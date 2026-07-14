@@ -1,0 +1,223 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Spartan Crew Enquiry Engine — Rebuild Plan</title>
+<style>
+  :root{
+    --ink:#16181d; --muted:#5b6270; --line:#e4e7ec; --bg:#fff;
+    --red:#b3271e; --red-soft:#fbeae9; --amber:#8a5a00; --green:#186a3b;
+    --code-bg:#f5f6f8; --accent:#0b57d0;
+  }
+  *{box-sizing:border-box}
+  html{-webkit-print-color-adjust:exact; print-color-adjust:exact}
+  body{
+    font:14px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    color:var(--ink); background:var(--bg); margin:0; padding:48px 56px; max-width:900px;
+  }
+  h1{font-size:30px; line-height:1.15; margin:0 0 6px; letter-spacing:-.5px}
+  h2{font-size:19px; margin:34px 0 10px; padding-bottom:6px; border-bottom:2px solid var(--red); letter-spacing:-.2px}
+  h3{font-size:15px; margin:20px 0 6px; color:#000}
+  p{margin:8px 0}
+  .sub{color:var(--muted); font-size:12.5px; margin:0 0 4px}
+  ul,ol{margin:8px 0 8px 22px; padding:0}
+  li{margin:4px 0}
+  code{font-family:"SF Mono",ui-monospace,"Cascadia Code",Consolas,monospace; font-size:12px;
+       background:var(--code-bg); padding:1px 5px; border-radius:4px}
+  pre{background:var(--code-bg); border:1px solid var(--line); border-radius:8px; padding:12px 14px;
+      overflow:auto; font-family:"SF Mono",ui-monospace,Consolas,monospace; font-size:11.5px; line-height:1.5; margin:10px 0}
+  table{border-collapse:collapse; width:100%; margin:12px 0; font-size:12.5px}
+  th,td{border:1px solid var(--line); padding:7px 9px; text-align:left; vertical-align:top}
+  th{background:#f8f9fb; font-weight:600}
+  .callout{background:var(--red-soft); border:1px solid #f0cfcc; border-left:4px solid var(--red);
+           border-radius:8px; padding:12px 16px; margin:14px 0}
+  .callout.amber{background:#fdf6e7; border-color:#f0e0b8; border-left-color:var(--amber)}
+  .callout.green{background:#eaf6ee; border-color:#c7e6d2; border-left-color:var(--green)}
+  .tag{display:inline-block; font-size:10.5px; font-weight:700; padding:1px 7px; border-radius:20px; vertical-align:middle}
+  .tag.new{background:#eaf6ee; color:var(--green)} .tag.old{background:#f2f3f5; color:var(--muted)}
+  .tag.gate{background:#fdf6e7; color:var(--amber)}
+  .lead{font-size:15px; color:#2a2e37}
+  .kill{color:var(--red); font-weight:600}
+  .win{color:var(--green); font-weight:600}
+  .mono-sm{font-family:"SF Mono",ui-monospace,Consolas,monospace; font-size:11px}
+  hr{border:none; border-top:1px solid var(--line); margin:24px 0}
+  .footer{color:var(--muted); font-size:11px; margin-top:28px; border-top:1px solid var(--line); padding-top:10px}
+  @page{size:A4; margin:16mm 14mm}
+  h2{break-after:avoid} h3{break-after:avoid} table,pre,.callout{break-inside:avoid}
+  .pb{break-before:page}
+</style>
+</head>
+<body>
+
+<h1>Spartan Crew — Enquiry&nbsp;→&nbsp;Booking Engine</h1>
+<p class="sub">Rebuild plan &amp; prototype status &middot; prepared 2026-07-13 &middot; <b>supersedes</b> <span class="mono-sm">Spartan-Crew-Vercel-Port-Handoff.pdf</span></p>
+
+<div class="callout">
+<b>What changed since the last brief.</b> The June port brief planned a <i>strangler-fig port</i> — keep n8n as the orchestrator and swap nodes for Vercel functions one at a time. The vision doc (<span class="mono-sm">Automate the Enquiry to booking process</span>) asks for something stronger: a <b>from-scratch rebuild</b> around a <b>conversational renderer/compiler + a Save State Table</b>, deterministic and hands-free. Confirmed client-facing scope is a <b>metrics dashboard + a settings menu, and nothing else</b>. This document is that rebuild plan. The port brief's research (live-workflow map, OnSinch API contract) is still valid input and is folded in below.
+</div>
+
+<h2>1. The one idea</h2>
+<p class="lead">The current system is <b>155 n8n nodes across 3 workflows</b> because n8n forces you to express <i>state reconciliation</i> as <i>dataflow</i>. Every relationship — this thread → this order, this company name → this id — is re-derived from scratch on every email, wired by hand.</p>
+<p>The fix the vision names — "conversational renderer + Save State Table" — is to make the <b>Gmail thread the unit of work</b>, hold its canonical state in <b>one table row</b>, and <b>compile</b> that row into the next actions. The entire system collapses to one idempotent loop:</p>
+
+<pre>on any Gmail event (poll OR push):
+  thread   = gmail.hydrateThread(threadId)     // always the FULL conversation
+  prior    = store.get(threadId)               // the Save State row (or none)
+  {state, actions} = compile(thread, prior)    // READS only; derives desired state
+  execute(actions)                             // reply draft + OnSinch create/patch
+  store.put(state)                             // persist (idempotent)</pre>
+
+<p>Because <code>compile()</code> only reads and is keyed on <code>thread_id</code>, running it again on any thread is harmless. <b>That is the "never miss a lead" guarantee</b>: a nightly sweep can re-compile every thread in the inbox and produce zero duplicate orders or drafts. Missed poll windows, crashes mid-run, and late-arriving mail all self-heal.</p>
+
+<h2>2. Why a rebuild does the job better</h2>
+<table>
+<tr><th>Problem in the live n8n system</th><th>Fix in the engine</th></tr>
+<tr><td><span class="kill">155 fragile nodes</span>; every node a failure point, near-impossible to change safely</td><td><span class="win">One <code>compile()</code> function</span> + small typed I/O clients. Logic is code you can read, test, and diff.</td></tr>
+<tr><td>10-minute poll window → a boundary failure silently <span class="kill">drops a lead</span></td><td>Thread-keyed state row + idempotent recompute. Nightly full-sweep backfills anything missed.</td></tr>
+<tr><td>The <code>stream:query:data</code> verbatim-extraction hack (25+ labels reconciled by hand)</td><td>One structured extraction → a typed <code>ConversationFacts</code> object.</td></tr>
+<tr><td>Compose agent emits flat <code>key: value</code> text lines, re-parsed by another node — <span class="kill">brittle text protocol</span></td><td>A typed <code>DesiredOrder</code>; the body builder is a pure, total function.</td></tr>
+<tr><td>Dedup by fuzzy Airtable lookup on every run</td><td>The state row <i>is</i> the dedup key: <code>thread_id → onsinch_order_id</code>.</td></tr>
+<tr><td><span class="kill">LLM resolves integer ids</span> (company/user/place) — non-deterministic where it must be exact</td><td>Ids resolved in deterministic code + local scoring. The model never emits an id.</td></tr>
+<tr><td>Black box in n8n — <span class="kill">no visibility</span> for the client</td><td>Vercel dashboard reads the state table directly; every decision is a row.</td></tr>
+<tr><td>Four models (gemini-flash, gemini-pro, glm-5, gpt-5-nano)</td><td>One model, <code>claude-opus-4-8</code>, temperature 0, for the 3 language tasks only.</td></tr>
+</table>
+
+<h2>3. What the live system does today (folded-in research)</h2>
+<p>Three <b>active</b> workflows (6 others are archived/dead):</p>
+<ul>
+<li><b>Bookings v3.4</b> (45 nodes) — orchestrator. Gmail poll → normalize → two branches: (a) <i>reply</i>: draft an LLM reply, label HIGH/MED/LOW, create a Gmail draft with Message-ID threading; (b) <i>job</i>: classify "is this an order?", log to Airtable, call v1.2.</li>
+<li><b>Bookings v1.2 Job Automation</b> (70 nodes) — the OnSinch order engine. Extract facts → resolve <code>company_id</code>/<code>place_id</code>/<code>user_id</code> → compose order → <code>POST/PATCH /orders</code> → log to Airtable + Sheets.</li>
+<li><b>Mini Operations</b> (40 nodes) — reply-only mirror of the Bookings reply branch (no job branch).</li>
+</ul>
+<p>Operations and Bookings already share an identical reply architecture, so the engine has <b>one reply path</b> parameterised by inbox, plus a <b>Bookings-only order path</b>. All current prompts and deterministic code (Normalize Data, Score Findings, format-for-OnSinch) are captured and ported.</p>
+
+<h2 class="pb">4. The Save State Table</h2>
+<p>One row per Gmail thread. This is the dedup key, the idempotency anchor, and the dashboard's data source.</p>
+<pre>ConversationState {
+  thread_id                 // PRIMARY KEY — the Gmail thread
+  subject, participants[], last_message_id, last_processed_epoch
+
+  classification            // new-job | update | confirmation-only | not-a-job
+  facts                     // typed ConversationFacts (replaces stream:query:data)
+
+  company_id?, user_id?, place_id?      // resolved once, then cached — never re-guessed
+  onsinch_order_id?, onsinch_order_number?   // this thread's order (the dedup link)
+
+  desired_order             // DesiredOrder | null   (null = info-only)
+  last_ordered_hash?        // hash of the order we last SENT — makes patch idempotent
+
+  priority                  // low | medium | high
+  reply_subject?, reply_body_html?, reply_draft_id?, last_reply_hash?
+
+  needs_human               // confidence gate for hands-free operation
+  status                    // open | drafted | ordered | error | ignored
+  notes[], order_action_log[]           // full audit trail for the dashboard
+}</pre>
+
+<h2>5. Deterministic vs. LLM — the discipline</h2>
+<div class="callout green"><b>Rule:</b> the model reads and writes prose; it never resolves an id or builds the order body. Exactly <b>three</b> tasks touch a model.</div>
+<table>
+<tr><th>Step</th><th>Kind</th><th>Notes</th></tr>
+<tr><td>normalize thread</td><td><span class="tag new">code</span></td><td>clean bodies, strip Spartan sigs/quotes, chronological, drop dupes</td></tr>
+<tr><td>classify latest email</td><td><span class="tag gate">LLM</span></td><td>new-job / update / confirmation-only / not-a-job + priority</td></tr>
+<tr><td>extract facts</td><td><span class="tag gate">LLM</span></td><td>→ typed <code>ConversationFacts</code>; verbatim values, dates → YYYY-MM-DD</td></tr>
+<tr><td>resolve company_id / user_id</td><td><span class="tag new">code + API</span></td><td>search OnSinch, exact-match, cache; reuse prior row's id</td></tr>
+<tr><td>resolve place_id</td><td><span class="tag new">code + API</span></td><td>OnSinch has no fuzzy search → local <code>Score Findings</code> port; ≥75% or create-new</td></tr>
+<tr><td>compose DesiredOrder</td><td><span class="tag new">code</span></td><td>business rules in code: <code>request_approval:true</code>, place_id on every slot, 08:00–18:00 defaults, profession mapping, crew-chief flag</td></tr>
+<tr><td>compose reply</td><td><span class="tag gate">LLM</span></td><td>casual crew tone, HTML body, never leaks IDs/priority/internal ops</td></tr>
+<tr><td>validate + diff + dedup</td><td><span class="tag new">code</span></td><td>pre-flight the 400-causers; hash-diff to decide create vs patch vs no-op</td></tr>
+</table>
+
+<h2>6. The compiler, step by step</h2>
+<ol>
+<li><b>Normalize</b> the thread → <code>{latest, history}</code>.</li>
+<li><b>Classify</b> the latest email against the thread + prior state.</li>
+<li><b>Compose reply</b> (every inbound gets a draft; hash-diffed so re-runs don't re-draft).</li>
+<li>If it's a job: <b>extract facts</b>, then <b>resolve</b> company/place/user ids (reusing cached ids from the row).</li>
+<li><b>Compose</b> the <code>DesiredOrder</code> and <b>validate</b> it.</li>
+<li><b>Confidence gate:</b> unresolved id or validation error → <code>needs_human = true</code>, order is held for review — the reply still drafts.</li>
+<li><b>Diff to actions:</b> no order id yet → <code>createOrder</code>; order exists and desired changed → <code>patchOrder</code>; unchanged → nothing.</li>
+</ol>
+<p>The compiler performs only reads (GETs are safe/idempotent). Writes (<code>createOrder</code>, <code>patchOrder</code>, <code>createReplyDraft</code>) are <b>returned as an <code>Actions</code> object</b> for a separate executor — keeping compile pure enough to re-run anytime.</p>
+
+<h2>7. Pipeline (confirmed scope)</h2>
+<p>The client-confirmed structure is a five-stage funnel; each stage is a compiler step, and each emits one metric event:</p>
+<table>
+<tr><th>Stage</th><th>Engine step</th><th>Metric emitted</th></tr>
+<tr><td>reliably intake <b>every</b> email</td><td>thread-keyed row + idempotent recompute + nightly sweep</td><td><code>email_received</code>, <code>thread_processed</code></td></tr>
+<tr><td>filter / render</td><td><code>normalize</code> + <code>classify</code> (not-a-job → ignored)</td><td><code>filtered_out</code></td></tr>
+<tr><td>extract client job requests</td><td><code>extractFacts</code> → typed <code>ConversationFacts</code></td><td><code>job_detected</code></td></tr>
+<tr><td>generate reply</td><td><code>composeReply</code> → threaded draft</td><td><code>reply_drafted</code></td></tr>
+<tr><td>create the OnSinch job</td><td>resolve ids → compose → validate → create/patch</td><td><code>order_created</code> / <code>order_updated</code> / <code>order_error</code></td></tr>
+</table>
+
+<h2>8. The Vercel app — dashboard + settings, that's it</h2>
+<p>The <b>only</b> client-facing surfaces are a dashboard and a settings menu. Architecture mirrors the House of Hud quote tool + its metrics dashboard.</p>
+<h3>Metrics (mirrors the HoH dashboard)</h3>
+<p>An append-only <code>metric_events</code> table (Neon/Vercel Postgres, exactly like HoH) records one row per pipeline transition. The dashboard <b>never</b> queries live Gmail/OnSinch — it aggregates this log only. Headline tiles + funnel:</p>
+<ul>
+<li><b>Headline tiles:</b> hours saved, orders created, clients served, awaiting confirmation, hands-free rate, needs-human count, order-error rate.</li>
+<li><b>Funnel:</b> emails received → threads processed → filtered out → job requests → replies drafted → orders proposed → created/updated.</li>
+<li><b>Confirm queue:</b> in draft-only mode, every proposed order sits here with its resolved company/place/crew for <b>one-click approve</b> (calls <code>confirmOrder</code>) — the human-in-the-loop before anything is written to OnSinch.</li>
+<li><b>Queue view:</b> the state table as a live list — status, priority, order links, and a <b>"needs human"</b> lane for anything the confidence gate held back.</li>
+</ul>
+<h3>Settings</h3>
+<ul><li><b>order_mode: draft-only (launch default) vs. auto</b>, confidence threshold, model, block-list, inbox creds, minutes-saved-per-email tuning.</li></ul>
+<p>The engine runs as Vercel Functions (compile + executor) triggered by Gmail push (Pub/Sub) with a cron sweep as backstop. State + metrics live in Postgres. Git-versioned throughout. <i>(The helper chatbot from the original vision is deferred — current scope is dashboard + settings only.)</i></p>
+
+<h2 class="pb">9. OnSinch contract — the essentials that bite</h2>
+<p>Full reference: <span class="mono-sm">Spartan-Crew-Onsinch-API-Reference.md</span>. The rules the engine must respect:</p>
+<ul>
+<li>Auth header is literally <code>Authorization: apikey &lt;KEY&gt;</code> — <span class="kill">not Bearer</span>.</li>
+<li>Every write is a <b>JSON array</b>, even for one item. <code>POST /orders</code> nests <code>Job</code> (object) + <code>SlotTeam[]</code>.</li>
+<li><code>PATCH</code> returns <b>204 no body</b> — don't parse JSON.</li>
+<li><code>place_id</code> is <b>required on every SlotTeam</b> — the single most common 400.</li>
+<li>Creating a Place requires <code>country</code> (ISO-2). No fuzzy search anywhere — that's why local scoring exists.</li>
+<li>profession_id: 1 Crew (default) · 32 CSCS · 9 Driver · 16 AV · 36 Crew&nbsp;Chief.</li>
+</ul>
+
+<h2>10. Data studies the vision calls for (planned)</h2>
+<ul>
+<li><b>Writing-style study</b> — mine 2000+ sent Spartan emails to build the reply prompt's tone/edge-case guide (same corpus tooling used for the HoH mail study).</li>
+<li><b>OnSinch edge-case map</b> — a "neural map" of quoting rules and failure modes from the API + real orders, driving the deterministic composer (esp. the crew-chief rule, TBC dates, multi-block splits).</li>
+</ul>
+
+<h2 class="pb">11. Prototype — built &amp; proven today <span class="tag new">DONE</span></h2>
+<p>Location: <span class="mono-sm">D:\code\SpartanCrew-Enquiry-Engine</span>. The <b>foundational core</b> is written, typechecks clean, and passes an offline end-to-end test (no network).</p>
+<table>
+<tr><th>Module</th><th>Status</th></tr>
+<tr><td><code>compiler.ts</code> — the <code>compile()</code> loop</td><td><span class="win">built</span></td></tr>
+<tr><td><code>types.ts</code> — ConversationState / DesiredOrder / facts</td><td><span class="win">built</span></td></tr>
+<tr><td><code>normalize.ts</code>, <code>score.ts</code>, <code>format.ts</code> — deterministic ports of the live n8n code</td><td><span class="win">built</span></td></tr>
+<tr><td><code>compose.ts</code> — facts + ids → DesiredOrder, business rules in code</td><td><span class="win">built</span></td></tr>
+<tr><td><code>onsinch.ts</code> — typed client (injectable transport)</td><td><span class="win">built</span></td></tr>
+<tr><td><code>reason.ts</code> — 3-task LLM boundary + Anthropic (Opus 4.8) adapter</td><td><span class="win">built</span></td></tr>
+<tr><td><code>store.ts</code> — Save State Table interface (in-memory; Postgres/KV later)</td><td><span class="win">built</span></td></tr>
+<tr><td><code>metrics.ts</code> — append-only <code>metric_events</code> + dashboard aggregate (HoH pattern)</td><td><span class="win">built</span></td></tr>
+<tr><td><code>pipeline.ts</code> — per-event handler: compile → execute → emit metrics</td><td><span class="win">built</span></td></tr>
+</table>
+<div class="callout green"><b>Test proves (20/20 assertions, offline):</b> draft-only new-job → reply drafted + order <b>proposed, not written</b> (ids resolved, <code>place_id</code> on the slot); <b>one-click confirm</b> → order created; re-handling the thread → no second order (idempotent); follow-up crew-count change → proposed <b>PATCH</b> → confirm; bare "thanks" → confirmation-only; the <b>dashboard aggregate</b> reflects the funnel; and flipping <code>order_mode:"auto"</code> writes hands-free. Run with <code>npm test</code>.</div>
+
+<h2>12. Build roadmap</h2>
+<ol>
+<li><span class="win">Phase 0 (done)</span> — foundational engine + offline proof.</li>
+<li><b>Phase 1</b> — real Gmail hydrate/draft client; Postgres/KV store; wire full ported prompts into the Opus reasoner; run against a replay of real threads.</li>
+<li><b>Phase 2</b> — Vercel app shell: metrics dashboard (funnel + tiles) + settings + the confirm queue + needs-human lane. <b>Launches in draft-only mode</b> — every order human-approved.</li>
+<li><b>Phase 3</b> — Gmail push trigger + cron sweep; flip <code>order_mode</code> to auto once the needs-human/error rate is proven low.</li>
+<li><b>Phase 4</b> — data studies feed the style guide + edge-case map.</li>
+</ol>
+
+<h2>13. Open decisions</h2>
+<ul>
+<li><b>Auto vs. draft-only at launch</b> — <span class="win">DECIDED: draft-only</span>. Every order is human-approved via the confirm queue until the needs-human/error rate is measured; then flip <code>order_mode</code> to auto.</li>
+<li><b>State store</b> — Vercel Postgres (relational, dashboard-friendly) vs. KV. Recommend Postgres.</li>
+<li><b>Trigger</b> — Gmail push (Pub/Sub) vs. cron poll. Recommend push + a nightly cron sweep as the idempotent safety net.</li>
+<li><b>Crew-chief rule semantics</b> — does ≥4 crew split a slot or just tag one? The composer flags it today; the edge-case study must settle it.</li>
+</ul>
+
+<div class="footer">
+Prototype: <span class="mono-sm">D:\code\SpartanCrew-Enquiry-Engine</span> &middot; OnSinch contract: <span class="mono-sm">Spartan-Crew-Onsinch-API-Reference.md</span> &middot; Fresh n8n export: <span class="mono-sm">D:\Business\SamurAI Solutions\n8n_export_fresh</span> &middot; Vision: Google Doc "Automate the Enquiry to booking process". Supersedes the June 2026 Vercel-Port handoff.
+</div>
+
+</body>
+</html>
