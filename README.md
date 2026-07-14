@@ -21,7 +21,7 @@ app/
     metricsDb   Neon metric_events sink + dashboard summary (HoH pattern)
     stateDb     Neon Save State Table (StateStore)
     settingsDb  order_mode (draft-only | auto)
-    deps        wires PipelineDeps from env (Anthropic reasoner, http OnSinch)
+    deps        wires PipelineDeps from env (OpenRouter reasoner, http OnSinch)
   api/
     n8n-inbound   POST { thread_id, messages[] }  ← n8n trigger; runs the pipeline
     confirm-order POST { thread_id }              ← dashboard confirm queue
@@ -34,9 +34,9 @@ app/
 `GMAIL_DRAFT_WEBHOOK` is unset, the composed reply is returned so n8n drafts it.
 
 ### Env
-`DATABASE_URL` (Neon) · `ANTHROPIC_API_KEY` · `ONSINCH_API_KEY` ·
+`DATABASE_URL` (Neon) · `OPENROUTER_API_KEY` · `ONSINCH_API_KEY` ·
 `ONSINCH_BASE_URL` · `N8N_WEBHOOK_SECRET` · `GMAIL_DRAFT_WEBHOOK` (optional) ·
-`SPARTAN_MODEL` (default `claude-opus-4-8`).
+`SPARTAN_MODEL` (default `anthropic/claude-opus-4.8`, via OpenRouter).
 
 ### Dev
 ```
@@ -80,7 +80,7 @@ The model never resolves an integer id or builds the order body.
 | `src/format.ts` | build + validate the OnSinch `POST /orders` array body |
 | `src/compose.ts` | facts + ids → `DesiredOrder` (business rules in code) |
 | `src/onsinch.ts` | typed OnSinch client (injectable transport) |
-| `src/reason.ts` | the 3-task LLM boundary + Anthropic adapter |
+| `app/lib/engine/reason.ts` | the 3-task LLM boundary + OpenRouter adapter |
 | `src/store.ts` | Save State Table interface (in-memory now, Postgres/KV later) |
 | `src/metrics.ts` | append-only `metric_events` + dashboard aggregate (HoH pattern) |
 | `src/compiler.ts` | **the foundational `compile()` function** |
@@ -115,4 +115,4 @@ executes a staged order.
 - Real Gmail hydrate/draft client + Gmail push (Pub/Sub) trigger.
 - Postgres/KV-backed `StateStore`.
 - The two data studies (2000+ sent emails → style guide; OnSinch edge-case map).
-- Wire `createAnthropicReasoner` prompts to the full ported n8n prompts.
+- Wire `createOpenRouterReasoner` prompts to the full ported n8n prompts.

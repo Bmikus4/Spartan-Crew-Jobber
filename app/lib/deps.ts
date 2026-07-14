@@ -9,7 +9,7 @@
 
 import { createHash } from "node:crypto";
 import { OnsinchClient, httpTransport } from "./engine/onsinch";
-import { createAnthropicReasoner, type Reasoner } from "./engine/reason";
+import { createOpenRouterReasoner, type Reasoner } from "./engine/reason";
 import { buildOrderBody } from "./engine/format";
 import type { Executor, PipelineDeps } from "./engine/pipeline";
 import { NeonStateStore } from "./stateDb";
@@ -19,14 +19,14 @@ import { getSettings } from "./settingsDb";
 export const hashOrder = (o: unknown) => createHash("sha256").update(JSON.stringify(o)).digest("hex").slice(0, 16);
 
 // Lazy: the reasoner is only constructed when a language task actually runs, so
-// order-execution paths (confirm-order) work without an Anthropic key set.
+// order-execution paths (confirm-order) work without the LLM key set.
 function reasoner(): Reasoner {
   let real: Reasoner | null = null;
   const get = (): Reasoner => {
     if (real) return real;
-    const apiKey = process.env.ANTHROPIC_API_KEY;
-    if (!apiKey) throw new Error("ANTHROPIC_API_KEY not set");
-    real = createAnthropicReasoner({ apiKey, model: process.env.SPARTAN_MODEL || "claude-opus-4-8" });
+    const apiKey = process.env.OPENROUTER_API_KEY;
+    if (!apiKey) throw new Error("OPENROUTER_API_KEY not set");
+    real = createOpenRouterReasoner({ apiKey, model: process.env.SPARTAN_MODEL || "anthropic/claude-opus-4.8" });
     return real;
   };
   return {

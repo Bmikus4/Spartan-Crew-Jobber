@@ -4,8 +4,9 @@
 // This is the key architectural discipline: the model extracts + writes prose,
 // it never resolves an integer id or builds the order body.
 //
-// Default model: claude-opus-4-8 (temp 0). One model, replacing the old
-// gemini-flash / gemini-pro / glm-5 / gpt-5-nano sprawl.
+// Provider: OpenRouter (the same gateway the live n8n uses). Default model
+// anthropic/claude-opus-4.8 (temp 0) — one model, replacing the old
+// gemini-flash / gemini-pro / glm-5 / gpt-5-nano sprawl. Swap via SPARTAN_MODEL.
 //
 // The interface is injectable so the compiler is testable offline (see
 // test/mockReasoner.ts).
@@ -48,39 +49,45 @@ export interface Reasoner {
 }
 
 // ---------------------------------------------------------------------------
-// Real adapter (Anthropic Messages API, structured via tool-use). Requires
-// ANTHROPIC_API_KEY. Prompts are versioned in ./prompts (ported from n8n).
-// Left as a thin sketch — the prototype's tests run against the mock.
+// Real adapter (OpenRouter, OpenAI-compatible chat completions). Structured
+// output is forced via function/tool calling: one tool "emit" whose parameters
+// ARE the target schema, with tool_choice pinned to it, so the model must
+// return valid JSON. Requires OPENROUTER_API_KEY.
 // ---------------------------------------------------------------------------
-export interface AnthropicConfig {
+export interface OpenRouterConfig {
   apiKey: string;
-  model?: string; // default claude-opus-4-8
+  model?: string;   // default anthropic/claude-opus-4.8
+  baseUrl?: string; // default https://openrouter.ai/api/v1
 }
 
-export function createAnthropicReasoner(cfg: AnthropicConfig): Reasoner {
-  const model = cfg.model ?? "claude-opus-4-8";
+export function createOpenRouterReasoner(cfg: OpenRouterConfig): Reasoner {
+  const model = cfg.model ?? "anthropic/claude-opus-4.8";
+  const baseUrl = cfg.baseUrl ?? "https://openrouter.ai/api/v1";
   async function call(system: string, user: string, schema: object) {
-    const res = await fetch("https://api.anthropic.com/v1/messages", {
+    const res = await fetch(`${baseUrl}/chat/completions`, {
       method: "POST",
       headers: {
-        "x-api-key": cfg.apiKey,
-        "anthropic-version": "2023-06-01",
-        "content-type": "application/json",
+        Authorization: `Bearer ${cfg.apiKey}`,
+        "Content-Type": "application/json",
+        "HTTP-Referer": "https://spartan-crew-jobber.vercel.app",
+        "X-Title": "Spartan Crew Jobber",
       },
       body: JSON.stringify({
         model,
-        max_tokens: 2048,
         temperature: 0,
-        system,
-        tools: [{ name: "emit", description: "Return structured result", input_schema: schema }],
-        tool_choice: { type: "tool", name: "emit" },
-        messages: [{ role: "user", content: user }],
+        messages: [
+          { role: "system", content: system },
+          { role: "user", content: user },
+        ],
+        tools: [{ type: "function", function: { name: "emit", description: "Return the structured result", parameters: schema } }],
+        tool_choice: { type: "function", function: { name: "emit" } },
       }),
     });
+    if (!res.ok) throw new Error(`OpenRouter ${res.status}: ${(await res.text()).slice(0, 400)}`);
     const j = await res.json();
-    const block = j.content?.find((b: any) => b.type === "tool_use");
-    if (!block) throw new Error("no tool_use in response: " + JSON.stringify(j).slice(0, 400));
-    return block.input;
+    const args = j.choices?.[0]?.message?.tool_calls?.[0]?.function?.arguments;
+    if (!args) throw new Error("no tool_call in response: " + JSON.stringify(j).slice(0, 400));
+    return typeof args === "string" ? JSON.parse(args) : args;
   }
 
   const threadText = (latest: ThreadMessage, history: ThreadMessage[]) =>
