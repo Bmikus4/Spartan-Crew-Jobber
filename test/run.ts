@@ -9,13 +9,13 @@
 //         (6) flipping order_mode:"auto" writes the order hands-free.
 // ============================================================================
 import { createHash } from "node:crypto";
-import { OnsinchClient } from "../src/onsinch.js";
-import { InMemoryStore } from "../src/store.js";
-import { InMemoryMetrics, aggregate } from "../src/metrics.js";
-import { buildOrderBody } from "../src/format.js";
-import { handleThread, confirmOrder, type Executor, type PipelineDeps } from "../src/pipeline.js";
-import { DEFAULT_SETTINGS, type HydratedThread, type Settings } from "../src/types.js";
-import { mockReasoner, mockTransport, msg } from "./mocks.js";
+import { OnsinchClient } from "../app/lib/engine/onsinch";
+import { InMemoryStore } from "../app/lib/engine/store";
+import { InMemoryMetrics, aggregate } from "../app/lib/engine/metrics";
+import { buildOrderBody } from "../app/lib/engine/format";
+import { handleThread, confirmOrder, type Executor, type PipelineDeps } from "../app/lib/engine/pipeline";
+import { DEFAULT_SETTINGS, type HydratedThread, type Settings } from "../app/lib/engine/types";
+import { mockReasoner, mockTransport, msg } from "./mocks";
 
 let clock = 1_700_000_000_000;
 const onsinch = new OnsinchClient(mockTransport);

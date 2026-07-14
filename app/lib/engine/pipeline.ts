@@ -4,10 +4,10 @@
 // emits one metric event per pipeline transition (funnel + quality). Keeping
 // metrics here (not inside pure compile()) preserves compile's re-runnability.
 // ============================================================================
-import { compile, type CompileDeps } from "./compiler.js";
-import type { StateStore } from "./store.js";
-import type { MetricSink } from "./metrics.js";
-import type { Actions, ConversationState, HydratedThread, Settings } from "./types.js";
+import { compile, type CompileDeps } from "./compiler";
+import type { StateStore } from "./store";
+import type { MetricSink } from "./metrics";
+import type { Actions, ConversationState, HydratedThread, Settings } from "./types";
 
 /** The side-effecting edges. Injected so the pipeline stays testable. */
 export interface Executor {

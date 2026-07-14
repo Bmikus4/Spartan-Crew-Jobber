@@ -9,8 +9,8 @@
 //   - one slot team per distinct request block
 //   - crew-chief rule flagged for review (>=4 regular crew => needs a chief)
 // ============================================================================
-import { PROFESSION } from "./types.js";
-import type { ConversationFacts, DesiredOrder, DesiredSlotTeam } from "./types.js";
+import { PROFESSION } from "./types";
+import type { ConversationFacts, DesiredOrder, DesiredSlotTeam } from "./types";
 
 function professionFromHint(hint?: string): number {
   const h = (hint || "").toLowerCase();

@@ -2,9 +2,9 @@
 // intentionally simple: it reads the latest body for a "N crew" count, a date,
 // and a venue, so a follow-up email that changes the count produces a
 // different DesiredOrder (exercising the patch path).
-import type { Reasoner, ClassifyResult, ReplyResult } from "../src/reason.js";
-import type { ConversationFacts, ThreadMessage } from "../src/types.js";
-import type { Transport } from "../src/onsinch.js";
+import type { Reasoner, ClassifyResult, ReplyResult } from "../app/lib/engine/reason";
+import type { ConversationFacts, ThreadMessage } from "../app/lib/engine/types";
+import type { Transport } from "../app/lib/engine/onsinch";
 
 export const mockReasoner: Reasoner = {
   async classify(latest, _history, priorOrderExists): Promise<ClassifyResult> {

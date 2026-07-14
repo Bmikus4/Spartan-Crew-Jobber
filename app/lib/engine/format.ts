@@ -5,7 +5,7 @@
 // typed object, so this is a pure, total function. All OnSinch writes are
 // arrays even for one item (§2.1 of the API ref), so we wrap in [ ].
 // ============================================================================
-import type { DesiredOrder } from "./types.js";
+import type { DesiredOrder } from "./types";
 
 export interface OnsinchOrderBody {
   name: string;

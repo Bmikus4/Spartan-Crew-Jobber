@@ -8,8 +8,8 @@
 //   - always filter/paginate reads
 // The transport is injectable so the compiler can be tested offline.
 // ============================================================================
-import type { PlaceCandidate } from "./types.js";
-import type { OnsinchOrderBody } from "./format.js";
+import type { PlaceCandidate } from "./types";
+import type { OnsinchOrderBody } from "./format";
 
 export type Transport = (
   method: string,

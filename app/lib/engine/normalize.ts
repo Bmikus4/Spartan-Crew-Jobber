@@ -4,7 +4,7 @@
 // HTML), builds a chronological thread, drops duplicates of the latest email.
 // Pure, no I/O — trivially testable.
 // ============================================================================
-import type { HydratedThread, ThreadMessage } from "./types.js";
+import type { HydratedThread, ThreadMessage } from "./types";
 
 const SPARTAN_SIG_MARKERS = [
   "spartan crew ltd",

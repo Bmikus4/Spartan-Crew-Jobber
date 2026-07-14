@@ -4,7 +4,7 @@
 // candidates against the extracted location string and pick the best, or
 // signal "create new" when nothing clears the confidence bar.
 // ============================================================================
-import type { PlaceCandidate } from "./types.js";
+import type { PlaceCandidate } from "./types";
 
 const MAX_SCORE = 113;
 const MATCH_THRESHOLD_PCT = 75;

@@ -13,13 +13,13 @@ import type {
   ConversationFacts,
   ConversationState,
   HydratedThread,
-} from "./types.js";
-import { normalizeThread } from "./normalize.js";
-import { scorePlaces } from "./score.js";
-import { composeOrder } from "./compose.js";
-import { validateOrder } from "./format.js";
-import type { Reasoner } from "./reason.js";
-import type { OnsinchClient } from "./onsinch.js";
+} from "./types";
+import { normalizeThread } from "./normalize";
+import { scorePlaces } from "./score";
+import { composeOrder } from "./compose";
+import { validateOrder } from "./format";
+import type { Reasoner } from "./reason";
+import type { OnsinchClient } from "./onsinch";
 
 export interface CompileDeps {
   reasoner: Reasoner;

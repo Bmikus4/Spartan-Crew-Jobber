@@ -4,7 +4,7 @@
 // is tiny on purpose; back it with Vercel Postgres/KV in production (an
 // in-memory impl is provided for the prototype + tests).
 // ============================================================================
-import type { ConversationState } from "./types.js";
+import type { ConversationState } from "./types";
 
 export interface StateStore {
   get(thread_id: string): Promise<ConversationState | undefined>;

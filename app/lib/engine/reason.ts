@@ -14,7 +14,7 @@ import type {
   Classification,
   ConversationFacts,
   ThreadMessage,
-} from "./types.js";
+} from "./types";
 
 export interface ClassifyResult {
   classification: Classification;

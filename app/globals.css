@@ -1,0 +1,148 @@
+@import "tailwindcss";
+
+/*
+ * Spartan Crew Jobber — same "Samurai" dark editorial design system as the
+ * House of Hud quote tool (shared architecture). Near-black surfaces, white
+ * headings, grey body, a single burnt-orange accent. No gradients, no imagery.
+ * (Accent is a single token — swap --accent to rebrand.)
+ */
+
+:root {
+  --bg: #0e0e0e;
+  --surface: #161616;
+  --surface-2: #1c1c1c;
+  --surface-hover: #222222;
+
+  --border: #262626;
+  --border-strong: #3a3a3a;
+  --border-subtle: rgba(255, 255, 255, 0.07);
+
+  --text-primary: #ffffff;
+  --text-secondary: #c7c7c7;
+  --text-muted: #8a8a8a;
+  --text-faint: #6a6a6a;
+
+  --accent: #f08a1c;
+  --accent-hover: #ff9a2e;
+  --accent-press: #d9780f;
+  --accent-contrast: #0e0e0e;
+  --accent-subtle: rgba(240, 138, 28, 0.12);
+  --accent-border: rgba(240, 138, 28, 0.45);
+
+  --danger: #ef4444;
+  --danger-subtle: rgba(239, 68, 68, 0.14);
+  --ok: #34d399;
+
+  --radius-sm: 6px;
+  --radius: 10px;
+  --radius-lg: 16px;
+
+  --nav-w-expanded: 232px;
+  --nav-w-condensed: 60px;
+  --nav-item-radius: 12px;
+  --nav-icon-box: 40px;
+
+  --panel-pad-x: 20px;
+  --panel-header-height: 48px;
+  --footer-bar-height: 58px;
+  --shell-pad: 8px;
+  --shell-double-pad: 16px;
+  --mobile-nav-h: 46px;
+  --mobile-nav-safe: max(0px, calc(env(safe-area-inset-bottom) - 30px));
+
+  /* legacy aliases so Sidebar's var() names resolve */
+  --color-surface-active: var(--accent-subtle);
+  --color-surface-hover: var(--surface-hover);
+  --color-surface-elevated: var(--surface-2);
+  --color-text-primary: var(--text-primary);
+  --color-text-secondary: var(--text-secondary);
+  --color-text-muted: var(--text-muted);
+  --color-primary: var(--accent);
+  --color-primary-subtle-bg: var(--accent-subtle);
+  --color-border-subtle: var(--border-subtle);
+}
+
+[data-theme="light"] {
+  --bg: #efe8da;
+  --surface: #f5efe4;
+  --surface-2: #e7decd;
+  --surface-hover: #ddd2bd;
+
+  --border: #d9cdb6;
+  --border-strong: #c3b497;
+  --border-subtle: rgba(60, 50, 30, 0.10);
+
+  --text-primary: #2a251d;
+  --text-secondary: #4c4435;
+  --text-muted: #7a6f5b;
+  --text-faint: #9c9079;
+
+  --accent: #c06a10;
+  --accent-hover: #d97c18;
+  --accent-press: #a65a0a;
+  --accent-contrast: #fbf6ec;
+  --accent-subtle: rgba(192, 106, 16, 0.13);
+  --accent-border: rgba(192, 106, 16, 0.45);
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+* { scrollbar-width: thin; scrollbar-color: var(--border-strong) transparent; }
+*::-webkit-scrollbar { width: 8px; height: 8px; }
+*::-webkit-scrollbar-track { background: transparent; }
+*::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 9999px; border: 2px solid transparent; background-clip: padding-box; }
+*::-webkit-scrollbar-thumb:hover { background: var(--text-faint); background-clip: padding-box; }
+
+*, *::before, *::after {
+  transition: background-color 250ms ease, border-color 250ms ease, color 250ms ease;
+}
+
+html, body {
+  height: 100%;
+  width: 100%;
+  background-color: var(--bg);
+  color: var(--text-secondary);
+  font-family: var(--font-geist-sans), "Geist", system-ui, sans-serif;
+  font-size: 16px;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  overflow: hidden;
+  overscroll-behavior: none;
+  position: fixed;
+  inset: 0;
+}
+
+.eyebrow { font-size: 11px; font-weight: 600; letter-spacing: 0.18em; text-transform: uppercase; color: var(--accent); }
+.eyebrow .slash { color: var(--accent); opacity: 0.7; margin-right: 6px; }
+
+.tnum { font-variant-numeric: tabular-nums; }
+.mono { font-family: var(--font-geist-mono), "Geist Mono", ui-monospace, monospace; }
+
+.frosted-glass {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+.nav-rail { scrollbar-width: none; -ms-overflow-style: none; }
+.nav-rail::-webkit-scrollbar { display: none; }
+
+input::placeholder, textarea::placeholder { color: var(--text-faint); }
+
+@keyframes crmShimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+.crm-shimmer {
+  background: linear-gradient(90deg, var(--text-muted) 0%, var(--text-primary) 50%, var(--text-muted) 100%);
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: crmShimmer 1.6s linear infinite;
+}
+
+@media (max-width: 768px) {
+  .frosted-glass { border: none; border-radius: 0; }
+  input, textarea, select { font-size: 16px !important; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.001ms !important; transition-duration: 0.001ms !important; }
+}
