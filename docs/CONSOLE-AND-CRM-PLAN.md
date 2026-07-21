@@ -81,14 +81,29 @@ enquiry→booking funnel + tiles). Do not carry HoH's quote-tool metrics. Net: o
 branded dashboard showing Spartan's funnel, plus the confirm-queue list (which
 `CLAUDE-BUILD-MANUAL.md` Phase E1 wants anyway — build it here).
 
-### 1.4 Branding (the "verbatim BRANDED copy" part)
-Swap, in `globals.css` + assets only (structure untouched = "verbatim"):
-- accent token set (`--accent`, hover/press/subtle/border) → Spartan Crew brand
-  color. **INPUT NEEDED from Ben:** Spartan's brand hex + logo asset (check
-  `D:\business\samurai` / spartancrew.co.uk). **Default if not supplied:** keep
-  the SamurAI dark editorial theme, drop in the Spartan wordmark/logo, retitle
-  app + manifest + favicon to "Spartan Crew". (The whole thing is theme-token
-  driven, so re-skinning later is a one-file change.)
+### 1.4 Branding — MATCH spartancrew.co.uk (locked 2026-07-21)
+Their real identity (pulled from the live site): **near-monochrome, white-on-
+dark, high-contrast, minimalist. White "Spartan Crew Ltd" wordmark (SVG) on a
+near-black ground. No loud accent color.** Tagline "Born Ready"; a "Spartan
+Arrow" motif. This is deliberately NOT the SamurAI burnt-orange — matching
+Spartan means removing color, not swapping it. There is no Spartan brand asset
+on disk (searched D:\business + D:\code); the only asset to source is the
+wordmark SVG from their site header.
+
+Changes, `globals.css` tokens + assets only (structure untouched = "verbatim"):
+- Keep the dark surfaces (near-black `#0b0b0c` ground already matches).
+- Replace the burnt-orange accent set with a **cool near-white / steel** accent
+  so CTAs read as white-on-dark (their button feel) and active states are
+  monochrome:
+  - `--accent: #e6e9ee` · `--accent-hover: #ffffff` · `--accent-press: #c4c8d0`
+  - `--accent-contrast: #0b0b0c` (dark text on the light accent fill)
+  - `--accent-subtle: rgba(200,208,220,0.10)` · `--accent-border: rgba(200,208,220,0.38)`
+  - light-theme variants: mirror with a graphite accent (`#3a3f47`) on the tan ground.
+- Logo: drop the **white Spartan wordmark SVG** into the sidebar header slot
+  where the HoH logo sits (fetch from their site header tomorrow, or Ben
+  supplies). Optional: the Spartan Arrow motif as favicon / loading mark.
+- Retitle app + `manifest.ts` + `<title>` + favicon → "Spartan Crew".
+- Everything is token-driven — a later re-skin is a one-file change.
 
 ### 1.5 Auth + settings
 - Auth: reuse the engine/HoH Google-only gate (memory `project_hoh_google_auth`).
@@ -203,7 +218,10 @@ show a gap.
 ```
 
 ## Open inputs / flags
-- **Spartan brand hex + logo** (Ben) — blocks final skin, not the build.
+- **Brand: DECIDED** — match spartancrew.co.uk (near-monochrome white-on-dark,
+  §1.4). Only remaining asset = the white Spartan wordmark SVG (fetch from their
+  site header during the build; not a blocker — a placeholder wordmark works
+  until then).
 - Voice in the chatbot: keep HoH's `transcribe` route or drop for v1? (default: keep.)
 - Optional n8n cred-isolation route for OnSinch (default: direct, like the engine).
 - `order_mode` toggle + full Settings return with Phase E (not this pass).
