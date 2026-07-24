@@ -46,40 +46,51 @@ function orderDate(o) {
   );
 }
 
+// Pull every order, projecting each down to the 4 fields we need (keeping full
+// objects blew memory to 600MB+). NOTE: OnSinch's `pagination.nextPage` is a
+// BOOLEAN, not a page number, and `sort=-id` is ignored — so we drive the loop
+// off the reliable integer `pageCount` and re-sort per company later.
 async function pullAllOrders() {
-  const orders = [];
+  const rows = [];
   let page = 1;
+  let pageCount = 1;
+  let count = "?";
   for (;;) {
-    const path = `/orders?with=Job&sort=-id&limit=${PAGE_SIZE}&page=${page}`;
-    const body = await onsinchGet(path, KEY);
-    const rows = body?.data ?? [];
-    orders.push(...rows);
-    const pg = body?.pagination ?? {};
-    process.stdout.write(
-      `\r  page ${page}/${pg.pageCount ?? "?"}  orders ${orders.length}/${pg.count ?? "?"}   `
+    const body = await onsinchGet(
+      `/orders?with=Job&limit=${PAGE_SIZE}&page=${page}`,
+      KEY
     );
-    if (orders.length >= argMax) break;
-    if (!rows.length) break;
-    if (pg.nextPage == null && page >= (pg.pageCount ?? page)) break;
-    page = pg.nextPage ?? page + 1;
-    if (page > (pg.pageCount ?? Infinity)) break;
+    const data = body?.data ?? [];
+    for (const o of data) {
+      const cid = o?.company_id ?? o?.Company?.id;
+      if (cid == null) continue;
+      // Job is an ARRAY (an order can hold multiple jobs); the rate card lives
+      // on Job[].pricelist_category_id. Take the first non-null card.
+      const jobs = Array.isArray(o?.Job) ? o.Job : o?.Job ? [o.Job] : [];
+      const card =
+        jobs.map((j) => j?.pricelist_category_id).find((c) => c != null) ?? null;
+      rows.push({ company_id: cid, card, id: o?.id ?? 0, date: orderDate(o) });
+    }
+    const pg = body?.pagination ?? {};
+    pageCount = Number.isInteger(pg.pageCount) ? pg.pageCount : pageCount;
+    count = pg.count ?? count;
+    process.stdout.write(`\r  page ${page}/${pageCount}  rows ${rows.length}/${count}   `);
+    if (rows.length >= argMax) break;
+    if (!data.length) break;
+    if (page >= pageCount) break;
+    page++;
   }
   process.stdout.write("\n");
-  return argMax === Infinity ? orders : orders.slice(0, argMax);
+  return argMax === Infinity ? rows : rows.slice(0, argMax);
 }
 
-function buildMap(orders) {
-  // group by company (orders arrive newest-first thanks to sort=-id)
+function buildMap(rows) {
+  // group by company; we re-sort each company's list newest-first below since
+  // the API's own sort is unreliable.
   const byCompany = new Map();
-  for (const o of orders) {
-    const cid = o?.company_id ?? o?.Company?.id;
-    if (cid == null) continue;
-    if (!byCompany.has(cid)) byCompany.set(cid, []);
-    byCompany.get(cid).push({
-      card: o?.Job?.pricelist_category_id ?? null,
-      id: o?.id ?? 0,
-      date: orderDate(o),
-    });
+  for (const r of rows) {
+    if (!byCompany.has(r.company_id)) byCompany.set(r.company_id, []);
+    byCompany.get(r.company_id).push(r);
   }
 
   const map = {};
@@ -146,10 +157,10 @@ const round = (x) => Math.round(x * 1000) / 1000;
 
 (async () => {
   console.log("Pulling OnSinch order history (with=Job)…");
-  const orders = await pullAllOrders();
-  console.log(`Fetched ${orders.length} orders.`);
+  const rows = await pullAllOrders();
+  console.log(`Fetched ${rows.length} orders.`);
 
-  const { map, ambiguous, none } = buildMap(orders);
+  const { map, ambiguous, none } = buildMap(rows);
   const companies = Object.keys(map).length;
   console.log(
     `\nCompanies: accepted ${companies} | ambiguous ${ambiguous.length} | no-explicit-card ${none.length}`
@@ -157,7 +168,7 @@ const round = (x) => Math.round(x * 1000) / 1000;
 
   const out = {
     _meta: {
-      generated_from_orders: orders.length,
+      generated_from_orders: rows.length,
       recency_window: RECENCY_WINDOW,
       accept_share: ACCEPT_SHARE,
       accepted_companies: companies,
@@ -171,6 +182,9 @@ const round = (x) => Math.round(x * 1000) / 1000;
   mkdirSync(dir, { recursive: true });
   const file = join(dir, "rate-map.json");
   writeFileSync(file, JSON.stringify(out, null, 2));
+  // Also cache the raw projected rows so weighting can be tuned offline
+  // (no re-pull) — see scripts/rate-decay-experiment.mjs.
+  writeFileSync(join(dir, "rate-rows.json"), JSON.stringify(rows));
   console.log(`\nWrote ${file}`);
   console.log(
     `Next: node scripts/seed-rate-cards.mjs  (upserts accepted cards into Neon rate_cards)`

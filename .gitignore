@@ -11,3 +11,6 @@ tsconfig.tsbuildinfo
 
 .vercel
 .env*.local
+
+# derived rate data (regenerable; contains client billing patterns)
+data/
