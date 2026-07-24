@@ -8,7 +8,7 @@ import { useCallback, useEffect, useState } from "react";
 import InstallButton from "./InstallButton";
 
 type OrderMode = "draft-only" | "auto";
-interface Settings { order_mode: OrderMode }
+interface Settings { order_mode: OrderMode; replies_enabled: boolean }
 
 const INK = "var(--text-primary)";
 const SUB = "var(--text-secondary)";
@@ -35,6 +35,26 @@ function Toggle({ value, onChange }: { value: OrderMode; onChange: (v: OrderMode
   );
 }
 
+function OnOff({ value, onChange }: { value: boolean; onChange: (v: boolean) => void }) {
+  const options: { id: boolean; label: string }[] = [
+    { id: false, label: "Off" },
+    { id: true, label: "On" },
+  ];
+  return (
+    <div style={{ display: "inline-flex", background: "var(--surface-2)", border: "1px solid var(--border)", borderRadius: 10, padding: 3, gap: 3 }}>
+      {options.map((o) => {
+        const active = value === o.id;
+        return (
+          <button key={String(o.id)} onClick={() => onChange(o.id)}
+            style={{ padding: "8px 20px", borderRadius: 8, border: "1px solid " + (active ? "var(--accent-border)" : "transparent"), background: active ? "var(--accent-subtle)" : "transparent", color: active ? A : SUB, fontWeight: 600, fontSize: 13, cursor: "pointer", transition: "all 200ms" }}>
+            {o.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 export default function SettingsScreen() {
   const [settings, setSettings] = useState<Settings | null>(null);
   const [saving, setSaving] = useState(false);
@@ -43,7 +63,7 @@ export default function SettingsScreen() {
   useEffect(() => {
     void (async () => {
       try { const r = await fetch("/api/settings"); setSettings(await r.json()); }
-      catch { setSettings({ order_mode: "draft-only" }); }
+      catch { setSettings({ order_mode: "draft-only", replies_enabled: false }); }
     })();
   }, []);
 
@@ -78,6 +98,19 @@ export default function SettingsScreen() {
               Auto mode writes orders to OnSinch without a human check. Only enable once the needs-human / error rate is proven low.
             </div>
           )}
+          <div style={{ fontSize: 11, color: "var(--text-faint)" }}>
+            {saving ? "Saving…" : savedAt ? "Saved." : "Changes save automatically."}
+          </div>
+        </div>
+
+        <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--radius-lg)", padding: "20px 22px", display: "flex", flexDirection: "column", gap: 14 }}>
+          <div>
+            <div style={{ fontSize: 14, fontWeight: 700, color: INK }}>AI email replies</div>
+            <p style={{ fontSize: 12.5, color: MUT, margin: "4px 0 0", lineHeight: 1.5 }}>
+              When on, the engine drafts a Spartan-Crew reply for each inbound email, in Spartan&apos;s voice and with full thread context. <b style={{ color: SUB }}>Off by default</b> — classification and order staging still run without it.
+            </p>
+          </div>
+          <OnOff value={settings.replies_enabled} onChange={(v) => save({ ...settings, replies_enabled: v })} />
           <div style={{ fontSize: 11, color: "var(--text-faint)" }}>
             {saving ? "Saving…" : savedAt ? "Saved." : "Changes save automatically."}
           </div>

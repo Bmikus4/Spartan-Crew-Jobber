@@ -150,13 +150,18 @@ export interface ConversationState {
 /** Client-tunable settings (surfaced in the Vercel settings menu). */
 export interface Settings {
   /**
-   * draft-only  = replies drafted + orders STAGED for one-click confirm (launch default)
-   * auto        = replies drafted + confident orders written to OnSinch hands-free
+   * draft-only  = orders STAGED for one-click confirm (launch default)
+   * auto        = confident orders written to OnSinch hands-free
    */
   order_mode: "draft-only" | "auto";
+  /**
+   * Tool 1 — the verbatim Spartan reply generator. OFF by default: the engine
+   * still classifies + does order work, but drafts NO reply until this is on.
+   */
+  replies_enabled: boolean;
 }
 
-export const DEFAULT_SETTINGS: Settings = { order_mode: "draft-only" };
+export const DEFAULT_SETTINGS: Settings = { order_mode: "draft-only", replies_enabled: false };
 
 /** The actions the executor should perform after a compile. */
 export interface Actions {

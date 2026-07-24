@@ -25,6 +25,8 @@ export interface CompileDeps {
   reasoner: Reasoner;
   onsinch: OnsinchClient;
   now: () => number; // injectable clock for deterministic tests
+  // Tool 1 toggle. undefined => enabled (tests); false => no reply is drafted.
+  repliesEnabled?: boolean;
 }
 
 function hash(s: string): string {
@@ -95,9 +97,13 @@ export async function compile(
   // 1. classify the latest email
   const cls = await reasoner.classify(latest, history, !!prior?.onsinch_order_id);
 
-  // 2. compose the reply (always — every inbound gets a draft)
-  const reply = await reasoner.composeReply(latest, history, cls.classification);
-  const replyHash = hash(reply.html);
+  // 2. compose the reply — Tool 1, gated by the replies_enabled setting.
+  // Off by default: classification + order work still run, but no reply is drafted.
+  const repliesEnabled = deps.repliesEnabled !== false;
+  const reply = repliesEnabled
+    ? await reasoner.composeReply(latest, history, cls.classification)
+    : null;
+  const replyHash = reply ? hash(reply.html) : undefined;
 
   // 3. only a real job triggers the order path
   const isJob = cls.classification === "new-job" || cls.classification === "update";
@@ -145,7 +151,7 @@ export async function compile(
 
   // 4. decide actions (reads already happened; writes are returned only)
   const actions: Actions = {};
-  if (!prior || prior.last_reply_hash !== replyHash) {
+  if (reply && (!prior || prior.last_reply_hash !== replyHash)) {
     actions.createReplyDraft = {
       subject: reply.subject,
       html: reply.html,
@@ -191,10 +197,10 @@ export async function compile(
     desired_order: desired,
     last_ordered_hash: prior?.last_ordered_hash,
     priority: cls.priority,
-    reply_body_html: reply.html,
-    reply_subject: reply.subject,
+    reply_body_html: reply?.html ?? prior?.reply_body_html,
+    reply_subject: reply?.subject ?? prior?.reply_subject,
     reply_draft_id: prior?.reply_draft_id,
-    last_reply_hash: replyHash,
+    last_reply_hash: replyHash ?? prior?.last_reply_hash,
     needs_human,
     status,
     notes,

@@ -70,12 +70,14 @@ function executor(client: OnsinchClient): Executor {
 
 export async function buildDeps(): Promise<PipelineDeps> {
   const client = onsinch();
+  const settings = await getSettings();
   return {
     reasoner: reasoner(),
     onsinch: client,
     store: new NeonStateStore(),
     metrics: new NeonMetrics(),
-    settings: await getSettings(),
+    settings,
+    repliesEnabled: settings.replies_enabled, // Tool 1: off by default
     executor: executor(client),
     now: () => Date.now(),
     hashOrder,
