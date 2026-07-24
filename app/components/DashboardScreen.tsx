@@ -171,7 +171,7 @@ export default function DashboardScreen({ isActive }: Props) {
 
   return (
     <div style={wrap}>
-      <div style={{ maxWidth: 1080, margin: "0 auto", display: "flex", flexDirection: "column", gap: 18 }}>
+      <div style={{ width: "100%", display: "flex", flexDirection: "column", gap: 18 }}>
         <header>
           <span className="eyebrow"><span className="slash">/</span>DASHBOARD</span>
           <h1 style={{ fontSize: 26, fontWeight: 700, color: INK, margin: "4px 0 2px" }}>Impact</h1>

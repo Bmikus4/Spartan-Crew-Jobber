@@ -117,7 +117,7 @@ export default function JobsScreen({ isActive }: Props) {
 
   return (
     <div style={wrap}>
-      <div style={{ maxWidth: 1000, margin: "0 auto", display: "flex", flexDirection: "column", gap: 16 }}>
+      <div style={{ width: "100%", display: "flex", flexDirection: "column", gap: 16 }}>
         <header>
           <span className="eyebrow"><span className="slash">/</span>JOBS</span>
           <h1 style={{ fontSize: 26, fontWeight: 700, color: INK, margin: "4px 0 2px" }}>Jobs</h1>
