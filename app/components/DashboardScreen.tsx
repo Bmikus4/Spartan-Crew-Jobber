@@ -70,13 +70,13 @@ function Sparkline({ values, h = 32 }: { values: number[]; h?: number }) {
   );
 }
 
-function StatTile({ label, value, sub, series, accent }: { label: string; value: string; sub?: string; series: number[]; accent?: boolean }) {
+function StatTile({ label, value, sub, series, accent, big }: { label: string; value: string; sub?: string; series: number[]; accent?: boolean; big?: boolean }) {
   return (
-    <div style={{ background: accent ? "var(--accent-subtle)" : "var(--surface)", border: `1px solid ${accent ? "var(--accent-border)" : BORDER}`, borderRadius: "var(--radius-lg)", padding: "16px 18px", display: "flex", flexDirection: "column", gap: 8 }}>
-      <span style={{ fontSize: 10.5, letterSpacing: "0.07em", textTransform: "uppercase", color: MUT, fontWeight: 700 }}>{label}</span>
-      <span className="tnum" style={{ fontSize: 30, fontWeight: 700, color: accent ? A : INK, lineHeight: 1 }}>{value}</span>
-      {sub && <span style={{ fontSize: 11, color: FAINT }}>{sub}</span>}
-      <div style={{ marginTop: 2 }}><Sparkline values={series.length ? series : [0, 0]} /></div>
+    <div style={{ background: accent ? "var(--accent-subtle)" : "var(--surface)", border: `1px solid ${accent ? "var(--accent-border)" : BORDER}`, borderRadius: "var(--radius-lg)", padding: big ? "20px 22px" : "16px 18px", display: "flex", flexDirection: "column", gap: big ? 10 : 8 }}>
+      <span style={{ fontSize: 11, letterSpacing: "0.07em", textTransform: "uppercase", color: MUT, fontWeight: 700 }}>{label}</span>
+      <span className="tnum" style={{ fontSize: big ? 46 : 34, fontWeight: 700, color: accent ? A : INK, lineHeight: 1, letterSpacing: "-0.02em" }}>{value}</span>
+      {sub && <span style={{ fontSize: 11.5, color: FAINT }}>{sub}</span>}
+      <div style={{ marginTop: 2 }}><Sparkline values={series.length ? series : [0, 0]} h={big ? 36 : 32} /></div>
     </div>
   );
 }
@@ -174,15 +174,15 @@ export default function DashboardScreen({ isActive }: Props) {
       <div style={{ maxWidth: 1080, margin: "0 auto", display: "flex", flexDirection: "column", gap: 18 }}>
         <header>
           <span className="eyebrow"><span className="slash">/</span>DASHBOARD</span>
-          <h1 style={{ fontSize: 22, fontWeight: 700, color: INK, margin: "4px 0 2px" }}>Enquiry engine impact</h1>
+          <h1 style={{ fontSize: 26, fontWeight: 700, color: INK, margin: "4px 0 2px" }}>Impact</h1>
           <p style={{ fontSize: 13, color: MUT, margin: 0 }}>Every email intook, filtered, replied to, and booked — measured from the engine&apos;s own run.</p>
         </header>
 
-        <section style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 14 }}>
-          <StatTile label="Hours reclaimed" value={`${fmt1(data.hours_saved)}h`} sub="from handled email" series={intakeSeries} accent />
-          <StatTile label="Orders created" value={fmtInt(data.orders_created)} sub={`${fmtInt(data.orders_updated)} updated`} series={ordersSeries} />
-          <StatTile label="Awaiting confirm" value={fmtInt(data.awaiting_confirmation)} sub="draft-only queue" series={data.series.map((r) => Number(r["order_proposed"] || 0))} />
-          <StatTile label="Hands-free rate" value={`${data.hands_free_rate}%`} sub={`${fmtInt(data.needs_human)} need a human`} series={repliesSeries} />
+        <section style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 14 }}>
+          <StatTile big label="Hours reclaimed" value={`${fmt1(data.hours_saved)}h`} sub="from handled email" series={intakeSeries} accent />
+          <StatTile big label="Orders created" value={fmtInt(data.orders_created)} sub={`${fmtInt(data.orders_updated)} updated`} series={ordersSeries} />
+          <StatTile big label="Awaiting confirm" value={fmtInt(data.awaiting_confirmation)} sub="draft-only queue" series={data.series.map((r) => Number(r["order_proposed"] || 0))} />
+          <StatTile big label="Hands-free rate" value={`${data.hands_free_rate}%`} sub={`${fmtInt(data.needs_human)} need a human`} series={repliesSeries} />
         </section>
 
         <section style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)", gap: 14 }} className="dash-split">

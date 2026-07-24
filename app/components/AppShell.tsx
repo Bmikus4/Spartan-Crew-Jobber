@@ -44,7 +44,7 @@ export default function AppShell() {
     <div style={{ display: "flex", height: "100%", width: "100%", background: "var(--bg)" }}>
       <Sidebar activeTool={tool} onSelectTool={(id) => setTool(id as Tool)} onSettings={() => setTool("settings")} />
 
-      <main style={{ flex: 1, minWidth: 0, height: "calc(100% - var(--shell-double-pad))", margin: "var(--shell-pad) var(--shell-pad) var(--shell-pad) 0", display: "flex", flexDirection: "column" }} className="frosted-glass">
+      <main style={{ flex: 1, minWidth: 0, height: "calc(100% - var(--shell-double-pad))", margin: "var(--shell-pad)", display: "flex", flexDirection: "column" }} className="frosted-glass">
         <header style={{ height: "var(--panel-header-height)", display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 var(--panel-pad-x)", borderBottom: "1px solid var(--border)", flexShrink: 0 }}>
           <span style={{ fontSize: 13, fontWeight: 600, color: "var(--text-secondary)", letterSpacing: "0.02em" }}>
             {tool === "dashboard" ? "Dashboard" : "Settings"}

@@ -5,6 +5,7 @@
 // every OnSinch order for one-click confirm; auto writes hands-free.
 
 import { useCallback, useEffect, useState } from "react";
+import InstallButton from "./InstallButton";
 
 type OrderMode = "draft-only" | "auto";
 interface Settings { order_mode: OrderMode }
@@ -80,6 +81,16 @@ export default function SettingsScreen() {
           <div style={{ fontSize: 11, color: "var(--text-faint)" }}>
             {saving ? "Saving…" : savedAt ? "Saved." : "Changes save automatically."}
           </div>
+        </div>
+
+        <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--radius-lg)", padding: "20px 22px", display: "flex", flexDirection: "column", gap: 12 }}>
+          <div>
+            <div style={{ fontSize: 14, fontWeight: 700, color: INK }}>Install app</div>
+            <p style={{ fontSize: 12.5, color: MUT, margin: "4px 0 0", lineHeight: 1.5 }}>
+              Add Spartan Crew to your phone or desktop home screen for full-screen, one-tap access.
+            </p>
+          </div>
+          <InstallButton />
         </div>
 
         <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--radius-lg)", padding: "20px 22px" }}>

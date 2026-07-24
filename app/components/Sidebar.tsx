@@ -137,7 +137,7 @@ export default function Sidebar({ activeTool, onSelectTool, onSettings }: Sideba
 
   return (
     <nav role="navigation" aria-label="Main sidebar navigation" className="frosted-glass nav-rail"
-      style={{ width, minWidth: width, height: "calc(100% - var(--shell-double-pad))", marginTop: "var(--shell-pad)", marginBottom: "var(--shell-pad)", display: "flex", flexDirection: "column", transition: "width 350ms cubic-bezier(0.4,0,0.2,1), min-width 350ms cubic-bezier(0.4,0,0.2,1)", position: "relative", zIndex: 100, overflowY: "auto", overflowX: "hidden", borderRadius: "0 var(--radius-lg) var(--radius-lg) 0" }}>
+      style={{ width, minWidth: width, height: "calc(100% - var(--shell-double-pad))", margin: "var(--shell-pad) 0 var(--shell-pad) var(--shell-pad)", display: "flex", flexDirection: "column", transition: "width 350ms cubic-bezier(0.4,0,0.2,1), min-width 350ms cubic-bezier(0.4,0,0.2,1)", position: "relative", zIndex: 100, overflowY: "auto", overflowX: "hidden", borderRadius: "var(--radius-lg)" }}>
       <button onClick={toggleExpanded} aria-expanded={expanded} aria-label={expanded ? "Collapse sidebar" : "Expand sidebar"}
         style={{ position: "absolute", top: "50%", right: 8, transform: "translateY(-50%)", width: 20, height: 20, borderRadius: 4, background: "transparent", color: "var(--text-muted)", border: "none", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", zIndex: 110, padding: 0 }}>
         <ToggleArrow expanded={expanded} />

@@ -45,8 +45,8 @@
   --panel-pad-x: 20px;
   --panel-header-height: 48px;
   --footer-bar-height: 58px;
-  --shell-pad: 8px;
-  --shell-double-pad: 16px;
+  --shell-pad: 12px;
+  --shell-double-pad: 24px;
   --mobile-nav-h: 46px;
   --mobile-nav-safe: max(0px, calc(env(safe-area-inset-bottom) - 30px));
 
