@@ -2,9 +2,10 @@
 
 /*
  * Spartan Crew Jobber — same "Samurai" dark editorial design system as the
- * House of Hud quote tool (shared architecture). Near-black surfaces, white
- * headings, grey body, a single burnt-orange accent. No gradients, no imagery.
- * (Accent is a single token — swap --accent to rebrand.)
+ * House of Hud quote tool (shared architecture). Spartan Crew identity:
+ * near-black surfaces, white headings, grey body, a near-monochrome white/steel
+ * accent (matches spartancrew.co.uk — deliberately no loud color).
+ * (Accent is a single token set — swap --accent* to rebrand.)
  */
 
 :root {
@@ -22,12 +23,13 @@
   --text-muted: #8a8a8a;
   --text-faint: #6a6a6a;
 
-  --accent: #f08a1c;
-  --accent-hover: #ff9a2e;
-  --accent-press: #d9780f;
-  --accent-contrast: #0e0e0e;
-  --accent-subtle: rgba(240, 138, 28, 0.12);
-  --accent-border: rgba(240, 138, 28, 0.45);
+  /* Spartan Crew identity: near-monochrome, white-on-dark (matches spartancrew.co.uk). */
+  --accent: #e6e9ee;
+  --accent-hover: #ffffff;
+  --accent-press: #c4c8d0;
+  --accent-contrast: #0b0b0c;
+  --accent-subtle: rgba(200, 208, 220, 0.10);
+  --accent-border: rgba(200, 208, 220, 0.38);
 
   --danger: #ef4444;
   --danger-subtle: rgba(239, 68, 68, 0.14);
@@ -77,12 +79,13 @@
   --text-muted: #7a6f5b;
   --text-faint: #9c9079;
 
-  --accent: #c06a10;
-  --accent-hover: #d97c18;
-  --accent-press: #a65a0a;
-  --accent-contrast: #fbf6ec;
-  --accent-subtle: rgba(192, 106, 16, 0.13);
-  --accent-border: rgba(192, 106, 16, 0.45);
+  /* Light theme: graphite accent on the tan ground (monochrome mirror). */
+  --accent: #3a3f47;
+  --accent-hover: #23272d;
+  --accent-press: #4c525b;
+  --accent-contrast: #ffffff;
+  --accent-subtle: rgba(58, 63, 71, 0.10);
+  --accent-border: rgba(58, 63, 71, 0.35);
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }

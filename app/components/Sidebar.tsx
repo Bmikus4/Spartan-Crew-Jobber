@@ -5,6 +5,7 @@
 // single tool: the Dashboard. Settings opens an overlay screen.
 
 import { useState, useEffect } from "react";
+import BrandLogo from "./BrandLogo";
 
 interface NavItemConfig {
   id: string;
@@ -49,10 +50,10 @@ const NAV_ITEMS: NavItemConfig[] = [{ id: "dashboard", label: "Dashboard", icon:
 const SETTINGS_ITEM: NavItemConfig = { id: "settings", label: "Settings", icon: <IconSettings /> };
 const NAV_BEVEL_SHADOW = "inset 0 1px 0 rgba(255,255,255,0.08), 0 1px 2px rgba(0,0,0,0.25)";
 
-function Logo() {
+function Logo({ condensed }: { condensed: boolean }) {
   return (
-    <div style={{ width: 42, height: 42, display: "flex", alignItems: "center", justifyContent: "center", borderRadius: 10, background: "var(--accent-subtle)", border: "1px solid var(--accent-border)" }}>
-      <span className="mono" style={{ fontWeight: 800, fontSize: 15, color: "var(--accent)", letterSpacing: "0.02em" }}>SC</span>
+    <div style={{ height: 42, display: "flex", alignItems: "center", justifyContent: "center" }}>
+      <BrandLogo condensed={condensed} />
     </div>
   );
 }
@@ -143,8 +144,8 @@ export default function Sidebar({ activeTool, onSelectTool, onSettings }: Sideba
         <ToggleArrow expanded={expanded} />
       </button>
 
-      <div style={{ padding: "16px 0 19px 0", display: "flex", justifyContent: "center" }}>
-        <Logo />
+      <div style={{ padding: "16px 10px 19px", display: "flex", justifyContent: "center" }}>
+        <Logo condensed={isCondensed} />
       </div>
 
       <div style={{ display: "flex", flexDirection: "column", gap: 2, padding: "0 8px", flex: 1 }}>
