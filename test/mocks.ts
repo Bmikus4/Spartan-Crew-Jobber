@@ -39,25 +39,34 @@ export const mockReasoner: Reasoner = {
   },
 };
 
-// Mock OnSinch transport: resolves the fixture company/place/user, and returns
-// 201 for order creation, 204 for patch.
+// Mock OnSinch transport: supports pull-all dedup (companies/places with
+// pagination + a company Client list), order-dedup (empty), and create/patch.
 export const mockTransport: Transport = async (method, path) => {
+  if (method === "POST" && path === "/places")
+    return { status: 201, data: { data: [{ id: 777 }] } };
+  if (method === "POST" && path === "/companies")
+    return { status: 201, data: { data: [{ id: 999 }] } };
+  if (method === "POST" && path === "/orders")
+    return { status: 201, data: { data: [{ id: 9001, number: "SC-9001" }] } };
+  if (method === "PATCH" && path === "/orders") return { status: 204, data: null };
   if (path.startsWith("/companies"))
-    return { status: 200, data: { data: [{ id: 42, name: "RedBeast Energy" }] } };
+    return {
+      status: 200,
+      data: {
+        data: [{ id: 42, name: "RedBeast Energy", invoice_name: "RedBeast Energy", Client: [{ id: 1337, email: "pier@redbeast.co.uk", name: "Pier" }] }],
+        pagination: { count: 1, pageCount: 1, nextPage: false },
+      },
+    };
   if (path.startsWith("/places"))
     return {
       status: 200,
       data: {
-        data: [
-          { id: 88, name: "Savoy Place", address: "2 savoy place", city: "london", zip: "wc2r 0bl", country: "GB", lat: 51.5, lng: -0.12 },
-        ],
+        data: [{ id: 88, name: "Savoy Place", address: "2 savoy place", city: "london", zip: "wc2r 0bl", country: "GB", lat: 51.5, lng: -0.12 }],
+        pagination: { count: 1, pageCount: 1, nextPage: false },
       },
     };
-  if (path.startsWith("/users"))
-    return { status: 200, data: { data: [{ id: 1337, email: "pier@redbeast.co.uk" }] } };
-  if (method === "POST" && path === "/orders")
-    return { status: 201, data: { data: [{ id: 9001, number: "SC-9001" }] } };
-  if (method === "PATCH" && path === "/orders") return { status: 204, data: null };
+  if (path.startsWith("/orders")) // company order-dedup lookup: none existing
+    return { status: 200, data: { data: [], pagination: { count: 0, pageCount: 1, nextPage: false } } };
   return { status: 200, data: { data: [] } };
 };
 

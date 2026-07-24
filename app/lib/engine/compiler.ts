@@ -12,12 +12,13 @@ import type {
   Actions,
   ConversationFacts,
   ConversationState,
+  DesiredOrder,
   HydratedThread,
 } from "./types";
 import { normalizeThread } from "./normalize";
-import { scorePlaces } from "./score";
 import { composeOrder } from "./compose";
 import { validateOrder } from "./format";
+import { matchCompany, matchContact, matchPlace, matchExistingOrder } from "./resolve";
 import type { Reasoner } from "./reason";
 import type { OnsinchClient } from "./onsinch";
 
@@ -41,7 +42,18 @@ function jobNameFrom(facts: ConversationFacts): string {
   return `${size} at ${loc} on ${date}`.slice(0, 100);
 }
 
-/** Resolve company_id from OnSinch, reusing the cached value if present. */
+/** Earliest requested date (YYYY-MM-DD) — the order-dedup key. */
+function firstDate(facts: ConversationFacts): string | undefined {
+  return facts.requests
+    .map((r) => r.date)
+    .filter((d): d is string => !!d)
+    .sort()[0];
+}
+
+// Tool 2 resolution — OnSinch search is limited/non-fuzzy, so we pull the WHOLE
+// list and match EXACTLY client-side (dedup: never create a duplicate).
+
+/** company: reuse prior; else exact-match all companies; else it's new (needs adding). */
 async function resolveCompany(
   facts: ConversationFacts,
   prior: ConversationState | undefined,
@@ -49,40 +61,44 @@ async function resolveCompany(
 ): Promise<{ id?: number; note?: string }> {
   if (prior?.company_id) return { id: prior.company_id };
   if (!facts.company_name) return { note: "no company name extracted" };
-  const cands = await onsinch.searchCompanies({ name: facts.company_name });
-  const exact = cands.find(
-    (c) => (c.name || "").toLowerCase() === facts.company_name!.toLowerCase()
-  );
-  const pick = exact ?? cands[0];
-  if (!pick) return { note: `company "${facts.company_name}" not found` };
-  return { id: pick.id };
+  const id = matchCompany(facts.company_name, await onsinch.allCompanies());
+  if (id) return { id };
+  return { note: `new company "${facts.company_name}" — add it in OnSinch (a contact is needed too)` };
 }
 
+/** contact: reuse prior; else exact-match the sender against the company's
+ * Client list; else fall back to an existing company contact; else needs-human.
+ * (The API cannot create contacts — a genuinely-new person must be added in OnSinch.) */
+async function resolveContact(
+  facts: ConversationFacts,
+  prior: ConversationState | undefined,
+  company_id: number | undefined,
+  onsinch: OnsinchClient
+): Promise<{ id?: number; note?: string }> {
+  if (prior?.user_id) return { id: prior.user_id };
+  if (!company_id) return { note: "no company resolved — contact pending" };
+  const clients = await onsinch.companyClients(company_id);
+  const exact = matchContact(facts.contact_email, clients);
+  if (exact) return { id: exact };
+  if (clients[0]?.id)
+    return { id: clients[0].id, note: `unknown sender ${facts.contact_email ?? "?"} — used the company's existing contact` };
+  return { note: `new contact ${facts.contact_email ?? "?"} and the company has no contact on file — add one in OnSinch` };
+}
+
+/** place: reuse prior; else exact-match all places; else provision a new one on write. */
 async function resolvePlace(
   facts: ConversationFacts,
   prior: ConversationState | undefined,
   onsinch: OnsinchClient
-): Promise<{ id?: number; note?: string }> {
+): Promise<{ id?: number; provision?: DesiredOrder["provision_place"]; note?: string }> {
   if (prior?.place_id) return { id: prior.place_id };
   if (!facts.location_text) return { note: "no location extracted" };
-  // OnSinch has no fuzzy search: pull candidates, then score locally.
-  const cands = await onsinch.searchPlaces({});
-  const scored = scorePlaces(facts.location_text, cands);
-  if (scored.decision === "match" && scored.place)
-    return { id: scored.place.id };
-  return { note: `place unresolved (best ${scored.match_pct}%) — create-new` };
-}
-
-async function resolveUser(
-  facts: ConversationFacts,
-  prior: ConversationState | undefined,
-  onsinch: OnsinchClient
-): Promise<{ id?: number; note?: string }> {
-  if (prior?.user_id) return { id: prior.user_id };
-  if (!facts.contact_email) return { note: "no contact email" };
-  const cands = await onsinch.searchUsers({ email: facts.contact_email });
-  if (!cands[0]) return { note: `user ${facts.contact_email} not found` };
-  return { id: cands[0].id };
+  const id = matchPlace(facts.location_text, await onsinch.allPlaces());
+  if (id) return { id };
+  return {
+    provision: { name: facts.location_text.slice(0, 120), country: "GB", address: facts.location_text },
+    note: `new venue "${facts.location_text}" — will be created in OnSinch on confirm`,
+  };
 }
 
 export async function compile(
@@ -113,30 +129,49 @@ export async function compile(
   let company_id = prior?.company_id;
   let user_id = prior?.user_id;
   let place_id = prior?.place_id;
+  let linkedOrderId = prior?.onsinch_order_id;
+  let provisionPlace: DesiredOrder["provision_place"];
 
   if (isJob) {
     facts = await reasoner.extractFacts(latest, history);
-    const [co, pl, us] = await Promise.all([
-      resolveCompany(facts, prior, onsinch),
-      resolvePlace(facts, prior, onsinch),
-      resolveUser(facts, prior, onsinch),
-    ]);
-    company_id = co.id ?? company_id;
-    place_id = pl.id ?? place_id;
-    user_id = us.id ?? user_id;
-    [co, pl, us].forEach((r) => r.note && notes.push(r.note));
 
-    if (company_id && user_id && place_id) {
+    // company first (contact resolution needs it)
+    const co = await resolveCompany(facts, prior, onsinch);
+    company_id = co.id ?? company_id;
+    if (co.note) notes.push(co.note);
+
+    const [pl, us] = await Promise.all([
+      resolvePlace(facts, prior, onsinch),
+      resolveContact(facts, prior, company_id, onsinch),
+    ]);
+    place_id = pl.id ?? place_id;
+    provisionPlace = pl.provision;
+    user_id = us.id ?? user_id;
+    if (pl.note) notes.push(pl.note);
+    if (us.note) notes.push(us.note);
+
+    // Order dedup vs OnSinch — never create a second job for an existing one.
+    if (company_id && !linkedOrderId) {
+      const existing = matchExistingOrder(firstDate(facts), await onsinch.companyOrdersWithJob(company_id));
+      if (existing) {
+        linkedOrderId = existing.order_id;
+        notes.push(`matched existing OnSinch order #${existing.order_id} (same date) — will update, not create`);
+      }
+    }
+
+    const havePlace = !!place_id || !!provisionPlace;
+    if (company_id && user_id && havePlace) {
       const composed = composeOrder({
         facts,
         company_id,
         user_id,
-        place_id,
+        place_id: place_id ?? 0, // 0 => created on write from provisionPlace
         orderName: (latest.subject || facts.requests[0]?.task || "Spartan Crew job").slice(0, 80),
         jobName: jobNameFrom(facts),
       });
       composed.warnings.forEach((w) => notes.push(w));
       desired = composed.order;
+      if (desired && provisionPlace) desired.provision_place = provisionPlace;
       if (desired) {
         const errs = validateOrder(desired);
         if (errs.length) {
@@ -145,7 +180,7 @@ export async function compile(
         }
       }
     } else {
-      needs_human = true; // unresolved ids -> a human confirms before we book
+      needs_human = true; // unknown company / no contact -> a human resolves it
     }
   }
 
@@ -160,10 +195,10 @@ export async function compile(
   }
   const desiredHash = desired ? hash(JSON.stringify(desired)) : undefined;
   if (desired && !needs_human) {
-    if (prior?.onsinch_order_id) {
-      // only patch if the desired order actually changed since we last sent it
-      if (desiredHash !== prior.last_ordered_hash) {
-        actions.patchOrder = { order_id: prior.onsinch_order_id, desired };
+    if (linkedOrderId) {
+      // an existing order (ours or matched in OnSinch) — patch only if it changed
+      if (desiredHash !== prior?.last_ordered_hash) {
+        actions.patchOrder = { order_id: linkedOrderId, desired };
       }
     } else {
       actions.createOrder = desired;
@@ -192,7 +227,7 @@ export async function compile(
     company_id,
     user_id,
     place_id,
-    onsinch_order_id: prior?.onsinch_order_id,
+    onsinch_order_id: linkedOrderId,
     onsinch_order_number: prior?.onsinch_order_number,
     desired_order: desired,
     last_ordered_hash: prior?.last_ordered_hash,

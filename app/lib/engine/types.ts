@@ -60,6 +60,12 @@ export interface DesiredOrder {
   request_approval: true; // hardcoded business rule
   job_name: string;
   slot_teams: DesiredSlotTeam[];
+  /**
+   * Tool 2 — when the venue isn't already in OnSinch, the place is created on
+   * write (reference data, no contact dependency) and its id backfilled onto
+   * every slot team. place_id is 0 on the slot teams until then.
+   */
+  provision_place?: { name: string; country: string; address?: string; city?: string; zip?: string };
 }
 
 /**

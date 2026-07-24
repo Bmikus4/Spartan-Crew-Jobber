@@ -9,7 +9,9 @@
 //         (6) flipping order_mode:"auto" writes the order hands-free.
 // ============================================================================
 import { createHash } from "node:crypto";
-import { OnsinchClient } from "../app/lib/engine/onsinch";
+import { OnsinchClient, type Transport } from "../app/lib/engine/onsinch";
+import { matchCompany, matchPlace, matchContact, matchExistingOrder } from "../app/lib/engine/resolve";
+import { createOrderWithPlace } from "../app/lib/deps";
 import { InMemoryStore } from "../app/lib/engine/store";
 import { InMemoryMetrics, aggregate } from "../app/lib/engine/metrics";
 import { buildOrderBody } from "../app/lib/engine/format";
@@ -103,6 +105,34 @@ const NEW = { message_id: "m1", body: "Hi, can I book 4 crew on 9th March at Sav
   const autoDeps: PipelineDeps = { ...deps, settings: { order_mode: "auto", replies_enabled: true } };
   const s2 = await handleThread({ thread_id: "thread-B", messages: [msg({ message_id: "b1", body: NEW.body })] }, autoDeps);
   assert(s2.status === "ordered" && s2.onsinch_order_id === 9001, "auto mode wrote order without confirm");
+
+  console.log("\n[8] Tool 2 dedup — pull-all EXACT match (resolve.ts)");
+  const companies = [{ id: 1, name: "RedBeast Energy Ltd" }, { id: 2, name: "Acme Events" }];
+  assert(matchCompany("redbeast energy", companies) === 1, "company exact-match ignores case + legal suffix");
+  assert(matchCompany("Unknown Co", companies) === null, "unknown company -> null (needs creating)");
+  const places = [{ id: 88, name: "Savoy Place", address: "2 savoy place", city: "london", zip: "wc2r 0bl", country: "GB" }];
+  assert(matchPlace("2 Savoy Place, London WC2R 0BL, United Kingdom", places) === 88, "venue matched from a richer email address string");
+  assert(matchPlace("Somewhere Else, Leeds", places) === null, "unknown venue -> null (provisioned on write)");
+  const clients = [{ id: 1337, email: "Pier@RedBeast.co.uk" }];
+  assert(matchContact("pier@redbeast.co.uk", clients) === 1337, "contact exact-match on email, case-insensitive (no dup)");
+  assert(matchContact("new@person.com", clients) === null, "new contact -> null");
+  const existing = [{ id: 5001, happening: "2026-03-09T08:00:00+00:00", Job: [{ id: 7001 }] }];
+  assert(matchExistingOrder("2026-03-09", existing)?.order_id === 5001, "order dedup: same-date match -> update, not create");
+  assert(matchExistingOrder("2026-03-10", existing) === null, "different date -> no dup match");
+
+  console.log("\n[9] Tool 2 — new venue provisioned on write, then order created");
+  const calls: string[] = [];
+  const recTransport: Transport = async (m, p, b) => { calls.push(`${m} ${p.split("?")[0]}`); return mockTransport(m, p, b); };
+  const recClient = new OnsinchClient(recTransport);
+  const provOrder = {
+    name: "New client @ New Venue", company_id: 42, user_id: 1337, request_approval: true as const,
+    job_name: "4 at New Venue on 2026-03-09",
+    slot_teams: [{ name: "Crew", profession_id: 1, beginning: "2026-03-09T08:00:00+00:00", end: "2026-03-09T18:00:00+00:00", size: 4, place_id: 0 }],
+    provision_place: { name: "New Venue", country: "GB", address: "1 New Road, Leeds" },
+  };
+  const provCreated = await createOrderWithPlace(recClient, provOrder);
+  assert(calls.includes("POST /places"), "new venue created (POST /places) before the order");
+  assert(provCreated.id === 9001, "order created after the place was provisioned");
 
   console.log(`\n${fails === 0 ? "ALL PASS" : fails + " FAILED"}\n`);
   process.exit(fails === 0 ? 0 : 1);

@@ -40,6 +40,19 @@ export function httpTransport(cfg: OnsinchConfig): Transport {
   };
 }
 
+// Warm-lambda cache for the big whole-list pulls (companies/places). A full
+// places pull is ~68 pages; without this we'd repeat it on every email. Short
+// TTL so newly-created entities show up quickly.
+const _listCache = new Map<string, { t: number; v: any[] }>();
+const LIST_TTL_MS = 5 * 60 * 1000;
+async function listAllCached(key: string, fetchAll: () => Promise<any[]>): Promise<any[]> {
+  const c = _listCache.get(key);
+  if (c && Date.now() - c.t < LIST_TTL_MS) return c.v;
+  const v = await fetchAll();
+  _listCache.set(key, { t: Date.now(), v });
+  return v;
+}
+
 function qs(filters: Record<string, string | number>): string {
   const parts = Object.entries(filters).map(
     ([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(String(v))}`
@@ -97,5 +110,65 @@ export class OnsinchClient {
     if (r.status !== 204 && r.status !== 200)
       throw new Error(`patchOrder ${r.status}: ${JSON.stringify(r.data)}`);
     return true;
+  }
+
+  // --- Tool 2: pull-all + create (search is limited/non-fuzzy, so we page the
+  // whole list and exact-match client-side; then create when genuinely new) ---
+
+  /**
+   * Page through every record of a list endpoint. NOTE: OnSinch's
+   * `pagination.nextPage` is a BOOLEAN, not a page number — we drive the loop
+   * off the integer `pageCount` (this exact bug caused an infinite re-pull in
+   * the rate study).
+   */
+  private async listAll(
+    path: string,
+    filters: Record<string, string | number> = {}
+  ): Promise<any[]> {
+    const out: any[] = [];
+    let page = 1;
+    let pageCount = 1;
+    for (;;) {
+      const r = await this.t("GET", path + qs({ ...filters, limit: 100, page }));
+      const data = (r.data?.data ?? []) as any[];
+      out.push(...data);
+      const pg = r.data?.pagination ?? {};
+      pageCount = Number.isInteger(pg.pageCount) ? pg.pageCount : pageCount;
+      if (!data.length || page >= pageCount) break;
+      page++;
+    }
+    return out;
+  }
+
+  /** All companies (for exact-match dedup). ~756 today. Cached (warm lambda). */
+  async allCompanies() {
+    return listAllCached("companies", () => this.listAll("/companies"));
+  }
+
+  /** All places (for exact-match dedup). ~6.8k today. Cached — a full pull is
+   * ~68 pages, far too slow to repeat per email. */
+  async allPlaces() {
+    return listAllCached("places", () => this.listAll("/places")) as Promise<PlaceCandidate[]>;
+  }
+
+  /** A company's Client contacts (the valid user_ids for its orders). */
+  async companyClients(company_id: number): Promise<any[]> {
+    const r = await this.t("GET", "/companies" + qs({ id: company_id, with: "Client" }));
+    return (r.data?.data?.[0]?.Client ?? []) as any[];
+  }
+
+  /** A company's existing orders (with Job) — the order-dedup source. */
+  async companyOrdersWithJob(company_id: number) {
+    return this.listAll("/orders", { company_id, with: "Job" });
+  }
+
+  /** POST /companies — array body, 201 { data:[{id}] }. name is the min field. */
+  async createCompany(company: { name: string } & Record<string, unknown>) {
+    const r = await this.t("POST", "/companies", [company]);
+    if (r.status !== 201)
+      throw new Error(
+        `createCompany ${r.status}: ${JSON.stringify(r.data?.validationErrors ?? r.data)}`
+      );
+    return r.data.data[0] as { id: number; name?: string };
   }
 }

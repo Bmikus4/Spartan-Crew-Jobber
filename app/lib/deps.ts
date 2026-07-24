@@ -11,7 +11,22 @@ import { createHash } from "node:crypto";
 import { OnsinchClient, httpTransport } from "./engine/onsinch";
 import { createOpenRouterReasoner, type Reasoner } from "./engine/reason";
 import { buildOrderBody } from "./engine/format";
+import type { DesiredOrder } from "./engine/types";
 import type { Executor, PipelineDeps } from "./engine/pipeline";
+
+/**
+ * Tool 2 write path: if the order carries a new-venue provision, create the
+ * place first (reference data, no contact dependency), backfill its id onto
+ * every slot team, then create the order. Exported so it's testable.
+ */
+export async function createOrderWithPlace(client: OnsinchClient, order: DesiredOrder) {
+  const o = { ...order };
+  if (o.provision_place && o.slot_teams.some((s) => !s.place_id)) {
+    const place = await client.createPlace({ ...o.provision_place });
+    o.slot_teams = o.slot_teams.map((s) => ({ ...s, place_id: place.id }));
+  }
+  return client.createOrder(buildOrderBody(o));
+}
 import { NeonStateStore } from "./stateDb";
 import { NeonMetrics } from "./metricsDb";
 import { getSettings } from "./settingsDb";
@@ -60,7 +75,7 @@ function executor(client: OnsinchClient): Executor {
       }
     },
     async createOrder(order) {
-      return client.createOrder(buildOrderBody(order));
+      return createOrderWithPlace(client, order);
     },
     async patchOrder(p) {
       await client.patchOrder([{ id: p.order_id }]);
