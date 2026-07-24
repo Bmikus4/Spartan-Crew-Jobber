@@ -41,8 +41,12 @@ export async function handleThread(
   // aggressively (re-POSTing everything for full coverage) at ~zero cost; only
   // genuinely new/changed threads run the model. A new email changes the latest
   // message id, so it always processes.
+  // Key on the newest CLIENT message (matches normalizeThread's "latest"): our
+  // own Spartan replies land in the thread but must not count as new activity,
+  // or every drafted reply would retrigger processing.
+  const pool = thread.messages.filter((m) => !m.is_from_spartan);
   const latestId =
-    thread.messages.reduce<(typeof thread.messages)[number] | undefined>(
+    (pool.length ? pool : thread.messages).reduce<(typeof thread.messages)[number] | undefined>(
       (top, m) => (!top || m.date_iso >= top.date_iso ? m : top),
       undefined
     )?.message_id ?? "";

@@ -91,6 +91,14 @@ const NEW = { message_id: "m1", body: "Hi, can I book 4 crew on 9th March at Sav
   assert(stats.orders_created === 1 && stats.orders_updated === 1, "1 created, 1 updated after confirms");
   assert(stats.awaiting_confirmation === 0, "nothing left awaiting confirmation");
 
+  console.log("\n[7] Newest message is our OWN Spartan reply -> act on the client email, never ourselves");
+  const s7 = await handleThread({ thread_id: "thread-C", messages: [
+    msg({ message_id: "c1", date_iso: "2026-03-01T10:00:00Z", body: NEW.body }),
+    msg({ message_id: "c2", date_iso: "2026-03-01T12:00:00Z", from: "bookings@spartancrew.co.uk", is_from_spartan: true, body: "Hello, got it and all noted for the 9th. Thanks, Spartan Crew" }),
+  ]}, deps);
+  assert(s7.last_message_id === "c1", "latest = the client message, not our Spartan reply");
+  assert(s7.classification === "new-job", "classified the client's request, not our own email");
+
   console.log("\n[6] order_mode:auto -> hands-free write (separate thread)");
   const autoDeps: PipelineDeps = { ...deps, settings: { order_mode: "auto" } };
   const s2 = await handleThread({ thread_id: "thread-B", messages: [msg({ message_id: "b1", body: NEW.body })] }, autoDeps);

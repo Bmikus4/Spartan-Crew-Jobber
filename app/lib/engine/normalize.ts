@@ -64,17 +64,23 @@ export function normalizeThread(thread: HydratedThread): {
 } {
   const cleaned = thread.messages
     .map((m) => ({ ...m, body: cleanEmailBody(m.body) }))
-    .filter((m) => m.body && m.body.length > 5)
+    // keep short-but-real client replies ("yes", "ok", "cancel"); only drop empties
+    .filter((m) => m.body && m.body.trim().length >= 2)
     .sort((a, b) => Date.parse(a.date_iso) - Date.parse(b.date_iso));
 
   if (cleaned.length === 0) {
     throw new Error(`Thread ${thread.thread_id} has no usable messages`);
   }
 
-  const latest = cleaned[cleaned.length - 1];
-  const history = cleaned
-    .slice(0, -1)
-    .filter((m) => m.body !== latest.body); // drop exact duplicates of latest
+  // Act on the newest CLIENT message. Our own Spartan replies (drafted or sent)
+  // show up in the thread as the newest message — they must NEVER be treated as
+  // the inbound to classify/reply to (that would reply to ourselves and loop).
+  // They remain in history as context only.
+  const clientMsgs = cleaned.filter((m) => !m.is_from_spartan);
+  const latest = clientMsgs.length
+    ? clientMsgs[clientMsgs.length - 1]
+    : cleaned[cleaned.length - 1];
+  const history = cleaned.filter((m) => m !== latest && m.body !== latest.body);
 
   return { latest, history };
 }
