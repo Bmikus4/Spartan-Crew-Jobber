@@ -16,6 +16,7 @@ import type {
   ConversationFacts,
   ThreadMessage,
 } from "./types";
+import { CLASSIFY_SYSTEM, EXTRACT_SYSTEM, REPLY_SYSTEM } from "./prompts";
 
 export interface ClassifyResult {
   classification: Classification;
@@ -161,9 +162,3 @@ const REPLY_SCHEMA = {
     priority: { type: "string", enum: ["low", "medium", "high"] },
   },
 };
-
-// Prompts ported verbatim from the live n8n workflows (trimmed here; the full
-// text lives in ./prompts/*.md in the real build).
-const CLASSIFY_SYSTEM = `Classify the LATEST email only as new-job | update | confirmation-only | not-a-job. History is context only. Confirmation with no changes => confirmation-only. Prefer update if a prior order exists and the email modifies it.`;
-const EXTRACT_SYSTEM = `Extract structured booking facts for the CLIENT company (never Spartan Crew). Copy values verbatim; reformat dates to YYYY-MM-DD. Never invent. One request entry per distinct date/size/task block. Exclude @spartancrew.co.uk addresses.`;
-const REPLY_SYSTEM = `You are the Spartan Crew email assistant. Write one casual, natural crew-style reply. Never mention IDs, priority, or internal ops. Body wrapped in <div>…<p>Thanks,<br>Spartan Crew</p></div>.`;
