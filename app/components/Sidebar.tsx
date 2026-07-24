@@ -46,7 +46,20 @@ function ToggleArrow({ expanded }: { expanded: boolean }) {
   );
 }
 
-const NAV_ITEMS: NavItemConfig[] = [{ id: "dashboard", label: "Dashboard", icon: <IconDashboard /> }];
+function IconJobs() {
+  return (
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3" y="7" width="18" height="13" rx="2" />
+      <path d="M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+      <line x1="3" y1="12" x2="21" y2="12" />
+    </svg>
+  );
+}
+
+const NAV_ITEMS: NavItemConfig[] = [
+  { id: "dashboard", label: "Dashboard", icon: <IconDashboard /> },
+  { id: "jobs", label: "Jobs", icon: <IconJobs /> },
+];
 const SETTINGS_ITEM: NavItemConfig = { id: "settings", label: "Settings", icon: <IconSettings /> };
 const NAV_BEVEL_SHADOW = "inset 0 1px 0 rgba(255,255,255,0.08), 0 1px 2px rgba(0,0,0,0.25)";
 

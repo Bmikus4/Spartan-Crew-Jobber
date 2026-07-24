@@ -8,9 +8,12 @@
 import { useEffect, useState } from "react";
 import Sidebar from "./Sidebar";
 import DashboardScreen from "./DashboardScreen";
+import JobsScreen from "./JobsScreen";
 import SettingsScreen from "./SettingsScreen";
 
-type Tool = "dashboard" | "settings";
+type Tool = "dashboard" | "jobs" | "settings";
+
+const TITLES: Record<Tool, string> = { dashboard: "Dashboard", jobs: "Jobs", settings: "Settings" };
 
 function ThemeToggle() {
   const [theme, setTheme] = useState<"dark" | "light">("dark");
@@ -47,12 +50,12 @@ export default function AppShell() {
       <main style={{ flex: 1, minWidth: 0, height: "calc(100% - var(--shell-double-pad))", margin: "var(--shell-pad)", display: "flex", flexDirection: "column" }} className="frosted-glass">
         <header style={{ height: "var(--panel-header-height)", display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 var(--panel-pad-x)", borderBottom: "1px solid var(--border)", flexShrink: 0 }}>
           <span style={{ fontSize: 13, fontWeight: 600, color: "var(--text-secondary)", letterSpacing: "0.02em" }}>
-            {tool === "dashboard" ? "Dashboard" : "Settings"}
+            {TITLES[tool]}
           </span>
           <ThemeToggle />
         </header>
         <div style={{ flex: 1, minHeight: 0, overflow: "hidden" }}>
-          {tool === "settings" ? <SettingsScreen /> : <DashboardScreen isActive />}
+          {tool === "settings" ? <SettingsScreen /> : tool === "jobs" ? <JobsScreen isActive /> : <DashboardScreen isActive />}
         </div>
       </main>
     </div>
