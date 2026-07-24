@@ -14,3 +14,6 @@ tsconfig.tsbuildinfo
 
 # derived rate data (regenerable; contains client billing patterns)
 data/
+
+# import-ready workflow with secret baked in (never commit)
+n8n/*.local.json

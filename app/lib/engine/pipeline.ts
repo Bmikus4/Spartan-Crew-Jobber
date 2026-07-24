@@ -34,6 +34,22 @@ export async function handleThread(
     metrics.emit({ ts: now(), thread_id: tid, type, meta });
 
   const prior = await store.get(tid);
+
+  // Idempotency fast-path (the "never miss an email" enabler): a re-POST of a
+  // thread we've already processed at its CURRENT latest message is a no-op —
+  // no LLM calls, no writes. This lets the interval + nightly Gmail sweeps run
+  // aggressively (re-POSTing everything for full coverage) at ~zero cost; only
+  // genuinely new/changed threads run the model. A new email changes the latest
+  // message id, so it always processes.
+  const latestId =
+    thread.messages.reduce<(typeof thread.messages)[number] | undefined>(
+      (top, m) => (!top || m.date_iso >= top.date_iso ? m : top),
+      undefined
+    )?.message_id ?? "";
+  if (prior && prior.last_message_id === latestId) {
+    return prior;
+  }
+
   await emit("email_received", { new_messages: thread.messages.length });
 
   const { state, actions } = await compile(thread, prior, deps);

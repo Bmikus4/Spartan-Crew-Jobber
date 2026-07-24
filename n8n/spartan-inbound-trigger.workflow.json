@@ -11,9 +11,7 @@
           ]
         },
         "simple": false,
-        "filters": {
-          "readStatus": "unread"
-        }
+        "filters": {}
       },
       "type": "n8n-nodes-base.gmailTrigger",
       "typeVersion": 1.3,
@@ -35,8 +33,8 @@
         "rule": {
           "interval": [
             {
-              "field": "days",
-              "triggerAtHour": 3
+              "field": "minutes",
+              "minutesInterval": 30
             }
           ]
         }
@@ -48,7 +46,7 @@
         320
       ],
       "id": "node-2",
-      "name": "Nightly Backstop"
+      "name": "Coverage Sweep (30m)"
     },
     {
       "parameters": {
@@ -56,7 +54,7 @@
         "operation": "getAll",
         "returnAll": true,
         "filters": {
-          "receivedAfter": "={{ $now.minus({ hours: 48 }).toISO() }}"
+          "receivedAfter": "={{ $now.minus({ hours: 24 }).toISO() }}"
         }
       },
       "type": "n8n-nodes-base.gmail",
@@ -66,7 +64,7 @@
         320
       ],
       "id": "node-3",
-      "name": "Search Last 48h",
+      "name": "Search Last 24h",
       "credentials": {
         "gmailOAuth2": {
           "id": "bgRJXZINuY5e6a3x",
@@ -227,7 +225,7 @@
     },
     {
       "parameters": {
-        "content": "## Spartan Crew — Inbound Trigger (NEW)\n\nThe brain runs on Vercel. This workflow only feeds it and drafts the reply.\n\n**Before activating:**\n1. Select the BOOKINGS Gmail OAuth credential on **Poll New Mail**, **Search Last 48h**, **Get Thread**, **Create Gmail Draft**.\n2. On **POST to Engine**, set header `x-webhook-secret` to the value of `N8N_WEBHOOK_SECRET` (same value set on Vercel).\n3. Confirm the URL points at the live deploy.\n4. Draft-only: the engine STAGES orders; it never writes to OnSinch until Ben flips order_mode. Replies are created as Gmail drafts, not sent.\n\nNightly 03:00 sweep re-POSTs the last 48h — idempotency makes it a free never-miss backstop.",
+        "content": "## Spartan Crew — Inbound Trigger (NEW)\n\nThe brain runs on Vercel. This workflow only feeds it and drafts the reply.\n\n**Before activating:**\n1. Select the BOOKINGS Gmail OAuth credential on **Poll New Mail**, **Search Last 24h**, **Get Thread**, **Create Gmail Draft**.\n2. On **POST to Engine**, set header `x-webhook-secret` to the value of `N8N_WEBHOOK_SECRET` (same value set on Vercel).\n3. Confirm the URL points at the live deploy.\n4. Draft-only: the engine STAGES orders; it never writes to OnSinch until Ben flips order_mode. Replies are created as Gmail drafts, not sent.\n\nCoverage: the poll fires on EVERY new email (no unread filter); the 30-min sweep re-POSTs the last 24h. The engine's idempotency guard makes already-seen threads a no-op, so nothing is missed and nothing is re-charged to the model.",
         "width": 420,
         "height": 320,
         "color": 4
@@ -254,18 +252,18 @@
         ]
       ]
     },
-    "Nightly Backstop": {
+    "Coverage Sweep (30m)": {
       "main": [
         [
           {
-            "node": "Search Last 48h",
+            "node": "Search Last 24h",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Search Last 48h": {
+    "Search Last 24h": {
       "main": [
         [
           {

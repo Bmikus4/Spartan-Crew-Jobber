@@ -116,7 +116,9 @@ const nodes = [
     parameters: {
       pollTimes: { item: [{ mode: "everyMinute" }] },
       simple: false,
-      filters: { readStatus: "unread" },
+      // NO readStatus filter — fire on EVERY new message (read or unread), so a
+      // human opening an email first never causes us to skip it.
+      filters: {},
     },
     type: "n8n-nodes-base.gmailTrigger",
     typeVersion: 1.3,
@@ -127,26 +129,29 @@ const nodes = [
   },
   {
     parameters: {
-      rule: { interval: [{ field: "days", triggerAtHour: 3 }] },
+      rule: { interval: [{ field: "minutes", minutesInterval: 30 }] },
     },
     type: "n8n-nodes-base.scheduleTrigger",
     typeVersion: 1.2,
     position: [-800, 320],
     id: nid(),
-    name: "Nightly Backstop",
+    name: "Coverage Sweep (30m)",
   },
   {
     parameters: {
       resource: "message",
       operation: "getAll",
       returnAll: true,
-      filters: { receivedAfter: "={{ $now.minus({ hours: 48 }).toISO() }}" },
+      // Re-list the last 24h and re-POST every thread. The engine's idempotency
+      // guard makes already-processed threads a no-op, so this is a cheap
+      // never-miss backstop that catches anything the real-time poll dropped.
+      filters: { receivedAfter: "={{ $now.minus({ hours: 24 }).toISO() }}" },
     },
     type: "n8n-nodes-base.gmail",
     typeVersion: 2.2,
     position: [-560, 320],
     id: nid(),
-    name: "Search Last 48h",
+    name: "Search Last 24h",
     credentials: { gmailOAuth2: GMAIL_CRED },
   },
   {
@@ -254,11 +259,11 @@ const nodes = [
         "## Spartan Crew — Inbound Trigger (NEW)\n\n" +
         "The brain runs on Vercel. This workflow only feeds it and drafts the reply.\n\n" +
         "**Before activating:**\n" +
-        "1. Select the BOOKINGS Gmail OAuth credential on **Poll New Mail**, **Search Last 48h**, **Get Thread**, **Create Gmail Draft**.\n" +
+        "1. Select the BOOKINGS Gmail OAuth credential on **Poll New Mail**, **Search Last 24h**, **Get Thread**, **Create Gmail Draft**.\n" +
         "2. On **POST to Engine**, set header `x-webhook-secret` to the value of `N8N_WEBHOOK_SECRET` (same value set on Vercel).\n" +
         "3. Confirm the URL points at the live deploy.\n" +
         "4. Draft-only: the engine STAGES orders; it never writes to OnSinch until Ben flips order_mode. Replies are created as Gmail drafts, not sent.\n\n" +
-        "Nightly 03:00 sweep re-POSTs the last 48h — idempotency makes it a free never-miss backstop.",
+        "Coverage: the poll fires on EVERY new email (no unread filter); the 30-min sweep re-POSTs the last 24h. The engine's idempotency guard makes already-seen threads a no-op, so nothing is missed and nothing is re-charged to the model.",
       width: 420,
       height: 320,
       color: 4,
@@ -276,8 +281,8 @@ const conn = (from, to) => ({ [from]: { main: [[{ node: to, type: "main", index:
 const connections = Object.assign(
   {},
   conn("Poll New Mail", "Get Thread"),
-  conn("Nightly Backstop", "Search Last 48h"),
-  conn("Search Last 48h", "Get Thread"),
+  conn("Coverage Sweep (30m)", "Search Last 24h"),
+  conn("Search Last 24h", "Get Thread"),
   conn("Get Thread", "Build Inbound Payload"),
   conn("Build Inbound Payload", "POST to Engine"),
   conn("POST to Engine", "Reply To Draft?"),
