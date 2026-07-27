@@ -13,7 +13,7 @@ import SettingsScreen from "./SettingsScreen";
 
 type Tool = "dashboard" | "jobs" | "settings";
 
-const TITLES: Record<Tool, string> = { dashboard: "Dashboard", jobs: "Jobs", settings: "Settings" };
+const TITLES: Record<Tool, string> = { dashboard: "Dashboard", jobs: "Jobs Board", settings: "Settings" };
 
 function ThemeToggle() {
   const [theme, setTheme] = useState<"dark" | "light">("dark");

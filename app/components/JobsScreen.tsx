@@ -119,8 +119,8 @@ export default function JobsScreen({ isActive }: Props) {
     <div style={wrap}>
       <div style={{ width: "100%", display: "flex", flexDirection: "column", gap: 16 }}>
         <header>
-          <span className="eyebrow"><span className="slash">/</span>JOBS</span>
-          <h1 style={{ fontSize: 26, fontWeight: 700, color: INK, margin: "4px 0 2px" }}>Jobs</h1>
+          <span className="eyebrow"><span className="slash">/</span>JOBS BOARD</span>
+          <h1 style={{ fontSize: 26, fontWeight: 700, color: INK, margin: "4px 0 2px" }}>Jobs Board</h1>
           <p style={{ fontSize: 13, color: MUT, margin: 0 }}>Every conversation linked to an OnSinch order. A green check means the engine drafted the reply.</p>
         </header>
 

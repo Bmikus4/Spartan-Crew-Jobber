@@ -58,7 +58,7 @@ function IconJobs() {
 
 const NAV_ITEMS: NavItemConfig[] = [
   { id: "dashboard", label: "Dashboard", icon: <IconDashboard /> },
-  { id: "jobs", label: "Jobs", icon: <IconJobs /> },
+  { id: "jobs", label: "Jobs Board", icon: <IconJobs /> },
 ];
 const SETTINGS_ITEM: NavItemConfig = { id: "settings", label: "Settings", icon: <IconSettings /> };
 const NAV_BEVEL_SHADOW = "inset 0 1px 0 rgba(255,255,255,0.08), 0 1px 2px rgba(0,0,0,0.25)";
