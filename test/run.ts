@@ -55,6 +55,11 @@ const NEW = { message_id: "m1", body: "Hi, can I book 4 crew on 9th March at Sav
   assert(!!s.pending_order && s.pending_order.kind === "create", "order staged for confirm");
   assert(s.onsinch_order_id === undefined, "NO order written to OnSinch yet");
   assert(s.pending_order?.desired.slot_teams[0].place_id === 88, "staged order has place_id 88");
+  assert(s.pending_order?.desired.pricelist_category_id === 197, "rate card 197 resolved onto the order (I1)");
+  assert(s.pending_order?.desired.provisional === true && s.pending_order?.desired.quote === true, "draft posture: provisional + quote");
+  assert(!!s.pending_order?.desired.slot_teams.some((t) => t.profession_id === 36), "crew-chief slot team added (4 crew -> +chief)");
+  assert(!!s.pending_order?.desired.specification, "job summary emitted to specification");
+  assert(s.pending_order?.desired.intern_name === "PO-44821", "customer ref emitted to intern_name");
 
   console.log("\n[1b] One-click confirm -> order created");
   s = (await confirmOrder(TID, deps))!;
@@ -126,6 +131,7 @@ const NEW = { message_id: "m1", body: "Hi, can I book 4 crew on 9th March at Sav
   const recClient = new OnsinchClient(recTransport);
   const provOrder = {
     name: "New client @ New Venue", company_id: 42, user_id: 1337, request_approval: true as const,
+    provisional: true, quote: true, pricelist_category_id: 197,
     job_name: "4 at New Venue on 2026-03-09",
     slot_teams: [{ name: "Crew", profession_id: 1, beginning: "2026-03-09T08:00:00+00:00", end: "2026-03-09T18:00:00+00:00", size: 4, place_id: 0 }],
     provision_place: { name: "New Venue", country: "GB", address: "1 New Road, Leeds" },

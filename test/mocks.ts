@@ -24,6 +24,7 @@ export const mockReasoner: Reasoner = {
       company_name: "RedBeast Energy",
       contact_name: "Piergiorgio Mammone",
       contact_email: latest.from,
+      customer_reference: "PO-44821",
       location_text: "2 Savoy Place London WC2R 0BL United Kingdom",
       requests: [
         { date: "2026-03-09", start_time: "08:00", end_time: "18:00", size, task: "Exhibition stand build" },
@@ -65,8 +66,8 @@ export const mockTransport: Transport = async (method, path) => {
         pagination: { count: 1, pageCount: 1, nextPage: false },
       },
     };
-  if (path.startsWith("/orders")) // company order-dedup lookup: none existing
-    return { status: 200, data: { data: [], pagination: { count: 0, pageCount: 1, nextPage: false } } };
+  if (path.startsWith("/orders")) // company history: one old order (rate card 197), different date so it doesn't dedup-match
+    return { status: 200, data: { data: [{ id: 8000, happening: "2025-01-01T08:00:00+00:00", Job: [{ id: 7000, pricelist_category_id: 197 }] }], pagination: { count: 1, pageCount: 1, nextPage: false } } };
   return { status: 200, data: { data: [] } };
 };
 

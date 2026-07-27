@@ -30,6 +30,7 @@ export async function createOrderWithPlace(client: OnsinchClient, order: Desired
 import { NeonStateStore } from "./stateDb";
 import { NeonMetrics } from "./metricsDb";
 import { getSettings } from "./settingsDb";
+import { getRateCard } from "./rateCardsDb";
 
 export const hashOrder = (o: unknown) => createHash("sha256").update(JSON.stringify(o)).digest("hex").slice(0, 16);
 
@@ -93,6 +94,7 @@ export async function buildDeps(): Promise<PipelineDeps> {
     metrics: new NeonMetrics(),
     settings,
     repliesEnabled: settings.replies_enabled, // Tool 1: off by default
+    seededRateCard: async (companyId: number) => (await getRateCard(companyId))?.card ?? null,
     executor: executor(client),
     now: () => Date.now(),
     hashOrder,

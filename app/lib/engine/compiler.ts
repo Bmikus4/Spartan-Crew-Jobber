@@ -19,6 +19,7 @@ import { normalizeThread } from "./normalize";
 import { composeOrder } from "./compose";
 import { validateOrder } from "./format";
 import { matchCompany, matchContact, matchPlace, matchExistingOrder } from "./resolve";
+import { resolveRateCard } from "./rates";
 import type { Reasoner } from "./reason";
 import type { OnsinchClient } from "./onsinch";
 
@@ -28,6 +29,9 @@ export interface CompileDeps {
   now: () => number; // injectable clock for deterministic tests
   // Tool 1 toggle. undefined => enabled (tests); false => no reply is drafted.
   repliesEnabled?: boolean;
+  // Seeded rate-card lookup (Phase B rate_cards). Injected so the engine stays
+  // DB-agnostic; when absent, rates.ts falls back to a live history scan.
+  seededRateCard?: (companyId: number) => Promise<number | null>;
 }
 
 function hash(s: string): string {
@@ -159,15 +163,26 @@ export async function compile(
       }
     }
 
+    // Rate card (I1) — resolved before compose; no confident card => needs-human.
+    let pricelist_category_id = 0;
+    if (company_id) {
+      const rate = await resolveRateCard(company_id, { onsinch, seededRateCard: deps.seededRateCard });
+      if (rate.card) pricelist_category_id = rate.card;
+      else notes.push(`no confident rate card for company ${company_id} — needs a human (I1)`);
+    }
+
     const havePlace = !!place_id || !!provisionPlace;
-    if (company_id && user_id && havePlace) {
+    if (company_id && user_id && havePlace && pricelist_category_id) {
       const composed = composeOrder({
         facts,
         company_id,
         user_id,
         place_id: place_id ?? 0, // 0 => created on write from provisionPlace
+        pricelist_category_id,
         orderName: (latest.subject || facts.requests[0]?.task || "Spartan Crew job").slice(0, 80),
         jobName: jobNameFrom(facts),
+        specification: cls.job_summary,
+        intern_name: facts.customer_reference,
       });
       composed.warnings.forEach((w) => notes.push(w));
       desired = composed.order;

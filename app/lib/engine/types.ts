@@ -50,16 +50,27 @@ export interface DesiredSlotTeam {
   end: string;           // ISO-8601 with offset
   size: number;
   place_id: number;      // MANDATORY on every slot team (top cause of 400s)
+  description?: string;
 }
 
-/** The order this conversation wants to create/patch, fully structured. */
+/**
+ * The order this conversation wants to create/patch — the full verified OnSinch
+ * DRAFT-order shape (provisional + quote posture, explicit rate card).
+ */
 export interface DesiredOrder {
   name: string;
   company_id: number;
   user_id: number;
-  request_approval: true; // hardcoded business rule
+  request_approval: true;      // hardcoded business rule
+  provisional: boolean;        // THE draft flag
+  quote: boolean;              // draft/quote posture
+  pricelist_category_id: number; // THE RATE CARD (I1 — never OnSinch's silent default)
   job_name: string;
   slot_teams: DesiredSlotTeam[];
+  specification?: string;      // the job summary
+  intern_name?: string;        // PO / customer reference ONLY
+  order_manager_id?: number;   // Spartan-side manager
+  supervisor_id?: number;      // job supervisor
   /**
    * Tool 2 — when the venue isn't already in OnSinch, the place is created on
    * write (reference data, no contact dependency) and its id backfilled onto
