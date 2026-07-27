@@ -109,8 +109,11 @@ n8n → /api/n8n-inbound
   → append inbound_raw (durable, first)            [B4]
   → acquire thread lease                            [B1]
   → GATE (layer-1 audited drop → filtered; layer-2 classify)   [§3]
-  → DEDUP: thread_id → order_id ONLY for auto-update; company+date+venue = WARN→needs_human   [S2]
-  → NEW or UPDATE?  (update → needs_human until §6 patch built) [B5]
+  → DEDUP FIRST (before anything else): match against the tickets table + OnSinch
+      (thread_id→order_id is the authoritative auto-update key [S2]; company+date+venue = WARN→needs_human)
+  → MARK new|update DETERMINISTICALLY from the dedupe result: existing linked order = UPDATE, no match = NEW.
+      The mark is set at intake, before extraction — the LLM does NOT guess it (it's a check, not a classification).
+      (update → needs_human until §6 patch built) [B5]
   → EXTRACT + PARSE + FORMAT → DesiredOrder
   → DRAFT REPLY (if replies_enabled; draft vs send)  [§7]
   → OnSinch DRAFT ORDER via write-intent+key, draft-only staged / auto  [B2]

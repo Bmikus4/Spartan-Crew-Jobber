@@ -1,0 +1,3261 @@
+{
+  "updatedAt": "2026-07-27T19:07:19.969Z",
+  "createdAt": "2025-10-20T16:15:41.065Z",
+  "id": "CPIRu7CpezvKjU8d",
+  "name": "Email SamurAI v3.4 Spartan Crew Bookings",
+  "description": "This Agent contains two objectives for the Spartan Crew Team.\n\n1 - Analyze and write draft replies to every email within thier inbox:\n\n2- Analyze and send Client Job Requests to the Onsinch API.",
+  "active": true,
+  "isArchived": false,
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## https://airtable.com/appKTOJbXpUz34KCZ/tbl1SETRx7gbfDFDe/viwd8rn6UcwvMsywV?blocks=hide",
+        "width": 166
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        3840,
+        3456
+      ],
+      "typeVersion": 1,
+      "id": "19676484-0df2-4b14-ac5e-84c19e34a569",
+      "name": "Sticky Note3"
+    },
+    {
+      "parameters": {
+        "pollTimes": {
+          "item": [
+            {
+              "mode": "everyMinute"
+            },
+            {
+              "mode": "everyX",
+              "value": 3,
+              "unit": "minutes"
+            }
+          ]
+        },
+        "filters": {
+          "includeDrafts": false,
+          "labelIds": [
+            "Label_5089401050847698788"
+          ],
+          "readStatus": "both"
+        }
+      },
+      "type": "n8n-nodes-base.gmailTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        -2672,
+        4080
+      ],
+      "id": "1ce92e0a-e940-4223-a21f-72670e48b03d",
+      "name": "Poll1",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "bgRJXZINuY5e6a3x",
+          "name": "BOOKINGS 5/18/26"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "506f7dc6-256f-4c95-b274-0937af09f530",
+              "name": "id",
+              "value": "={{ $json.id }}",
+              "type": "string"
+            },
+            {
+              "id": "696eda32-d10b-44bc-8232-378c50d0ba7b",
+              "name": "threadId",
+              "value": "={{ $json.threadId }}",
+              "type": "string"
+            },
+            {
+              "id": "56f8a8e6-696b-4b6e-b84d-adf753618cb4",
+              "name": "historyId",
+              "value": "={{ $json.historyId }}",
+              "type": "string"
+            },
+            {
+              "id": "49cc6e52-6534-4c98-b13e-7b5a54ea51a6",
+              "name": "from[0].email",
+              "value": "={{ $json.from[0].email }}",
+              "type": "string"
+            },
+            {
+              "id": "04d2bd7e-28ba-45e5-afaa-ba5af8fa02de",
+              "name": "to[0].email",
+              "value": "={{ $json.to[0].email }}",
+              "type": "string"
+            },
+            {
+              "id": "e7fc51da-6651-465a-adc9-2ff486b89b5b",
+              "name": "ccEmails[0]",
+              "value": "={{ $json.ccEmails[0] }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -1760,
+        4192
+      ],
+      "id": "ad8815a1-7477-4103-91de-c06c567d8b39",
+      "name": "Get IDs1"
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "messageId": "={{ $('Get IDs1').item.json.id }}",
+        "simple": false,
+        "options": {}
+      },
+      "id": "6cc566da-3982-43a3-b0d1-c917c5c42f74",
+      "name": "Get Hydrated Emails1",
+      "type": "n8n-nodes-base.gmail",
+      "position": [
+        -1072,
+        4192
+      ],
+      "webhookId": "53b5e765-33e2-44f8-8e0c-d1a72322a603",
+      "typeVersion": 2.1,
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "bgRJXZINuY5e6a3x",
+          "name": "BOOKINGS 5/18/26"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineByPosition",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        -848,
+        4208
+      ],
+      "id": "f7929a44-3684-484b-ae23-d5a394fd65ed",
+      "name": "Merge1"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// ===================== HELPERS =====================\nfunction decodeBase64(data) {\n  if (!data) return '';\n  return Buffer.from(\n    data.replace(/-/g, '+').replace(/_/g, '/'),\n    'base64'\n  ).toString('utf-8');\n}\n\nfunction stripHtml(html) {\n  return html\n    .replace(/<style[^>]*>[\\s\\S]*?<\\/style>/gi, '')\n    .replace(/<script[^>]*>[\\s\\S]*?<\\/script>/gi, '')\n    .replace(/<\\/?[^>]+>/gi, '')\n    .replace(/\\s+/g, ' ')\n    .trim();\n}\n\nfunction extractBody(payload) {\n  if (!payload) return '';\n\n  if (Array.isArray(payload.parts)) {\n    const textPart = payload.parts.find(p => p.mimeType === 'text/plain');\n    if (textPart?.body?.data) {\n      return decodeBase64(textPart.body.data);\n    }\n\n    const htmlPart = payload.parts.find(p => p.mimeType === 'text/html');\n    if (htmlPart?.body?.data) {\n      return decodeBase64(htmlPart.body.data);\n    }\n  }\n\n  if (payload.body?.data) {\n    return decodeBase64(payload.body.data);\n  }\n\n  return '';\n}\n\n// ===================== HARD CLEANER =====================\nfunction cleanEmailBody(raw) {\n  if (!raw) return '';\n\n  let text = raw;\n\n  // Remove quoted replies\n  text = text.split(/\\nOn .*wrote:\\n/i)[0];\n\n  // Remove quoted lines\n  text = text\n    .split('\\n')\n    .filter(line => !line.trim().startsWith('>'))\n    .join('\\n');\n\n  // Remove image placeholders\n  text = text.replace(/\\[image:[^\\]]+\\]/gi, '');\n\n  // Remove Spartan Crew signatures\n  const signatureMarkers = [\n    'spartan crew ltd',\n    'operations spartan crew',\n    'designexpert44.com/signature',\n    'spartan_crew/logo.png',\n    'unit 7 titan business estate',\n    'www.spartancrew.co.uk',\n    '03333 053374'\n  ];\n\n  for (const marker of signatureMarkers) {\n    const idx = text.toLowerCase().indexOf(marker);\n    if (idx !== -1) {\n      text = text.slice(0, idx);\n    }\n  }\n\n  return stripHtml(text);\n}\n\n// ===================== ORIGINAL EMAIL =====================\nconst originalBody = cleanEmailBody(\n  $json.text || extractBody($json.payload)\n);\n\nconst original_email = {\n  email_id: $json.id,\n  thread_id: $json.threadId,\n  from: $json.from?.value?.[0]?.address || '',\n  subject: $json.headers?.subject || '',\n  body: originalBody\n};\n\n// ===================== THREAD HISTORY =====================\nconst messages = Array.isArray($json.messages) ? $json.messages : [];\n\nconst thread_messages = messages\n  .map(m => cleanEmailBody(extractBody(m.payload)))\n  .filter(body =>\n    body &&\n    body.length > 5 &&\n    body !== originalBody // ✅ remove original email from history\n  );\n\n// ===================== FINAL OUTPUT =====================\nreturn {\n  original_email,\n  thread_history: {\n    messages: thread_messages\n  }\n};\n\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -736,
+        4128
+      ],
+      "id": "02707657-72d5-4b24-920a-ebea06bb252f",
+      "name": "Normalize Data"
+    },
+    {
+      "parameters": {
+        "resource": "thread",
+        "operation": "get",
+        "threadId": "={{ $('Get Hydrated Emails1').item.json.threadId }}",
+        "simple": false,
+        "options": {
+          "returnOnlyMessages": false
+        }
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        -960,
+        4256
+      ],
+      "id": "7beb4bd0-a4a7-4362-93e7-0e7062d6a7ec",
+      "name": "Get a thread2",
+      "webhookId": "edb9194f-b8d4-40e1-a599-4c5496a5889e",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "bgRJXZINuY5e6a3x",
+          "name": "BOOKINGS 5/18/26"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        -1952,
+        4192
+      ],
+      "id": "7aaa9748-5702-459d-b74a-8db2d258bbed",
+      "name": "Loop Over Items"
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "anthropic/claude-3.5-haiku",
+          "mode": "list",
+          "cachedResultName": "ANTHROPIC/CLAUDE-3.5-HAIKU"
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "=USER PROMPT (INPUT DATA)\n\nCurrent Email Subject: \n{{ $('Normalize Data').item.json.original_email.subject }}\n\nCurrent Email Body: \n{{ $('Normalize Data').item.json.original_email.body }}\n\nThread History: \n{{ $('Normalize Data').item.json.thread_history.messages }}\n\nemail_id: \n{{ $('Normalize Data').item.json.original_email.email_id }}\n\nthread_id: \n{{ $('Normalize Data').item.json.original_email.thread_id }}\n\nfrom: \n{{ $('Normalize Data').item.json.original_email.from }}"
+            },
+            {
+              "content": "ROLE:\nClassify incoming emails as either:\n1. NEW job request\n2. UPDATE to existing job request\n3. NOT a job request\n\nYou ONLY classify the Current Email. Thread History is context only.\n\n---\n\nSCOPE RULE:\n\nYou are classifying ONLY the \"Current Email\" (subject + body).\n\nThread History exists solely to answer these two questions:\n  1. Does Current Email introduce a NEW job NOT in Thread History?\n  2. Does Current Email modify a job that ALREADY EXISTS in Thread History?\n\nIf neither is true → NOT a job request.\n\nCRITICAL: Never classify Thread History messages. Only classify Current Email.\n\n---\n\nDEFINITIONS:\n\n\"Job Request\" = Any message requesting crew, booking, order, shift, or staffing.\n\n\"Current Email\" = The most recent email (the one just arrived).\n\n\"Thread History\" = All previous emails in this conversation thread.\n\n---\n\nCLASSIFICATION LOGIC:\n\nSTEP 1: Does Current Email contain job request language?\n\n  NEW Job Indicators:\n  • \"booking request,\" \"crew request,\" \"I need a crew\"\n  • \"I'll take [X] on this day,\" \"[X] crew on [date]\"\n  • \"new order,\" \"crew chief,\" \"can you crew this\"\n  • Any explicit request for staffing with numbers/dates/details\n\n  UPDATE Job Indicators:\n  • \"change this,\" \"make it [X] instead\"\n  • \"update,\" \"amend,\" \"adjust,\" \"modify\"\n  • \"actually,\" \"instead,\" \"can we switch\"\n  • \"cancel,\" \"remove,\" \"add to\"\n  • \"confirmed,\" \"approved,\" \"going ahead\"\n  • \"push to,\" \"move to,\" \"delay\"\n\n  If Current Email has NONE of these → is_job: false → STOP\n\n---\n\nSTEP 2: If YES to job language, check Thread History\n\n  CASE A: No Thread History exists\n    → is_job: true / type_job: new\n    → Job summary: What this email requests\n\n  CASE B: Thread History exists but NO prior job mentioned\n    → is_job: true / type_job: new\n    → Job summary: What this email requests\n\n  CASE C: Thread History EXISTS and CONTAINS a prior job\n    → Continue to STEP 3\n\n---\n\nSTEP 3: Does Current Email reference/modify the existing job?\n\n  If YES:\n    → is_job: true / type_job: update\n    → Job summary: Original job + what changed\n\n  If NO (Current Email is unrelated to prior job):\n    → is_job: true / type_job: new\n    → Job summary: What this email requests (separate from prior job)\n\n---\n\nDETERMINISM RULES:\n\nRule 1: DUPLICATE DETECTION\n  If Current Email is identical to any message in Thread History:\n  → Mark as duplicate and disregard from thread history context\n  → Still classify Current Email normally based on content\n\nRule 2: AMBIGUOUS LANGUAGE\n  If Current Email COULD be either new or update:\n  → Prioritize UPDATE if Thread History has any prior job details\n  → Default to NEW if Thread History is unclear or absent\n  → REASON: Safer to categorize as update than miss context\n\nRule 3: MULTIPLE JOBS IN ONE EMAIL\n  If Current Email contains BOTH a new request AND update to prior:\n  → type_job: update (the update takes precedence)\n  → job_summary: Describe the original job, what changed, AND what new request was added\n\nRule 4: CONFIRMATION ONLY\n  If Current Email only confirms/acknowledges prior job with NO changes:\n  → is_job: false (confirmation alone is not a new classified request)\n  \n  Exception: If confirmation includes NEW details not in prior job:\n  → is_job: true / type_job: update\n  → job_summary: Note what new information was provided\n\nRule 5: CANCELLATION\n  If Current Email cancels an existing job or part of it:\n  → is_job: true / type_job: update\n  → job_summary: State what was cancelled and from what prior job\n\nRule 6: MISSING CRITICAL DATA\n  If Current Email requests crew but lacks dates/times/headcount:\n  → Still classify as is_job: true\n  → job_summary: Note what details are missing (\"Date unclear,\" \"Crew size not specified\")\n\n---\n\nOUTPUT FORMAT (EXACTLY):\n\nfrom: [email address from passthrough]\nemail_id: [ID from passthrough]\nthread_id: [ID from passthrough]\nis_job: [true or false]\ntype_job: [new or update, blank if is_job is false]\njob_summary: [technical summary, see below]\n\n---\n\nJOB_SUMMARY SPECIFICATIONS:\n\nIf is_job: true / type_job: new\n  Format: \"[Date/Time] - [Headcount] crew at [Location] - [Any other key details]\"\n  Example: \"Thursday 9am - 3 crew at 123 Main St - Crew chief: Mike\"\n  Include: Dates, times, headcount, location, crew chief, any IDs, payment terms if mentioned\n\nIf is_job: true / type_job: update\n  Format: \"[Original job details] → UPDATED: [what changed]\"\n  Example: \"Thursday 9am - 3 crew → UPDATED: Now 4 crew instead of 3\"\n  Include: What changed FROM what TO what (if discernible)\n  If change is unclear, state: \"Change requested but specifics unclear\"\n\nIf is_job: false\n  Write: \"N/A - [brief reason]\"\n  Examples: \"N/A - General conversation, no crew request\"\n            \"N/A - Status update only, no changes requested\"\n            \"N/A - Thank you/confirmation without modifications\"\n\n---\n\nTHREAD HISTORY REFERENCE:\n\nThread History is provided chronologically:\n  • Oldest message = Top\n  • Newest message = Bottom\n  • Current Email = NOT in Thread History (it's separate)\n\nWhen analyzing Thread History:\n  1. Read from top to bottom\n  2. Identify job requests in the order they appear\n  3. Track what changes between messages\n  4. Use dates/timestamps to prioritize newer information\n  5. Remember: Current Email is always more recent than everything in history\n\n---\n\nEDGE CASES:\n\nScenario 1: \"Can you send me a quote?\"\n  → is_job: false (request for information, not a booking)\n\nScenario 2: \"I'd like to move the crew from Friday to Saturday\"\n  → is_job: true / type_job: update (references existing job, modifies it)\n\nScenario 3: Current Email says \"Sounds good\" with no changes\n  → is_job: false (pure confirmation/acknowledgment)\n  → UNLESS Thread History shows no prior job, then it's ambiguous\n    → is_job: false (no actionable request in Current Email itself)\n\nScenario 4: \"We'll need 5 crew Thursday AND can we cancel Monday?\"\n  → is_job: true / type_job: update (both are modifications to prior job context)\n  → job_summary: \"Thursday - 5 crew requested. Monday booking cancelled.\"\n\nScenario 5: Current Email references \"the job\" but Thread History is unclear\n  → is_job: true / type_job: update (Current Email clearly references prior job)\n  → job_summary: \"Update to existing booking (prior details unclear from thread)\"\n\n---\n\nCRITICAL OUTPUTS:\n\n✓ Only output the 6 required fields\n✓ No markdown, no JSON, no code blocks, no extra formatting\n✓ type_job NEVER contains \"-new\", \"-update\", or variations\n✓ type_job is blank if is_job is false\n✓ Passthrough fields (from, email_id, thread_id) are exactly as provided in input\n✓ No assumptions about missing data — note it in job_summary if unclear",
+              "role": "system"
+            }
+          ]
+        },
+        "jsonOutput": true,
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.8,
+      "position": [
+        -288,
+        4160
+      ],
+      "id": "348992ea-f617-4df7-9002-ebf3af9ee41b",
+      "name": "Determine if Order",
+      "retryOnFail": true,
+      "credentials": {
+        "openAiApi": {
+          "id": "XwWRvjUzKmbGWIQw",
+          "name": "SpartanCrew Email SamurAI"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "removeLabels",
+        "messageId": "={{ $json.id }}",
+        "labelIds": [
+          "Label_5089401050847698788"
+        ]
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        -2096,
+        4032
+      ],
+      "id": "5a9c77e1-a32c-4d1d-b4d0-d62b9c374845",
+      "name": "Remove label from message",
+      "webhookId": "9981a7bb-5e30-4df8-9d31-c4a6424efa2d",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "bgRJXZINuY5e6a3x",
+          "name": "BOOKINGS 5/18/26"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "returnAll": true,
+        "filters": {
+          "labelIds": [
+            "Label_5089401050847698788"
+          ],
+          "receivedAfter": "={{ $json.receivedAfter }}"
+        }
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        -2304,
+        4176
+      ],
+      "id": "8861bfa1-bb99-4047-a630-2e34aff2b3cb",
+      "name": "Get many messages",
+      "webhookId": "0433aa9d-3109-445b-82a8-a5c94a0f0edb",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "bgRJXZINuY5e6a3x",
+          "name": "BOOKINGS 5/18/26"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        -2672,
+        4272
+      ],
+      "id": "54154154-d51b-47b7-9c6f-05a9294b9575",
+      "name": "Schedule Trigger"
+    },
+    {
+      "parameters": {
+        "options": {
+          "timezone": ""
+        }
+      },
+      "type": "n8n-nodes-base.dateTime",
+      "typeVersion": 2,
+      "position": [
+        -2528,
+        4176
+      ],
+      "id": "cc5400b4-f7ec-4723-a52a-5f0f3020c5a3",
+      "name": "Date & Time"
+    },
+    {
+      "parameters": {
+        "jsCode": "// n8n Code node (JavaScript)\n// Input:  { \"currentDate\": \"2026-02-26T17:41:48.851+00:00\" }\n// Output: { \"receivedAfter\": \"2026-02-26T17:31:48.851Z\" }\n\nconst s = $input.first()?.json?.currentDate;\n\nif (typeof s !== \"string\" || !s.trim()) {\n  throw new Error(\"Missing `currentDate` (expected a string).\");\n}\n\nconst d = new Date(s);\nif (Number.isNaN(d.getTime())) {\n  throw new Error(`Invalid currentDate: ${s}`);\n}\n\n// subtract 10 minutes\nconst d2 = new Date(d.getTime() - 10 * 60 * 1000);\n\n// Graph-native ISO UTC: YYYY-MM-DDTHH:mm:ss.sssZ\nconst isoUtc = d2.toISOString();\n\nreturn [\n  {\n    json: {\n      receivedAfter: isoUtc,\n    },\n  },\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -2416,
+        4176
+      ],
+      "id": "17348440-ad1f-4f9a-82e5-b3b27ca980b5",
+      "name": "-10 mins"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        -2208,
+        4016
+      ],
+      "id": "42634ab5-f76e-4b36-88d0-c5e3259b8be3",
+      "name": "Loop Over Items1"
+    },
+    {
+      "parameters": {
+        "operation": "create",
+        "base": {
+          "__rl": true,
+          "value": "appWXNhlTE3slvUR5",
+          "mode": "list",
+          "cachedResultName": "House of Hud Proposal generator",
+          "cachedResultUrl": "https://airtable.com/appWXNhlTE3slvUR5"
+        },
+        "table": {
+          "__rl": true,
+          "value": "tblwQG6DMdpHFcBrf",
+          "mode": "list",
+          "cachedResultName": "in_follow_up_sequence",
+          "cachedResultUrl": "https://airtable.com/appWXNhlTE3slvUR5/tblwQG6DMdpHFcBrf"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "outlook_id": "={{ $('When Executed by Another Workflow').item.json.id }}",
+            "conversation_id": "={{ $('When Executed by Another Workflow').item.json.conversationId }}"
+          },
+          "matchingColumns": [
+            "outlook_id"
+          ],
+          "schema": [
+            {
+              "id": "last_sent_message",
+              "displayName": "last_sent_message",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "last_place_in_follow_up",
+              "displayName": "last_place_in_follow_up",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "outlook_id",
+              "displayName": "outlook_id",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "conversation_id",
+              "displayName": "conversation_id",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.1,
+      "position": [
+        -1184,
+        4096
+      ],
+      "id": "2fb1221d-a490-4a9e-af6a-91748b35c221",
+      "name": "Create a record",
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "ay2XLl26NeuhHwju",
+          "name": "House of hud proposal generator"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "d8d85a97-6dfd-49eb-aea6-319a9a2256ac",
+              "name": "id",
+              "value": "={{ $('When Executed by Another Workflow').item.json.id }}",
+              "type": "string"
+            },
+            {
+              "id": "f8c9343c-dfe5-41a8-adde-5e2abb3ffa64",
+              "name": "conversationId",
+              "value": "={{ $('When Executed by Another Workflow').item.json.conversationId }}",
+              "type": "string"
+            },
+            {
+              "id": "109ff9c0-c3ca-45cf-8869-7611c5ba90bc",
+              "name": "subject",
+              "value": "={{ $('When Executed by Another Workflow').item.json.subject }}",
+              "type": "string"
+            },
+            {
+              "id": "a39f2491-5224-4634-8436-3e3a89162f71",
+              "name": "bodyContent",
+              "value": "={{ $('When Executed by Another Workflow').item.json.bodyContent }}",
+              "type": "string"
+            },
+            {
+              "id": "2c623902-e855-4233-8b70-f256d95c73f3",
+              "name": "sentDateTime",
+              "value": "={{ $('When Executed by Another Workflow').item.json.sentDateTime }}",
+              "type": "string"
+            },
+            {
+              "id": "bb7cd69d-101a-4784-8201-ab4fd1ab2734",
+              "name": "sentDate",
+              "value": "={{ $('When Executed by Another Workflow').item.json.sentDate }}",
+              "type": "string"
+            },
+            {
+              "id": "1190b2ec-2789-4715-a3ce-bd77fc2c9284",
+              "name": "sentTime",
+              "value": "={{ $('When Executed by Another Workflow').item.json.sentTime }}",
+              "type": "string"
+            },
+            {
+              "id": "85dd5785-7406-4f46-8af6-61179ac4dd3e",
+              "name": "receivedDateTime",
+              "value": "={{ $('When Executed by Another Workflow').item.json.receivedDateTime }}",
+              "type": "string"
+            },
+            {
+              "id": "dd913ffe-8755-40aa-812b-e35a216b6aa5",
+              "name": "receivedDate",
+              "value": "={{ $('When Executed by Another Workflow').item.json.receivedDate }}",
+              "type": "string"
+            },
+            {
+              "id": "9becc5a0-22f4-49bb-8f8f-e393c94a3984",
+              "name": "receivedTime",
+              "value": "={{ $('When Executed by Another Workflow').item.json.receivedTime }}",
+              "type": "string"
+            },
+            {
+              "id": "0ecab68d-ee8b-4098-aa95-7dd596cc02f6",
+              "name": "createdDateTime",
+              "value": "={{ $('When Executed by Another Workflow').item.json.createdDateTime }}",
+              "type": "string"
+            },
+            {
+              "id": "ef459def-dc0e-4693-b2da-18621b783460",
+              "name": "lastModifiedDateTime",
+              "value": "={{ $('When Executed by Another Workflow').item.json.lastModifiedDateTime }}",
+              "type": "string"
+            },
+            {
+              "id": "479b0612-8933-41b5-b501-40a65dfa260d",
+              "name": "fromAddress",
+              "value": "={{ $('When Executed by Another Workflow').item.json.fromAddress }}",
+              "type": "string"
+            },
+            {
+              "id": "ef58c0de-be1e-4393-b3e3-d8e707027f2b",
+              "name": "fromName",
+              "value": "={{ $('When Executed by Another Workflow').item.json.fromName }}",
+              "type": "string"
+            },
+            {
+              "id": "46e01773-f754-49d0-a1cb-e4ced2a2fa31",
+              "name": "toRecipients[0].name",
+              "value": "={{ $('When Executed by Another Workflow').item.json.toRecipients[0].name }}",
+              "type": "string"
+            },
+            {
+              "id": "0646c489-8499-42c8-9898-f01274424519",
+              "name": "toRecipients[0].address",
+              "value": "={{ $('When Executed by Another Workflow').item.json.toRecipients[0].address }}",
+              "type": "string"
+            },
+            {
+              "id": "2f48daa6-cd63-42bc-8a3d-3a81aceb43b5",
+              "name": "ccRecipients",
+              "value": "={{ $('When Executed by Another Workflow').item.json.ccRecipients }}",
+              "type": "array"
+            },
+            {
+              "id": "86769e80-075e-4526-b036-f9be8a17ac3a",
+              "name": "threadHistory",
+              "value": "={{ $('When Executed by Another Workflow').item.json.threadHistory }}",
+              "type": "string"
+            },
+            {
+              "id": "43dd42b1-fdd5-41ba-bc49-cdf954790c24",
+              "name": "category",
+              "value": "={{ $('When Executed by Another Workflow').item.json.category }}",
+              "type": "string"
+            },
+            {
+              "id": "8046efe8-1680-40ff-8de0-ea49cacc4e78",
+              "name": "found",
+              "value": "={{ $json.found }}",
+              "type": "string"
+            },
+            {
+              "id": "bc32f637-ffee-4395-80f6-2244ea9fa1e5",
+              "name": "last_sent_message",
+              "value": "={{ $json.last_sent_message }}",
+              "type": "string"
+            },
+            {
+              "id": "877eb95f-7ad2-4303-9321-8448685c0462",
+              "name": "last_place_in_follow_up",
+              "value": "={{ $json.last_place_in_follow_up }}",
+              "type": "string"
+            },
+            {
+              "id": "eb1b4eba-309e-411a-acf8-e68735cded45",
+              "name": "added_to_whatsapp",
+              "value": "={{ $json.added_to_whatsapp }}",
+              "type": "string"
+            },
+            {
+              "id": "2d9d17bd-8f30-4edd-9d57-958d046e49bc",
+              "name": "id",
+              "value": "={{ $json.id }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -624,
+        4208
+      ],
+      "id": "bf2efbd4-ee50-4e80-b831-0d5187bafa1f",
+      "name": "MAINDATA"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ╔═══════════════════════════════════════════════════════════════════╗\n// ║                                                                   ║\n// ║   ██╗  ██╗ ██████╗ ██╗   ██╗███████╗███████╗                     ║\n// ║   ██║  ██║██╔═══██╗██║   ██║██╔════╝██╔════╝                     ║\n// ║   ███████║██║   ██║██║   ██║███████╗█████╗                       ║\n// ║   ██╔══██║██║   ██║██║   ██║╚════██║██╔══╝                       ║\n// ║   ██║  ██║╚██████╔╝╚██████╔╝███████║███████╗                     ║\n// ║   ╚═╝  ╚═╝ ╚═════╝  ╚═════╝ ╚══════╝╚══════╝                     ║\n// ║    ██████╗ ███████╗    ██╗  ██╗██╗   ██╗██████╗                   ║\n// ║   ██╔═══██╗██╔════╝    ██║  ██║██║   ██║██╔══██╗                  ║\n// ║   ██║   ██║█████╗      ███████║██║   ██║██║  ██║                  ║\n// ║   ██║   ██║██╔══╝      ██╔══██║██║   ██║██║  ██║                  ║\n// ║   ╚██████╔╝██║         ██║  ██║╚██████╔╝██████╔╝                  ║\n// ║    ╚═════╝ ╚═╝         ╚═╝  ╚═╝ ╚═════╝ ╚═════╝                  ║\n// ║                                                                   ║\n// ║   C O N V E R S A T I O N A L   R E N D E R I N G   E N G I N E  ║\n// ║                                                                   ║\n// ║   Deterministic thread parser · Classifier · Client extractor     ║\n// ║   Runs once per item · No external libs required                  ║\n// ║                                                                   ║\n// ╚═══════════════════════════════════════════════════════════════════╝\n\nconst crypto = require('crypto');\n\n// ---------- CONSTANTS ----------\nconst ENQUIRY_FORM_SENDERS = new Set([\n  'noreply@arabiantents.com',\n  'noreply@pearltents.co.uk',\n  'noreply@completechillout.com',\n  'info@thepearltentcompany.com',\n]);\n\nconst AI_SEND_ADDRESS = 'hello@houseofhud.com';\n\nconst INTERNAL_SENDERS = new Set([\n  'aamina@houseofhud.com','accounts@houseofhud.com','adele@houseofhud.com',\n  'admin@houseofhud.com','agustina@houseofhud.com','amy@houseofhud.com',\n  'angela@houseofhud.com','carolinaarchive@arabiantents.com','charlotte@houseofhud.com',\n  'crew@houseofhud.com','crewcontacts@houseofhud.com','daisy@houseofhud.com',\n  'deliveries@houseofhud.com','emily@arabiantents.com','erin@houseofhud.com',\n  'eva@houseofhud.com','eventplanning@houseofhud.com','grace@houseofhud.com',\n  'hello@houseofhud.com','holly@houseofhud.com','jennie@houseofhud.com',\n  'jeremy@houseofhud.com','jonny@houseofhud.com','kat@houseofhud.com',\n  'katherine@arabiantents.com','kh@houseofhud.com','leah@houseofhud.com',\n  'lecia@houseofhud.com','leonie@houseofhud.com','logistics@houseofhud.com',\n  'mailmanager@arabiantents.com','malcolm@houseofhud.com','marketing@houseofhud.com',\n  'max@houseofhud.com','melanie@houseofhud.com','planner@houseofhud.com',\n  'projects@houseofhud.com','ruthforward2@arabiantents.com','sarah@houseofhud.com',\n  'site-team@houseofhud.com','suzie@houseofhud.com','transport@houseofhud.com',\n  'warehouseold@houseofhud.com','zain@houseofhud.com',\n]);\n\nconst MONTHS = {jan:0,feb:1,mar:2,apr:3,may:4,jun:5,jul:6,aug:7,sep:8,oct:9,nov:10,dec:11};\n\n// ---------- HTML / TEXT ----------\nfunction decodeEntities(s) {\n  if (!s) return '';\n  return s\n    .replace(/&nbsp;/gi,' ').replace(/&amp;/gi,'&').replace(/&lt;/gi,'<')\n    .replace(/&gt;/gi,'>').replace(/&quot;/gi,'\"').replace(/&#39;/gi,\"'\")\n    .replace(/&apos;/gi,\"'\").replace(/&#(\\d+);/g,(_,n)=>String.fromCharCode(+n))\n    .replace(/&#x([0-9a-f]+);/gi,(_,h)=>String.fromCharCode(parseInt(h,16)));\n}\nfunction stripHtmlToText(html) {\n  if (!html) return '';\n  let s = String(html);\n  s = s.replace(/<style[\\s\\S]*?<\\/style>/gi,' ').replace(/<script[\\s\\S]*?<\\/script>/gi,' ');\n  s = s.replace(/<!--[\\s\\S]*?-->/g,' ');\n  s = s.replace(/<\\s*br\\s*\\/?>/gi,'\\n');\n  s = s.replace(/<\\/(p|div|tr|li|h[1-6])\\s*>/gi,'\\n');\n  s = s.replace(/<[^>]+>/g,' ');\n  s = decodeEntities(s);\n  s = s.replace(/\\r/g,'').replace(/[ \\t]+/g,' ').replace(/\\n[ \\t]+/g,'\\n').replace(/\\n{3,}/g,'\\n\\n');\n  return s.trim();\n}\nfunction normalizeForMatch(s) {\n  return String(s||'').toLowerCase().replace(/\\s+/g,' ').replace(/[^\\p{L}\\p{N} ]/gu,'').trim();\n}\nfunction jaccardTokenSet(a,b) {\n  const A = new Set(normalizeForMatch(a).split(' ').filter(Boolean));\n  const B = new Set(normalizeForMatch(b).split(' ').filter(Boolean));\n  if (!A.size || !B.size) return 0;\n  let inter = 0; for (const t of A) if (B.has(t)) inter++;\n  return inter / (A.size + B.size - inter);\n}\nfunction sha256(s){return crypto.createHash('sha256').update(s).digest('hex');}\n\n// ---------- DATE PARSING (UK log preserved) ----------\nfunction parseUkDate(str) {\n  if (!str) return null;\n  const m = String(str).match(/(\\d{1,2})\\s+([A-Za-z]{3,})\\s+(\\d{4})(?:[,\\s]+(\\d{1,2}):(\\d{2}))?/);\n  if (!m) return null;\n  const d=+m[1], mo=MONTHS[m[2].slice(0,3).toLowerCase()], y=+m[3];\n  const hh=m[4]?+m[4]:0, mm=m[5]?+m[5]:0;\n  if (mo==null) return null;\n  const utcGuess = Date.UTC(y,mo,d,hh,mm);\n  const isBST = (() => {\n    const lastSun = (yr,mon) => { const dt=new Date(Date.UTC(yr,mon+1,0)); return dt.getUTCDate() - dt.getUTCDay(); };\n    const startBST = Date.UTC(y,2,lastSun(y,2),1,0);\n    const endBST   = Date.UTC(y,9,lastSun(y,9),1,0);\n    return utcGuess >= startBST && utcGuess < endBST;\n  })();\n  return new Date(utcGuess - (isBST?60:0)*60000);\n}\n\n// ---------- SENDER CLASSIFIERS ----------\nconst addrOf = s => String(s||'').toLowerCase().trim();\nconst isEnquiryFormSender = a => ENQUIRY_FORM_SENDERS.has(addrOf(a));\nconst isInternalSender    = a => INTERNAL_SENDERS.has(addrOf(a));\nconst isAiSender          = a => addrOf(a) === AI_SEND_ADDRESS;\n\n// ---------- THREAD PARSER ----------\nfunction parseThreadHistory(raw) {\n  if (!raw) return [];\n  const blocks = String(raw).split(/---\\s*Message\\s+\\d+\\s+of\\s+\\d+\\s*---/i).map(b=>b.trim()).filter(Boolean);\n  const out = [];\n  for (const b of blocks) {\n    const fromM = b.match(/^From:\\s*(.+)$/mi);\n    const dateM = b.match(/^Date:\\s*(.+)$/mi);\n    const subjM = b.match(/^Subject:\\s*(.+)$/mi);\n    const headerEnd = b.search(/\\n\\s*\\n/);\n    const body = headerEnd>-1 ? b.slice(headerEnd).trim() : '';\n    const fromRaw = fromM ? fromM[1].trim() : '';\n    const emailM = fromRaw.match(/<([^>]+)>/) || fromRaw.match(/([\\w.+-]+@[\\w.-]+)/);\n    const fromAddress = emailM ? emailM[1] : fromRaw;\n    out.push({\n      fromAddress: addrOf(fromAddress),\n      fromRaw,\n      date: parseUkDate(dateM?dateM[1]:''),\n      dateRaw: dateM?dateM[1].trim():'',\n      subject: subjM?subjM[1].trim():'',\n      bodyHtml: body,\n      bodyText: stripHtmlToText(body),\n    });\n  }\n  return out;\n}\n\n// ================================================================\n// SIGNATURE / EXIT-GREETING EXTRACTION\n// ================================================================\n// IMPORTANT: The regex scans BACKWARDS (last match wins) so that\n// phrases like \"Thank you for...\" in the body are not mistaken\n// for a sign-off. Do NOT change to a forward scan.\n// ================================================================\n\nconst EXIT_GREETING_RE = /^[ \\t]*(?:kind(?:est)?\\s*regards|best\\s*(?:wishes|regards)?|regards|sincerely|yours\\s*(?:sincerely|faithfully|truly)|many\\s*thanks|warm(?:est)?\\s*(?:regards|wishes)?|cheers|with\\s*(?:thanks|gratitude)|all\\s*the\\s*best|take\\s*care|speak\\s*soon|looking\\s*forward|thanks\\s*(?:again|so\\s*much|very\\s*much|in\\s*advance)?|thank\\s*you\\s*(?:very\\s*much|so\\s*much|kindly|in\\s*advance)?)[,.\\s!]*$/im;\n\nconst SIG_NOISE_RE = /^(?:--|___|\\*\\*\\*|===|~~~|sent\\s+from|get\\s+outlook|this\\s+email\\s+(?:was|is)|https?:\\/\\/|www\\.|disclaimer|confidential|unsubscribe)/i;\n\nconst PHONE_RE = /(?:(?:Tel(?:ephone)?|Phone|Mobile|Mob|Cell|Direct|Office|Fax|M|T|P|O)\\s*[:.]\\s*)?([+\\d][\\d\\s().-]{5,}\\d)/gi;\n\nconst SIG_EMAIL_RE = /([\\w.+-]+@[\\w.-]+\\.[a-z]{2,})/i;\n\nfunction extractFromSignature(text) {\n  if (!text) return { name: '', phone: '', email: '' };\n\n  const lines = text.split('\\n');\n\n  let greetingIdx = -1;\n  for (let i = lines.length - 1; i >= 0; i--) {\n    if (EXIT_GREETING_RE.test(lines[i])) {\n      greetingIdx = i;\n      break;\n    }\n  }\n\n  if (greetingIdx === -1) return { name: '', phone: '', email: '' };\n\n  const sigLines = lines.slice(greetingIdx + 1);\n\n  let name = '';\n  for (const raw of sigLines) {\n    const line = raw.trim();\n    if (!line) continue;\n    if (SIG_NOISE_RE.test(line)) continue;\n    if (/^\\d{2,}/.test(line)) continue;\n    if (/@/.test(line)) continue;\n    if (/^https?:\\/\\//i.test(line)) continue;\n    if (/^[+\\d\\s().-]+$/.test(line)) continue;\n\n    let candidate = line\n      .replace(/^(?:Mr\\.?|Mrs\\.?|Ms\\.?|Miss|Dr\\.?|Prof\\.?)\\s*/i, '')\n      .replace(/[|–—·•].*$/, '')\n      .trim();\n\n    if (candidate.length >= 2 && candidate.length <= 60 &&\n        /^[\\p{L}\\s'.-]+$/u.test(candidate) &&\n        candidate.split(/\\s+/).length >= 1 && candidate.split(/\\s+/).length <= 6) {\n      const titleMatch = line.match(/^(Mr\\.?|Mrs\\.?|Ms\\.?|Miss|Dr\\.?|Prof\\.?)\\s*/i);\n      name = titleMatch ? titleMatch[0].trim() + ' ' + candidate : candidate;\n      break;\n    }\n  }\n\n  const sigBlock = sigLines.join('\\n');\n  let phone = '';\n  const phoneMatches = [];\n  let pm;\n  const phoneRe = new RegExp(PHONE_RE.source, PHONE_RE.flags);\n  while ((pm = phoneRe.exec(sigBlock)) !== null) {\n    const cleaned = pm[1].replace(/[^+\\d]/g, '');\n    if (cleaned.length >= 7 && cleaned.length <= 15) {\n      phoneMatches.push(pm[1].trim());\n    }\n  }\n  if (phoneMatches.length) {\n    const mobile = phoneMatches.find(p => /(?:^07|^\\+?\\d{1,3}\\s*7)/i.test(p.replace(/[^+\\d]/g, '')));\n    phone = mobile || phoneMatches[0];\n  }\n\n  let email = '';\n  const emailMatch = sigBlock.match(SIG_EMAIL_RE);\n  if (emailMatch) email = emailMatch[1];\n\n  return { name, phone, email };\n}\n\n// ================================================================\n// GREETING INTRO EXTRACTION\n// ================================================================\n\nconst COMMON_WORDS = new Set([\n  'a','about','after','all','also','an','and','any','are','as','at','back','be',\n  'been','but','by','can','come','could','do','down','each','even','find','first',\n  'for','from','get','give','go','going','good','got','great','had','has','have',\n  'he','her','here','him','his','how','i','if','in','into','is','it','its','just',\n  'know','let','like','look','looking','lot','make','me','more','much','my','new',\n  'no','not','now','of','off','on','one','only','or','other','our','out','over',\n  'own','really','right','said','say','see','she','so','some','still','such',\n  'sure','take','than','that','the','their','them','then','there','these','they',\n  'think','this','those','through','time','to','too','try','two','up','us','use',\n  'very','want','was','way','we','well','were','what','when','where','which',\n  'while','who','will','with','wonder','wondering','work','would','writing','year',\n  'you','your','emailing','enquiring','contacting','reaching','planning','hoping',\n  'interested','happy','delighted','pleased','sorry','afraid','able','unable',\n]);\n\nfunction looksLikeName(str) {\n  if (!str || str.length < 2 || str.length > 40) return false;\n  if (!/^[A-Z\\u00C0-\\u024F]/.test(str)) return false;\n  if (!/^[\\p{L}\\s'.-]+$/u.test(str)) return false;\n  const firstWord = str.split(/\\s+/)[0].toLowerCase();\n  if (COMMON_WORDS.has(firstWord)) return false;\n  const words = str.split(/\\s+/);\n  if (words.length < 1 || words.length > 5) return false;\n  return true;\n}\n\nfunction extractFromGreeting(text) {\n  if (!text) return { name: '' };\n  const intro = text.slice(0, 500);\n\n  const p1 = intro.match(/[Mm]y\\s+name\\s+is\\s+([\\p{L}][\\p{L}\\s'.-]{1,39}?)(?:\\s*[,.\\n;]|\\s+and\\b|\\s+from\\b)/u);\n  if (p1 && looksLikeName(p1[1].trim())) return { name: p1[1].trim() };\n\n  const p2 = intro.match(/I[''\\u2019]m\\s+([\\p{L}][\\p{L}\\s'.-]{1,39}?)(?:\\s*[,.\\n;]|\\s+and\\b|\\s+from\\b)/u)\n          || intro.match(/I\\s+am\\s+([\\p{L}][\\p{L}\\s'.-]{1,39}?)(?:\\s*[,.\\n;]|\\s+and\\b|\\s+from\\b)/u);\n  if (p2 && looksLikeName(p2[1].trim())) return { name: p2[1].trim() };\n\n  const p3 = intro.match(/[Tt]his\\s+is\\s+([\\p{L}][\\p{L}\\s'.-]{1,39}?)(?:\\s*[,.\\n;]|\\s+from\\b|\\s+at\\b|\\s+with\\b)/u);\n  if (p3 && looksLikeName(p3[1].trim())) return { name: p3[1].trim() };\n\n  return { name: '' };\n}\n\n// ================================================================\n// INLINE CONTEXTUAL PHONE EXTRACTION\n// ================================================================\n\nfunction extractInlinePhone(text) {\n  if (!text) return '';\n\n  const patterns = [\n    /(?:call|reach|contact|text|ring|get)\\s+me\\s+(?:on|at)\\s*:?\\s*([+\\d][\\d\\s().-]{5,}\\d)/i,\n    /my\\s+(?:number|phone|mobile|cell|tel|telephone|mob|direct\\s+(?:number|line))\\s+(?:is|:)\\s*([+\\d][\\d\\s().-]{5,}\\d)/i,\n    /I[\\u2019'']\\s*m\\s+on\\s+([+\\d][\\d\\s().-]{5,}\\d)/i,\n    /I\\s+am\\s+on\\s+([+\\d][\\d\\s().-]{5,}\\d)/i,\n    /you\\s+can\\s+(?:get|reach|contact|call)\\s+me\\s+(?:on|at)\\s*:?\\s*([+\\d][\\d\\s().-]{5,}\\d)/i,\n    /best\\s+to\\s+(?:call|ring|text|reach\\s+me\\s+on)\\s*:?\\s*([+\\d][\\d\\s().-]{5,}\\d)/i,\n  ];\n\n  for (const re of patterns) {\n    const m = text.match(re);\n    if (m) {\n      const cleaned = m[1].replace(/[^+\\d]/g, '');\n      if (cleaned.length >= 7 && cleaned.length <= 15) {\n        return m[1].trim();\n      }\n    }\n  }\n  return '';\n}\n\n// ---------- CLIENT INFO EXTRACTION ----------\n// Priority: Form fields > Signature > Greeting intro > Inline phone > Fallback email\n// EMAIL RULE: Sender address ALWAYS wins for non-form messages.\nfunction extractClientInfo(text, fallbackEmail, isFormMessage) {\n  const t = text || '';\n  const pick = re => { const m=t.match(re); return m?m[1].trim():''; };\n\n  const info = {\n    name:      pick(/(?:^|\\n)\\s*(?:From|What'?s your name\\??|Name)\\s*[:\\n]\\s*([^\\n]+)/i),\n    email:     pick(/(?:E-?mail|EMAIL)\\s*[:\\n]\\s*([\\w.+-]+@[\\w.-]+)/i),\n    phone:     pick(/(?:Telephone|PHONE|Phone)\\s*[:\\n]\\s*([+\\d\\s()-]{6,})/i),\n    event_type:pick(/(?:Type of event|What kind of event[^\\n?]*\\??)\\s*[:\\n]\\s*([^\\n]+)/i),\n    event_date:pick(/(?:Date(?: of your event)?|DATE OF YOUR EVENT|Have you set a date\\??)\\s*[:\\n]\\s*([^\\n]+)/i),\n    location:  pick(/(?:Postcode\\/?location|Where will your event be(?:\\s+held)?\\??|Location|Venue)\\s*[:\\n]\\s*([^\\n]+)/i),\n    guests:    pick(/(?:How many (?:G|g)uests\\??|Guests)\\s*[:\\n]\\s*([^\\n]+)/i),\n    budget:    pick(/Budget\\s*[:\\n]\\s*([^\\n]+)/i),\n    sent_from: pick(/(?:Sent from|Where did you find us\\??)\\s*[:\\n]\\s*([^\\n]+)/i),\n  };\n\n  const sig = extractFromSignature(t);\n  if (!info.name  && sig.name)  info.name  = sig.name;\n  if (!info.phone && sig.phone) info.phone = sig.phone;\n  if (!info.email && sig.email && isFormMessage) info.email = sig.email;\n\n  if (!info.name) {\n    const greeting = extractFromGreeting(t);\n    if (greeting.name) info.name = greeting.name;\n  }\n\n  if (!info.phone) {\n    const inlinePhone = extractInlinePhone(t);\n    if (inlinePhone) info.phone = inlinePhone;\n  }\n\n  if (!info.email && fallbackEmail) info.email = fallbackEmail;\n\n  return info;\n}\n\nfunction extractClientMessageOnly(text) {\n  const m = text.match(/(?:^|\\n)\\s*(?:Message|What are you planning\\??|Mobile message[^\\n]*)\\s*[:\\n]\\s*([\\s\\S]+?)(?:\\n\\s*---|\\n\\s*This email is a system notification|\\n\\s*Where did you find us\\??|$)/i);\n  return m ? m[1].trim() : text.trim();\n}\n\n// ---------- AI MATCHING ----------\nfunction matchAiReplies(messages, lastSentList, lastPlaceList) {\n  const assignments = [];\n  const used = new Set();\n  for (let i=0;i<lastSentList.length;i++) {\n    const ai = normalizeForMatch(lastSentList[i]);\n    if (!ai) continue;\n    const head = ai.slice(0,200);\n    let best = {idx:-1, score:0};\n    for (let j=0;j<messages.length;j++) {\n      if (used.has(j)) continue;\n      const body = normalizeForMatch(messages[j].bodyText);\n      if (!body) continue;\n      let score = 0;\n      if (body.includes(head)) score = 1;\n      else score = jaccardTokenSet(ai, body);\n      if (score > best.score) best = {idx:j, score};\n    }\n    if (best.idx>=0 && best.score>=0.75) {\n      used.add(best.idx);\n      assignments.push({aiIndex:i, messageIndex:best.idx, score:best.score, followUp:lastPlaceList[i]||null});\n    }\n  }\n  return assignments;\n}\n\n// ---------- CLASSIFY ----------\n// Priority: Form sender → AI match → Internal sender → External (from_client)\nfunction classifyAll(messages, aiAssignments) {\n  const aiMap = new Map(aiAssignments.map(a=>[a.messageIndex, a]));\n  return messages.map((m,idx) => {\n    if (isEnquiryFormSender(m.fromAddress))\n      return {index:idx, from:m.fromAddress, label:'from_client', followUp:null, reason:'enquiry_form_sender', dateUTC:m.date?m.date.toISOString():null};\n    if (aiMap.has(idx)) {\n      const a = aiMap.get(idx);\n      return {index:idx, from:m.fromAddress, label:'reply_AI', followUp:a.followUp, reason:'matched_last_sent', dateUTC:m.date?m.date.toISOString():null};\n    }\n    if (isInternalSender(m.fromAddress))\n      return {index:idx, from:m.fromAddress, label:'reply_manual', followUp:null, reason:isAiSender(m.fromAddress)?'ai_address_unmatched':'internal_sender', dateUTC:m.date?m.date.toISOString():null};\n    return {index:idx, from:m.fromAddress, label:'from_client', followUp:null, reason:'external_sender', dateUTC:m.date?m.date.toISOString():null};\n  });\n}\n\n// ---------- DEDUPE ----------\nfunction dedupeInbound(messages, inbound) {\n  if (!inbound) return messages;\n  const inboundNorm = normalizeForMatch(stripHtmlToText(inbound.bodyContent||'')).slice(0,400);\n  const inboundFrom = addrOf(inbound.fromAddress);\n  const inboundTs = inbound.sentDateTime ? new Date(inbound.sentDateTime).getTime() : null;\n  return messages.filter(m => {\n    if (m.fromAddress !== inboundFrom) return true;\n    if (inboundTs && m.date && Math.abs(m.date.getTime()-inboundTs) > 5*60*1000) return true;\n    const mNorm = normalizeForMatch(m.bodyText).slice(0,400);\n    if (!inboundNorm || !mNorm) return true;\n    return !(mNorm.includes(inboundNorm.slice(0,150)) || inboundNorm.includes(mNorm.slice(0,150)));\n  });\n}\n\n// ---------- RENDER (conversation only) ----------\nfunction renderConversation(messages, classifications) {\n  if (!messages.length) return '(no conversation messages)';\n  const lines = [];\n  messages.forEach((m,i) => {\n    const c = classifications[i];\n    const isForm = isEnquiryFormSender(m.fromAddress);\n    const body = isForm ? extractClientMessageOnly(m.bodyText) : m.bodyText;\n    const ts = m.date ? formatUK(m.date) : (m.dateRaw||'unknown');\n    const fu = c.followUp ? ` {${c.followUp}}` : '';\n    lines.push(`[${ts} UK] <${m.fromAddress}> [${c.label}]${fu}`);\n    lines.push(body.trim());\n    lines.push('');\n  });\n  return lines.join('\\n').trim();\n}\n\nfunction formatUK(d) {\n  const months=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];\n  const pad=n=>String(n).padStart(2,'0');\n  const y=d.getUTCFullYear(), mo=d.getUTCMonth(), da=d.getUTCDate(), h=d.getUTCHours(), mi=d.getUTCMinutes();\n  const utcMs = Date.UTC(y,mo,da,h,mi);\n  const lastSun=(yr,m)=>{const dt=new Date(Date.UTC(yr,m+1,0));return dt.getUTCDate()-dt.getUTCDay();};\n  const bstStart=Date.UTC(y,2,lastSun(y,2),1,0), bstEnd=Date.UTC(y,9,lastSun(y,9),1,0);\n  const offset = (utcMs>=bstStart && utcMs<bstEnd) ? 60 : 0;\n  const local = new Date(utcMs + offset*60000);\n  return `${pad(local.getUTCDate())} ${months[local.getUTCMonth()]} ${local.getUTCFullYear()} ${pad(local.getUTCHours())}:${pad(local.getUTCMinutes())}`;\n}\n\n// ---------- MAIN ----------\nconst results = [];\nfor (const item of items) {\n  const j = item.json;\n  const warnings = [];\n\n  const inboundMsg = {\n    fromAddress: addrOf(j.fromAddress),\n    date: j.sentDateTime?new Date(j.sentDateTime):null,\n    bodyHtml: j.bodyContent||'',\n    bodyText: stripHtmlToText(j.bodyContent||''),\n    subject: j.subject||'',\n  };\n\n  let threadMsgs = parseThreadHistory(j.threadHistory||'');\n  threadMsgs = dedupeInbound(threadMsgs, j);\n\n  const hasInbound = threadMsgs.some(m =>\n    m.fromAddress===inboundMsg.fromAddress &&\n    Math.abs((m.date?.getTime()||0)-(inboundMsg.date?.getTime()||0)) < 5*60*1000\n  );\n  if (!hasInbound) threadMsgs.push(inboundMsg);\n\n  threadMsgs.sort((a,b)=>(a.date?.getTime()||0)-(b.date?.getTime()||0));\n\n  // AI matching — split last_sent_message on -NEXT- delimiter, last_place on comma\n  const lastSent = Array.isArray(j.last_sent_message) ? j.last_sent_message\n                 : (typeof j.last_sent_message==='string' && j.last_sent_message.trim()\n                    ? j.last_sent_message.split(/\\s*-NEXT-\\s*/i).map(s=>s.trim()).filter(Boolean)\n                    : []);\n  const lastPlace = Array.isArray(j.last_place_in_follow_up) ? j.last_place_in_follow_up\n                  : (typeof j.last_place_in_follow_up==='string' && j.last_place_in_follow_up.trim()\n                     ? j.last_place_in_follow_up.split(/\\s*,\\s*/).map(s=>s.trim()).filter(Boolean)\n                     : []);\n  const aiAssignments = matchAiReplies(threadMsgs, lastSent, lastPlace);\n  if (lastSent.length && aiAssignments.length < lastSent.length) warnings.push(`Only matched ${aiAssignments.length}/${lastSent.length} AI replies`);\n\n  const classifications = classifyAll(threadMsgs, aiAssignments);\n\n  // Client information — form extraction first, then first client message\n  // EMAIL RULE: Sender address ALWAYS wins for non-form messages.\n  let clientInfo = {name:'',email:'',phone:'',event_type:'',event_date:'',location:'',guests:'',budget:'',sent_from:''};\n  const formMsg = threadMsgs.find(m => isEnquiryFormSender(m.fromAddress));\n  if (formMsg) {\n    clientInfo = extractClientInfo(formMsg.bodyText, '', true);\n  } else {\n    const firstClientIdx = classifications.findIndex(c=>c.label==='from_client');\n    if (firstClientIdx>=0) {\n      const m = threadMsgs[firstClientIdx];\n      const extracted = extractClientInfo(m.bodyText, m.fromAddress, false);\n      clientInfo = {...clientInfo, ...extracted, email: m.fromAddress};\n    }\n  }\n\n  // Derive email_reply_to — always populated, never a form sender address\n  const senderAddr = addrOf(j.fromAddress);\n  let emailReplyTo;\n  if (isEnquiryFormSender(senderAddr)) {\n    // Form: use extracted client email, fall back to form sender address\n    emailReplyTo = clientInfo.email || senderAddr;\n  } else {\n    // Non-form: always the original sender\n    emailReplyTo = senderAddr;\n  }\n\n  const rendered = renderConversation(threadMsgs, classifications);\n  const render_hash = sha256(rendered);\n\n  results.push({\n    json: {\n      rendered,\n      email_reply_to: emailReplyTo,\n      client_information: {\n        name:        clientInfo.name        || null,\n        email:       clientInfo.email       || null,\n        phone:       clientInfo.phone       || null,\n        event_type:  clientInfo.event_type  || null,\n        event_date:  clientInfo.event_date  || null,\n        location:    clientInfo.location    || null,\n        guests:      clientInfo.guests      || null,\n        budget:      clientInfo.budget      || null,\n        sent_from:   clientInfo.sent_from   || null,\n      },\n      metadata: {\n        subject: j.subject || null,\n        found: j.found === true || String(j.found).toLowerCase() === 'true',\n        added_to_whatsapp: j.added_to_whatsapp === true || String(j.added_to_whatsapp).toLowerCase() === 'true',\n        messageCount: threadMsgs.length,\n        classifications,\n        id: j.id || null,\n        conversationId: j.conversationId || null,\n        render_hash,\n        warnings,\n      },\n    },\n  });\n}\nreturn results;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -512,
+        4208
+      ],
+      "id": "e9e5c6ed-3bc4-45ef-b1f6-a71429cbec75",
+      "name": "Conversational Renderer",
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "operation": "search",
+        "base": {
+          "__rl": true,
+          "value": "appWXNhlTE3slvUR5",
+          "mode": "list",
+          "cachedResultName": "House of Hud Proposal generator",
+          "cachedResultUrl": "https://airtable.com/appWXNhlTE3slvUR5"
+        },
+        "table": {
+          "__rl": true,
+          "value": "tblwQG6DMdpHFcBrf",
+          "mode": "list",
+          "cachedResultName": "in_follow_up_sequence",
+          "cachedResultUrl": "https://airtable.com/appWXNhlTE3slvUR5/tblwQG6DMdpHFcBrf"
+        },
+        "filterByFormula": "={conversation_id} = \"{{ $json.conversationId }}\"",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.1,
+      "position": [
+        -1648,
+        4192
+      ],
+      "id": "67411e25-badb-4457-85c3-a1afda645376",
+      "name": "Search records1",
+      "alwaysOutputData": true,
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "ay2XLl26NeuhHwju",
+          "name": "House of hud proposal generator"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.found }}",
+                    "rightValue": false,
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "equals"
+                    },
+                    "id": "f1e2e636-f653-4590-86ba-d28117c00bab"
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "9de4733e-39fe-4a9c-9bdc-9f9964dc0004",
+                    "leftValue": "={{ $json.found }}",
+                    "rightValue": true,
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [
+        -1312,
+        4192
+      ],
+      "id": "1cab765b-397a-44f3-99a0-bbf98231ed3f",
+      "name": "Switch"
+    },
+    {
+      "parameters": {
+        "jsCode": "// n8n Code node (JavaScript)\n// Assumption: this node receives EXACTLY 1 item from the Airtable Search node.\n// Goal: output true/false in `found` indicating whether that item is a real Airtable record.\n\nconst item = $input.first();\nconst j = item?.json ?? {};\n\n// Airtable record shape is typically:\n// { id: \"rec...\", createdTime: \"...\", fields: { ... } }\nconst hasRecordId =\n  typeof j.id === \"string\" && j.id.trim().length > 0 && j.id.startsWith(\"rec\");\n\nconst hasFieldsObject =\n  j.fields && typeof j.fields === \"object\" && !Array.isArray(j.fields);\n\nconst hasAnyFields =\n  hasFieldsObject && Object.keys(j.fields).length > 0;\n\n// Some n8n/Airtable nodes may flatten fields into top-level keys instead of `fields`.\n// If the JSON has *any* keys beyond harmless metadata, treat as a record.\nconst topLevelKeys = Object.keys(j);\nconst nonMetaKeys = topLevelKeys.filter(\n  (k) => ![\"@odata.etag\", \"createdTime\", \"createdDateTime\", \"lastModifiedDateTime\"].includes(k)\n);\nconst hasMeaningfulTopLevelData = nonMetaKeys.length > 0;\n\n// Final decision:\n// Prefer record id; otherwise require fields; otherwise fall back to \"any meaningful keys\".\nconst found = hasRecordId || hasAnyFields || hasMeaningfulTopLevelData;\n\nreturn [\n  {\n    json: {\n      found,\n    },\n  },\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1536,
+        4192
+      ],
+      "id": "8323bdd4-54ec-44aa-9f6b-72de69f9eaed",
+      "name": "does exist?"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "cf352fe5-7884-4e18-b1d8-30a5a4208d1e",
+              "name": "found",
+              "value": "={{ $json.found }}",
+              "type": "boolean"
+            },
+            {
+              "id": "7af25a82-9635-46e9-b5d8-488ea5412978",
+              "name": "last_sent_message",
+              "value": "={{ $('Search records1').item.json.last_sent_message }}",
+              "type": "string"
+            },
+            {
+              "id": "3519fa0a-968a-4dae-8a54-ac476dc831db",
+              "name": "last_place_in_follow_up",
+              "value": "={{ $('Search records1').item.json.last_place_in_follow_up }}",
+              "type": "string"
+            },
+            {
+              "id": "ec1ac5d3-90bc-449e-a706-e982b69f1bea",
+              "name": "added_to_whatsapp",
+              "value": "={{ $('Search records1').item.json.added_to_whatsapp }}",
+              "type": "string"
+            },
+            {
+              "id": "9b6d4ccd-f099-4875-95f5-1e8da97b6173",
+              "name": "id",
+              "value": "={{ $('Search records1').item.json.id }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -1424,
+        4192
+      ],
+      "id": "cd616722-6be3-4b63-8caf-6950ed499044",
+      "name": "get found?"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        1232,
+        4016
+      ],
+      "id": "2d0e38f9-89f8-4af4-848b-eefa058fb9ed",
+      "name": "Respond to Webhook"
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "base": {
+          "__rl": true,
+          "value": "appWXNhlTE3slvUR5",
+          "mode": "list",
+          "cachedResultName": "House of Hud Proposal generator",
+          "cachedResultUrl": "https://airtable.com/appWXNhlTE3slvUR5"
+        },
+        "table": {
+          "__rl": true,
+          "value": "tblwQG6DMdpHFcBrf",
+          "mode": "list",
+          "cachedResultName": "in_follow_up_sequence",
+          "cachedResultUrl": "https://airtable.com/appWXNhlTE3slvUR5/tblwQG6DMdpHFcBrf"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "last_place_in_follow_up": "={{ $json.last_place_in_follow_up }}",
+            "last_sent_message": "={{ $json.last_sent_message }}",
+            "id": "={{ $json.id }}",
+            "added_to_whatsapp": "={{ $json.added_to_whatsapp }}"
+          },
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": [
+            {
+              "id": "id",
+              "displayName": "id",
+              "required": false,
+              "defaultMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": true,
+              "removed": false
+            },
+            {
+              "id": "last_sent_message",
+              "displayName": "last_sent_message",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "last_place_in_follow_up",
+              "displayName": "last_place_in_follow_up",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "outlook_id",
+              "displayName": "outlook_id",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "conversation_id",
+              "displayName": "conversation_id",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "added_to_whatsapp",
+              "displayName": "added_to_whatsapp",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {
+          "typecast": true
+        }
+      },
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.1,
+      "position": [
+        464,
+        4240
+      ],
+      "id": "76bbf922-2066-4245-bc3a-88188074ebec",
+      "name": "Update record",
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "ay2XLl26NeuhHwju",
+          "name": "House of hud proposal generator"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "cfd5c1e5-f215-46c3-8dbe-fc3606d23644",
+              "name": "id",
+              "value": "={{ $json.fields.outlook_id }}",
+              "type": "string"
+            },
+            {
+              "id": "e1d91a7c-df05-440e-af83-f7af5b75b9f4",
+              "name": "conversationId",
+              "value": "={{ $('MAINDATA').item.json.conversationId }}",
+              "type": "string"
+            },
+            {
+              "id": "124e534c-ee45-4a64-8d85-7407e41398af",
+              "name": "ccRecipients",
+              "value": "={{ $('MAINDATA').item.json.ccRecipients }}",
+              "type": "array"
+            },
+            {
+              "id": "c83d96a1-e5bc-43ca-8a2a-757622e68235",
+              "name": "classification",
+              "value": "={{ $('parse output data').item.json.classification }}",
+              "type": "string"
+            },
+            {
+              "id": "b917443a-efac-4101-85db-c8774fb54aa4",
+              "name": "subject",
+              "value": "={{ $('parse output data').item.json.subject }}",
+              "type": "string"
+            },
+            {
+              "id": "92d044b7-bbcd-4a38-8fee-f10ca1b6f9d6",
+              "name": "body",
+              "value": "={{ $('parse output data').item.json.body }}",
+              "type": "string"
+            },
+            {
+              "id": "0afc5400-90a7-49fe-8f97-515d7af76e03",
+              "name": "included_links",
+              "value": "={{ $('parse output data').item.json.included_links }}",
+              "type": "string"
+            },
+            {
+              "id": "602673d7-5800-41aa-81b3-dd91431d1f69",
+              "name": "client_information.name",
+              "value": "={{ $('Conversational Renderer').item.json.client_information.name }}",
+              "type": "string"
+            },
+            {
+              "id": "40fb2f4b-9cff-4cb2-8734-8a27b4d0a20c",
+              "name": "send.email.address",
+              "value": "={{ $('Conversational Renderer').item.json.email_reply_to }}",
+              "type": "string"
+            },
+            {
+              "id": "9fae4efb-ba21-408e-82b7-bdc6c598510f",
+              "name": "client_information.phone",
+              "value": "={{ $('Conversational Renderer').item.json.client_information.phone }}",
+              "type": "string"
+            },
+            {
+              "id": "12a1759f-acc0-45d4-a2ac-62ab16db7930",
+              "name": "signature",
+              "value": " <div id=\"Signature\">   <div style=\"font-family: Georgia, serif; font-size: 12pt; color: rgb(0, 0, 0);\"><br></div>   <p style=\"margin-top: 0px; margin-bottom: 0px;\">     <span style=\"font-family: Georgia, serif; font-size: 12pt; color: rgb(32, 31, 30);\"><b>Best Wishes,</b></span>   </p>   <div style=\"margin-top: 0px; margin-bottom: 0px; font-family: Georgia, serif; font-size: 12pt; color: black;\"><br></div>   <p style=\"text-align: left; text-indent: 0px; background-color: white; margin: 0px;\">     <span style=\"font-family: Georgia, serif; font-size: 12pt; color: rgb(32, 31, 30);\">- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -</span>   </p>   <div style=\"text-align: left; text-indent: 0px; background-color: white; margin: 0px; font-family: Georgia, serif; font-size: 12pt; color: rgb(127, 127, 127);\">     The House of Hud Team   </div>   <p style=\"text-align: left; text-indent: 0px; background-color: white; margin: 0px;\">     <span style=\"font-family: Georgia, serif; font-size: 12pt; color: rgb(127, 127, 127);\">Office: 0800 193 </span>     <span style=\"font-family: Georgia, serif; font-size: 12pt; color: rgb(153, 153, 153);\">5229</span>   </p>   <p style=\"text-align: left; text-indent: 0px; background-color: white; margin: 0px;\">     <span style=\"font-family: Georgia, serif; font-size: 12pt; color: rgb(153, 153, 153);\">       <a href=\"https://houseofhud.com/\" style=\"color: rgb(153, 153, 153);\">https://houseofhud.com/</a>     </span>   </p>   <p style=\"text-align: left; text-indent: 0px; background-color: white; margin: 0px;\">     <span style=\"font-family: Georgia, serif; font-size: 12pt; color: rgb(32, 31, 30);\"><b>House of Hud</b></span>   </p>   <p style=\"text-align: left; text-indent: 0px; background-color: white; margin: 0px;\">     <a href=\"https://houseofhud.com/\" target=\"_blank\" rel=\"noopener noreferrer\" style=\"color: rgb(36, 36, 36); margin: 0px;\">       <img src=\"https://lh3.googleusercontent.com/d/1MQQbwEGzdhtPZCIa-T3EtCgazHCRQjP2=w192?authuser=0\" alt=\"House of Hud Logo\" width=\"96\" height=\"93\" style=\"width: 72.74pt; height: 70.49pt; max-width: 648px; min-width: auto; min-height: auto; margin: 0px;\">     </a>   </p>   <div style=\"font-family: Georgia, serif; font-size: 12pt; color: rgb(0, 0, 0);\"><br></div> </div>",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        576,
+        4240
+      ],
+      "id": "9ccd2044-ba60-4999-9efc-d6f4865c2c24",
+      "name": "ready for email"
+    },
+    {
+      "parameters": {
+        "base": {
+          "__rl": true,
+          "value": "appWXNhlTE3slvUR5",
+          "mode": "list",
+          "cachedResultName": "House of Hud Proposal generator",
+          "cachedResultUrl": "https://airtable.com/appWXNhlTE3slvUR5"
+        },
+        "table": {
+          "__rl": true,
+          "value": "tblwQG6DMdpHFcBrf",
+          "mode": "list",
+          "cachedResultName": "in_follow_up_sequence",
+          "cachedResultUrl": "https://airtable.com/appWXNhlTE3slvUR5/tblwQG6DMdpHFcBrf"
+        },
+        "id": "={{ $('Create a record').item.json.id }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.1,
+      "position": [
+        240,
+        4240
+      ],
+      "id": "62d5ae62-b9da-44d1-924b-0770bd505ba3",
+      "name": "Get a record",
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "ay2XLl26NeuhHwju",
+          "name": "House of hud proposal generator"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "af3983a4-6cbb-4f91-a605-d628a0324479",
+              "name": "last_sent_message",
+              "value": "={{ $json.last_sent_message }} -NEXT- {{ $('Merge').item.json.body }}",
+              "type": "string"
+            },
+            {
+              "id": "eed9ce1c-6440-4861-8988-1e6f0d2f9d69",
+              "name": "last_place_in_follow_up",
+              "value": "={{ $json.last_place_in_follow_up }}, {{ $('Merge').item.json.classification }}",
+              "type": "string"
+            },
+            {
+              "id": "6fc069d2-567d-4dd2-a68e-77690ac03a24",
+              "name": "added_to_whatsapp",
+              "value": "={{ $('Merge').item.json.value }}",
+              "type": "string"
+            },
+            {
+              "id": "3332ec24-67d0-4ced-ae42-e8335b18ac7b",
+              "name": "id",
+              "value": "={{ $json.id }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        352,
+        4240
+      ],
+      "id": "a2cb042a-c7b5-4e0d-ae28-9250567360b8",
+      "name": "combine strings"
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "anthropic/claude-3.5-haiku",
+          "mode": "list",
+          "cachedResultName": "ANTHROPIC/CLAUDE-3.5-HAIKU"
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "=USER PROMPT (INPUT DATA)\n\nCurrent Email Subject: \n{{ $('Normalize Data').item.json.original_email.subject }}\n\nCurrent Email Body: \n{{ $('Normalize Data').item.json.original_email.body }}\n\nThread History: \n{{ $('Normalize Data').item.json.thread_history.messages }}\n\nemail_id: \n{{ $('Normalize Data').item.json.original_email.email_id }}\n\nthread_id: \n{{ $('Normalize Data').item.json.original_email.thread_id }}\n\nfrom: \n{{ $('Normalize Data').item.json.original_email.from }}"
+            },
+            {
+              "content": "ROLE:\nClassify incoming emails as either:\n1. NEW job request\n2. UPDATE to existing job request\n3. NOT a job request\n\nYou ONLY classify the Current Email. Thread History is context only.\n\n---\n\nSCOPE RULE:\n\nYou are classifying ONLY the \"Current Email\" (subject + body).\n\nThread History exists solely to answer these two questions:\n  1. Does Current Email introduce a NEW job NOT in Thread History?\n  2. Does Current Email modify a job that ALREADY EXISTS in Thread History?\n\nIf neither is true → NOT a job request.\n\nCRITICAL: Never classify Thread History messages. Only classify Current Email.\n\n---\n\nDEFINITIONS:\n\n\"Job Request\" = Any message requesting crew, booking, order, shift, or staffing.\n\n\"Current Email\" = The most recent email (the one just arrived).\n\n\"Thread History\" = All previous emails in this conversation thread.\n\n---\n\nCLASSIFICATION LOGIC:\n\nSTEP 1: Does Current Email contain job request language?\n\n  NEW Job Indicators:\n  • \"booking request,\" \"crew request,\" \"I need a crew\"\n  • \"I'll take [X] on this day,\" \"[X] crew on [date]\"\n  • \"new order,\" \"crew chief,\" \"can you crew this\"\n  • Any explicit request for staffing with numbers/dates/details\n\n  UPDATE Job Indicators:\n  • \"change this,\" \"make it [X] instead\"\n  • \"update,\" \"amend,\" \"adjust,\" \"modify\"\n  • \"actually,\" \"instead,\" \"can we switch\"\n  • \"cancel,\" \"remove,\" \"add to\"\n  • \"confirmed,\" \"approved,\" \"going ahead\"\n  • \"push to,\" \"move to,\" \"delay\"\n\n  If Current Email has NONE of these → is_job: false → STOP\n\n---\n\nSTEP 2: If YES to job language, check Thread History\n\n  CASE A: No Thread History exists\n    → is_job: true / type_job: new\n    → Job summary: What this email requests\n\n  CASE B: Thread History exists but NO prior job mentioned\n    → is_job: true / type_job: new\n    → Job summary: What this email requests\n\n  CASE C: Thread History EXISTS and CONTAINS a prior job\n    → Continue to STEP 3\n\n---\n\nSTEP 3: Does Current Email reference/modify the existing job?\n\n  If YES:\n    → is_job: true / type_job: update\n    → Job summary: Original job + what changed\n\n  If NO (Current Email is unrelated to prior job):\n    → is_job: true / type_job: new\n    → Job summary: What this email requests (separate from prior job)\n\n---\n\nDETERMINISM RULES:\n\nRule 1: DUPLICATE DETECTION\n  If Current Email is identical to any message in Thread History:\n  → Mark as duplicate and disregard from thread history context\n  → Still classify Current Email normally based on content\n\nRule 2: AMBIGUOUS LANGUAGE\n  If Current Email COULD be either new or update:\n  → Prioritize UPDATE if Thread History has any prior job details\n  → Default to NEW if Thread History is unclear or absent\n  → REASON: Safer to categorize as update than miss context\n\nRule 3: MULTIPLE JOBS IN ONE EMAIL\n  If Current Email contains BOTH a new request AND update to prior:\n  → type_job: update (the update takes precedence)\n  → job_summary: Describe the original job, what changed, AND what new request was added\n\nRule 4: CONFIRMATION ONLY\n  If Current Email only confirms/acknowledges prior job with NO changes:\n  → is_job: false (confirmation alone is not a new classified request)\n  \n  Exception: If confirmation includes NEW details not in prior job:\n  → is_job: true / type_job: update\n  → job_summary: Note what new information was provided\n\nRule 5: CANCELLATION\n  If Current Email cancels an existing job or part of it:\n  → is_job: true / type_job: update\n  → job_summary: State what was cancelled and from what prior job\n\nRule 6: MISSING CRITICAL DATA\n  If Current Email requests crew but lacks dates/times/headcount:\n  → Still classify as is_job: true\n  → job_summary: Note what details are missing (\"Date unclear,\" \"Crew size not specified\")\n\n---\n\nOUTPUT FORMAT (EXACTLY):\n\nfrom: [email address from passthrough]\nemail_id: [ID from passthrough]\nthread_id: [ID from passthrough]\nis_job: [true or false]\ntype_job: [new or update, blank if is_job is false]\njob_summary: [technical summary, see below]\n\n---\n\nJOB_SUMMARY SPECIFICATIONS:\n\nIf is_job: true / type_job: new\n  Format: \"[Date/Time] - [Headcount] crew at [Location] - [Any other key details]\"\n  Example: \"Thursday 9am - 3 crew at 123 Main St - Crew chief: Mike\"\n  Include: Dates, times, headcount, location, crew chief, any IDs, payment terms if mentioned\n\nIf is_job: true / type_job: update\n  Format: \"[Original job details] → UPDATED: [what changed]\"\n  Example: \"Thursday 9am - 3 crew → UPDATED: Now 4 crew instead of 3\"\n  Include: What changed FROM what TO what (if discernible)\n  If change is unclear, state: \"Change requested but specifics unclear\"\n\nIf is_job: false\n  Write: \"N/A - [brief reason]\"\n  Examples: \"N/A - General conversation, no crew request\"\n            \"N/A - Status update only, no changes requested\"\n            \"N/A - Thank you/confirmation without modifications\"\n\n---\n\nTHREAD HISTORY REFERENCE:\n\nThread History is provided chronologically:\n  • Oldest message = Top\n  • Newest message = Bottom\n  • Current Email = NOT in Thread History (it's separate)\n\nWhen analyzing Thread History:\n  1. Read from top to bottom\n  2. Identify job requests in the order they appear\n  3. Track what changes between messages\n  4. Use dates/timestamps to prioritize newer information\n  5. Remember: Current Email is always more recent than everything in history\n\n---\n\nEDGE CASES:\n\nScenario 1: \"Can you send me a quote?\"\n  → is_job: false (request for information, not a booking)\n\nScenario 2: \"I'd like to move the crew from Friday to Saturday\"\n  → is_job: true / type_job: update (references existing job, modifies it)\n\nScenario 3: Current Email says \"Sounds good\" with no changes\n  → is_job: false (pure confirmation/acknowledgment)\n  → UNLESS Thread History shows no prior job, then it's ambiguous\n    → is_job: false (no actionable request in Current Email itself)\n\nScenario 4: \"We'll need 5 crew Thursday AND can we cancel Monday?\"\n  → is_job: true / type_job: update (both are modifications to prior job context)\n  → job_summary: \"Thursday - 5 crew requested. Monday booking cancelled.\"\n\nScenario 5: Current Email references \"the job\" but Thread History is unclear\n  → is_job: true / type_job: update (Current Email clearly references prior job)\n  → job_summary: \"Update to existing booking (prior details unclear from thread)\"\n\n---\n\nCRITICAL OUTPUTS:\n\n✓ Only output the 6 required fields\n✓ No markdown, no JSON, no code blocks, no extra formatting\n✓ type_job NEVER contains \"-new\", \"-update\", or variations\n✓ type_job is blank if is_job is false\n✓ Passthrough fields (from, email_id, thread_id) are exactly as provided in input\n✓ No assumptions about missing data — note it in job_summary if unclear",
+              "role": "system"
+            }
+          ]
+        },
+        "jsonOutput": true,
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.8,
+      "position": [
+        -224,
+        4288
+      ],
+      "id": "49b83292-dcd3-4896-a640-3600b49597bc",
+      "name": "Determine if Order Failsafe",
+      "retryOnFail": true,
+      "credentials": {
+        "openAiApi": {
+          "id": "XwWRvjUzKmbGWIQw",
+          "name": "SpartanCrew Email SamurAI"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "5b0b9146-35d4-4405-a22e-92911bc0f259",
+              "leftValue": "",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "equals",
+                "name": "filter.operator.equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        0,
+        4176
+      ],
+      "id": "f881bbe8-2aed-4dd7-b83c-89f1d2dd9db6",
+      "name": "If"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        240,
+        4080
+      ],
+      "id": "1a970bfd-803d-477a-ac52-818b29489e4d",
+      "name": "Combine all Email Data"
+    }
+  ],
+  "connections": {
+    "Poll1": {
+      "main": [
+        [
+          {
+            "node": "Date & Time",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get IDs1": {
+      "main": [
+        [
+          {
+            "node": "Search records1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Hydrated Emails1": {
+      "main": [
+        [
+          {
+            "node": "Get a thread2",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Merge1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge1": {
+      "main": [
+        [
+          {
+            "node": "Normalize Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Data": {
+      "main": [
+        [
+          {
+            "node": "MAINDATA",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get a thread2": {
+      "main": [
+        [
+          {
+            "node": "Merge1",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Loop Over Items": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Get IDs1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Determine if Order": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Remove label from message": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get many messages": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items1",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Date & Time",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Date & Time": {
+      "main": [
+        [
+          {
+            "node": "-10 mins",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "-10 mins": {
+      "main": [
+        [
+          {
+            "node": "Get many messages",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Over Items1": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Remove label from message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create a record": {
+      "main": [
+        [
+          {
+            "node": "Get Hydrated Emails1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "MAINDATA": {
+      "main": [
+        [
+          {
+            "node": "Conversational Renderer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "does exist?": {
+      "main": [
+        [
+          {
+            "node": "get found?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "get found?": {
+      "main": [
+        [
+          {
+            "node": "Switch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Search records1": {
+      "main": [
+        [
+          {
+            "node": "does exist?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch": {
+      "main": [
+        [
+          {
+            "node": "Create a record",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Get Hydrated Emails1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Conversational Renderer": {
+      "main": [
+        [
+          {
+            "node": "Determine if Order",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Determine if Order Failsafe",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Respond to Webhook": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update record": {
+      "main": [
+        [
+          {
+            "node": "ready for email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get a record": {
+      "main": [
+        [
+          {
+            "node": "combine strings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "combine strings": {
+      "main": [
+        [
+          {
+            "node": "Update record",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Determine if Order Failsafe": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "Combine all Email Data",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Get a record",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Get a record",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Combine all Email Data": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ready for email": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "callerPolicy": "workflowsFromSameOwner",
+    "executionOrder": "v0",
+    "errorWorkflow": "NZ9lV5RxNz77ttBx",
+    "timeSavedPerExecution": 1,
+    "timeSavedMode": "fixed",
+    "availableInMCP": false,
+    "binaryMode": "separate"
+  },
+  "staticData": {
+    "node:On Message Received": {
+      "lastTimeChecked": 1769321797,
+      "possibleDuplicates": [
+        "19bf3cc1bc20a344"
+      ]
+    },
+    "node:Gmail Trigger": {
+      "Gmail Trigger": {
+        "lastTimeChecked": 1769603155,
+        "possibleDuplicates": [
+          "19c0491664efe505"
+        ]
+      }
+    },
+    "node:Schedule Trigger": {
+      "recurrenceRules": [
+        null
+      ],
+      "recurrenceRuleSignatures": [
+        null
+      ]
+    },
+    "node:Gmail Trigger1": {
+      "Gmail Trigger1": {
+        "lastTimeChecked": 1769603155,
+        "possibleDuplicates": [
+          "19c0491664efe505"
+        ]
+      }
+    },
+    "node:Gmail Trigger3": {
+      "Gmail Trigger3": {
+        "lastTimeChecked": 1769603076,
+        "possibleDuplicates": [
+          "19c04901ba391c4d",
+          "19c04895fd236539"
+        ]
+      }
+    },
+    "node:Gmail Trigger4": {
+      "Gmail Trigger4": {
+        "lastTimeChecked": 1769553365,
+        "possibleDuplicates": [
+          "19c01998f2db1f70",
+          "19c01997a9d49cd8",
+          "19c0198a7f0976c4",
+          "19c0198931b3e068",
+          "19c0197bf366a0f7"
+        ]
+      }
+    },
+    "node:Gmail Trigger2": {
+      "Gmail Trigger2": {
+        "lastTimeChecked": 1769603155,
+        "possibleDuplicates": [
+          "19c0491664efe505"
+        ]
+      }
+    },
+    "node:Poll1": {
+      "Poll1": {
+        "lastTimeChecked": 1782226037,
+        "possibleDuplicates": [
+          "19ef4f35adb899c2",
+          "19ef4f1a67d7a769"
+        ]
+      }
+    },
+    "node:Poll": {
+      "Poll": {
+        "lastTimeChecked": 1772216660,
+        "possibleDuplicates": [
+          "19ca0583341b44a6",
+          "19ca056291584d0e",
+          "19ca04629fa797ea"
+        ]
+      }
+    },
+    "node:Poll2": {
+      "Poll2": {
+        "lastTimeChecked": 1772216660,
+        "possibleDuplicates": [
+          "19ca0583341b44a6",
+          "19ca056291584d0e",
+          "19ca04629fa797ea"
+        ]
+      }
+    },
+    "node:Poll4": {
+      "Poll4": {
+        "lastTimeChecked": 1772336647,
+        "possibleDuplicates": [
+          "19ca77f0fc8aa160"
+        ]
+      }
+    },
+    "node:Schedule Trigger1": {
+      "recurrenceRules": []
+    },
+    "node:Microsoft Outlook Trigger1": {
+      "lastTimeChecked": "2026-07-02T18:30:48.005+01:00"
+    }
+  },
+  "meta": {
+    "templateId": "4722",
+    "templateCredsSetupCompleted": true
+  },
+  "nodeGroups": [],
+  "pinData": {
+    "Poll1": [
+      {
+        "json": {
+          "id": "19e93124a9065fdf",
+          "threadId": "19cbdeaed907fa42",
+          "snippet": "Please cancel this request as the event is no longer going ahead. thanks Jo ᐧ On Thu, 5 Mar 2026 at 16:16, Jo Reynolds &lt;jo.reynolds@aztec.events&gt; wrote: Hi Tracy, Please find attached the PO as",
+          "payload": {
+            "mimeType": "multipart/alternative"
+          },
+          "sizeEstimate": 51405,
+          "historyId": "39561713",
+          "internalDate": "1780583898000",
+          "labels": [
+            {
+              "id": "INBOX",
+              "name": "INBOX"
+            },
+            {
+              "id": "IMPORTANT",
+              "name": "IMPORTANT"
+            },
+            {
+              "id": "CATEGORY_PERSONAL",
+              "name": "CATEGORY_PERSONAL"
+            },
+            {
+              "id": "UNREAD",
+              "name": "UNREAD"
+            },
+            {
+              "id": "Label_5089401050847698788",
+              "name": "New"
+            }
+          ],
+          "From": "Jo Reynolds <jo.reynolds@aztec.events>",
+          "Subject": "Re: On site crew call - 17/06 & 18/06 - MCC - Fractal AI (CR73112)",
+          "To": "Bookings Spartan Crew <bookings@spartancrew.co.uk>"
+        },
+        "pairedItem": {
+          "item": 0
+        }
+      }
+    ],
+    "Schedule Trigger": [
+      {
+        "json": {
+          "timestamp": "2026-06-24T17:35:34.003+01:00",
+          "Readable date": "June 24th 2026, 5:35:34 pm",
+          "Readable time": "5:35:34 pm",
+          "Day of week": "Wednesday",
+          "Year": "2026",
+          "Month": "June",
+          "Day of month": "24",
+          "Hour": "17",
+          "Minute": "35",
+          "Second": "34",
+          "Timezone": "Europe/London (UTC+01:00)"
+        },
+        "pairedItem": {
+          "item": 0
+        }
+      }
+    ]
+  },
+  "versionId": "7365ab56-06fd-4c25-8d42-27b43d274b4f",
+  "activeVersionId": "7365ab56-06fd-4c25-8d42-27b43d274b4f",
+  "versionCounter": 10113,
+  "triggerCount": 2,
+  "sourceWorkflowId": null,
+  "shared": [
+    {
+      "updatedAt": "2025-10-20T16:16:08.416Z",
+      "createdAt": "2025-10-20T16:16:08.416Z",
+      "role": "workflow:owner",
+      "workflowId": "CPIRu7CpezvKjU8d",
+      "projectId": "QYhxf5wADFAhnwUD",
+      "project": {
+        "updatedAt": "2026-01-27T21:19:32.000Z",
+        "createdAt": "2025-02-26T17:02:01.251Z",
+        "id": "QYhxf5wADFAhnwUD",
+        "name": "SamurAI Solutions",
+        "type": "team",
+        "icon": {
+          "type": "icon",
+          "value": "layer-group"
+        },
+        "description": "",
+        "customTelemetryTags": [],
+        "creatorId": null
+      }
+    }
+  ],
+  "tags": [
+    {
+      "updatedAt": "2026-01-25T07:05:38.404Z",
+      "createdAt": "2026-01-25T07:05:38.404Z",
+      "id": "b1ysvLXPnQdfcx9e",
+      "name": "DO NOT EDIT"
+    },
+    {
+      "updatedAt": "2026-02-22T17:46:15.512Z",
+      "createdAt": "2026-02-22T17:46:15.512Z",
+      "id": "r0PSFYkr8I9ECsFp",
+      "name": "PRODUCTION"
+    }
+  ],
+  "activeVersion": {
+    "updatedAt": "2026-07-27T19:10:36.000Z",
+    "createdAt": "2026-07-27T19:07:19.971Z",
+    "versionId": "7365ab56-06fd-4c25-8d42-27b43d274b4f",
+    "workflowId": "CPIRu7CpezvKjU8d",
+    "nodes": [
+      {
+        "parameters": {
+          "content": "## https://airtable.com/appKTOJbXpUz34KCZ/tbl1SETRx7gbfDFDe/viwd8rn6UcwvMsywV?blocks=hide",
+          "width": 166
+        },
+        "type": "n8n-nodes-base.stickyNote",
+        "position": [
+          3840,
+          3456
+        ],
+        "typeVersion": 1,
+        "id": "19676484-0df2-4b14-ac5e-84c19e34a569",
+        "name": "Sticky Note3"
+      },
+      {
+        "parameters": {
+          "pollTimes": {
+            "item": [
+              {
+                "mode": "everyMinute"
+              },
+              {
+                "mode": "everyX",
+                "value": 3,
+                "unit": "minutes"
+              }
+            ]
+          },
+          "filters": {
+            "includeDrafts": false,
+            "labelIds": [
+              "Label_5089401050847698788"
+            ],
+            "readStatus": "both"
+          }
+        },
+        "type": "n8n-nodes-base.gmailTrigger",
+        "typeVersion": 1.3,
+        "position": [
+          -2672,
+          4080
+        ],
+        "id": "1ce92e0a-e940-4223-a21f-72670e48b03d",
+        "name": "Poll1",
+        "credentials": {
+          "gmailOAuth2": {
+            "id": "bgRJXZINuY5e6a3x",
+            "name": "BOOKINGS 5/18/26"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "assignments": {
+            "assignments": [
+              {
+                "id": "506f7dc6-256f-4c95-b274-0937af09f530",
+                "name": "id",
+                "value": "={{ $json.id }}",
+                "type": "string"
+              },
+              {
+                "id": "696eda32-d10b-44bc-8232-378c50d0ba7b",
+                "name": "threadId",
+                "value": "={{ $json.threadId }}",
+                "type": "string"
+              },
+              {
+                "id": "56f8a8e6-696b-4b6e-b84d-adf753618cb4",
+                "name": "historyId",
+                "value": "={{ $json.historyId }}",
+                "type": "string"
+              },
+              {
+                "id": "49cc6e52-6534-4c98-b13e-7b5a54ea51a6",
+                "name": "from[0].email",
+                "value": "={{ $json.from[0].email }}",
+                "type": "string"
+              },
+              {
+                "id": "04d2bd7e-28ba-45e5-afaa-ba5af8fa02de",
+                "name": "to[0].email",
+                "value": "={{ $json.to[0].email }}",
+                "type": "string"
+              },
+              {
+                "id": "e7fc51da-6651-465a-adc9-2ff486b89b5b",
+                "name": "ccEmails[0]",
+                "value": "={{ $json.ccEmails[0] }}",
+                "type": "string"
+              }
+            ]
+          },
+          "options": {}
+        },
+        "type": "n8n-nodes-base.set",
+        "typeVersion": 3.4,
+        "position": [
+          -1760,
+          4192
+        ],
+        "id": "ad8815a1-7477-4103-91de-c06c567d8b39",
+        "name": "Get IDs1"
+      },
+      {
+        "parameters": {
+          "operation": "get",
+          "messageId": "={{ $('Get IDs1').item.json.id }}",
+          "simple": false,
+          "options": {}
+        },
+        "id": "6cc566da-3982-43a3-b0d1-c917c5c42f74",
+        "name": "Get Hydrated Emails1",
+        "type": "n8n-nodes-base.gmail",
+        "position": [
+          -1072,
+          4192
+        ],
+        "webhookId": "53b5e765-33e2-44f8-8e0c-d1a72322a603",
+        "typeVersion": 2.1,
+        "credentials": {
+          "gmailOAuth2": {
+            "id": "bgRJXZINuY5e6a3x",
+            "name": "BOOKINGS 5/18/26"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "mode": "combine",
+          "combineBy": "combineByPosition",
+          "options": {}
+        },
+        "type": "n8n-nodes-base.merge",
+        "typeVersion": 3.2,
+        "position": [
+          -848,
+          4208
+        ],
+        "id": "f7929a44-3684-484b-ae23-d5a394fd65ed",
+        "name": "Merge1"
+      },
+      {
+        "parameters": {
+          "mode": "runOnceForEachItem",
+          "jsCode": "// ===================== HELPERS =====================\nfunction decodeBase64(data) {\n  if (!data) return '';\n  return Buffer.from(\n    data.replace(/-/g, '+').replace(/_/g, '/'),\n    'base64'\n  ).toString('utf-8');\n}\n\nfunction stripHtml(html) {\n  return html\n    .replace(/<style[^>]*>[\\s\\S]*?<\\/style>/gi, '')\n    .replace(/<script[^>]*>[\\s\\S]*?<\\/script>/gi, '')\n    .replace(/<\\/?[^>]+>/gi, '')\n    .replace(/\\s+/g, ' ')\n    .trim();\n}\n\nfunction extractBody(payload) {\n  if (!payload) return '';\n\n  if (Array.isArray(payload.parts)) {\n    const textPart = payload.parts.find(p => p.mimeType === 'text/plain');\n    if (textPart?.body?.data) {\n      return decodeBase64(textPart.body.data);\n    }\n\n    const htmlPart = payload.parts.find(p => p.mimeType === 'text/html');\n    if (htmlPart?.body?.data) {\n      return decodeBase64(htmlPart.body.data);\n    }\n  }\n\n  if (payload.body?.data) {\n    return decodeBase64(payload.body.data);\n  }\n\n  return '';\n}\n\n// ===================== HARD CLEANER =====================\nfunction cleanEmailBody(raw) {\n  if (!raw) return '';\n\n  let text = raw;\n\n  // Remove quoted replies\n  text = text.split(/\\nOn .*wrote:\\n/i)[0];\n\n  // Remove quoted lines\n  text = text\n    .split('\\n')\n    .filter(line => !line.trim().startsWith('>'))\n    .join('\\n');\n\n  // Remove image placeholders\n  text = text.replace(/\\[image:[^\\]]+\\]/gi, '');\n\n  // Remove Spartan Crew signatures\n  const signatureMarkers = [\n    'spartan crew ltd',\n    'operations spartan crew',\n    'designexpert44.com/signature',\n    'spartan_crew/logo.png',\n    'unit 7 titan business estate',\n    'www.spartancrew.co.uk',\n    '03333 053374'\n  ];\n\n  for (const marker of signatureMarkers) {\n    const idx = text.toLowerCase().indexOf(marker);\n    if (idx !== -1) {\n      text = text.slice(0, idx);\n    }\n  }\n\n  return stripHtml(text);\n}\n\n// ===================== ORIGINAL EMAIL =====================\nconst originalBody = cleanEmailBody(\n  $json.text || extractBody($json.payload)\n);\n\nconst original_email = {\n  email_id: $json.id,\n  thread_id: $json.threadId,\n  from: $json.from?.value?.[0]?.address || '',\n  subject: $json.headers?.subject || '',\n  body: originalBody\n};\n\n// ===================== THREAD HISTORY =====================\nconst messages = Array.isArray($json.messages) ? $json.messages : [];\n\nconst thread_messages = messages\n  .map(m => cleanEmailBody(extractBody(m.payload)))\n  .filter(body =>\n    body &&\n    body.length > 5 &&\n    body !== originalBody // ✅ remove original email from history\n  );\n\n// ===================== FINAL OUTPUT =====================\nreturn {\n  original_email,\n  thread_history: {\n    messages: thread_messages\n  }\n};\n\n"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          -736,
+          4128
+        ],
+        "id": "02707657-72d5-4b24-920a-ebea06bb252f",
+        "name": "Normalize Data"
+      },
+      {
+        "parameters": {
+          "resource": "thread",
+          "operation": "get",
+          "threadId": "={{ $('Get Hydrated Emails1').item.json.threadId }}",
+          "simple": false,
+          "options": {
+            "returnOnlyMessages": false
+          }
+        },
+        "type": "n8n-nodes-base.gmail",
+        "typeVersion": 2.2,
+        "position": [
+          -960,
+          4256
+        ],
+        "id": "7beb4bd0-a4a7-4362-93e7-0e7062d6a7ec",
+        "name": "Get a thread2",
+        "webhookId": "edb9194f-b8d4-40e1-a599-4c5496a5889e",
+        "credentials": {
+          "gmailOAuth2": {
+            "id": "bgRJXZINuY5e6a3x",
+            "name": "BOOKINGS 5/18/26"
+          }
+        },
+        "onError": "continueRegularOutput"
+      },
+      {
+        "parameters": {
+          "options": {}
+        },
+        "type": "n8n-nodes-base.splitInBatches",
+        "typeVersion": 3,
+        "position": [
+          -1952,
+          4192
+        ],
+        "id": "7aaa9748-5702-459d-b74a-8db2d258bbed",
+        "name": "Loop Over Items"
+      },
+      {
+        "parameters": {
+          "modelId": {
+            "__rl": true,
+            "value": "anthropic/claude-3.5-haiku",
+            "mode": "list",
+            "cachedResultName": "ANTHROPIC/CLAUDE-3.5-HAIKU"
+          },
+          "messages": {
+            "values": [
+              {
+                "content": "=USER PROMPT (INPUT DATA)\n\nCurrent Email Subject: \n{{ $('Normalize Data').item.json.original_email.subject }}\n\nCurrent Email Body: \n{{ $('Normalize Data').item.json.original_email.body }}\n\nThread History: \n{{ $('Normalize Data').item.json.thread_history.messages }}\n\nemail_id: \n{{ $('Normalize Data').item.json.original_email.email_id }}\n\nthread_id: \n{{ $('Normalize Data').item.json.original_email.thread_id }}\n\nfrom: \n{{ $('Normalize Data').item.json.original_email.from }}"
+              },
+              {
+                "content": "ROLE:\nClassify incoming emails as either:\n1. NEW job request\n2. UPDATE to existing job request\n3. NOT a job request\n\nYou ONLY classify the Current Email. Thread History is context only.\n\n---\n\nSCOPE RULE:\n\nYou are classifying ONLY the \"Current Email\" (subject + body).\n\nThread History exists solely to answer these two questions:\n  1. Does Current Email introduce a NEW job NOT in Thread History?\n  2. Does Current Email modify a job that ALREADY EXISTS in Thread History?\n\nIf neither is true → NOT a job request.\n\nCRITICAL: Never classify Thread History messages. Only classify Current Email.\n\n---\n\nDEFINITIONS:\n\n\"Job Request\" = Any message requesting crew, booking, order, shift, or staffing.\n\n\"Current Email\" = The most recent email (the one just arrived).\n\n\"Thread History\" = All previous emails in this conversation thread.\n\n---\n\nCLASSIFICATION LOGIC:\n\nSTEP 1: Does Current Email contain job request language?\n\n  NEW Job Indicators:\n  • \"booking request,\" \"crew request,\" \"I need a crew\"\n  • \"I'll take [X] on this day,\" \"[X] crew on [date]\"\n  • \"new order,\" \"crew chief,\" \"can you crew this\"\n  • Any explicit request for staffing with numbers/dates/details\n\n  UPDATE Job Indicators:\n  • \"change this,\" \"make it [X] instead\"\n  • \"update,\" \"amend,\" \"adjust,\" \"modify\"\n  • \"actually,\" \"instead,\" \"can we switch\"\n  • \"cancel,\" \"remove,\" \"add to\"\n  • \"confirmed,\" \"approved,\" \"going ahead\"\n  • \"push to,\" \"move to,\" \"delay\"\n\n  If Current Email has NONE of these → is_job: false → STOP\n\n---\n\nSTEP 2: If YES to job language, check Thread History\n\n  CASE A: No Thread History exists\n    → is_job: true / type_job: new\n    → Job summary: What this email requests\n\n  CASE B: Thread History exists but NO prior job mentioned\n    → is_job: true / type_job: new\n    → Job summary: What this email requests\n\n  CASE C: Thread History EXISTS and CONTAINS a prior job\n    → Continue to STEP 3\n\n---\n\nSTEP 3: Does Current Email reference/modify the existing job?\n\n  If YES:\n    → is_job: true / type_job: update\n    → Job summary: Original job + what changed\n\n  If NO (Current Email is unrelated to prior job):\n    → is_job: true / type_job: new\n    → Job summary: What this email requests (separate from prior job)\n\n---\n\nDETERMINISM RULES:\n\nRule 1: DUPLICATE DETECTION\n  If Current Email is identical to any message in Thread History:\n  → Mark as duplicate and disregard from thread history context\n  → Still classify Current Email normally based on content\n\nRule 2: AMBIGUOUS LANGUAGE\n  If Current Email COULD be either new or update:\n  → Prioritize UPDATE if Thread History has any prior job details\n  → Default to NEW if Thread History is unclear or absent\n  → REASON: Safer to categorize as update than miss context\n\nRule 3: MULTIPLE JOBS IN ONE EMAIL\n  If Current Email contains BOTH a new request AND update to prior:\n  → type_job: update (the update takes precedence)\n  → job_summary: Describe the original job, what changed, AND what new request was added\n\nRule 4: CONFIRMATION ONLY\n  If Current Email only confirms/acknowledges prior job with NO changes:\n  → is_job: false (confirmation alone is not a new classified request)\n  \n  Exception: If confirmation includes NEW details not in prior job:\n  → is_job: true / type_job: update\n  → job_summary: Note what new information was provided\n\nRule 5: CANCELLATION\n  If Current Email cancels an existing job or part of it:\n  → is_job: true / type_job: update\n  → job_summary: State what was cancelled and from what prior job\n\nRule 6: MISSING CRITICAL DATA\n  If Current Email requests crew but lacks dates/times/headcount:\n  → Still classify as is_job: true\n  → job_summary: Note what details are missing (\"Date unclear,\" \"Crew size not specified\")\n\n---\n\nOUTPUT FORMAT (EXACTLY):\n\nfrom: [email address from passthrough]\nemail_id: [ID from passthrough]\nthread_id: [ID from passthrough]\nis_job: [true or false]\ntype_job: [new or update, blank if is_job is false]\njob_summary: [technical summary, see below]\n\n---\n\nJOB_SUMMARY SPECIFICATIONS:\n\nIf is_job: true / type_job: new\n  Format: \"[Date/Time] - [Headcount] crew at [Location] - [Any other key details]\"\n  Example: \"Thursday 9am - 3 crew at 123 Main St - Crew chief: Mike\"\n  Include: Dates, times, headcount, location, crew chief, any IDs, payment terms if mentioned\n\nIf is_job: true / type_job: update\n  Format: \"[Original job details] → UPDATED: [what changed]\"\n  Example: \"Thursday 9am - 3 crew → UPDATED: Now 4 crew instead of 3\"\n  Include: What changed FROM what TO what (if discernible)\n  If change is unclear, state: \"Change requested but specifics unclear\"\n\nIf is_job: false\n  Write: \"N/A - [brief reason]\"\n  Examples: \"N/A - General conversation, no crew request\"\n            \"N/A - Status update only, no changes requested\"\n            \"N/A - Thank you/confirmation without modifications\"\n\n---\n\nTHREAD HISTORY REFERENCE:\n\nThread History is provided chronologically:\n  • Oldest message = Top\n  • Newest message = Bottom\n  • Current Email = NOT in Thread History (it's separate)\n\nWhen analyzing Thread History:\n  1. Read from top to bottom\n  2. Identify job requests in the order they appear\n  3. Track what changes between messages\n  4. Use dates/timestamps to prioritize newer information\n  5. Remember: Current Email is always more recent than everything in history\n\n---\n\nEDGE CASES:\n\nScenario 1: \"Can you send me a quote?\"\n  → is_job: false (request for information, not a booking)\n\nScenario 2: \"I'd like to move the crew from Friday to Saturday\"\n  → is_job: true / type_job: update (references existing job, modifies it)\n\nScenario 3: Current Email says \"Sounds good\" with no changes\n  → is_job: false (pure confirmation/acknowledgment)\n  → UNLESS Thread History shows no prior job, then it's ambiguous\n    → is_job: false (no actionable request in Current Email itself)\n\nScenario 4: \"We'll need 5 crew Thursday AND can we cancel Monday?\"\n  → is_job: true / type_job: update (both are modifications to prior job context)\n  → job_summary: \"Thursday - 5 crew requested. Monday booking cancelled.\"\n\nScenario 5: Current Email references \"the job\" but Thread History is unclear\n  → is_job: true / type_job: update (Current Email clearly references prior job)\n  → job_summary: \"Update to existing booking (prior details unclear from thread)\"\n\n---\n\nCRITICAL OUTPUTS:\n\n✓ Only output the 6 required fields\n✓ No markdown, no JSON, no code blocks, no extra formatting\n✓ type_job NEVER contains \"-new\", \"-update\", or variations\n✓ type_job is blank if is_job is false\n✓ Passthrough fields (from, email_id, thread_id) are exactly as provided in input\n✓ No assumptions about missing data — note it in job_summary if unclear",
+                "role": "system"
+              }
+            ]
+          },
+          "jsonOutput": true,
+          "options": {}
+        },
+        "type": "@n8n/n8n-nodes-langchain.openAi",
+        "typeVersion": 1.8,
+        "position": [
+          -288,
+          4160
+        ],
+        "id": "348992ea-f617-4df7-9002-ebf3af9ee41b",
+        "name": "Determine if Order",
+        "retryOnFail": true,
+        "credentials": {
+          "openAiApi": {
+            "id": "XwWRvjUzKmbGWIQw",
+            "name": "SpartanCrew Email SamurAI"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "operation": "removeLabels",
+          "messageId": "={{ $json.id }}",
+          "labelIds": [
+            "Label_5089401050847698788"
+          ]
+        },
+        "type": "n8n-nodes-base.gmail",
+        "typeVersion": 2.2,
+        "position": [
+          -2096,
+          4032
+        ],
+        "id": "5a9c77e1-a32c-4d1d-b4d0-d62b9c374845",
+        "name": "Remove label from message",
+        "webhookId": "9981a7bb-5e30-4df8-9d31-c4a6424efa2d",
+        "credentials": {
+          "gmailOAuth2": {
+            "id": "bgRJXZINuY5e6a3x",
+            "name": "BOOKINGS 5/18/26"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "operation": "getAll",
+          "returnAll": true,
+          "filters": {
+            "labelIds": [
+              "Label_5089401050847698788"
+            ],
+            "receivedAfter": "={{ $json.receivedAfter }}"
+          }
+        },
+        "type": "n8n-nodes-base.gmail",
+        "typeVersion": 2.2,
+        "position": [
+          -2304,
+          4176
+        ],
+        "id": "8861bfa1-bb99-4047-a630-2e34aff2b3cb",
+        "name": "Get many messages",
+        "webhookId": "0433aa9d-3109-445b-82a8-a5c94a0f0edb",
+        "credentials": {
+          "gmailOAuth2": {
+            "id": "bgRJXZINuY5e6a3x",
+            "name": "BOOKINGS 5/18/26"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "rule": {
+            "interval": [
+              {
+                "field": "minutes"
+              }
+            ]
+          }
+        },
+        "type": "n8n-nodes-base.scheduleTrigger",
+        "typeVersion": 1.3,
+        "position": [
+          -2672,
+          4272
+        ],
+        "id": "54154154-d51b-47b7-9c6f-05a9294b9575",
+        "name": "Schedule Trigger"
+      },
+      {
+        "parameters": {
+          "options": {
+            "timezone": ""
+          }
+        },
+        "type": "n8n-nodes-base.dateTime",
+        "typeVersion": 2,
+        "position": [
+          -2528,
+          4176
+        ],
+        "id": "cc5400b4-f7ec-4723-a52a-5f0f3020c5a3",
+        "name": "Date & Time"
+      },
+      {
+        "parameters": {
+          "jsCode": "// n8n Code node (JavaScript)\n// Input:  { \"currentDate\": \"2026-02-26T17:41:48.851+00:00\" }\n// Output: { \"receivedAfter\": \"2026-02-26T17:31:48.851Z\" }\n\nconst s = $input.first()?.json?.currentDate;\n\nif (typeof s !== \"string\" || !s.trim()) {\n  throw new Error(\"Missing `currentDate` (expected a string).\");\n}\n\nconst d = new Date(s);\nif (Number.isNaN(d.getTime())) {\n  throw new Error(`Invalid currentDate: ${s}`);\n}\n\n// subtract 10 minutes\nconst d2 = new Date(d.getTime() - 10 * 60 * 1000);\n\n// Graph-native ISO UTC: YYYY-MM-DDTHH:mm:ss.sssZ\nconst isoUtc = d2.toISOString();\n\nreturn [\n  {\n    json: {\n      receivedAfter: isoUtc,\n    },\n  },\n];"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          -2416,
+          4176
+        ],
+        "id": "17348440-ad1f-4f9a-82e5-b3b27ca980b5",
+        "name": "-10 mins"
+      },
+      {
+        "parameters": {
+          "options": {}
+        },
+        "type": "n8n-nodes-base.splitInBatches",
+        "typeVersion": 3,
+        "position": [
+          -2208,
+          4016
+        ],
+        "id": "42634ab5-f76e-4b36-88d0-c5e3259b8be3",
+        "name": "Loop Over Items1"
+      },
+      {
+        "parameters": {
+          "operation": "create",
+          "base": {
+            "__rl": true,
+            "value": "appWXNhlTE3slvUR5",
+            "mode": "list",
+            "cachedResultName": "House of Hud Proposal generator",
+            "cachedResultUrl": "https://airtable.com/appWXNhlTE3slvUR5"
+          },
+          "table": {
+            "__rl": true,
+            "value": "tblwQG6DMdpHFcBrf",
+            "mode": "list",
+            "cachedResultName": "in_follow_up_sequence",
+            "cachedResultUrl": "https://airtable.com/appWXNhlTE3slvUR5/tblwQG6DMdpHFcBrf"
+          },
+          "columns": {
+            "mappingMode": "defineBelow",
+            "value": {
+              "outlook_id": "={{ $('When Executed by Another Workflow').item.json.id }}",
+              "conversation_id": "={{ $('When Executed by Another Workflow').item.json.conversationId }}"
+            },
+            "matchingColumns": [
+              "outlook_id"
+            ],
+            "schema": [
+              {
+                "id": "last_sent_message",
+                "displayName": "last_sent_message",
+                "required": false,
+                "defaultMatch": false,
+                "canBeUsedToMatch": true,
+                "display": true,
+                "type": "string",
+                "readOnly": false,
+                "removed": true
+              },
+              {
+                "id": "last_place_in_follow_up",
+                "displayName": "last_place_in_follow_up",
+                "required": false,
+                "defaultMatch": false,
+                "canBeUsedToMatch": true,
+                "display": true,
+                "type": "string",
+                "readOnly": false,
+                "removed": true
+              },
+              {
+                "id": "outlook_id",
+                "displayName": "outlook_id",
+                "required": false,
+                "defaultMatch": false,
+                "canBeUsedToMatch": true,
+                "display": true,
+                "type": "string",
+                "readOnly": false,
+                "removed": false
+              },
+              {
+                "id": "conversation_id",
+                "displayName": "conversation_id",
+                "required": false,
+                "defaultMatch": false,
+                "canBeUsedToMatch": true,
+                "display": true,
+                "type": "string",
+                "readOnly": false,
+                "removed": false
+              }
+            ],
+            "attemptToConvertTypes": false,
+            "convertFieldsToString": false
+          },
+          "options": {}
+        },
+        "type": "n8n-nodes-base.airtable",
+        "typeVersion": 2.1,
+        "position": [
+          -1184,
+          4096
+        ],
+        "id": "2fb1221d-a490-4a9e-af6a-91748b35c221",
+        "name": "Create a record",
+        "credentials": {
+          "airtableTokenApi": {
+            "id": "ay2XLl26NeuhHwju",
+            "name": "House of hud proposal generator"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "assignments": {
+            "assignments": [
+              {
+                "id": "d8d85a97-6dfd-49eb-aea6-319a9a2256ac",
+                "name": "id",
+                "value": "={{ $('When Executed by Another Workflow').item.json.id }}",
+                "type": "string"
+              },
+              {
+                "id": "f8c9343c-dfe5-41a8-adde-5e2abb3ffa64",
+                "name": "conversationId",
+                "value": "={{ $('When Executed by Another Workflow').item.json.conversationId }}",
+                "type": "string"
+              },
+              {
+                "id": "109ff9c0-c3ca-45cf-8869-7611c5ba90bc",
+                "name": "subject",
+                "value": "={{ $('When Executed by Another Workflow').item.json.subject }}",
+                "type": "string"
+              },
+              {
+                "id": "a39f2491-5224-4634-8436-3e3a89162f71",
+                "name": "bodyContent",
+                "value": "={{ $('When Executed by Another Workflow').item.json.bodyContent }}",
+                "type": "string"
+              },
+              {
+                "id": "2c623902-e855-4233-8b70-f256d95c73f3",
+                "name": "sentDateTime",
+                "value": "={{ $('When Executed by Another Workflow').item.json.sentDateTime }}",
+                "type": "string"
+              },
+              {
+                "id": "bb7cd69d-101a-4784-8201-ab4fd1ab2734",
+                "name": "sentDate",
+                "value": "={{ $('When Executed by Another Workflow').item.json.sentDate }}",
+                "type": "string"
+              },
+              {
+                "id": "1190b2ec-2789-4715-a3ce-bd77fc2c9284",
+                "name": "sentTime",
+                "value": "={{ $('When Executed by Another Workflow').item.json.sentTime }}",
+                "type": "string"
+              },
+              {
+                "id": "85dd5785-7406-4f46-8af6-61179ac4dd3e",
+                "name": "receivedDateTime",
+                "value": "={{ $('When Executed by Another Workflow').item.json.receivedDateTime }}",
+                "type": "string"
+              },
+              {
+                "id": "dd913ffe-8755-40aa-812b-e35a216b6aa5",
+                "name": "receivedDate",
+                "value": "={{ $('When Executed by Another Workflow').item.json.receivedDate }}",
+                "type": "string"
+              },
+              {
+                "id": "9becc5a0-22f4-49bb-8f8f-e393c94a3984",
+                "name": "receivedTime",
+                "value": "={{ $('When Executed by Another Workflow').item.json.receivedTime }}",
+                "type": "string"
+              },
+              {
+                "id": "0ecab68d-ee8b-4098-aa95-7dd596cc02f6",
+                "name": "createdDateTime",
+                "value": "={{ $('When Executed by Another Workflow').item.json.createdDateTime }}",
+                "type": "string"
+              },
+              {
+                "id": "ef459def-dc0e-4693-b2da-18621b783460",
+                "name": "lastModifiedDateTime",
+                "value": "={{ $('When Executed by Another Workflow').item.json.lastModifiedDateTime }}",
+                "type": "string"
+              },
+              {
+                "id": "479b0612-8933-41b5-b501-40a65dfa260d",
+                "name": "fromAddress",
+                "value": "={{ $('When Executed by Another Workflow').item.json.fromAddress }}",
+                "type": "string"
+              },
+              {
+                "id": "ef58c0de-be1e-4393-b3e3-d8e707027f2b",
+                "name": "fromName",
+                "value": "={{ $('When Executed by Another Workflow').item.json.fromName }}",
+                "type": "string"
+              },
+              {
+                "id": "46e01773-f754-49d0-a1cb-e4ced2a2fa31",
+                "name": "toRecipients[0].name",
+                "value": "={{ $('When Executed by Another Workflow').item.json.toRecipients[0].name }}",
+                "type": "string"
+              },
+              {
+                "id": "0646c489-8499-42c8-9898-f01274424519",
+                "name": "toRecipients[0].address",
+                "value": "={{ $('When Executed by Another Workflow').item.json.toRecipients[0].address }}",
+                "type": "string"
+              },
+              {
+                "id": "2f48daa6-cd63-42bc-8a3d-3a81aceb43b5",
+                "name": "ccRecipients",
+                "value": "={{ $('When Executed by Another Workflow').item.json.ccRecipients }}",
+                "type": "array"
+              },
+              {
+                "id": "86769e80-075e-4526-b036-f9be8a17ac3a",
+                "name": "threadHistory",
+                "value": "={{ $('When Executed by Another Workflow').item.json.threadHistory }}",
+                "type": "string"
+              },
+              {
+                "id": "43dd42b1-fdd5-41ba-bc49-cdf954790c24",
+                "name": "category",
+                "value": "={{ $('When Executed by Another Workflow').item.json.category }}",
+                "type": "string"
+              },
+              {
+                "id": "8046efe8-1680-40ff-8de0-ea49cacc4e78",
+                "name": "found",
+                "value": "={{ $json.found }}",
+                "type": "string"
+              },
+              {
+                "id": "bc32f637-ffee-4395-80f6-2244ea9fa1e5",
+                "name": "last_sent_message",
+                "value": "={{ $json.last_sent_message }}",
+                "type": "string"
+              },
+              {
+                "id": "877eb95f-7ad2-4303-9321-8448685c0462",
+                "name": "last_place_in_follow_up",
+                "value": "={{ $json.last_place_in_follow_up }}",
+                "type": "string"
+              },
+              {
+                "id": "eb1b4eba-309e-411a-acf8-e68735cded45",
+                "name": "added_to_whatsapp",
+                "value": "={{ $json.added_to_whatsapp }}",
+                "type": "string"
+              },
+              {
+                "id": "2d9d17bd-8f30-4edd-9d57-958d046e49bc",
+                "name": "id",
+                "value": "={{ $json.id }}",
+                "type": "string"
+              }
+            ]
+          },
+          "options": {}
+        },
+        "type": "n8n-nodes-base.set",
+        "typeVersion": 3.4,
+        "position": [
+          -624,
+          4208
+        ],
+        "id": "bf2efbd4-ee50-4e80-b831-0d5187bafa1f",
+        "name": "MAINDATA"
+      },
+      {
+        "parameters": {
+          "jsCode": "// ╔═══════════════════════════════════════════════════════════════════╗\n// ║                                                                   ║\n// ║   ██╗  ██╗ ██████╗ ██╗   ██╗███████╗███████╗                     ║\n// ║   ██║  ██║██╔═══██╗██║   ██║██╔════╝██╔════╝                     ║\n// ║   ███████║██║   ██║██║   ██║███████╗█████╗                       ║\n// ║   ██╔══██║██║   ██║██║   ██║╚════██║██╔══╝                       ║\n// ║   ██║  ██║╚██████╔╝╚██████╔╝███████║███████╗                     ║\n// ║   ╚═╝  ╚═╝ ╚═════╝  ╚═════╝ ╚══════╝╚══════╝                     ║\n// ║    ██████╗ ███████╗    ██╗  ██╗██╗   ██╗██████╗                   ║\n// ║   ██╔═══██╗██╔════╝    ██║  ██║██║   ██║██╔══██╗                  ║\n// ║   ██║   ██║█████╗      ███████║██║   ██║██║  ██║                  ║\n// ║   ██║   ██║██╔══╝      ██╔══██║██║   ██║██║  ██║                  ║\n// ║   ╚██████╔╝██║         ██║  ██║╚██████╔╝██████╔╝                  ║\n// ║    ╚═════╝ ╚═╝         ╚═╝  ╚═╝ ╚═════╝ ╚═════╝                  ║\n// ║                                                                   ║\n// ║   C O N V E R S A T I O N A L   R E N D E R I N G   E N G I N E  ║\n// ║                                                                   ║\n// ║   Deterministic thread parser · Classifier · Client extractor     ║\n// ║   Runs once per item · No external libs required                  ║\n// ║                                                                   ║\n// ╚═══════════════════════════════════════════════════════════════════╝\n\nconst crypto = require('crypto');\n\n// ---------- CONSTANTS ----------\nconst ENQUIRY_FORM_SENDERS = new Set([\n  'noreply@arabiantents.com',\n  'noreply@pearltents.co.uk',\n  'noreply@completechillout.com',\n  'info@thepearltentcompany.com',\n]);\n\nconst AI_SEND_ADDRESS = 'hello@houseofhud.com';\n\nconst INTERNAL_SENDERS = new Set([\n  'aamina@houseofhud.com','accounts@houseofhud.com','adele@houseofhud.com',\n  'admin@houseofhud.com','agustina@houseofhud.com','amy@houseofhud.com',\n  'angela@houseofhud.com','carolinaarchive@arabiantents.com','charlotte@houseofhud.com',\n  'crew@houseofhud.com','crewcontacts@houseofhud.com','daisy@houseofhud.com',\n  'deliveries@houseofhud.com','emily@arabiantents.com','erin@houseofhud.com',\n  'eva@houseofhud.com','eventplanning@houseofhud.com','grace@houseofhud.com',\n  'hello@houseofhud.com','holly@houseofhud.com','jennie@houseofhud.com',\n  'jeremy@houseofhud.com','jonny@houseofhud.com','kat@houseofhud.com',\n  'katherine@arabiantents.com','kh@houseofhud.com','leah@houseofhud.com',\n  'lecia@houseofhud.com','leonie@houseofhud.com','logistics@houseofhud.com',\n  'mailmanager@arabiantents.com','malcolm@houseofhud.com','marketing@houseofhud.com',\n  'max@houseofhud.com','melanie@houseofhud.com','planner@houseofhud.com',\n  'projects@houseofhud.com','ruthforward2@arabiantents.com','sarah@houseofhud.com',\n  'site-team@houseofhud.com','suzie@houseofhud.com','transport@houseofhud.com',\n  'warehouseold@houseofhud.com','zain@houseofhud.com',\n]);\n\nconst MONTHS = {jan:0,feb:1,mar:2,apr:3,may:4,jun:5,jul:6,aug:7,sep:8,oct:9,nov:10,dec:11};\n\n// ---------- HTML / TEXT ----------\nfunction decodeEntities(s) {\n  if (!s) return '';\n  return s\n    .replace(/&nbsp;/gi,' ').replace(/&amp;/gi,'&').replace(/&lt;/gi,'<')\n    .replace(/&gt;/gi,'>').replace(/&quot;/gi,'\"').replace(/&#39;/gi,\"'\")\n    .replace(/&apos;/gi,\"'\").replace(/&#(\\d+);/g,(_,n)=>String.fromCharCode(+n))\n    .replace(/&#x([0-9a-f]+);/gi,(_,h)=>String.fromCharCode(parseInt(h,16)));\n}\nfunction stripHtmlToText(html) {\n  if (!html) return '';\n  let s = String(html);\n  s = s.replace(/<style[\\s\\S]*?<\\/style>/gi,' ').replace(/<script[\\s\\S]*?<\\/script>/gi,' ');\n  s = s.replace(/<!--[\\s\\S]*?-->/g,' ');\n  s = s.replace(/<\\s*br\\s*\\/?>/gi,'\\n');\n  s = s.replace(/<\\/(p|div|tr|li|h[1-6])\\s*>/gi,'\\n');\n  s = s.replace(/<[^>]+>/g,' ');\n  s = decodeEntities(s);\n  s = s.replace(/\\r/g,'').replace(/[ \\t]+/g,' ').replace(/\\n[ \\t]+/g,'\\n').replace(/\\n{3,}/g,'\\n\\n');\n  return s.trim();\n}\nfunction normalizeForMatch(s) {\n  return String(s||'').toLowerCase().replace(/\\s+/g,' ').replace(/[^\\p{L}\\p{N} ]/gu,'').trim();\n}\nfunction jaccardTokenSet(a,b) {\n  const A = new Set(normalizeForMatch(a).split(' ').filter(Boolean));\n  const B = new Set(normalizeForMatch(b).split(' ').filter(Boolean));\n  if (!A.size || !B.size) return 0;\n  let inter = 0; for (const t of A) if (B.has(t)) inter++;\n  return inter / (A.size + B.size - inter);\n}\nfunction sha256(s){return crypto.createHash('sha256').update(s).digest('hex');}\n\n// ---------- DATE PARSING (UK log preserved) ----------\nfunction parseUkDate(str) {\n  if (!str) return null;\n  const m = String(str).match(/(\\d{1,2})\\s+([A-Za-z]{3,})\\s+(\\d{4})(?:[,\\s]+(\\d{1,2}):(\\d{2}))?/);\n  if (!m) return null;\n  const d=+m[1], mo=MONTHS[m[2].slice(0,3).toLowerCase()], y=+m[3];\n  const hh=m[4]?+m[4]:0, mm=m[5]?+m[5]:0;\n  if (mo==null) return null;\n  const utcGuess = Date.UTC(y,mo,d,hh,mm);\n  const isBST = (() => {\n    const lastSun = (yr,mon) => { const dt=new Date(Date.UTC(yr,mon+1,0)); return dt.getUTCDate() - dt.getUTCDay(); };\n    const startBST = Date.UTC(y,2,lastSun(y,2),1,0);\n    const endBST   = Date.UTC(y,9,lastSun(y,9),1,0);\n    return utcGuess >= startBST && utcGuess < endBST;\n  })();\n  return new Date(utcGuess - (isBST?60:0)*60000);\n}\n\n// ---------- SENDER CLASSIFIERS ----------\nconst addrOf = s => String(s||'').toLowerCase().trim();\nconst isEnquiryFormSender = a => ENQUIRY_FORM_SENDERS.has(addrOf(a));\nconst isInternalSender    = a => INTERNAL_SENDERS.has(addrOf(a));\nconst isAiSender          = a => addrOf(a) === AI_SEND_ADDRESS;\n\n// ---------- THREAD PARSER ----------\nfunction parseThreadHistory(raw) {\n  if (!raw) return [];\n  const blocks = String(raw).split(/---\\s*Message\\s+\\d+\\s+of\\s+\\d+\\s*---/i).map(b=>b.trim()).filter(Boolean);\n  const out = [];\n  for (const b of blocks) {\n    const fromM = b.match(/^From:\\s*(.+)$/mi);\n    const dateM = b.match(/^Date:\\s*(.+)$/mi);\n    const subjM = b.match(/^Subject:\\s*(.+)$/mi);\n    const headerEnd = b.search(/\\n\\s*\\n/);\n    const body = headerEnd>-1 ? b.slice(headerEnd).trim() : '';\n    const fromRaw = fromM ? fromM[1].trim() : '';\n    const emailM = fromRaw.match(/<([^>]+)>/) || fromRaw.match(/([\\w.+-]+@[\\w.-]+)/);\n    const fromAddress = emailM ? emailM[1] : fromRaw;\n    out.push({\n      fromAddress: addrOf(fromAddress),\n      fromRaw,\n      date: parseUkDate(dateM?dateM[1]:''),\n      dateRaw: dateM?dateM[1].trim():'',\n      subject: subjM?subjM[1].trim():'',\n      bodyHtml: body,\n      bodyText: stripHtmlToText(body),\n    });\n  }\n  return out;\n}\n\n// ================================================================\n// SIGNATURE / EXIT-GREETING EXTRACTION\n// ================================================================\n// IMPORTANT: The regex scans BACKWARDS (last match wins) so that\n// phrases like \"Thank you for...\" in the body are not mistaken\n// for a sign-off. Do NOT change to a forward scan.\n// ================================================================\n\nconst EXIT_GREETING_RE = /^[ \\t]*(?:kind(?:est)?\\s*regards|best\\s*(?:wishes|regards)?|regards|sincerely|yours\\s*(?:sincerely|faithfully|truly)|many\\s*thanks|warm(?:est)?\\s*(?:regards|wishes)?|cheers|with\\s*(?:thanks|gratitude)|all\\s*the\\s*best|take\\s*care|speak\\s*soon|looking\\s*forward|thanks\\s*(?:again|so\\s*much|very\\s*much|in\\s*advance)?|thank\\s*you\\s*(?:very\\s*much|so\\s*much|kindly|in\\s*advance)?)[,.\\s!]*$/im;\n\nconst SIG_NOISE_RE = /^(?:--|___|\\*\\*\\*|===|~~~|sent\\s+from|get\\s+outlook|this\\s+email\\s+(?:was|is)|https?:\\/\\/|www\\.|disclaimer|confidential|unsubscribe)/i;\n\nconst PHONE_RE = /(?:(?:Tel(?:ephone)?|Phone|Mobile|Mob|Cell|Direct|Office|Fax|M|T|P|O)\\s*[:.]\\s*)?([+\\d][\\d\\s().-]{5,}\\d)/gi;\n\nconst SIG_EMAIL_RE = /([\\w.+-]+@[\\w.-]+\\.[a-z]{2,})/i;\n\nfunction extractFromSignature(text) {\n  if (!text) return { name: '', phone: '', email: '' };\n\n  const lines = text.split('\\n');\n\n  let greetingIdx = -1;\n  for (let i = lines.length - 1; i >= 0; i--) {\n    if (EXIT_GREETING_RE.test(lines[i])) {\n      greetingIdx = i;\n      break;\n    }\n  }\n\n  if (greetingIdx === -1) return { name: '', phone: '', email: '' };\n\n  const sigLines = lines.slice(greetingIdx + 1);\n\n  let name = '';\n  for (const raw of sigLines) {\n    const line = raw.trim();\n    if (!line) continue;\n    if (SIG_NOISE_RE.test(line)) continue;\n    if (/^\\d{2,}/.test(line)) continue;\n    if (/@/.test(line)) continue;\n    if (/^https?:\\/\\//i.test(line)) continue;\n    if (/^[+\\d\\s().-]+$/.test(line)) continue;\n\n    let candidate = line\n      .replace(/^(?:Mr\\.?|Mrs\\.?|Ms\\.?|Miss|Dr\\.?|Prof\\.?)\\s*/i, '')\n      .replace(/[|–—·•].*$/, '')\n      .trim();\n\n    if (candidate.length >= 2 && candidate.length <= 60 &&\n        /^[\\p{L}\\s'.-]+$/u.test(candidate) &&\n        candidate.split(/\\s+/).length >= 1 && candidate.split(/\\s+/).length <= 6) {\n      const titleMatch = line.match(/^(Mr\\.?|Mrs\\.?|Ms\\.?|Miss|Dr\\.?|Prof\\.?)\\s*/i);\n      name = titleMatch ? titleMatch[0].trim() + ' ' + candidate : candidate;\n      break;\n    }\n  }\n\n  const sigBlock = sigLines.join('\\n');\n  let phone = '';\n  const phoneMatches = [];\n  let pm;\n  const phoneRe = new RegExp(PHONE_RE.source, PHONE_RE.flags);\n  while ((pm = phoneRe.exec(sigBlock)) !== null) {\n    const cleaned = pm[1].replace(/[^+\\d]/g, '');\n    if (cleaned.length >= 7 && cleaned.length <= 15) {\n      phoneMatches.push(pm[1].trim());\n    }\n  }\n  if (phoneMatches.length) {\n    const mobile = phoneMatches.find(p => /(?:^07|^\\+?\\d{1,3}\\s*7)/i.test(p.replace(/[^+\\d]/g, '')));\n    phone = mobile || phoneMatches[0];\n  }\n\n  let email = '';\n  const emailMatch = sigBlock.match(SIG_EMAIL_RE);\n  if (emailMatch) email = emailMatch[1];\n\n  return { name, phone, email };\n}\n\n// ================================================================\n// GREETING INTRO EXTRACTION\n// ================================================================\n\nconst COMMON_WORDS = new Set([\n  'a','about','after','all','also','an','and','any','are','as','at','back','be',\n  'been','but','by','can','come','could','do','down','each','even','find','first',\n  'for','from','get','give','go','going','good','got','great','had','has','have',\n  'he','her','here','him','his','how','i','if','in','into','is','it','its','just',\n  'know','let','like','look','looking','lot','make','me','more','much','my','new',\n  'no','not','now','of','off','on','one','only','or','other','our','out','over',\n  'own','really','right','said','say','see','she','so','some','still','such',\n  'sure','take','than','that','the','their','them','then','there','these','they',\n  'think','this','those','through','time','to','too','try','two','up','us','use',\n  'very','want','was','way','we','well','were','what','when','where','which',\n  'while','who','will','with','wonder','wondering','work','would','writing','year',\n  'you','your','emailing','enquiring','contacting','reaching','planning','hoping',\n  'interested','happy','delighted','pleased','sorry','afraid','able','unable',\n]);\n\nfunction looksLikeName(str) {\n  if (!str || str.length < 2 || str.length > 40) return false;\n  if (!/^[A-Z\\u00C0-\\u024F]/.test(str)) return false;\n  if (!/^[\\p{L}\\s'.-]+$/u.test(str)) return false;\n  const firstWord = str.split(/\\s+/)[0].toLowerCase();\n  if (COMMON_WORDS.has(firstWord)) return false;\n  const words = str.split(/\\s+/);\n  if (words.length < 1 || words.length > 5) return false;\n  return true;\n}\n\nfunction extractFromGreeting(text) {\n  if (!text) return { name: '' };\n  const intro = text.slice(0, 500);\n\n  const p1 = intro.match(/[Mm]y\\s+name\\s+is\\s+([\\p{L}][\\p{L}\\s'.-]{1,39}?)(?:\\s*[,.\\n;]|\\s+and\\b|\\s+from\\b)/u);\n  if (p1 && looksLikeName(p1[1].trim())) return { name: p1[1].trim() };\n\n  const p2 = intro.match(/I[''\\u2019]m\\s+([\\p{L}][\\p{L}\\s'.-]{1,39}?)(?:\\s*[,.\\n;]|\\s+and\\b|\\s+from\\b)/u)\n          || intro.match(/I\\s+am\\s+([\\p{L}][\\p{L}\\s'.-]{1,39}?)(?:\\s*[,.\\n;]|\\s+and\\b|\\s+from\\b)/u);\n  if (p2 && looksLikeName(p2[1].trim())) return { name: p2[1].trim() };\n\n  const p3 = intro.match(/[Tt]his\\s+is\\s+([\\p{L}][\\p{L}\\s'.-]{1,39}?)(?:\\s*[,.\\n;]|\\s+from\\b|\\s+at\\b|\\s+with\\b)/u);\n  if (p3 && looksLikeName(p3[1].trim())) return { name: p3[1].trim() };\n\n  return { name: '' };\n}\n\n// ================================================================\n// INLINE CONTEXTUAL PHONE EXTRACTION\n// ================================================================\n\nfunction extractInlinePhone(text) {\n  if (!text) return '';\n\n  const patterns = [\n    /(?:call|reach|contact|text|ring|get)\\s+me\\s+(?:on|at)\\s*:?\\s*([+\\d][\\d\\s().-]{5,}\\d)/i,\n    /my\\s+(?:number|phone|mobile|cell|tel|telephone|mob|direct\\s+(?:number|line))\\s+(?:is|:)\\s*([+\\d][\\d\\s().-]{5,}\\d)/i,\n    /I[\\u2019'']\\s*m\\s+on\\s+([+\\d][\\d\\s().-]{5,}\\d)/i,\n    /I\\s+am\\s+on\\s+([+\\d][\\d\\s().-]{5,}\\d)/i,\n    /you\\s+can\\s+(?:get|reach|contact|call)\\s+me\\s+(?:on|at)\\s*:?\\s*([+\\d][\\d\\s().-]{5,}\\d)/i,\n    /best\\s+to\\s+(?:call|ring|text|reach\\s+me\\s+on)\\s*:?\\s*([+\\d][\\d\\s().-]{5,}\\d)/i,\n  ];\n\n  for (const re of patterns) {\n    const m = text.match(re);\n    if (m) {\n      const cleaned = m[1].replace(/[^+\\d]/g, '');\n      if (cleaned.length >= 7 && cleaned.length <= 15) {\n        return m[1].trim();\n      }\n    }\n  }\n  return '';\n}\n\n// ---------- CLIENT INFO EXTRACTION ----------\n// Priority: Form fields > Signature > Greeting intro > Inline phone > Fallback email\n// EMAIL RULE: Sender address ALWAYS wins for non-form messages.\nfunction extractClientInfo(text, fallbackEmail, isFormMessage) {\n  const t = text || '';\n  const pick = re => { const m=t.match(re); return m?m[1].trim():''; };\n\n  const info = {\n    name:      pick(/(?:^|\\n)\\s*(?:From|What'?s your name\\??|Name)\\s*[:\\n]\\s*([^\\n]+)/i),\n    email:     pick(/(?:E-?mail|EMAIL)\\s*[:\\n]\\s*([\\w.+-]+@[\\w.-]+)/i),\n    phone:     pick(/(?:Telephone|PHONE|Phone)\\s*[:\\n]\\s*([+\\d\\s()-]{6,})/i),\n    event_type:pick(/(?:Type of event|What kind of event[^\\n?]*\\??)\\s*[:\\n]\\s*([^\\n]+)/i),\n    event_date:pick(/(?:Date(?: of your event)?|DATE OF YOUR EVENT|Have you set a date\\??)\\s*[:\\n]\\s*([^\\n]+)/i),\n    location:  pick(/(?:Postcode\\/?location|Where will your event be(?:\\s+held)?\\??|Location|Venue)\\s*[:\\n]\\s*([^\\n]+)/i),\n    guests:    pick(/(?:How many (?:G|g)uests\\??|Guests)\\s*[:\\n]\\s*([^\\n]+)/i),\n    budget:    pick(/Budget\\s*[:\\n]\\s*([^\\n]+)/i),\n    sent_from: pick(/(?:Sent from|Where did you find us\\??)\\s*[:\\n]\\s*([^\\n]+)/i),\n  };\n\n  const sig = extractFromSignature(t);\n  if (!info.name  && sig.name)  info.name  = sig.name;\n  if (!info.phone && sig.phone) info.phone = sig.phone;\n  if (!info.email && sig.email && isFormMessage) info.email = sig.email;\n\n  if (!info.name) {\n    const greeting = extractFromGreeting(t);\n    if (greeting.name) info.name = greeting.name;\n  }\n\n  if (!info.phone) {\n    const inlinePhone = extractInlinePhone(t);\n    if (inlinePhone) info.phone = inlinePhone;\n  }\n\n  if (!info.email && fallbackEmail) info.email = fallbackEmail;\n\n  return info;\n}\n\nfunction extractClientMessageOnly(text) {\n  const m = text.match(/(?:^|\\n)\\s*(?:Message|What are you planning\\??|Mobile message[^\\n]*)\\s*[:\\n]\\s*([\\s\\S]+?)(?:\\n\\s*---|\\n\\s*This email is a system notification|\\n\\s*Where did you find us\\??|$)/i);\n  return m ? m[1].trim() : text.trim();\n}\n\n// ---------- AI MATCHING ----------\nfunction matchAiReplies(messages, lastSentList, lastPlaceList) {\n  const assignments = [];\n  const used = new Set();\n  for (let i=0;i<lastSentList.length;i++) {\n    const ai = normalizeForMatch(lastSentList[i]);\n    if (!ai) continue;\n    const head = ai.slice(0,200);\n    let best = {idx:-1, score:0};\n    for (let j=0;j<messages.length;j++) {\n      if (used.has(j)) continue;\n      const body = normalizeForMatch(messages[j].bodyText);\n      if (!body) continue;\n      let score = 0;\n      if (body.includes(head)) score = 1;\n      else score = jaccardTokenSet(ai, body);\n      if (score > best.score) best = {idx:j, score};\n    }\n    if (best.idx>=0 && best.score>=0.75) {\n      used.add(best.idx);\n      assignments.push({aiIndex:i, messageIndex:best.idx, score:best.score, followUp:lastPlaceList[i]||null});\n    }\n  }\n  return assignments;\n}\n\n// ---------- CLASSIFY ----------\n// Priority: Form sender → AI match → Internal sender → External (from_client)\nfunction classifyAll(messages, aiAssignments) {\n  const aiMap = new Map(aiAssignments.map(a=>[a.messageIndex, a]));\n  return messages.map((m,idx) => {\n    if (isEnquiryFormSender(m.fromAddress))\n      return {index:idx, from:m.fromAddress, label:'from_client', followUp:null, reason:'enquiry_form_sender', dateUTC:m.date?m.date.toISOString():null};\n    if (aiMap.has(idx)) {\n      const a = aiMap.get(idx);\n      return {index:idx, from:m.fromAddress, label:'reply_AI', followUp:a.followUp, reason:'matched_last_sent', dateUTC:m.date?m.date.toISOString():null};\n    }\n    if (isInternalSender(m.fromAddress))\n      return {index:idx, from:m.fromAddress, label:'reply_manual', followUp:null, reason:isAiSender(m.fromAddress)?'ai_address_unmatched':'internal_sender', dateUTC:m.date?m.date.toISOString():null};\n    return {index:idx, from:m.fromAddress, label:'from_client', followUp:null, reason:'external_sender', dateUTC:m.date?m.date.toISOString():null};\n  });\n}\n\n// ---------- DEDUPE ----------\nfunction dedupeInbound(messages, inbound) {\n  if (!inbound) return messages;\n  const inboundNorm = normalizeForMatch(stripHtmlToText(inbound.bodyContent||'')).slice(0,400);\n  const inboundFrom = addrOf(inbound.fromAddress);\n  const inboundTs = inbound.sentDateTime ? new Date(inbound.sentDateTime).getTime() : null;\n  return messages.filter(m => {\n    if (m.fromAddress !== inboundFrom) return true;\n    if (inboundTs && m.date && Math.abs(m.date.getTime()-inboundTs) > 5*60*1000) return true;\n    const mNorm = normalizeForMatch(m.bodyText).slice(0,400);\n    if (!inboundNorm || !mNorm) return true;\n    return !(mNorm.includes(inboundNorm.slice(0,150)) || inboundNorm.includes(mNorm.slice(0,150)));\n  });\n}\n\n// ---------- RENDER (conversation only) ----------\nfunction renderConversation(messages, classifications) {\n  if (!messages.length) return '(no conversation messages)';\n  const lines = [];\n  messages.forEach((m,i) => {\n    const c = classifications[i];\n    const isForm = isEnquiryFormSender(m.fromAddress);\n    const body = isForm ? extractClientMessageOnly(m.bodyText) : m.bodyText;\n    const ts = m.date ? formatUK(m.date) : (m.dateRaw||'unknown');\n    const fu = c.followUp ? ` {${c.followUp}}` : '';\n    lines.push(`[${ts} UK] <${m.fromAddress}> [${c.label}]${fu}`);\n    lines.push(body.trim());\n    lines.push('');\n  });\n  return lines.join('\\n').trim();\n}\n\nfunction formatUK(d) {\n  const months=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];\n  const pad=n=>String(n).padStart(2,'0');\n  const y=d.getUTCFullYear(), mo=d.getUTCMonth(), da=d.getUTCDate(), h=d.getUTCHours(), mi=d.getUTCMinutes();\n  const utcMs = Date.UTC(y,mo,da,h,mi);\n  const lastSun=(yr,m)=>{const dt=new Date(Date.UTC(yr,m+1,0));return dt.getUTCDate()-dt.getUTCDay();};\n  const bstStart=Date.UTC(y,2,lastSun(y,2),1,0), bstEnd=Date.UTC(y,9,lastSun(y,9),1,0);\n  const offset = (utcMs>=bstStart && utcMs<bstEnd) ? 60 : 0;\n  const local = new Date(utcMs + offset*60000);\n  return `${pad(local.getUTCDate())} ${months[local.getUTCMonth()]} ${local.getUTCFullYear()} ${pad(local.getUTCHours())}:${pad(local.getUTCMinutes())}`;\n}\n\n// ---------- MAIN ----------\nconst results = [];\nfor (const item of items) {\n  const j = item.json;\n  const warnings = [];\n\n  const inboundMsg = {\n    fromAddress: addrOf(j.fromAddress),\n    date: j.sentDateTime?new Date(j.sentDateTime):null,\n    bodyHtml: j.bodyContent||'',\n    bodyText: stripHtmlToText(j.bodyContent||''),\n    subject: j.subject||'',\n  };\n\n  let threadMsgs = parseThreadHistory(j.threadHistory||'');\n  threadMsgs = dedupeInbound(threadMsgs, j);\n\n  const hasInbound = threadMsgs.some(m =>\n    m.fromAddress===inboundMsg.fromAddress &&\n    Math.abs((m.date?.getTime()||0)-(inboundMsg.date?.getTime()||0)) < 5*60*1000\n  );\n  if (!hasInbound) threadMsgs.push(inboundMsg);\n\n  threadMsgs.sort((a,b)=>(a.date?.getTime()||0)-(b.date?.getTime()||0));\n\n  // AI matching — split last_sent_message on -NEXT- delimiter, last_place on comma\n  const lastSent = Array.isArray(j.last_sent_message) ? j.last_sent_message\n                 : (typeof j.last_sent_message==='string' && j.last_sent_message.trim()\n                    ? j.last_sent_message.split(/\\s*-NEXT-\\s*/i).map(s=>s.trim()).filter(Boolean)\n                    : []);\n  const lastPlace = Array.isArray(j.last_place_in_follow_up) ? j.last_place_in_follow_up\n                  : (typeof j.last_place_in_follow_up==='string' && j.last_place_in_follow_up.trim()\n                     ? j.last_place_in_follow_up.split(/\\s*,\\s*/).map(s=>s.trim()).filter(Boolean)\n                     : []);\n  const aiAssignments = matchAiReplies(threadMsgs, lastSent, lastPlace);\n  if (lastSent.length && aiAssignments.length < lastSent.length) warnings.push(`Only matched ${aiAssignments.length}/${lastSent.length} AI replies`);\n\n  const classifications = classifyAll(threadMsgs, aiAssignments);\n\n  // Client information — form extraction first, then first client message\n  // EMAIL RULE: Sender address ALWAYS wins for non-form messages.\n  let clientInfo = {name:'',email:'',phone:'',event_type:'',event_date:'',location:'',guests:'',budget:'',sent_from:''};\n  const formMsg = threadMsgs.find(m => isEnquiryFormSender(m.fromAddress));\n  if (formMsg) {\n    clientInfo = extractClientInfo(formMsg.bodyText, '', true);\n  } else {\n    const firstClientIdx = classifications.findIndex(c=>c.label==='from_client');\n    if (firstClientIdx>=0) {\n      const m = threadMsgs[firstClientIdx];\n      const extracted = extractClientInfo(m.bodyText, m.fromAddress, false);\n      clientInfo = {...clientInfo, ...extracted, email: m.fromAddress};\n    }\n  }\n\n  // Derive email_reply_to — always populated, never a form sender address\n  const senderAddr = addrOf(j.fromAddress);\n  let emailReplyTo;\n  if (isEnquiryFormSender(senderAddr)) {\n    // Form: use extracted client email, fall back to form sender address\n    emailReplyTo = clientInfo.email || senderAddr;\n  } else {\n    // Non-form: always the original sender\n    emailReplyTo = senderAddr;\n  }\n\n  const rendered = renderConversation(threadMsgs, classifications);\n  const render_hash = sha256(rendered);\n\n  results.push({\n    json: {\n      rendered,\n      email_reply_to: emailReplyTo,\n      client_information: {\n        name:        clientInfo.name        || null,\n        email:       clientInfo.email       || null,\n        phone:       clientInfo.phone       || null,\n        event_type:  clientInfo.event_type  || null,\n        event_date:  clientInfo.event_date  || null,\n        location:    clientInfo.location    || null,\n        guests:      clientInfo.guests      || null,\n        budget:      clientInfo.budget      || null,\n        sent_from:   clientInfo.sent_from   || null,\n      },\n      metadata: {\n        subject: j.subject || null,\n        found: j.found === true || String(j.found).toLowerCase() === 'true',\n        added_to_whatsapp: j.added_to_whatsapp === true || String(j.added_to_whatsapp).toLowerCase() === 'true',\n        messageCount: threadMsgs.length,\n        classifications,\n        id: j.id || null,\n        conversationId: j.conversationId || null,\n        render_hash,\n        warnings,\n      },\n    },\n  });\n}\nreturn results;"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          -512,
+          4208
+        ],
+        "id": "e9e5c6ed-3bc4-45ef-b1f6-a71429cbec75",
+        "name": "Conversational Renderer",
+        "onError": "continueErrorOutput"
+      },
+      {
+        "parameters": {
+          "operation": "search",
+          "base": {
+            "__rl": true,
+            "value": "appWXNhlTE3slvUR5",
+            "mode": "list",
+            "cachedResultName": "House of Hud Proposal generator",
+            "cachedResultUrl": "https://airtable.com/appWXNhlTE3slvUR5"
+          },
+          "table": {
+            "__rl": true,
+            "value": "tblwQG6DMdpHFcBrf",
+            "mode": "list",
+            "cachedResultName": "in_follow_up_sequence",
+            "cachedResultUrl": "https://airtable.com/appWXNhlTE3slvUR5/tblwQG6DMdpHFcBrf"
+          },
+          "filterByFormula": "={conversation_id} = \"{{ $json.conversationId }}\"",
+          "options": {}
+        },
+        "type": "n8n-nodes-base.airtable",
+        "typeVersion": 2.1,
+        "position": [
+          -1648,
+          4192
+        ],
+        "id": "67411e25-badb-4457-85c3-a1afda645376",
+        "name": "Search records1",
+        "alwaysOutputData": true,
+        "credentials": {
+          "airtableTokenApi": {
+            "id": "ay2XLl26NeuhHwju",
+            "name": "House of hud proposal generator"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "rules": {
+            "values": [
+              {
+                "conditions": {
+                  "options": {
+                    "caseSensitive": true,
+                    "leftValue": "",
+                    "typeValidation": "strict",
+                    "version": 3
+                  },
+                  "conditions": [
+                    {
+                      "leftValue": "={{ $json.found }}",
+                      "rightValue": false,
+                      "operator": {
+                        "type": "boolean",
+                        "operation": "equals"
+                      },
+                      "id": "f1e2e636-f653-4590-86ba-d28117c00bab"
+                    }
+                  ],
+                  "combinator": "and"
+                }
+              },
+              {
+                "conditions": {
+                  "options": {
+                    "caseSensitive": true,
+                    "leftValue": "",
+                    "typeValidation": "strict",
+                    "version": 3
+                  },
+                  "conditions": [
+                    {
+                      "id": "9de4733e-39fe-4a9c-9bdc-9f9964dc0004",
+                      "leftValue": "={{ $json.found }}",
+                      "rightValue": true,
+                      "operator": {
+                        "type": "boolean",
+                        "operation": "equals"
+                      }
+                    }
+                  ],
+                  "combinator": "and"
+                }
+              }
+            ]
+          },
+          "options": {}
+        },
+        "type": "n8n-nodes-base.switch",
+        "typeVersion": 3.4,
+        "position": [
+          -1312,
+          4192
+        ],
+        "id": "1cab765b-397a-44f3-99a0-bbf98231ed3f",
+        "name": "Switch"
+      },
+      {
+        "parameters": {
+          "jsCode": "// n8n Code node (JavaScript)\n// Assumption: this node receives EXACTLY 1 item from the Airtable Search node.\n// Goal: output true/false in `found` indicating whether that item is a real Airtable record.\n\nconst item = $input.first();\nconst j = item?.json ?? {};\n\n// Airtable record shape is typically:\n// { id: \"rec...\", createdTime: \"...\", fields: { ... } }\nconst hasRecordId =\n  typeof j.id === \"string\" && j.id.trim().length > 0 && j.id.startsWith(\"rec\");\n\nconst hasFieldsObject =\n  j.fields && typeof j.fields === \"object\" && !Array.isArray(j.fields);\n\nconst hasAnyFields =\n  hasFieldsObject && Object.keys(j.fields).length > 0;\n\n// Some n8n/Airtable nodes may flatten fields into top-level keys instead of `fields`.\n// If the JSON has *any* keys beyond harmless metadata, treat as a record.\nconst topLevelKeys = Object.keys(j);\nconst nonMetaKeys = topLevelKeys.filter(\n  (k) => ![\"@odata.etag\", \"createdTime\", \"createdDateTime\", \"lastModifiedDateTime\"].includes(k)\n);\nconst hasMeaningfulTopLevelData = nonMetaKeys.length > 0;\n\n// Final decision:\n// Prefer record id; otherwise require fields; otherwise fall back to \"any meaningful keys\".\nconst found = hasRecordId || hasAnyFields || hasMeaningfulTopLevelData;\n\nreturn [\n  {\n    json: {\n      found,\n    },\n  },\n];"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          -1536,
+          4192
+        ],
+        "id": "8323bdd4-54ec-44aa-9f6b-72de69f9eaed",
+        "name": "does exist?"
+      },
+      {
+        "parameters": {
+          "assignments": {
+            "assignments": [
+              {
+                "id": "cf352fe5-7884-4e18-b1d8-30a5a4208d1e",
+                "name": "found",
+                "value": "={{ $json.found }}",
+                "type": "boolean"
+              },
+              {
+                "id": "7af25a82-9635-46e9-b5d8-488ea5412978",
+                "name": "last_sent_message",
+                "value": "={{ $('Search records1').item.json.last_sent_message }}",
+                "type": "string"
+              },
+              {
+                "id": "3519fa0a-968a-4dae-8a54-ac476dc831db",
+                "name": "last_place_in_follow_up",
+                "value": "={{ $('Search records1').item.json.last_place_in_follow_up }}",
+                "type": "string"
+              },
+              {
+                "id": "ec1ac5d3-90bc-449e-a706-e982b69f1bea",
+                "name": "added_to_whatsapp",
+                "value": "={{ $('Search records1').item.json.added_to_whatsapp }}",
+                "type": "string"
+              },
+              {
+                "id": "9b6d4ccd-f099-4875-95f5-1e8da97b6173",
+                "name": "id",
+                "value": "={{ $('Search records1').item.json.id }}",
+                "type": "string"
+              }
+            ]
+          },
+          "options": {}
+        },
+        "type": "n8n-nodes-base.set",
+        "typeVersion": 3.4,
+        "position": [
+          -1424,
+          4192
+        ],
+        "id": "cd616722-6be3-4b63-8caf-6950ed499044",
+        "name": "get found?"
+      },
+      {
+        "parameters": {
+          "options": {}
+        },
+        "type": "n8n-nodes-base.respondToWebhook",
+        "typeVersion": 1.5,
+        "position": [
+          1232,
+          4016
+        ],
+        "id": "2d0e38f9-89f8-4af4-848b-eefa058fb9ed",
+        "name": "Respond to Webhook"
+      },
+      {
+        "parameters": {
+          "operation": "update",
+          "base": {
+            "__rl": true,
+            "value": "appWXNhlTE3slvUR5",
+            "mode": "list",
+            "cachedResultName": "House of Hud Proposal generator",
+            "cachedResultUrl": "https://airtable.com/appWXNhlTE3slvUR5"
+          },
+          "table": {
+            "__rl": true,
+            "value": "tblwQG6DMdpHFcBrf",
+            "mode": "list",
+            "cachedResultName": "in_follow_up_sequence",
+            "cachedResultUrl": "https://airtable.com/appWXNhlTE3slvUR5/tblwQG6DMdpHFcBrf"
+          },
+          "columns": {
+            "mappingMode": "defineBelow",
+            "value": {
+              "last_place_in_follow_up": "={{ $json.last_place_in_follow_up }}",
+              "last_sent_message": "={{ $json.last_sent_message }}",
+              "id": "={{ $json.id }}",
+              "added_to_whatsapp": "={{ $json.added_to_whatsapp }}"
+            },
+            "matchingColumns": [
+              "id"
+            ],
+            "schema": [
+              {
+                "id": "id",
+                "displayName": "id",
+                "required": false,
+                "defaultMatch": true,
+                "display": true,
+                "type": "string",
+                "readOnly": true,
+                "removed": false
+              },
+              {
+                "id": "last_sent_message",
+                "displayName": "last_sent_message",
+                "required": false,
+                "defaultMatch": false,
+                "canBeUsedToMatch": true,
+                "display": true,
+                "type": "string",
+                "readOnly": false,
+                "removed": false
+              },
+              {
+                "id": "last_place_in_follow_up",
+                "displayName": "last_place_in_follow_up",
+                "required": false,
+                "defaultMatch": false,
+                "canBeUsedToMatch": true,
+                "display": true,
+                "type": "string",
+                "readOnly": false,
+                "removed": false
+              },
+              {
+                "id": "outlook_id",
+                "displayName": "outlook_id",
+                "required": false,
+                "defaultMatch": false,
+                "canBeUsedToMatch": true,
+                "display": true,
+                "type": "string",
+                "readOnly": false,
+                "removed": true
+              },
+              {
+                "id": "conversation_id",
+                "displayName": "conversation_id",
+                "required": false,
+                "defaultMatch": false,
+                "canBeUsedToMatch": true,
+                "display": true,
+                "type": "string",
+                "readOnly": false,
+                "removed": true
+              },
+              {
+                "id": "added_to_whatsapp",
+                "displayName": "added_to_whatsapp",
+                "required": false,
+                "defaultMatch": false,
+                "canBeUsedToMatch": true,
+                "display": true,
+                "type": "string",
+                "readOnly": false,
+                "removed": false
+              }
+            ],
+            "attemptToConvertTypes": false,
+            "convertFieldsToString": false
+          },
+          "options": {
+            "typecast": true
+          }
+        },
+        "type": "n8n-nodes-base.airtable",
+        "typeVersion": 2.1,
+        "position": [
+          464,
+          4240
+        ],
+        "id": "76bbf922-2066-4245-bc3a-88188074ebec",
+        "name": "Update record",
+        "credentials": {
+          "airtableTokenApi": {
+            "id": "ay2XLl26NeuhHwju",
+            "name": "House of hud proposal generator"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "assignments": {
+            "assignments": [
+              {
+                "id": "cfd5c1e5-f215-46c3-8dbe-fc3606d23644",
+                "name": "id",
+                "value": "={{ $json.fields.outlook_id }}",
+                "type": "string"
+              },
+              {
+                "id": "e1d91a7c-df05-440e-af83-f7af5b75b9f4",
+                "name": "conversationId",
+                "value": "={{ $('MAINDATA').item.json.conversationId }}",
+                "type": "string"
+              },
+              {
+                "id": "124e534c-ee45-4a64-8d85-7407e41398af",
+                "name": "ccRecipients",
+                "value": "={{ $('MAINDATA').item.json.ccRecipients }}",
+                "type": "array"
+              },
+              {
+                "id": "c83d96a1-e5bc-43ca-8a2a-757622e68235",
+                "name": "classification",
+                "value": "={{ $('parse output data').item.json.classification }}",
+                "type": "string"
+              },
+              {
+                "id": "b917443a-efac-4101-85db-c8774fb54aa4",
+                "name": "subject",
+                "value": "={{ $('parse output data').item.json.subject }}",
+                "type": "string"
+              },
+              {
+                "id": "92d044b7-bbcd-4a38-8fee-f10ca1b6f9d6",
+                "name": "body",
+                "value": "={{ $('parse output data').item.json.body }}",
+                "type": "string"
+              },
+              {
+                "id": "0afc5400-90a7-49fe-8f97-515d7af76e03",
+                "name": "included_links",
+                "value": "={{ $('parse output data').item.json.included_links }}",
+                "type": "string"
+              },
+              {
+                "id": "602673d7-5800-41aa-81b3-dd91431d1f69",
+                "name": "client_information.name",
+                "value": "={{ $('Conversational Renderer').item.json.client_information.name }}",
+                "type": "string"
+              },
+              {
+                "id": "40fb2f4b-9cff-4cb2-8734-8a27b4d0a20c",
+                "name": "send.email.address",
+                "value": "={{ $('Conversational Renderer').item.json.email_reply_to }}",
+                "type": "string"
+              },
+              {
+                "id": "9fae4efb-ba21-408e-82b7-bdc6c598510f",
+                "name": "client_information.phone",
+                "value": "={{ $('Conversational Renderer').item.json.client_information.phone }}",
+                "type": "string"
+              },
+              {
+                "id": "12a1759f-acc0-45d4-a2ac-62ab16db7930",
+                "name": "signature",
+                "value": " <div id=\"Signature\">   <div style=\"font-family: Georgia, serif; font-size: 12pt; color: rgb(0, 0, 0);\"><br></div>   <p style=\"margin-top: 0px; margin-bottom: 0px;\">     <span style=\"font-family: Georgia, serif; font-size: 12pt; color: rgb(32, 31, 30);\"><b>Best Wishes,</b></span>   </p>   <div style=\"margin-top: 0px; margin-bottom: 0px; font-family: Georgia, serif; font-size: 12pt; color: black;\"><br></div>   <p style=\"text-align: left; text-indent: 0px; background-color: white; margin: 0px;\">     <span style=\"font-family: Georgia, serif; font-size: 12pt; color: rgb(32, 31, 30);\">- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -</span>   </p>   <div style=\"text-align: left; text-indent: 0px; background-color: white; margin: 0px; font-family: Georgia, serif; font-size: 12pt; color: rgb(127, 127, 127);\">     The House of Hud Team   </div>   <p style=\"text-align: left; text-indent: 0px; background-color: white; margin: 0px;\">     <span style=\"font-family: Georgia, serif; font-size: 12pt; color: rgb(127, 127, 127);\">Office: 0800 193 </span>     <span style=\"font-family: Georgia, serif; font-size: 12pt; color: rgb(153, 153, 153);\">5229</span>   </p>   <p style=\"text-align: left; text-indent: 0px; background-color: white; margin: 0px;\">     <span style=\"font-family: Georgia, serif; font-size: 12pt; color: rgb(153, 153, 153);\">       <a href=\"https://houseofhud.com/\" style=\"color: rgb(153, 153, 153);\">https://houseofhud.com/</a>     </span>   </p>   <p style=\"text-align: left; text-indent: 0px; background-color: white; margin: 0px;\">     <span style=\"font-family: Georgia, serif; font-size: 12pt; color: rgb(32, 31, 30);\"><b>House of Hud</b></span>   </p>   <p style=\"text-align: left; text-indent: 0px; background-color: white; margin: 0px;\">     <a href=\"https://houseofhud.com/\" target=\"_blank\" rel=\"noopener noreferrer\" style=\"color: rgb(36, 36, 36); margin: 0px;\">       <img src=\"https://lh3.googleusercontent.com/d/1MQQbwEGzdhtPZCIa-T3EtCgazHCRQjP2=w192?authuser=0\" alt=\"House of Hud Logo\" width=\"96\" height=\"93\" style=\"width: 72.74pt; height: 70.49pt; max-width: 648px; min-width: auto; min-height: auto; margin: 0px;\">     </a>   </p>   <div style=\"font-family: Georgia, serif; font-size: 12pt; color: rgb(0, 0, 0);\"><br></div> </div>",
+                "type": "string"
+              }
+            ]
+          },
+          "options": {}
+        },
+        "type": "n8n-nodes-base.set",
+        "typeVersion": 3.4,
+        "position": [
+          576,
+          4240
+        ],
+        "id": "9ccd2044-ba60-4999-9efc-d6f4865c2c24",
+        "name": "ready for email"
+      },
+      {
+        "parameters": {
+          "base": {
+            "__rl": true,
+            "value": "appWXNhlTE3slvUR5",
+            "mode": "list",
+            "cachedResultName": "House of Hud Proposal generator",
+            "cachedResultUrl": "https://airtable.com/appWXNhlTE3slvUR5"
+          },
+          "table": {
+            "__rl": true,
+            "value": "tblwQG6DMdpHFcBrf",
+            "mode": "list",
+            "cachedResultName": "in_follow_up_sequence",
+            "cachedResultUrl": "https://airtable.com/appWXNhlTE3slvUR5/tblwQG6DMdpHFcBrf"
+          },
+          "id": "={{ $('Create a record').item.json.id }}",
+          "options": {}
+        },
+        "type": "n8n-nodes-base.airtable",
+        "typeVersion": 2.1,
+        "position": [
+          240,
+          4240
+        ],
+        "id": "62d5ae62-b9da-44d1-924b-0770bd505ba3",
+        "name": "Get a record",
+        "credentials": {
+          "airtableTokenApi": {
+            "id": "ay2XLl26NeuhHwju",
+            "name": "House of hud proposal generator"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "assignments": {
+            "assignments": [
+              {
+                "id": "af3983a4-6cbb-4f91-a605-d628a0324479",
+                "name": "last_sent_message",
+                "value": "={{ $json.last_sent_message }} -NEXT- {{ $('Merge').item.json.body }}",
+                "type": "string"
+              },
+              {
+                "id": "eed9ce1c-6440-4861-8988-1e6f0d2f9d69",
+                "name": "last_place_in_follow_up",
+                "value": "={{ $json.last_place_in_follow_up }}, {{ $('Merge').item.json.classification }}",
+                "type": "string"
+              },
+              {
+                "id": "6fc069d2-567d-4dd2-a68e-77690ac03a24",
+                "name": "added_to_whatsapp",
+                "value": "={{ $('Merge').item.json.value }}",
+                "type": "string"
+              },
+              {
+                "id": "3332ec24-67d0-4ced-ae42-e8335b18ac7b",
+                "name": "id",
+                "value": "={{ $json.id }}",
+                "type": "string"
+              }
+            ]
+          },
+          "options": {}
+        },
+        "type": "n8n-nodes-base.set",
+        "typeVersion": 3.4,
+        "position": [
+          352,
+          4240
+        ],
+        "id": "a2cb042a-c7b5-4e0d-ae28-9250567360b8",
+        "name": "combine strings"
+      },
+      {
+        "parameters": {
+          "modelId": {
+            "__rl": true,
+            "value": "anthropic/claude-3.5-haiku",
+            "mode": "list",
+            "cachedResultName": "ANTHROPIC/CLAUDE-3.5-HAIKU"
+          },
+          "messages": {
+            "values": [
+              {
+                "content": "=USER PROMPT (INPUT DATA)\n\nCurrent Email Subject: \n{{ $('Normalize Data').item.json.original_email.subject }}\n\nCurrent Email Body: \n{{ $('Normalize Data').item.json.original_email.body }}\n\nThread History: \n{{ $('Normalize Data').item.json.thread_history.messages }}\n\nemail_id: \n{{ $('Normalize Data').item.json.original_email.email_id }}\n\nthread_id: \n{{ $('Normalize Data').item.json.original_email.thread_id }}\n\nfrom: \n{{ $('Normalize Data').item.json.original_email.from }}"
+              },
+              {
+                "content": "ROLE:\nClassify incoming emails as either:\n1. NEW job request\n2. UPDATE to existing job request\n3. NOT a job request\n\nYou ONLY classify the Current Email. Thread History is context only.\n\n---\n\nSCOPE RULE:\n\nYou are classifying ONLY the \"Current Email\" (subject + body).\n\nThread History exists solely to answer these two questions:\n  1. Does Current Email introduce a NEW job NOT in Thread History?\n  2. Does Current Email modify a job that ALREADY EXISTS in Thread History?\n\nIf neither is true → NOT a job request.\n\nCRITICAL: Never classify Thread History messages. Only classify Current Email.\n\n---\n\nDEFINITIONS:\n\n\"Job Request\" = Any message requesting crew, booking, order, shift, or staffing.\n\n\"Current Email\" = The most recent email (the one just arrived).\n\n\"Thread History\" = All previous emails in this conversation thread.\n\n---\n\nCLASSIFICATION LOGIC:\n\nSTEP 1: Does Current Email contain job request language?\n\n  NEW Job Indicators:\n  • \"booking request,\" \"crew request,\" \"I need a crew\"\n  • \"I'll take [X] on this day,\" \"[X] crew on [date]\"\n  • \"new order,\" \"crew chief,\" \"can you crew this\"\n  • Any explicit request for staffing with numbers/dates/details\n\n  UPDATE Job Indicators:\n  • \"change this,\" \"make it [X] instead\"\n  • \"update,\" \"amend,\" \"adjust,\" \"modify\"\n  • \"actually,\" \"instead,\" \"can we switch\"\n  • \"cancel,\" \"remove,\" \"add to\"\n  • \"confirmed,\" \"approved,\" \"going ahead\"\n  • \"push to,\" \"move to,\" \"delay\"\n\n  If Current Email has NONE of these → is_job: false → STOP\n\n---\n\nSTEP 2: If YES to job language, check Thread History\n\n  CASE A: No Thread History exists\n    → is_job: true / type_job: new\n    → Job summary: What this email requests\n\n  CASE B: Thread History exists but NO prior job mentioned\n    → is_job: true / type_job: new\n    → Job summary: What this email requests\n\n  CASE C: Thread History EXISTS and CONTAINS a prior job\n    → Continue to STEP 3\n\n---\n\nSTEP 3: Does Current Email reference/modify the existing job?\n\n  If YES:\n    → is_job: true / type_job: update\n    → Job summary: Original job + what changed\n\n  If NO (Current Email is unrelated to prior job):\n    → is_job: true / type_job: new\n    → Job summary: What this email requests (separate from prior job)\n\n---\n\nDETERMINISM RULES:\n\nRule 1: DUPLICATE DETECTION\n  If Current Email is identical to any message in Thread History:\n  → Mark as duplicate and disregard from thread history context\n  → Still classify Current Email normally based on content\n\nRule 2: AMBIGUOUS LANGUAGE\n  If Current Email COULD be either new or update:\n  → Prioritize UPDATE if Thread History has any prior job details\n  → Default to NEW if Thread History is unclear or absent\n  → REASON: Safer to categorize as update than miss context\n\nRule 3: MULTIPLE JOBS IN ONE EMAIL\n  If Current Email contains BOTH a new request AND update to prior:\n  → type_job: update (the update takes precedence)\n  → job_summary: Describe the original job, what changed, AND what new request was added\n\nRule 4: CONFIRMATION ONLY\n  If Current Email only confirms/acknowledges prior job with NO changes:\n  → is_job: false (confirmation alone is not a new classified request)\n  \n  Exception: If confirmation includes NEW details not in prior job:\n  → is_job: true / type_job: update\n  → job_summary: Note what new information was provided\n\nRule 5: CANCELLATION\n  If Current Email cancels an existing job or part of it:\n  → is_job: true / type_job: update\n  → job_summary: State what was cancelled and from what prior job\n\nRule 6: MISSING CRITICAL DATA\n  If Current Email requests crew but lacks dates/times/headcount:\n  → Still classify as is_job: true\n  → job_summary: Note what details are missing (\"Date unclear,\" \"Crew size not specified\")\n\n---\n\nOUTPUT FORMAT (EXACTLY):\n\nfrom: [email address from passthrough]\nemail_id: [ID from passthrough]\nthread_id: [ID from passthrough]\nis_job: [true or false]\ntype_job: [new or update, blank if is_job is false]\njob_summary: [technical summary, see below]\n\n---\n\nJOB_SUMMARY SPECIFICATIONS:\n\nIf is_job: true / type_job: new\n  Format: \"[Date/Time] - [Headcount] crew at [Location] - [Any other key details]\"\n  Example: \"Thursday 9am - 3 crew at 123 Main St - Crew chief: Mike\"\n  Include: Dates, times, headcount, location, crew chief, any IDs, payment terms if mentioned\n\nIf is_job: true / type_job: update\n  Format: \"[Original job details] → UPDATED: [what changed]\"\n  Example: \"Thursday 9am - 3 crew → UPDATED: Now 4 crew instead of 3\"\n  Include: What changed FROM what TO what (if discernible)\n  If change is unclear, state: \"Change requested but specifics unclear\"\n\nIf is_job: false\n  Write: \"N/A - [brief reason]\"\n  Examples: \"N/A - General conversation, no crew request\"\n            \"N/A - Status update only, no changes requested\"\n            \"N/A - Thank you/confirmation without modifications\"\n\n---\n\nTHREAD HISTORY REFERENCE:\n\nThread History is provided chronologically:\n  • Oldest message = Top\n  • Newest message = Bottom\n  • Current Email = NOT in Thread History (it's separate)\n\nWhen analyzing Thread History:\n  1. Read from top to bottom\n  2. Identify job requests in the order they appear\n  3. Track what changes between messages\n  4. Use dates/timestamps to prioritize newer information\n  5. Remember: Current Email is always more recent than everything in history\n\n---\n\nEDGE CASES:\n\nScenario 1: \"Can you send me a quote?\"\n  → is_job: false (request for information, not a booking)\n\nScenario 2: \"I'd like to move the crew from Friday to Saturday\"\n  → is_job: true / type_job: update (references existing job, modifies it)\n\nScenario 3: Current Email says \"Sounds good\" with no changes\n  → is_job: false (pure confirmation/acknowledgment)\n  → UNLESS Thread History shows no prior job, then it's ambiguous\n    → is_job: false (no actionable request in Current Email itself)\n\nScenario 4: \"We'll need 5 crew Thursday AND can we cancel Monday?\"\n  → is_job: true / type_job: update (both are modifications to prior job context)\n  → job_summary: \"Thursday - 5 crew requested. Monday booking cancelled.\"\n\nScenario 5: Current Email references \"the job\" but Thread History is unclear\n  → is_job: true / type_job: update (Current Email clearly references prior job)\n  → job_summary: \"Update to existing booking (prior details unclear from thread)\"\n\n---\n\nCRITICAL OUTPUTS:\n\n✓ Only output the 6 required fields\n✓ No markdown, no JSON, no code blocks, no extra formatting\n✓ type_job NEVER contains \"-new\", \"-update\", or variations\n✓ type_job is blank if is_job is false\n✓ Passthrough fields (from, email_id, thread_id) are exactly as provided in input\n✓ No assumptions about missing data — note it in job_summary if unclear",
+                "role": "system"
+              }
+            ]
+          },
+          "jsonOutput": true,
+          "options": {}
+        },
+        "type": "@n8n/n8n-nodes-langchain.openAi",
+        "typeVersion": 1.8,
+        "position": [
+          -224,
+          4288
+        ],
+        "id": "49b83292-dcd3-4896-a640-3600b49597bc",
+        "name": "Determine if Order Failsafe",
+        "retryOnFail": true,
+        "credentials": {
+          "openAiApi": {
+            "id": "XwWRvjUzKmbGWIQw",
+            "name": "SpartanCrew Email SamurAI"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": true,
+              "leftValue": "",
+              "typeValidation": "strict",
+              "version": 3
+            },
+            "conditions": [
+              {
+                "id": "5b0b9146-35d4-4405-a22e-92911bc0f259",
+                "leftValue": "",
+                "rightValue": "",
+                "operator": {
+                  "type": "string",
+                  "operation": "equals",
+                  "name": "filter.operator.equals"
+                }
+              }
+            ],
+            "combinator": "and"
+          },
+          "options": {}
+        },
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2.3,
+        "position": [
+          0,
+          4176
+        ],
+        "id": "f881bbe8-2aed-4dd7-b83c-89f1d2dd9db6",
+        "name": "If"
+      },
+      {
+        "parameters": {
+          "options": {}
+        },
+        "type": "n8n-nodes-base.set",
+        "typeVersion": 3.4,
+        "position": [
+          240,
+          4080
+        ],
+        "id": "1a970bfd-803d-477a-ac52-818b29489e4d",
+        "name": "Combine all Email Data"
+      }
+    ],
+    "connections": {
+      "Poll1": {
+        "main": [
+          [
+            {
+              "node": "Date & Time",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Get IDs1": {
+        "main": [
+          [
+            {
+              "node": "Search records1",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Get Hydrated Emails1": {
+        "main": [
+          [
+            {
+              "node": "Get a thread2",
+              "type": "main",
+              "index": 0
+            },
+            {
+              "node": "Merge1",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Merge1": {
+        "main": [
+          [
+            {
+              "node": "Normalize Data",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Normalize Data": {
+        "main": [
+          [
+            {
+              "node": "MAINDATA",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Get a thread2": {
+        "main": [
+          [
+            {
+              "node": "Merge1",
+              "type": "main",
+              "index": 1
+            }
+          ]
+        ]
+      },
+      "Loop Over Items": {
+        "main": [
+          [],
+          [
+            {
+              "node": "Get IDs1",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Determine if Order": {
+        "main": [
+          [
+            {
+              "node": "If",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Remove label from message": {
+        "main": [
+          [
+            {
+              "node": "Loop Over Items1",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Get many messages": {
+        "main": [
+          [
+            {
+              "node": "Loop Over Items1",
+              "type": "main",
+              "index": 0
+            },
+            {
+              "node": "Loop Over Items",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Schedule Trigger": {
+        "main": [
+          [
+            {
+              "node": "Date & Time",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Date & Time": {
+        "main": [
+          [
+            {
+              "node": "-10 mins",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "-10 mins": {
+        "main": [
+          [
+            {
+              "node": "Get many messages",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Loop Over Items1": {
+        "main": [
+          [],
+          [
+            {
+              "node": "Remove label from message",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Create a record": {
+        "main": [
+          [
+            {
+              "node": "Get Hydrated Emails1",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "MAINDATA": {
+        "main": [
+          [
+            {
+              "node": "Conversational Renderer",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "does exist?": {
+        "main": [
+          [
+            {
+              "node": "get found?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "get found?": {
+        "main": [
+          [
+            {
+              "node": "Switch",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Search records1": {
+        "main": [
+          [
+            {
+              "node": "does exist?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Switch": {
+        "main": [
+          [
+            {
+              "node": "Create a record",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Get Hydrated Emails1",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Conversational Renderer": {
+        "main": [
+          [
+            {
+              "node": "Determine if Order",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Determine if Order Failsafe",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Respond to Webhook": {
+        "main": [
+          [
+            {
+              "node": "Loop Over Items",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Update record": {
+        "main": [
+          [
+            {
+              "node": "ready for email",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Get a record": {
+        "main": [
+          [
+            {
+              "node": "combine strings",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "combine strings": {
+        "main": [
+          [
+            {
+              "node": "Update record",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Determine if Order Failsafe": {
+        "main": [
+          [
+            {
+              "node": "If",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "If": {
+        "main": [
+          [
+            {
+              "node": "Combine all Email Data",
+              "type": "main",
+              "index": 0
+            },
+            {
+              "node": "Get a record",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Get a record",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Combine all Email Data": {
+        "main": [
+          [
+            {
+              "node": "Respond to Webhook",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "ready for email": {
+        "main": [
+          [
+            {
+              "node": "Loop Over Items",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "nodeGroups": [],
+    "authors": "Benjamin Mikus",
+    "name": "Version 7365ab56",
+    "description": "",
+    "autosaved": true,
+    "workflowPublishHistory": [
+      {
+        "createdAt": "2026-07-27T19:10:36.016Z",
+        "id": 2311,
+        "workflowId": "CPIRu7CpezvKjU8d",
+        "versionId": "7365ab56-06fd-4c25-8d42-27b43d274b4f",
+        "event": "activated",
+        "userId": "82d33c4e-36f6-4cef-8957-45ce1ded0cb1"
+      }
+    ]
+  }
+}
