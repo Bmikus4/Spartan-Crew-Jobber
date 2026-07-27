@@ -1,10 +1,10 @@
 export const runtime = "nodejs";
 
-// Jobs list — the tickets-style view of conversation_state (thread -> order).
+// Jobs Board list — reads the first-class tickets table (thread -> order).
 // Read-only; degrades gracefully to an empty list without a DB.
-import { listJobs, jobsDbEnabled } from "../../lib/jobsDb";
+import { listTickets, ticketsDbEnabled } from "../../lib/ticketsDb";
 
 export async function GET(): Promise<Response> {
-  const jobs = await listJobs();
-  return Response.json({ enabled: jobsDbEnabled(), count: jobs.length, jobs });
+  const jobs = await listTickets();
+  return Response.json({ enabled: ticketsDbEnabled(), count: jobs.length, jobs });
 }

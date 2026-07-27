@@ -14,6 +14,7 @@ import type { HydratedThread, ThreadMessage } from "../../lib/engine/types";
 import { isFromSpartan } from "../../lib/engine/normalize";
 import { buildDeps } from "../../lib/deps";
 import { captureInboundRaw } from "../../lib/inboundRawDb";
+import { upsertTicketFromState } from "../../lib/ticketsDb";
 
 function unauthorized(): Response {
   return Response.json({ ok: false, error: "unauthorized" }, { status: 401 });
@@ -67,6 +68,7 @@ export async function POST(request: Request): Promise<Response> {
   try {
     const deps = await buildDeps();
     const state = await handleThread(thread, deps);
+    await upsertTicketFromState(state); // project onto the Jobs Board tickets table
     return Response.json({
       ok: true,
       thread_id: state.thread_id,

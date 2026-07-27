@@ -7,6 +7,7 @@ export const maxDuration = 60;
 
 import { confirmOrder } from "../../lib/engine/pipeline";
 import { buildDeps } from "../../lib/deps";
+import { upsertTicketFromState } from "../../lib/ticketsDb";
 
 export async function POST(request: Request): Promise<Response> {
   const secret = process.env.N8N_WEBHOOK_SECRET;
@@ -22,6 +23,7 @@ export async function POST(request: Request): Promise<Response> {
     const deps = await buildDeps();
     const state = await confirmOrder(thread_id, deps);
     if (!state) return Response.json({ ok: false, error: "thread not found" }, { status: 404 });
+    await upsertTicketFromState(state); // reflect the confirm on the tickets board
     return Response.json({ ok: true, thread_id, status: state.status, onsinch_order_id: state.onsinch_order_id ?? null, notes: state.notes });
   } catch (err) {
     console.error("[confirm-order] failed", err);
