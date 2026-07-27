@@ -155,6 +155,59 @@ export async function upsertTicketFromState(s: ConversationState): Promise<void>
   }
 }
 
+export interface TicketDetail extends Job {
+  user_id: number | null;
+  place_id: number | null;
+  is_client_inquiry: boolean;
+  gate_reason: string | null;
+  reply_state: string | null;
+  notes: string[];
+  extracted: { facts?: unknown; desired_order?: unknown } | null;
+  created_at: string;
+}
+
+/** Full ticket for the detail panel (includes the composed draft order + notes). */
+export async function getTicketDetail(thread_id: string): Promise<TicketDetail | null> {
+  const sql = db();
+  if (!sql) return null;
+  try {
+    await ensure(sql);
+    const rows = (await sql`
+      SELECT *, extract(epoch from updated_at) * 1000 AS uts, extract(epoch from created_at) * 1000 AS cts
+      FROM tickets WHERE thread_id = ${thread_id} LIMIT 1`) as any[];
+    const r = rows[0];
+    if (!r) return null;
+    return {
+      thread_id: r.thread_id,
+      subject: r.subject || "(no subject)",
+      contact: r.contact || "—",
+      company_id: r.company_id ?? null,
+      user_id: r.user_id ?? null,
+      place_id: r.place_id ?? null,
+      order_id: r.onsinch_order_id ?? null,
+      order_number: r.onsinch_order_number ?? null,
+      classification: r.classification,
+      status: r.status,
+      priority: r.priority,
+      needs_human: !!r.needs_human,
+      ai_replied: !!r.ai_replied,
+      is_client_inquiry: !!r.is_client_inquiry,
+      gate_reason: r.gate_reason ?? null,
+      reply_state: r.reply_state ?? null,
+      crew_size: r.crew_size ?? null,
+      dates: Array.isArray(r.dates) ? r.dates : [],
+      location: r.location ?? null,
+      notes: Array.isArray(r.notes) ? r.notes : [],
+      extracted: r.extracted ?? null,
+      created_at: new Date(Number(r.cts)).toISOString(),
+      updated_at: new Date(Number(r.uts)).toISOString(),
+    };
+  } catch (err) {
+    console.error("[tickets] detail failed", thread_id, err);
+    return null;
+  }
+}
+
 /** The Jobs Board read-model — projects tickets rows into Job[]. */
 export async function listTickets(limit = 300): Promise<Job[]> {
   const sql = db();
