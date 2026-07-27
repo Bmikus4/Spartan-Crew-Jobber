@@ -1,0 +1,95 @@
+{
+  "_comment": "REFERENCE ONLY (Ben, saved 2026-07-27). Original live n8n subflow that creates the Gmail DRAFT reply in the Spartan bookings inbox. Flow: Signature (builds the branded HTML signature) -> get RealID (fetch the real Message-ID header for the message) -> get id (assemble subject/body/from/cc/signature/message-ID) -> Code in JavaScript1 (build raw RFC-2822 MIME, threaded via In-Reply-To/References = Message-ID, base64url) -> HTTP Request (POST https://gmail.googleapis.com/gmail/v1/users/me/drafts). NOTE: this is DRAFT creation only (no send). The reply_delivery='send' path reuses the same raw MIME but POSTs to /messages/send. Gmail cred: BOOKINGS 5/18/26 (id bgRJXZINuY5e6a3x). Use when building System B reply drafting + the draft/send setting.",
+  "nodes": [
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "return {\n  signature_html: `<table width=\"600\" border=\"0\" cellspacing=\"0\" cellpadding=\"0\" style=\"font-family:Arial,Helvetica,sans-serif;width:600px;color:#1d1d1b\">\n  <tbody>\n    <tr>\n      <td width=\"200\" style=\"padding:0;vertical-align:top\">\n        <a href=\"https://spartancrew.co.uk/\" target=\"_blank\" style=\"border:none;text-decoration:none\">\n          <img src=\"https://designexpert44.com/signature/july23/spartan_crew/logo.png\" width=\"180\" height=\"44\" alt=\"Spartan Crew\" style=\"display:block;border:0\">\n        </a>\n      </td>\n\n      <td width=\"400\" style=\"padding-left:15px;border-left:2px solid #c72017;vertical-align:top\">\n        <p style=\"margin:0 0 4px 0;font-size:16px;line-height:1.2;color:#222\"><strong>Spartan Crew</strong></p>\n        <p style=\"margin:0 0 4px 0;font-size:16px;line-height:1.2;color:#c72017\"><strong>Bookings</strong></p>\n        <p style=\"margin:0 0 8px 0;font-size:12px;line-height:1.2\"><strong>Spartan Crew Ltd.</strong></p>\n\n        <p style=\"margin:0 0 4px 0;font-size:12px;line-height:1.4\">\n          <img src=\"https://designexpert44.com/signature/july23/spartan_crew/telephone.png\" width=\"13\" height=\"11\" alt=\"\" style=\"border:0;vertical-align:middle\"> &nbsp;\n          <a href=\"tel:03333053374\" style=\"color:#1d1d1b;text-decoration:none\">03333 053374</a>\n        </p>\n\n        <p style=\"margin:0 0 4px 0;font-size:12px;line-height:1.4\">\n          <img src=\"https://designexpert44.com/signature/july23/spartan_crew/website.png\" width=\"13\" height=\"13\" alt=\"\" style=\"border:0;vertical-align:middle\"> &nbsp;\n          <a href=\"https://spartancrew.co.uk/\" style=\"color:#1d1d1b;text-decoration:none\">www.spartancrew.co.uk</a>\n        </p>\n\n        <p style=\"margin:0 0 8px 0;font-size:12px;line-height:1.4\">\n          <img src=\"https://designexpert44.com/signature/july23/spartan_crew/place.png\" width=\"13\" height=\"13\" alt=\"\" style=\"border:0;vertical-align:middle\"> &nbsp;\n          Unit 7 Titan Business Estate, Ffinch Street, London SE8 5QA\n        </p>\n\n        <p style=\"margin:7px 0 0 0;line-height:1\">\n          <a href=\"https://www.linkedin.com/company/spartan-crew-ltd/\" target=\"_blank\">\n            <img src=\"https://designexpert44.com/signature/july23/spartan_crew/linkedin.png\" width=\"20\">\n          </a>\n          <a href=\"https://www.instagram.com/spartan.c/\" target=\"_blank\">\n            <img src=\"https://designexpert44.com/signature/july23/spartan_crew/instagram.png\" width=\"20\">\n          </a>\n          <a href=\"https://www.facebook.com/SpartanCrewLtd\" target=\"_blank\">\n            <img src=\"https://designexpert44.com/signature/july23/spartan_crew/facebook.png\" width=\"20\">\n          </a>\n          <a href=\"https://twitter.com/SpartanCrewLTD\" target=\"_blank\">\n            <img src=\"https://designexpert44.com/signature/july23/spartan_crew/twitter.png\" width=\"20\">\n          </a>\n        </p>\n      <e/td>\n    </tr>\n  </tbody>\n</table>`\n};\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1648, 4256],
+      "id": "ca08731c-577f-46c2-94c7-0fe3c853e524",
+      "name": "Signature"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            { "id": "e774648d-3dc7-43a5-962b-ba4908fda7bf", "name": "original_email.email_id", "value": "={{ $('Normalize Data').item.json.original_email.email_id }}", "type": "string" },
+            { "id": "262d13e2-ccaf-4650-a5c4-f410497fb1dd", "name": "original_email.thread_id", "value": "={{ $('Normalize Data').item.json.original_email.thread_id }}", "type": "string" },
+            { "id": "f4bac687-3047-49b5-b4e7-c2d6f86eb7f4", "name": "original_email.from", "value": "={{ $('Normalize Data').item.json.original_email.from }}", "type": "string" },
+            { "id": "060f9326-275f-4043-9c46-053c523c8206", "name": "signature_html", "value": "={{ $('Signature').item.json.signature_html }}", "type": "string" },
+            { "id": "58cb73f5-7408-4ede-a90d-053873b62ae8", "name": "subject", "value": "={{ $('parse email').item.json.subject }}", "type": "string" },
+            { "id": "d87c0aea-8524-49d0-a30a-832aab53b619", "name": "body", "value": "={{ $('parse email').item.json.body }}", "type": "string" },
+            { "id": "9012384c-2211-4c09-a09e-6e684090e893", "name": "Cc", "value": "={{ $('Merge').item.json.ccEmails }}", "type": "string" },
+            { "id": "98e22f5b-2971-4b92-801f-f2de275bfa0a", "name": "message-ID", "value": "={{ $json.payload.headers.find(h => h.name === 'Message-ID')?.value }}\n", "type": "string" }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [2096, 4256],
+      "id": "93abb8e7-6cf5-4133-aefb-c0a387ba0354",
+      "name": "get id"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://gmail.googleapis.com/gmail/v1/users/me/drafts",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "gmailOAuth2",
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [{}] },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            { "name": "message.raw", "value": "={{ $json.raw }}" },
+            { "name": "message.threadId", "value": "={{ $json.threadId }}" }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [2608, 4256],
+      "id": "99fe90c9-1bf4-4edd-a96a-688980b09665",
+      "name": "HTTP Request",
+      "credentials": { "gmailOAuth2": { "id": "bgRJXZINuY5e6a3x", "name": "BOOKINGS 5/18/26" } }
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $input.first().json;\n\nconst replyTo = data.original_email.from;\nconst subject = data.subject;\nconst threadId = data.original_email.thread_id;\nconst messageId = data['message-ID'];\nconst body = data.body;\nconst signature = data.signature_html;\nconst yourEmail = \"bookings@spartancrew.co.uk\";\n\n// Parse CC from input\nlet ccAddresses = [];\ntry {\n  const raw = data.Cc;\n  // If it's already an array, use it directly; otherwise try to parse\n  if (Array.isArray(raw)) {\n    ccAddresses = raw;\n  } else if (typeof raw === 'string' && raw.trim() !== '') {\n    const parsed = JSON.parse(raw);\n    ccAddresses = Array.isArray(parsed) ? parsed : [parsed];\n  }\n} catch (e) {\n  if (data.Cc && typeof data.Cc === 'string') {\n    ccAddresses = data.Cc.split(',').map(e => e.trim());\n  }\n}\n\n// Clean CC: remove nulls, blanks, yourself, and the main recipient\nconst cleanCc = [...new Set(\n  ccAddresses\n    .filter(e => typeof e === 'string' && e.trim() !== '')   // ← THIS is the key fix\n    .map(e => e.trim().toLowerCase())\n    .filter(e => !e.includes(yourEmail.toLowerCase()))\n    .filter(e => !e.includes(replyTo.toLowerCase()))\n)];\n\nconst ccLine = cleanCc.join(', ');\n\n// Build HTML body with signature\nconst htmlBody = `<html><body>${body}<br>${signature}</body></html>`;\n\n// Build raw RFC 2822 message\nconst messageLines = [\n  `From: ${yourEmail}`,\n  `To: ${replyTo}`,\n];\n\nif (ccLine) {\n  messageLines.push(`Cc: ${ccLine}`);\n}\n\nmessageLines.push(\n  `Subject: ${subject}`,\n  `In-Reply-To: ${messageId}`,\n  `References: ${messageId}`,\n  `MIME-Version: 1.0`,\n  `Content-Type: text/html; charset=\"UTF-8\"`,\n  ``,\n  htmlBody\n);\n\nconst rawMessage = messageLines.join('\\r\\n');\n\n// Base64url encode\nconst encoded = Buffer.from(rawMessage)\n  .toString('base64')\n  .replace(/\\+/g, '-')\n  .replace(/\\//g, '_')\n  .replace(/=+$/, '');\n\nreturn [{\n  json: {\n    raw: encoded,\n    threadId: threadId\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2320, 4256],
+      "id": "415c2cbc-2e36-41d9-9f19-1a3a7bec8c35",
+      "name": "Code in JavaScript1"
+    },
+    {
+      "parameters": {
+        "url": "=https://gmail.googleapis.com/gmail/v1/users/me/messages/{{ $('Merge').item.json.id }}?format=metadata&metadataHeaders=Message-ID",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "gmailOAuth2",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [1872, 4256],
+      "id": "0d194a32-2486-41b0-b6ce-827e398855c9",
+      "name": "get RealID",
+      "credentials": { "gmailOAuth2": { "id": "bgRJXZINuY5e6a3x", "name": "BOOKINGS 5/18/26" } }
+    }
+  ],
+  "connections": {
+    "Signature": { "main": [[{ "node": "get RealID", "type": "main", "index": 0 }]] },
+    "get id": { "main": [[{ "node": "Code in JavaScript1", "type": "main", "index": 0 }]] },
+    "HTTP Request": { "main": [[]] },
+    "Code in JavaScript1": { "main": [[{ "node": "HTTP Request", "type": "main", "index": 0 }]] },
+    "get RealID": { "main": [[{ "node": "get id", "type": "main", "index": 0 }]] }
+  },
+  "pinData": {},
+  "meta": { "templateId": "4722", "templateCredsSetupCompleted": true, "instanceId": "53c4aa2f462ae93c5de2fe7ffd36ed9b2379dadff308ef50e44ca4901f08047d" }
+}
