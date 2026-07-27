@@ -13,6 +13,7 @@ import { handleThread } from "../../lib/engine/pipeline";
 import type { HydratedThread, ThreadMessage } from "../../lib/engine/types";
 import { isFromSpartan } from "../../lib/engine/normalize";
 import { buildDeps } from "../../lib/deps";
+import { captureInboundRaw } from "../../lib/inboundRawDb";
 
 function unauthorized(): Response {
   return Response.json({ ok: false, error: "unauthorized" }, { status: 401 });
@@ -47,8 +48,21 @@ export async function POST(request: Request): Promise<Response> {
   let payload: unknown;
   try { payload = await request.json(); } catch { return Response.json({ ok: false, error: "bad json" }, { status: 400 }); }
 
+  // Durable capture FIRST — no inbound is ever lost, and re-posts dedupe.
+  const cap = await captureInboundRaw(payload, "n8n");
+
   const thread = coerceThread(payload);
-  if (!thread) return Response.json({ ok: false, error: "expected { thread_id, messages[] }" }, { status: 400 });
+  if (!thread) {
+    // Accept + keep any non-contract payload (e.g. the live workflow's current
+    // shape) so we can align without dropping it. Return 200, not 400.
+    return Response.json({
+      ok: true,
+      captured: cap.captured,
+      stored: true,
+      note: "payload stored in inbound_raw for contract alignment (not the { thread_id, messages[] } shape)",
+      dedup_key: cap.dedup_key,
+    });
+  }
 
   try {
     const deps = await buildDeps();
