@@ -17,3 +17,9 @@ data/
 
 # import-ready workflow with secret baked in (never commit)
 n8n/*.local.json
+
+# live-workflow snapshots: the POST-to-Engine / Dedupe-Claim nodes carry
+# N8N_WEBHOOK_SECRET in their headers, so these must never be committed.
+# (The one pre-existing snapshot below predates that node and is clean.)
+n8n/backups/*.json
+!n8n/backups/bookings-CPIRu7CpezvKjU8d.backup.json
