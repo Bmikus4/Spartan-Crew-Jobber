@@ -10,36 +10,13 @@ export const maxDuration = 60;
 // automation itself runs here on Vercel.
 
 import { handleThread } from "../../lib/engine/pipeline";
-import type { HydratedThread, ThreadMessage } from "../../lib/engine/types";
-import { isFromSpartan } from "../../lib/engine/normalize";
+import { coerceThread } from "../../lib/engine/intake";
 import { buildDeps } from "../../lib/deps";
 import { captureInboundRaw } from "../../lib/inboundRawDb";
 import { upsertTicketFromState } from "../../lib/ticketsDb";
 
 function unauthorized(): Response {
   return Response.json({ ok: false, error: "unauthorized" }, { status: 401 });
-}
-
-function coerceThread(body: unknown): HydratedThread | null {
-  if (!body || typeof body !== "object") return null;
-  const b = body as Record<string, unknown>;
-  const thread_id = String(b.thread_id ?? b.threadId ?? "").trim();
-  const rawMsgs = Array.isArray(b.messages) ? b.messages : [];
-  if (!thread_id || rawMsgs.length === 0) return null;
-  const messages: ThreadMessage[] = rawMsgs.map((m) => {
-    const r = (m ?? {}) as Record<string, unknown>;
-    const from = String(r.from ?? "");
-    return {
-      message_id: String(r.message_id ?? r.id ?? ""),
-      from,
-      to: Array.isArray(r.to) ? r.to.map(String) : r.to ? [String(r.to)] : [],
-      date_iso: String(r.date_iso ?? r.date ?? new Date().toISOString()),
-      subject: String(r.subject ?? ""),
-      body: String(r.body ?? r.text ?? ""),
-      is_from_spartan: typeof r.is_from_spartan === "boolean" ? r.is_from_spartan : isFromSpartan(from),
-    };
-  });
-  return { thread_id, messages };
 }
 
 export async function POST(request: Request): Promise<Response> {
