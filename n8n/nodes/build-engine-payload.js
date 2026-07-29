@@ -75,13 +75,37 @@ function extractBody(msg) {
   return '';
 }
 
+// Header names n8n's Gmail node flattens straight onto the message item, in
+// their wire casing. Everything here is looked up case-insensitively.
+const FLAT_HEADER_KEYS = [
+  'From', 'To', 'Cc', 'Bcc', 'Subject', 'Date', 'Message-ID', 'In-Reply-To',
+  'References', 'Reply-To', 'Content-Type', 'MIME-Version',
+];
+
 function headerMap(msg) {
   const out = {};
-  const hs = (msg && msg.payload && msg.payload.headers) || [];
+  if (!msg) return out;
+
+  const hs = (msg.payload && msg.payload.headers) || [];
   for (const h of hs) if (h && h.name) out[String(h.name).toLowerCase()] = h.value;
-  // n8n's Gmail node sometimes also flattens headers onto the item
-  if (msg && msg.headers && typeof msg.headers === 'object') {
+
+  if (msg.headers && typeof msg.headers === 'object') {
     for (const [k, v] of Object.entries(msg.headers)) if (out[k.toLowerCase()] === undefined) out[k.toLowerCase()] = v;
+  }
+
+  // The case that actually bit us. "Get a thread" returns messages whose
+  // payload has NO headers array (it holds only the MIME parts) and no
+  // msg.headers object - the headers are flattened onto the item itself as
+  // "From", "To", "Subject", "Date", "Message-ID". Reading only msg.from /
+  // msg.subject therefore yielded "" for every real message, so every thread
+  // reached the engine with no sender and no subject. The bodies arrived fine,
+  // which is why it looked like it was working: three live threads were
+  // classified with the sender and subject blanked out.
+  for (const k of FLAT_HEADER_KEYS) {
+    const lower = k.toLowerCase();
+    if (out[lower] !== undefined) continue;
+    if (msg[k] !== undefined && msg[k] !== null && msg[k] !== '') out[lower] = msg[k];
+    else if (msg[lower] !== undefined && msg[lower] !== null && msg[lower] !== '') out[lower] = msg[lower];
   }
   return out;
 }

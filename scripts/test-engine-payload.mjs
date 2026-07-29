@@ -151,5 +151,54 @@ out = runNode({
 });
 ok(out[0].json.messages.length === 1 && /4 crew/.test(out[0].json.messages[0].body), "snippet used as last resort");
 
+console.log("8. the REAL shape 'Get a thread' returns: headers flattened onto the item");
+// Copied from live execution 300327. payload has NO headers array - it holds only
+// the MIME parts - and the headers sit on the item itself in wire casing. Every
+// fixture above used payload.headers, so the tests passed while three real
+// threads reached the engine with from and subject blank.
+out = runNode({
+  nodes: {
+    "Get a thread2": {
+      id: "19fae4d0dffce9e8",
+      historyId: "41065513",
+      messages: [
+        {
+          id: "19fae5a30d110664",
+          threadId: "19fae4d0dffce9e8",
+          snippet: "Hi Dan, Thanks for your call earlier.",
+          sizeEstimate: 267346,
+          internalDate: "1785336574000",
+          labels: [{ id: "SENT", name: "SENT" }],
+          "MIME-Version": "1.0",
+          Date: "Wed, 29 Jul 2026 15:49:34 +0100",
+          "Message-ID": "<CADtfxmFn2uNz9GjEsNJMAnF6@mail.gmail.com>",
+          Subject: "4x Crew - Saturday 1st August - Olympia",
+          From: "Bookings Spartan Crew <bookings@spartancrew.co.uk>",
+          To: "Dan Hill <dan@tyserallan.com>",
+          "Content-Type": 'multipart/mixed; boundary="0000000000004aea360657c11087"',
+          payload: {
+            partId: "",
+            mimeType: "multipart/mixed",
+            filename: "",
+            body: { size: 0 },
+            parts: [{ mimeType: "text/plain", body: { data: b64("Hi Dan,\r\n\r\nPlease see the attached price quote for 08:00-20:00 on Saturday.") } }],
+          },
+        },
+      ],
+    },
+  },
+  json: {},
+});
+p = out[0].json;
+const r0 = p.messages[0];
+ok(p.messages.length === 1, "one message", String(p.messages.length));
+ok(r0.from === "bookings@spartancrew.co.uk", "from read off the flattened header (was '')", JSON.stringify(r0.from));
+ok(r0.subject === "4x Crew - Saturday 1st August - Olympia", "subject read off the flattened header (was '')", JSON.stringify(r0.subject));
+ok(r0.to.length === 1 && r0.to[0] === "dan@tyserallan.com", "to[] read off the flattened header (was [])", JSON.stringify(r0.to));
+ok(r0.is_from_spartan === true, "is_from_spartan now correct - it was false for every message");
+ok(r0.message_id === "19fae5a30d110664", "message_id still the Gmail id, not the RFC Message-ID", r0.message_id);
+ok(new Date(r0.date_iso).getTime() === 1785336574000, "date_iso from internalDate", r0.date_iso);
+ok(/price quote/.test(r0.body), "body still decoded from payload.parts");
+
 console.log(fails ? `\n${fails} FAILED` : "\nall passed");
 process.exit(fails ? 1 : 0);
