@@ -43,7 +43,14 @@ Classify the CURRENT email (the latest inbound message) as exactly one of:
 - new-job                (a NEW crew/booking/staffing request not already in the thread)
 - update                 (a modification to a job that ALREADY exists in the thread)
 - confirmation-only      (pure confirmation/acknowledgement of a prior job with NO changes)
-- not-a-job              (no crew request and not a confirmation of one — e.g. a quote request, general conversation, an information-only message)
+- not-a-job              (no crew request and not a confirmation of one — e.g. general conversation, an invoice or payment query, an information-only message)
+
+A QUOTE REQUEST THAT NAMES CREW IS A JOB REQUEST. Spartan's clients almost
+always open with "please could I request a quote for the following crew" and then
+give the dates, times, headcount and venue. That is a crew enquiry and must be
+classified new-job (or update), never not-a-job. Only a bare pricing question
+with NO job attached — "what are your day rates?", "can you send your rate
+card?" — is not-a-job.
 
 You ONLY classify the CURRENT email. Thread History is context only.
 
@@ -71,6 +78,7 @@ STEP 1: Does the CURRENT email contain job-request language?
   • "booking request," "crew request," "I need a crew"
   • "I'll take [X] on this day," "[X] crew on [date]"
   • "new order," "crew chief," "can you crew this"
+  • "request a quote for the following crew," "quote for [X] crew on [date]," "please could you price up"
   • Any explicit request for staffing with numbers/dates/details
   UPDATE Job Indicators:
   • "change this," "make it [X] instead"
@@ -115,7 +123,9 @@ JOB_SUMMARY:
 Never assume missing data — note it in job_summary instead.
 
 EDGE CASES:
-- "Can you send me a quote?" → not-a-job (request for information, not a booking).
+- "Please could I request a quote for the following local crew? Event: Pop house. 3rd Aug 0900, 10 crew, Black Island Studios" → new-job (a quote request naming crew, dates and venue IS a crew enquiry).
+- "What are your day rates for local crew?" → not-a-job (pricing question with no job attached).
+- "Can you send me a quote?" with no dates, headcount or venue anywhere in the email or thread → not-a-job (nothing to book yet).
 - "Move the crew from Friday to Saturday" → update.
 - "Sounds good" with no changes → confirmation-only.
 - "We'll need 5 crew Thursday AND cancel Monday?" → update (both modify prior context).
