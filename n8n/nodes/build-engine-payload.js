@@ -171,7 +171,25 @@ function toThreadMessage(msg) {
 const norm = nodeJson('Normalize Data') || {};
 const original = norm.original_email || {};
 const threadNode = nodeJson('Get a thread2') || {};
-const verdict = nodeJson('Determine if Order') || nodeJson('Determine if Order Failsafe') || {};
+// The classifier node has been rebuilt more than once - it was "Determine if
+// Order" (+ Failsafe) as a plain openAi node, and is now an AI Agent feeding
+// "Parse Job Determinism Output", with gpt-5 primary and opus 4.6 as fallback.
+// nodeJson swallows a missing node, so a rename does not break the run - it just
+// silently drops the verdict from the durable record, which is the one field that
+// lets anyone compare n8n's judgement against the engine's. Try the current names
+// first and keep the old ones so this works against either shape.
+const VERDICT_NODES = [
+  'Parse Job Determinism Output',
+  'AI Agent',
+  'Determine if Order',
+  'Determine if Order Failsafe',
+];
+let verdict = {};
+let verdict_source = null;
+for (const name of VERDICT_NODES) {
+  const j = nodeJson(name);
+  if (j) { verdict = j; verdict_source = name; break; }
+}
 const renderer = nodeJson('Conversational Renderer') || {};
 
 const thread_id = String(threadNode.id || original.thread_id || norm.thread_id || $json.threadId || $json.thread_id || '').trim();
@@ -218,7 +236,14 @@ return [
       n8n: {
         workflow: 'Email SamurAI v3.4 Spartan Crew Bookings',
         latest_message_id: String(original.email_id || (messages.length ? messages[messages.length - 1].message_id : '')),
-        verdict: verdict.message || verdict.content || verdict.text || verdict.output || null,
+        // The old openAi node wrapped its answer in message/content; the parse
+        // node emits the fields directly (is_job, type_job, job_summary). Fall
+        // back to the whole object rather than recording null for a shape we did
+        // not anticipate - this field is pure transparency, so keeping too much
+        // costs nothing and keeping nothing costs the audit trail.
+        verdict: verdict.message || verdict.content || verdict.text || verdict.output ||
+          (verdict_source && Object.keys(verdict).length ? verdict : null),
+        verdict_source: verdict_source,
         client_information: renderer.client_information || null,
         render_hash: (renderer.metadata && renderer.metadata.render_hash) || null,
         classifications: (renderer.metadata && renderer.metadata.classifications) || null,

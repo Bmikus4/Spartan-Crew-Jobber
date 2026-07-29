@@ -200,5 +200,37 @@ ok(r0.message_id === "19fae5a30d110664", "message_id still the Gmail id, not the
 ok(new Date(r0.date_iso).getTime() === 1785336574000, "date_iso from internalDate", r0.date_iso);
 ok(/price quote/.test(r0.body), "body still decoded from payload.parts");
 
+console.log("9. the classifier verdict survives the node being renamed");
+// Ben rebuilt the gate: "Determine if Order" (+ Failsafe) became an AI Agent
+// feeding "Parse Job Determinism Output", gpt-5 primary with opus 4.6 fallback.
+// nodeJson swallows a missing node, so a rename does not break the run - it just
+// drops the verdict from the durable record, which is the only field that lets
+// n8n's judgement be compared with the engine's.
+{
+  const base = { "Get a thread2": gmailThread, "Normalize Data": normalizeData };
+  // current shape: the parse node emits the fields directly
+  out = runNode({ nodes: { ...base, "Parse Job Determinism Output": { is_job: true, type_job: "update", job_summary: "10 crew, Black Island Studios" } }, json: {} });
+  let v = out[0].json.n8n;
+  ok(v.verdict_source === "Parse Job Determinism Output", "verdict read from the parse node", String(v.verdict_source));
+  ok(v.verdict && v.verdict.type_job === "update", "field-shaped verdict kept whole, not recorded as null", JSON.stringify(v.verdict));
+
+  // the agent itself, if the parse node is absent
+  out = runNode({ nodes: { ...base, "AI Agent": { output: "is_job: true\ntype_job: new" } }, json: {} });
+  v = out[0].json.n8n;
+  ok(v.verdict_source === "AI Agent" && /type_job: new/.test(String(v.verdict)), "falls back to the agent node", String(v.verdict_source));
+
+  // the OLD shape must still work - the workflow has been both
+  out = runNode({ nodes: { ...base, "Determine if Order": verdict }, json: {} });
+  v = out[0].json.n8n;
+  ok(v.verdict_source === "Determine if Order", "the pre-rebuild node still works", String(v.verdict_source));
+  ok(String(v.verdict.content ?? v.verdict).includes("is_order"), "and its message/content is unwrapped as before");
+
+  // no classifier node at all -> null, and no throw
+  out = runNode({ nodes: base, json: {} });
+  v = out[0].json.n8n;
+  ok(v.verdict === null && v.verdict_source === null, "no classifier node -> null, no throw", `${v.verdict} / ${v.verdict_source}`);
+  ok(out[0].json.messages.length === 2, "and the contract itself is unaffected", String(out[0].json.messages.length));
+}
+
 console.log(fails ? `\n${fails} FAILED` : "\nall passed");
 process.exit(fails ? 1 : 0);
