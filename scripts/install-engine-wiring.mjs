@@ -154,7 +154,11 @@ const MAP = {
   // MAINDATA's Outlook fields are unread - blanked rather than left pointing at
   // a node that does not exist.
   fromName: "=",
-  ccRecipients: "=",
+  // ARRAY-typed, unlike every other field here. "=" evaluates to an empty
+  // STRING, which n8n rejects at runtime: "'ccRecipients' expects a array but we
+  // got ''" - it killed the first real run. Nothing reads CC (the renderer never
+  // looks at it), so an empty array is the correct blank.
+  ccRecipients: "={{ [] }}",
   createdDateTime: "=",
   lastModifiedDateTime: "=",
   sentDate: "=",

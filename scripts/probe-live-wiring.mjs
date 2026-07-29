@@ -112,7 +112,10 @@ console.log("\ncleanup");
   const b = await sql`DELETE FROM inbound_raw WHERE thread_id = ${THREAD} RETURNING id`;
   const c = await sql`DELETE FROM tickets WHERE thread_id = ${THREAD} RETURNING thread_id`;
   const d = await sql`DELETE FROM conversation_state WHERE thread_id = ${THREAD} RETURNING thread_id`;
-  console.log(`  removed ledger=${a.length} inbound_raw=${b.length} tickets=${c.length} state=${d.length}`);
+  // upsertTicketFromState also appends to ticket_events - the first version of
+  // this cleanup missed that and left orphan audit rows behind.
+  const e = await sql`DELETE FROM ticket_events WHERE thread_id = ${THREAD} RETURNING id`;
+  console.log(`  removed ledger=${a.length} inbound_raw=${b.length} tickets=${c.length} state=${d.length} events=${e.length}`);
 }
 
 console.log(fails ? `\n${fails} FAILED` : "\nall passed");
