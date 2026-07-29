@@ -136,7 +136,11 @@ async function main() {
       if (s.desired_order) {
         console.log(`    ORDER staged    ${s.desired_order.slot_teams?.length ?? 0} slot team(s)`);
         for (const st of s.desired_order.slot_teams ?? [])
-          console.log(`      slot          ${st.start} -> ${st.end}  crew=${st.people ?? st.count ?? "?"}  prof=${st.profession_id ?? "-"}`);
+          // DesiredSlotTeam is { name, profession_id, beginning, end, size,
+          // place_id, description } - not start/people/count. Guessed field names
+          // in a script broke the whole production build, because tsc compiles
+          // scripts/ too and stops the deploy on the first error.
+          console.log(`      slot          ${st.beginning} -> ${st.end}  crew=${st.size}  prof=${st.profession_id}  place=${st.place_id}`);
       } else {
         console.log(`    ORDER staged    none`);
       }
