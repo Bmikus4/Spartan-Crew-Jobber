@@ -8,7 +8,10 @@ import { useCallback, useEffect, useState } from "react";
 import InstallButton from "./InstallButton";
 
 type OrderMode = "draft-only" | "auto";
-interface Settings { order_mode: OrderMode; replies_enabled: boolean }
+type ReplyDelivery = "draft" | "send";
+interface Settings { order_mode: OrderMode; replies_enabled: boolean; reply_delivery: ReplyDelivery }
+
+const SETTINGS_FALLBACK: Settings = { order_mode: "draft-only", replies_enabled: false, reply_delivery: "draft" };
 
 const INK = "var(--text-primary)";
 const SUB = "var(--text-secondary)";
@@ -62,8 +65,10 @@ export default function SettingsScreen() {
 
   useEffect(() => {
     void (async () => {
-      try { const r = await fetch("/api/settings"); setSettings(await r.json()); }
-      catch { setSettings({ order_mode: "draft-only", replies_enabled: false }); }
+      try {
+        const r = await fetch("/api/settings");
+        setSettings({ ...SETTINGS_FALLBACK, ...(await r.json()) });
+      } catch { setSettings(SETTINGS_FALLBACK); }
     })();
   }, []);
 
@@ -111,6 +116,35 @@ export default function SettingsScreen() {
             </p>
           </div>
           <OnOff value={settings.replies_enabled} onChange={(v) => save({ ...settings, replies_enabled: v })} />
+
+          {/* Ben's second reply setting: draft vs actually send. Only meaningful
+              once replies are on, so it stays hidden until then. */}
+          {settings.replies_enabled && (
+            <div style={{ borderTop: "1px solid var(--border)", paddingTop: 14, display: "flex", flexDirection: "column", gap: 12 }}>
+              <div>
+                <div style={{ fontSize: 13.5, fontWeight: 700, color: INK }}>Reply delivery</div>
+                <p style={{ fontSize: 12.5, color: MUT, margin: "4px 0 0", lineHeight: 1.5 }}>
+                  <b style={{ color: SUB }}>Draft</b> (default): the reply is left in the Gmail thread as a draft for a human to read and send. <b style={{ color: SUB }}>Send</b>: the engine sends it itself.
+                </p>
+              </div>
+              <div style={{ display: "inline-flex", background: "var(--surface-2)", border: "1px solid var(--border)", borderRadius: 10, padding: 3, gap: 3, alignSelf: "flex-start" }}>
+                {(["draft", "send"] as ReplyDelivery[]).map((id) => {
+                  const active = settings.reply_delivery === id;
+                  return (
+                    <button key={id} onClick={() => save({ ...settings, reply_delivery: id })}
+                      style={{ padding: "8px 16px", borderRadius: 8, border: "1px solid " + (active ? "var(--accent-border)" : "transparent"), background: active ? "var(--accent-subtle)" : "transparent", color: active ? A : SUB, fontWeight: 600, fontSize: 13, cursor: "pointer", transition: "all 200ms", textTransform: "capitalize" }}>
+                      {id}
+                    </button>
+                  );
+                })}
+              </div>
+              {settings.reply_delivery === "send" && (
+                <div style={{ background: "var(--danger-subtle)", border: "1px solid rgba(239,68,68,0.3)", borderRadius: 8, padding: "10px 14px", fontSize: 12, color: SUB }}>
+                  Send mode emails clients without a human reading the reply first. Only enable once drafted replies have been checked for a while.
+                </div>
+              )}
+            </div>
+          )}
           <div style={{ fontSize: 11, color: "var(--text-faint)" }}>
             {saving ? "Saving…" : savedAt ? "Saved." : "Changes save automatically."}
           </div>

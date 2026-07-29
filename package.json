@@ -12,7 +12,9 @@
     "test:seam": "tsx test/seam.ts",
     "test:payload": "node scripts/test-engine-payload.mjs",
     "test:dedupe": "node scripts/test-dedupe.mjs",
-    "test:link": "tsx test/orderLink.ts"
+    "test:link": "tsx test/orderLink.ts",
+    "test:settings": "tsx test/settings.ts",
+    "test:all": "tsx test/run.ts && tsx test/seam.ts && tsx test/orderLink.ts && tsx test/settings.ts && node scripts/test-engine-payload.mjs"
   },
   "dependencies": {
     "@neondatabase/serverless": "^0.10.4",

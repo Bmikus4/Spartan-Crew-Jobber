@@ -13,6 +13,7 @@ import { handleThread } from "../../lib/engine/pipeline";
 import { coerceThread } from "../../lib/engine/intake";
 import { buildDeps } from "../../lib/deps";
 import { captureInboundRaw } from "../../lib/inboundRawDb";
+import { replyDeliveryForWire } from "../../lib/settingsDb";
 import { upsertTicketFromState } from "../../lib/ticketsDb";
 
 function unauthorized(): Response {
@@ -54,8 +55,18 @@ export async function POST(request: Request): Promise<Response> {
       status: state.status,
       needs_human: state.needs_human,
       onsinch_order_id: state.onsinch_order_id ?? null,
-      // returned so n8n can create the Gmail draft when no draft webhook is set
-      reply: { subject: state.reply_subject ?? null, html: state.reply_body_html ?? null, draft_id: state.reply_draft_id ?? null },
+      // Returned so n8n can create the Gmail draft when no draft webhook is set.
+      // `delivery` tells its reply subflow which Gmail call to make:
+      //   "draft" -> POST /users/me/drafts   (the default, human sends it)
+      //   "send"  -> POST /users/me/messages/send
+      // The decision lives here, not in n8n, so the Settings screen is the single
+      // place it is controlled.
+      reply: {
+        subject: state.reply_subject ?? null,
+        html: state.reply_body_html ?? null,
+        draft_id: state.reply_draft_id ?? null,
+        ...replyDeliveryForWire(deps.settings),
+      },
       pending_order: state.pending_order ?? null,
       notes: state.notes,
     });

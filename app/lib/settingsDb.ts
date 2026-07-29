@@ -24,6 +24,32 @@ async function ensure(sql: NeonQueryFunction<false, false>): Promise<void> {
   _ready = true;
 }
 
+/**
+ * Whitelist an untrusted partial update. Lives here rather than inline in the
+ * route so the tests exercise the REAL rule instead of a copy that can drift.
+ *
+ * Every field must be listed. It previously accepted only order_mode, so the
+ * Settings screen's replies toggle POSTed replies_enabled and it was dropped on
+ * the floor - the toggle looked like it worked and changed nothing.
+ */
+export function coerceSettings(body: unknown): Partial<Settings> {
+  const b = (body ?? {}) as Record<string, unknown>;
+  const next: Partial<Settings> = {};
+  if (b.order_mode === "draft-only" || b.order_mode === "auto") next.order_mode = b.order_mode;
+  if (typeof b.replies_enabled === "boolean") next.replies_enabled = b.replies_enabled;
+  if (b.reply_delivery === "draft" || b.reply_delivery === "send") next.reply_delivery = b.reply_delivery;
+  return next;
+}
+
+/**
+ * What the engine reports to n8n's reply subflow. Replies being OFF pins delivery
+ * to "draft" regardless of the stored value, so a stale "send" can never email a
+ * client while the master switch is off.
+ */
+export function replyDeliveryForWire(s: Settings): { enabled: boolean; delivery: "draft" | "send" } {
+  return { enabled: s.replies_enabled, delivery: s.replies_enabled ? s.reply_delivery : "draft" };
+}
+
 export async function getSettings(): Promise<Settings> {
   const sql = db();
   if (!sql) return { ...DEFAULT_SETTINGS };

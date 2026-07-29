@@ -107,7 +107,7 @@ const NEW = { message_id: "m1", body: "Hi, can I book 4 crew on 9th March at Sav
   assert(s7.classification === "new-job", "classified the client's request, not our own email");
 
   console.log("\n[6] order_mode:auto -> hands-free write (separate thread)");
-  const autoDeps: PipelineDeps = { ...deps, settings: { order_mode: "auto", replies_enabled: true } };
+  const autoDeps: PipelineDeps = { ...deps, settings: { ...DEFAULT_SETTINGS, order_mode: "auto", replies_enabled: true } };
   const s2 = await handleThread({ thread_id: "thread-B", messages: [msg({ message_id: "b1", body: NEW.body })] }, autoDeps);
   assert(s2.status === "ordered" && s2.onsinch_order_id === 9001, "auto mode wrote order without confirm");
 

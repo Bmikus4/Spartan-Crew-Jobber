@@ -176,9 +176,19 @@ export interface Settings {
    * still classifies + does order work, but drafts NO reply until this is on.
    */
   replies_enabled: boolean;
+  /**
+   * The second of Ben's two reply settings: once replies ARE on, is the reply
+   * left as a Gmail draft for a human to send, or sent outright?
+   * DRAFT by default. N/A while replies_enabled is false.
+   */
+  reply_delivery: "draft" | "send";
 }
 
-export const DEFAULT_SETTINGS: Settings = { order_mode: "draft-only", replies_enabled: false };
+export const DEFAULT_SETTINGS: Settings = {
+  order_mode: "draft-only",
+  replies_enabled: false,
+  reply_delivery: "draft",
+};
 
 /** The actions the executor should perform after a compile. */
 export interface Actions {
