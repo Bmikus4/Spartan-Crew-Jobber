@@ -156,7 +156,32 @@ console.log("\n[10] a single thin coincidence must not link on a perfect ratio")
   if (d.kind === "unmatched") ok(/too little evidence/.test(d.reason), "reason names the guard", d.reason);
 }
 
-console.log("\n[11] identity evidence links even when nothing else is known");
+console.log("\n[11] short company names do not match mid-word (the RTS / O Films bug)");
+{
+  // Both are real companies in the live 30. Raw substring matching made
+  // normName("RTS")="rts" a hit inside "spare parts", and "O Films" a hit inside
+  // "info films" - so an unrelated thread scored company_name.
+  const rts: OrderSide = { id: 254, name: "RTS @ HQ", created: "2026-07-20T10:00:00+00:00", happening: "2026-07-25", company_id: 264 };
+  const decoy: ThreadSide = {
+    thread_id: "decoy",
+    subject: "spare parts enquiry",
+    company_name: "Spare Parts Direct",
+    participants: ["sales@spareparts.example"],
+    contact_email: "sales@spareparts.example",
+    first_message_iso: "2026-07-18T09:00:00.000Z",
+  };
+  const s = scoreLink(rts, decoy);
+  ok(s.features.find((f) => f.name === "company_name")?.hit === false, "RTS does not match 'Spare Parts Direct'");
+  ok(s.features.find((f) => f.name === "subject_echo")?.hit === false, "RTS does not echo in 'spare parts enquiry'");
+  ok(decideLink(rts, [decoy]).kind === "unmatched", "so it stays unmatched");
+
+  // and the legitimate matches still work
+  ok(scoreLink({ ...rts, name: "RTS @ HQ" }, { thread_id: "t", company_name: "RTS Ltd" }).features.find((f) => f.name === "company_name")?.hit === true, "RTS still matches 'RTS Ltd'");
+  const multi = scoreLink(order, { thread_id: "t", company_name: "Wacker Global Events Ltd" });
+  ok(multi.features.find((f) => f.name === "company_name")?.hit === true, "'Wacker Global' still matches 'Wacker Global Events Ltd'");
+}
+
+console.log("\n[12] identity evidence links even when nothing else is known");
 {
   const idOnly: ThreadSide = { thread_id: "idonly", participants: ["ops@wackerglobal.com"], contact_email: "ops@wackerglobal.com" };
   const d = decideLink(order, [idOnly]);

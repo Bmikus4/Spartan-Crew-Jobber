@@ -101,8 +101,25 @@ console.log("3. context is carried, not dropped");
 ok(p.n8n.client_information.name === "Jane Doe", "renderer client_information");
 ok(p.n8n.render_hash === "deadbeef", "render_hash");
 ok(p.n8n.history_text.length === 1, "bodies-only history carried as history_text");
-ok(p.n8n.dedupe.thread_first_seen === true, "dedupe verdict carried");
+ok(p.n8n.dedupe.thread_first_seen === true, "dedupe verdict carried (from $json fallback)");
 ok(p.n8n.latest_message_id === "msg_001", "latest_message_id");
+
+console.log("3b. dedupe flags come from the Dedupe Claim NODE, not $json");
+// At the tap, $json is the classifier's item and never carries these. Reading
+// $json reported found:false for every message; the node must be the source.
+out = runNode({
+  nodes: {
+    "Normalize Data": normalizeData,
+    "Get a thread2": gmailThread,
+    "Dedupe Claim": { found: true, first_seen: false, thread_first_seen: false, thread_message_count: 3, seen_count: 2 },
+  },
+  json: { found: false, thread_first_seen: true }, // deliberately contradicts the node
+});
+p = out[0].json;
+ok(p.n8n.dedupe.found === true, "found taken from the node (true), not $json (false)");
+ok(p.n8n.dedupe.first_seen === false, "first_seen from the node");
+ok(p.n8n.dedupe.thread_first_seen === false, "thread_first_seen from the node, not $json");
+ok(p.n8n.dedupe.thread_message_count === 3, "thread_message_count from the node", String(p.n8n.dedupe.thread_message_count));
 
 console.log("4. no Gmail thread node -> falls back to Merge1");
 out = runNode({

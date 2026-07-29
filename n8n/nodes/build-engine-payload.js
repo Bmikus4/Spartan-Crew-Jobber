@@ -198,11 +198,19 @@ return [
         client_information: renderer.client_information || null,
         render_hash: (renderer.metadata && renderer.metadata.render_hash) || null,
         classifications: (renderer.metadata && renderer.metadata.classifications) || null,
-        dedupe: {
-          found: $json.found === true,
-          thread_first_seen: $json.thread_first_seen === true,
-          thread_message_count: $json.thread_message_count || null,
-        },
+        // Read these off the Dedupe Claim node, NOT $json. At this point in the
+        // branch $json is the classifier's item, which never carries them, so
+        // reading $json silently reported found:false for every message.
+        dedupe: (function () {
+          const d = nodeJson('Dedupe Claim') || $json || {};
+          return {
+            found: d.found === true,
+            first_seen: d.first_seen === true,
+            thread_first_seen: d.thread_first_seen === true,
+            thread_message_count: d.thread_message_count || null,
+            degraded: d.degraded || null,
+          };
+        })(),
         history_text,
         message_count: messages.length,
       },

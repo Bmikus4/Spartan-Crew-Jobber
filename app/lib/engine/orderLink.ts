@@ -99,29 +99,49 @@ export function parseOrderName(name?: string): { company: string; sub?: string; 
 
 const domainOf = (email?: string) => (email || "").toLowerCase().split("@")[1] || "";
 
-/** Do two normalised names overlap enough to count? Token containment, not equality. */
+/**
+ * Do two normalised names overlap enough to count?
+ *
+ * Matching is on WHOLE TOKENS, never raw substrings. Plain `includes` looked
+ * reasonable and was quietly wrong on exactly the short company names this
+ * tenant uses: normName("RTS") is "rts", which is a substring of "spare parts",
+ * and "O Films" hits "info films". Both RTS (#254) and O Films (#247) are real
+ * companies in the live 30, so that false positive would have fired on real data.
+ *
+ * The rule: every substantive token of the shorter name must appear as a whole
+ * token in the longer one, and a single-token name must be long enough that the
+ * coincidence is unlikely.
+ */
+function tokenContains(shortToks: string[], longToks: string[]): boolean {
+  if (!shortToks.length) return false;
+  // one short token is too thin to carry a match on its own
+  if (shortToks.length === 1 && shortToks[0].length < 4) return false;
+  const set = new Set(longToks);
+  return shortToks.every((t) => set.has(t));
+}
+
 function nameOverlap(a?: string, b?: string): boolean {
   const x = normName(a);
   const y = normName(b);
   if (!x || !y) return false;
   if (x === y) return true;
-  if (x.includes(y) || y.includes(x)) return true;
-  const xs = new Set(x.split(" ").filter((t) => t.length > 2));
-  const ys = y.split(" ").filter((t) => t.length > 2);
-  if (!xs.size || !ys.length) return false;
-  const shared = ys.filter((t) => xs.has(t)).length;
-  // both sides are short, so require most of the smaller side to be present
-  return shared >= Math.max(1, Math.min(xs.size, ys.length) - 0);
+  const xs = x.split(" ").filter((t) => t.length >= 3);
+  const ys = y.split(" ").filter((t) => t.length >= 3);
+  if (!xs.length || !ys.length) return false;
+  return xs.length <= ys.length ? tokenContains(xs, ys) : tokenContains(ys, xs);
 }
 
 function addrOverlap(a?: string, b?: string): boolean {
   const x = normAddr(a);
   const y = normAddr(b);
   if (!x || !y) return false;
-  if (x.includes(y) || y.includes(x)) return true;
+  if (x === y) return true;
   const xs = new Set(x.split(" ").filter((t) => t.length > 3));
-  const shared = y.split(" ").filter((t) => t.length > 3 && xs.has(t)).length;
-  return shared >= 2; // two substantive venue tokens in common
+  const ys = y.split(" ").filter((t) => t.length > 3);
+  if (!xs.size || !ys.length) return false;
+  const shared = ys.filter((t) => xs.has(t)).length;
+  // two substantive venue tokens in common, or the whole (single-token) venue name
+  return shared >= 2 || (xs.size === 1 && shared === 1 && [...xs][0].length >= 5);
 }
 
 const DAY = 86_400_000;

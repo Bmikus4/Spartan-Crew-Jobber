@@ -86,6 +86,14 @@ export interface ClaimResult {
  * Atomically claim a message. Idempotent and safe under concurrency: exactly one
  * caller gets first_seen=true for a given message_id, however many poll at once.
  *
+ * Scope note: that guarantee covers first_seen/found, which come out of the
+ * single INSERT ... ON CONFLICT. `thread_first_seen` does NOT share it - it is a
+ * separate SELECT before the write, so two DIFFERENT new messages on the same
+ * brand-new thread arriving at the same instant could both report true. It is
+ * therefore advisory only. Nothing depends on it for correctness: the engine
+ * keeps one state row per thread and decides new-vs-update from that row, so a
+ * wrong hint costs nothing.
+ *
  * On a database failure this returns first_seen=true with `degraded` set. That is
  * deliberate: losing an enquiry is unacceptable, processing one twice is merely
  * untidy, and the downstream /api/n8n-inbound ledger dedupes again anyway.
