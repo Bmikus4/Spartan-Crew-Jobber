@@ -24,15 +24,27 @@ export interface OnsinchConfig {
 
 /** Real fetch transport. `apikey ` prefix is mandatory. */
 export function httpTransport(cfg: OnsinchConfig): Transport {
+  // A call with no deadline is the worst failure mode we have: the serverless
+  // invocation dies at 60s having logged nothing, and because the n8n workflow
+  // strips the Gmail label before the engine is reached, that email is simply
+  // gone. Better to fail one request loudly and fast.
+  const TIMEOUT_MS = Number(process.env.ONSINCH_TIMEOUT_MS || 12_000);
   return async (method, path, body) => {
-    const res = await fetch(cfg.baseUrl + path, {
-      method,
-      headers: {
-        Authorization: `apikey ${cfg.apiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: body ? JSON.stringify(body) : undefined,
-    });
+    let res: Response;
+    try {
+      res = await fetch(cfg.baseUrl + path, {
+        method,
+        headers: {
+          Authorization: `apikey ${cfg.apiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: body ? JSON.stringify(body) : undefined,
+        signal: AbortSignal.timeout(TIMEOUT_MS),
+      });
+    } catch (err) {
+      const timedOut = (err as Error)?.name === "TimeoutError" || (err as Error)?.name === "AbortError";
+      throw new Error(`OnSinch ${method} ${path} ${timedOut ? `timed out after ${TIMEOUT_MS}ms` : `failed: ${(err as Error)?.message}`}`);
+    }
     // PATCH -> 204 no body
     if (res.status === 204) return { status: 204, data: null };
     const text = await res.text();
@@ -45,6 +57,15 @@ export function httpTransport(cfg: OnsinchConfig): Transport {
 // TTL so newly-created entities show up quickly.
 const _listCache = new Map<string, { t: number; v: any[] }>();
 const LIST_TTL_MS = 5 * 60 * 1000;
+/**
+ * Drop the warm-lambda list cache. Test-only: the cache is module-global and
+ * keyed by list name, so without this every case after the first in test/paging.ts
+ * silently asserts against the first case's rows.
+ */
+export function __resetListCache(): void {
+  _listCache.clear();
+}
+
 async function listAllCached(key: string, fetchAll: () => Promise<any[]>): Promise<any[]> {
   const c = _listCache.get(key);
   if (c && Date.now() - c.t < LIST_TTL_MS) return c.v;
@@ -125,19 +146,39 @@ export class OnsinchClient {
     path: string,
     filters: Record<string, string | number> = {}
   ): Promise<any[]> {
-    const out: any[] = [];
-    let page = 1;
-    let pageCount = 1;
-    for (;;) {
+    const get = async (page: number) => {
       const r = await this.t("GET", path + qs({ ...filters, limit: 100, page }));
-      const data = (r.data?.data ?? []) as any[];
-      out.push(...data);
-      const pg = r.data?.pagination ?? {};
-      pageCount = Number.isInteger(pg.pageCount) ? pg.pageCount : pageCount;
-      if (!data.length || page >= pageCount) break;
-      page++;
-    }
-    return out;
+      return { data: (r.data?.data ?? []) as any[], pagination: r.data?.pagination ?? {} };
+    };
+
+    // Page 1 tells us how many there are.
+    const first = await get(1);
+    const pageCount = Number.isInteger(first.pagination.pageCount) ? first.pagination.pageCount : 1;
+    if (!first.data.length || pageCount <= 1) return first.data;
+
+    // The rest go out CONCURRENTLY. Sequentially, /places is 69 pages at ~500ms
+    // = ~35s, and /companies another ~8s: over 42s of paging before the engine
+    // has even called the model. That is what made /api/n8n-inbound die at
+    // exactly 60s with no error line - it was not failing, it was still paging.
+    // Page count is known after page 1, so there is no reason to walk them.
+    // Capped so a 69-page pull cannot open 69 sockets at once against a client's
+    // production OnSinch.
+    const CONCURRENCY = 8;
+    const rest: any[][] = new Array(pageCount - 1);
+    let next = 2;
+    const worker = async () => {
+      for (;;) {
+        const page = next++;
+        if (page > pageCount) return;
+        rest[page - 2] = (await get(page)).data;
+      }
+    };
+    await Promise.all(Array.from({ length: Math.min(CONCURRENCY, pageCount - 1) }, worker));
+
+    // Reassembled in page order: the resolver's exact-match is order-independent,
+    // but anything that reads "the first match" must not depend on which socket
+    // came back first.
+    return first.data.concat(...rest.map((p) => p ?? []));
   }
 
   /** All companies (for exact-match dedup). ~756 today. Cached (warm lambda). */

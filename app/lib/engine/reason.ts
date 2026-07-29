@@ -64,9 +64,18 @@ export interface OpenRouterConfig {
 export function createOpenRouterReasoner(cfg: OpenRouterConfig): Reasoner {
   const model = cfg.model ?? "anthropic/claude-opus-4.8";
   const baseUrl = cfg.baseUrl ?? "https://openrouter.ai/api/v1";
+  // Same reasoning as the OnSinch transport: an open-ended model call can eat the
+  // whole serverless invocation, and the workflow has already stripped the Gmail
+  // label by then, so the email is lost rather than retried. A stage normally
+  // takes 1.5-5s; 25s means something is wrong, and saying so beats hanging.
+  const TIMEOUT_MS = Number(process.env.REASONER_TIMEOUT_MS || 25_000);
+
   async function call(system: string, user: string, schema: object) {
-    const res = await fetch(`${baseUrl}/chat/completions`, {
+    let res: Response;
+    try {
+      res = await fetch(`${baseUrl}/chat/completions`, {
       method: "POST",
+      signal: AbortSignal.timeout(TIMEOUT_MS),
       headers: {
         Authorization: `Bearer ${cfg.apiKey}`,
         "Content-Type": "application/json",
@@ -83,7 +92,11 @@ export function createOpenRouterReasoner(cfg: OpenRouterConfig): Reasoner {
         tools: [{ type: "function", function: { name: "emit", description: "Return the structured result", parameters: schema } }],
         tool_choice: { type: "function", function: { name: "emit" } },
       }),
-    });
+      });
+    } catch (err) {
+      const timedOut = (err as Error)?.name === "TimeoutError" || (err as Error)?.name === "AbortError";
+      throw new Error(timedOut ? `OpenRouter (${model}) timed out after ${TIMEOUT_MS}ms` : `OpenRouter (${model}) failed: ${(err as Error)?.message}`);
+    }
     if (!res.ok) throw new Error(`OpenRouter ${res.status}: ${(await res.text()).slice(0, 400)}`);
     const j = await res.json();
     const args = j.choices?.[0]?.message?.tool_calls?.[0]?.function?.arguments;
