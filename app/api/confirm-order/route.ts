@@ -8,12 +8,14 @@ export const maxDuration = 60;
 import { confirmOrder } from "../../lib/engine/pipeline";
 import { buildDeps } from "../../lib/deps";
 import { upsertTicketFromState } from "../../lib/ticketsDb";
+import { authorizeAction } from "../../lib/apiAuth";
 
 export async function POST(request: Request): Promise<Response> {
-  const secret = process.env.N8N_WEBHOOK_SECRET;
-  if (secret && request.headers.get("x-webhook-secret") !== secret) {
-    return Response.json({ ok: false, error: "unauthorized" }, { status: 401 });
-  }
+  // A signed-in human OR n8n. This used to demand the webhook secret only, so
+  // the Jobs Board's one-click confirm - the entire point of draft-only mode -
+  // got a 401 from the browser, which sends a session cookie and no secret.
+  const caller = await authorizeAction(request);
+  if (!caller.ok) return Response.json({ ok: false, error: "unauthorized" }, { status: 401 });
   let body: { thread_id?: string };
   try { body = await request.json(); } catch { return Response.json({ ok: false, error: "bad json" }, { status: 400 }); }
   const thread_id = String(body.thread_id ?? "").trim();
@@ -24,7 +26,12 @@ export async function POST(request: Request): Promise<Response> {
     const state = await confirmOrder(thread_id, deps);
     if (!state) return Response.json({ ok: false, error: "thread not found" }, { status: 404 });
     await upsertTicketFromState(state); // reflect the confirm on the tickets board
-    return Response.json({ ok: true, thread_id, status: state.status, onsinch_order_id: state.onsinch_order_id ?? null, notes: state.notes });
+    return Response.json({
+      ok: true, thread_id, status: state.status,
+      onsinch_order_id: state.onsinch_order_id ?? null,
+      confirmed_by: caller.actor, // who approved it, for the audit trail
+      notes: state.notes,
+    });
   } catch (err) {
     console.error("[confirm-order] failed", err);
     return Response.json({ ok: false, error: String((err as Error)?.message ?? err) }, { status: 500 });

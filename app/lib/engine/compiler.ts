@@ -223,8 +223,10 @@ export async function compile(
     actions.none = true;
   }
 
+  // needs-info, NOT error: nothing failed here, we simply cannot finish without
+  // a human. "error" is reserved for an actual failure (see pipeline.ts).
   const status: ConversationState["status"] = needs_human
-    ? "error"
+    ? "needs-info"
     : desired
     ? "ordered"
     : cls.classification === "not-a-job"

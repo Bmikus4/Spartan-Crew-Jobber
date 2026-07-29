@@ -153,7 +153,17 @@ export interface ConversationState {
     desired: DesiredOrder;
     order_id?: number;               // present for a patch
   };
-  status: "open" | "drafted" | "proposed" | "ordered" | "error" | "ignored";
+  /**
+   * needs-info = the engine did its job but cannot proceed without a human
+   *              (no company name in the email, unknown sender, new venue).
+   *              Expected and routine.
+   * error      = something actually FAILED, e.g. an OnSinch write threw.
+   *
+   * These were both "error", which meant a real write failure was
+   * indistinguishable from a routine "we need the company name" on the Jobs
+   * Board — the dangerous direction, since genuine failures hid in the noise.
+   */
+  status: "open" | "drafted" | "proposed" | "ordered" | "needs-info" | "error" | "ignored";
   notes: string[];
   order_action_log: Array<{
     ts: number;

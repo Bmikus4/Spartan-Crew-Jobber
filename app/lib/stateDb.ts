@@ -64,4 +64,12 @@ export class NeonStateStore implements StateStore {
     const rows = (await sql`SELECT state FROM conversation_state ORDER BY updated_at DESC LIMIT 500`) as { state: ConversationState }[];
     return rows.map((r) => r.state);
   }
+  /** The confirm queue: conversations with a staged order awaiting approval. */
+  async listProposed(): Promise<ConversationState[]> {
+    const sql = db();
+    if (!sql) return [];
+    await ensure(sql);
+    const rows = (await sql`SELECT state FROM conversation_state WHERE status = 'proposed' ORDER BY updated_at DESC LIMIT 100`) as { state: ConversationState }[];
+    return rows.map((r) => r.state);
+  }
 }

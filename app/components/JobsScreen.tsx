@@ -1,9 +1,14 @@
 "use client";
 
 // Jobs — the tickets-style view of every conversation linked to (or heading
-// toward) an OnSinch order. Backed by conversation_state via /api/jobs. Shows
+// toward) an OnSinch order. Backed by the tickets table via /api/jobs. Shows
 // the thread -> order link, a status lane, and a green check when the engine
-// drafted the reply. Read-only for now (confirm actions land with the queue).
+// drafted the reply.
+//
+// The one write action is confirming a STAGED order (status "proposed"), which
+// is what draft-only mode exists for. Lanes separate a routine "needs a human"
+// from an actual "Failed", so a real OnSinch write failure cannot hide among
+// enquiries that are merely missing a company name.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
@@ -25,11 +30,16 @@ const A = "var(--accent)";
 const OK = "var(--ok)";
 const BORDER = "var(--border)";
 
-type Filter = "all" | "proposed" | "needs_human" | "booked";
+type Filter = "all" | "proposed" | "needs_human" | "failed" | "booked";
 
 function badge(j: Job): { label: string; color: string; bg: string; bd: string } {
-  if (j.needs_human || j.status === "error")
-    return { label: "Needs human", color: "var(--danger)", bg: "var(--danger-subtle)", bd: "rgba(239,68,68,0.3)" };
+  // A real failure is called out separately from a routine needs-a-human. Both
+  // used to read "Needs human", so an OnSinch write that actually threw looked
+  // identical to "we could not find the company name".
+  if (j.status === "error")
+    return { label: "Failed", color: "var(--danger)", bg: "var(--danger-subtle)", bd: "rgba(239,68,68,0.55)" };
+  if (j.needs_human || j.status === "needs-info")
+    return { label: "Needs human", color: "var(--warn, #f59e0b)", bg: "rgba(245,158,11,0.12)", bd: "rgba(245,158,11,0.32)" };
   if (j.status === "proposed")
     return { label: "Awaiting confirm", color: A, bg: "var(--accent-subtle)", bd: "var(--accent-border)" };
   if (j.status === "ordered")
@@ -98,15 +108,48 @@ function Row({ k, v }: { k: string; v: React.ReactNode }) {
   );
 }
 
-// Read-only ticket detail: the AI decision (transparency) + the composed draft order.
-function Detail({ threadId, onBack }: { threadId: string; onBack: () => void }) {
+// Ticket detail: the AI decision (transparency), the composed draft order, and
+// the one action draft-only mode exists for — approving a staged order.
+function Detail({ threadId, onBack, onChanged }: { threadId: string; onBack: () => void; onChanged?: () => void }) {
   const [d, setD] = useState<any | null>(null);
   const [err, setErr] = useState(false);
-  useEffect(() => {
-    let ok = true;
-    fetch(`/api/jobs?id=${encodeURIComponent(threadId)}`).then((r) => r.json()).then((x) => { if (ok) setD(x.ticket || null); }).catch(() => { if (ok) setErr(true); });
-    return () => { ok = false; };
+  const [confirming, setConfirming] = useState(false);
+  const [confirmErr, setConfirmErr] = useState<string | null>(null);
+
+  const load = useCallback(async (): Promise<boolean> => {
+    try {
+      const r = await fetch(`/api/jobs?id=${encodeURIComponent(threadId)}`);
+      const x = await r.json();
+      setD(x.ticket || null);
+      return true;
+    } catch { setErr(true); return false; }
   }, [threadId]);
+
+  useEffect(() => { void load(); }, [load]);
+
+  const confirm = useCallback(async () => {
+    setConfirming(true); setConfirmErr(null);
+    try {
+      const r = await fetch("/api/confirm-order", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ thread_id: threadId }),
+      });
+      const x = await r.json().catch(() => ({}));
+      if (r.status === 401) {
+        // Writing to OnSinch needs a signed-in human. With AUTH_REQUIRED off
+        // nobody is signed in by default, so say what to do instead of just
+        // reporting "unauthorized".
+        setConfirmErr("you need to be signed in to confirm an order — sign in with Google, or use the ?admin= break-glass link.");
+      } else if (!r.ok || !x.ok) {
+        setConfirmErr(x.error || `failed (${r.status})`);
+      }
+      await load();
+      onChanged?.();
+    } catch (e) {
+      setConfirmErr(String((e as Error)?.message ?? e));
+    } finally { setConfirming(false); }
+  }, [threadId, load, onChanged]);
 
   const wrap: React.CSSProperties = { height: "100%", overflowY: "auto", padding: "24px clamp(16px, 4vw, 40px) 56px" };
   const back = <button onClick={onBack} style={{ alignSelf: "flex-start", background: "none", border: "none", color: A, cursor: "pointer", fontWeight: 700, fontSize: 13, padding: 0 }}>&larr; Jobs Board</button>;
@@ -169,9 +212,41 @@ function Detail({ threadId, onBack }: { threadId: string; onBack: () => void }) 
                   ))}
                 </div>
               </div>
+
+              {/* The approval step. Only a STAGED order can be confirmed: once
+                  it is written to OnSinch the button is replaced by its number,
+                  so a second click can never create a duplicate job. */}
+              {d.status === "proposed" ? (
+                <div style={{ borderTop: `1px solid ${BORDER}`, marginTop: 4, paddingTop: 12, display: "flex", flexDirection: "column", gap: 8 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+                    <button onClick={confirm} disabled={confirming}
+                      style={{ padding: "10px 18px", borderRadius: 9, border: "1px solid var(--accent-border)", background: confirming ? "var(--surface-2)" : "var(--accent-subtle)", color: confirming ? MUT : A, fontWeight: 700, fontSize: 13, cursor: confirming ? "default" : "pointer", transition: "all 200ms" }}>
+                      {confirming ? "Sending to OnSinch…" : "Confirm draft order"}
+                    </button>
+                    <span style={{ fontSize: 12, color: MUT }}>
+                      {d.needs_human ? "Flagged for a human — check the notes above first." : "Creates the draft order in OnSinch."}
+                    </span>
+                  </div>
+                  {confirmErr && (
+                    <div style={{ background: "var(--danger-subtle)", border: "1px solid rgba(239,68,68,0.3)", borderRadius: 8, padding: "9px 12px", fontSize: 12, color: SUB }}>
+                      Couldn&apos;t confirm: {confirmErr}
+                    </div>
+                  )}
+                </div>
+              ) : d.status === "ordered" ? (
+                <div style={{ borderTop: `1px solid ${BORDER}`, marginTop: 4, paddingTop: 12, fontSize: 12.5, color: MUT }}>
+                  Written to OnSinch{d.order_number ? <> as <b style={{ color: SUB }}>#{d.order_number}</b></> : null}.
+                </div>
+              ) : null}
             </div>
           ) : (
-            <p style={{ fontSize: 12.5, color: MUT, margin: 0 }}>No order composed yet — status <b style={{ color: SUB }}>{d.status}</b>{d.needs_human ? " (needs a human)" : ""}.</p>
+            <p style={{ fontSize: 12.5, color: MUT, margin: 0 }}>
+              {d.status === "error"
+                ? <>An order action <b style={{ color: "var(--danger)" }}>failed</b> — see the notes above.</>
+                : d.status === "needs-info"
+                ? <>No order composed yet: the engine needs something a human has to supply — see the notes above.</>
+                : <>No order composed yet — status <b style={{ color: SUB }}>{d.status}</b>.</>}
+            </p>
           )}
         </Panel>
 
@@ -208,7 +283,8 @@ export default function JobsScreen({ isActive }: Props) {
     return {
       all: j.length,
       proposed: j.filter((x) => x.status === "proposed" && !x.needs_human).length,
-      needs_human: j.filter((x) => x.needs_human || x.status === "error").length,
+      needs_human: j.filter((x) => (x.needs_human || x.status === "needs-info") && x.status !== "error").length,
+      failed: j.filter((x) => x.status === "error").length,
       booked: j.filter((x) => x.order_id != null).length,
     };
   }, [jobs]);
@@ -217,18 +293,24 @@ export default function JobsScreen({ isActive }: Props) {
     const j = jobs ?? [];
     if (filter === "all") return j;
     if (filter === "proposed") return j.filter((x) => x.status === "proposed" && !x.needs_human);
-    if (filter === "needs_human") return j.filter((x) => x.needs_human || x.status === "error");
+    if (filter === "needs_human") return j.filter((x) => (x.needs_human || x.status === "needs-info") && x.status !== "error");
+    if (filter === "failed") return j.filter((x) => x.status === "error");
     return j.filter((x) => x.order_id != null);
   }, [jobs, filter]);
 
   const wrap: React.CSSProperties = { height: "100%", overflowY: "auto", padding: "24px clamp(16px, 4vw, 40px) 56px" };
   if (!jobs) return <div style={{ ...wrap, display: "grid", placeItems: "center" }}><span className="crm-shimmer" style={{ color: MUT }}>Loading jobs…</span></div>;
-  if (selected) return <Detail threadId={selected} onBack={() => setSelected(null)} />;
+  // onChanged refreshes the list so a confirmed order moves out of the
+  // "Awaiting confirm" lane rather than sitting there until a manual reload.
+  if (selected) return <Detail threadId={selected} onBack={() => setSelected(null)} onChanged={() => void load()} />;
 
   const tabs: { id: Filter; label: string }[] = [
     { id: "all", label: `All ${counts.all}` },
     { id: "proposed", label: `Awaiting confirm ${counts.proposed}` },
     { id: "needs_human", label: `Needs human ${counts.needs_human}` },
+    // Only shown when something has actually failed — an empty lane would just
+    // be noise, but a non-empty one must be impossible to miss.
+    ...(counts.failed ? [{ id: "failed" as Filter, label: `Failed ${counts.failed}` }] : []),
     { id: "booked", label: `Booked ${counts.booked}` },
   ];
 
