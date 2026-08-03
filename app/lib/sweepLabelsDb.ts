@@ -42,11 +42,28 @@ async function ensure(): Promise<NeonQueryFunction<false, false>> {
       blocks         JSONB NOT NULL DEFAULT '[]'::jsonb,
       first_start    TIMESTAMPTZ,
       last_end       TIMESTAMPTZ,
-      crew_total     INT,
+      -- PEAK crew, not the sum across blocks: four crew over three days is a job for
+      -- four people, and summing read it as twelve (one thread scored 61).
+      crew_peak      INT,
+      crew_days      INT,
       error          TEXT,
       labelled_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
       PRIMARY KEY (thread_id, model)
     )`;
+  // The first version of this table summed crew into crew_total. Rename rather than
+  // drop, so the handful of rows labelled under the old meaning are still inspectable
+  // — and re-labelling overwrites them with the peak.
+  await sql`
+    DO $$ BEGIN
+      IF EXISTS (SELECT 1 FROM information_schema.columns
+                 WHERE table_name = 'sweep_labels' AND column_name = 'crew_total') THEN
+        ALTER TABLE sweep_labels RENAME COLUMN crew_total TO crew_peak;
+      END IF;
+      IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                     WHERE table_name = 'sweep_labels' AND column_name = 'crew_days') THEN
+        ALTER TABLE sweep_labels ADD COLUMN crew_days INT;
+      END IF;
+    END $$`;
   await sql`CREATE INDEX IF NOT EXISTS sweep_labels_class ON sweep_labels (classification)`;
   await sql`CREATE INDEX IF NOT EXISTS sweep_labels_start ON sweep_labels (first_start)`;
   _ready = true;
@@ -101,7 +118,10 @@ export interface LabelRow {
   company_name?: string;
   location_text?: string;
   blocks?: WorkBlock[];
-  crew_total?: number;
+  /** Largest crew asked for in any single block — not the sum across blocks. */
+  crew_peak?: number;
+  /** Blocks x crew, i.e. crew-days: what the job costs, kept separately. */
+  crew_days?: number;
   error?: string;
 }
 
@@ -115,12 +135,12 @@ export async function storeLabel(row: LabelRow): Promise<void> {
   await sql`
     INSERT INTO sweep_labels (
       thread_id, model, classification, is_cancellation, priority, job_summary,
-      company_name, location_text, blocks, first_start, last_end, crew_total, error
+      company_name, location_text, blocks, first_start, last_end, crew_peak, crew_days, error
     ) VALUES (
       ${row.thread_id}, ${row.model}, ${row.classification ?? null}, ${row.is_cancellation ?? false},
       ${row.priority ?? null}, ${row.job_summary ?? null}, ${row.company_name ?? null},
       ${row.location_text ?? null}, ${JSON.stringify(blocks)}, ${firstStart}, ${lastEnd},
-      ${row.crew_total ?? null}, ${row.error ?? null}
+      ${row.crew_peak ?? null}, ${row.crew_days ?? null}, ${row.error ?? null}
     )
     ON CONFLICT (thread_id, model) DO UPDATE SET
       classification = EXCLUDED.classification,
@@ -132,7 +152,8 @@ export async function storeLabel(row: LabelRow): Promise<void> {
       blocks = EXCLUDED.blocks,
       first_start = EXCLUDED.first_start,
       last_end = EXCLUDED.last_end,
-      crew_total = EXCLUDED.crew_total,
+      crew_peak = EXCLUDED.crew_peak,
+      crew_days = EXCLUDED.crew_days,
       error = EXCLUDED.error,
       labelled_at = now()`;
 }

@@ -12,8 +12,9 @@
 // START AND FINISH. The engine returns a date plus optional times. The live
 // "Spartan Crew Bookings v1.2" workflow defines what to do when a time is missing,
 // and this follows it exactly rather than inventing a convention:
-//   beginning = date + start_time, or 08:00:00+00:00 when no start time is given
-//   end       = date + end_time,   or 18:00:00+00:00 when no end time is given
+//   beginning = date + start_time, or 08:00 when no start time is given
+//   end       = date + end_time,   or 18:00 when no end time is given
+// Those times are UK LOCAL, stamped with the offset in force on the day — see ukOffset.
 // A request with no date at all is kept and marked date_confirmed:false — the
 // workflow's rule is to keep a TBC block rather than drop the request.
 //
@@ -84,11 +85,6 @@ function messagesOf(payload: { messages?: unknown[] }): ThreadMessage[] {
 }
 
 /**
- * A request from the engine's facts -> a work block with a real start and finish,
- * using the live workflow's defaults for a missing time. Kept here rather than in the
- * engine because it describes how the STUDY reads the engine's output.
- */
-/**
  * Is this instant inside British Summer Time? Same rule the live workflow's
  * Conversational Renderer uses: last Sunday of March 01:00 UTC to last Sunday of
  * October 01:00 UTC. A client writing "8am" means 8am in London, so a block stamped
@@ -107,6 +103,11 @@ function ukOffset(dateStr: string): "+01:00" | "+00:00" {
   return t >= start && t < end ? "+01:00" : "+00:00";
 }
 
+/**
+ * A request from the engine's facts -> a work block with a real start and finish,
+ * using the live workflow's defaults for a missing time. Kept here rather than in the
+ * engine because it describes how the STUDY reads the engine's output.
+ */
 function toBlock(r: { date?: string; start_time?: string; end_time?: string; size?: number; task?: string }): WorkBlock | null {
   const time = (t: string | undefined, dflt: string) => {
     const m = /^(\d{1,2}):(\d{2})/.exec(String(t ?? ""));
@@ -212,7 +213,11 @@ for (const t of threads) {
     const cancels = await isCancellation(latest, history);
 
     const blocks = (facts.requests || []).map(toBlock).filter((b): b is WorkBlock => !!b);
-    const crew = blocks.reduce((n, b) => n + (Number(b.size) || 0), 0);
+    // Peak crew is the answer to "how many people", crew-days to "how much work".
+    // Summing sizes conflates them and inflates any multi-day job.
+    const sizes = blocks.map((b) => Number(b.size) || 0);
+    const crew = sizes.length ? Math.max(...sizes) : 0;
+    const crewDays = sizes.reduce((n, s) => n + s, 0);
     tally[cls.classification] = (tally[cls.classification] || 0) + 1;
 
     if (!DRY) {
@@ -226,7 +231,8 @@ for (const t of threads) {
         company_name: facts.company_name,
         location_text: facts.location_text,
         blocks,
-        crew_total: crew || undefined,
+        crew_peak: crew || undefined,
+        crew_days: crewDays || undefined,
       });
     }
 
