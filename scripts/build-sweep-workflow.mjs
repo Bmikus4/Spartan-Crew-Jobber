@@ -29,9 +29,12 @@ import { join } from "node:path";
 import { ROOT_DIR } from "./_env.mjs";
 
 const INGEST_URL = "https://spartan-crew-jobber.vercel.app/api/sweep-ingest";
-// The same BOOKINGS Gmail OAuth credential the live workflow holds. Referenced by
-// id so n8n links it on import instead of prompting.
-const GMAIL_CRED = { id: "bgRJXZINuY5e6a3x", name: "BOOKINGS 5/18/26" };
+// The Gmail credential the live workflow authenticates with TODAY — verified against
+// its five Gmail nodes, not copied from the older export. "BOOKINGS 5/18/26"
+// (bgRJXZINuY5e6a3x) is the one the first build script still names, and it was
+// replaced when the bookings credential was re-authorised; borrowing the dead one
+// would fail on the first list. Referenced by id so n8n links it on import.
+const GMAIL_CRED = { id: "LIVJMrWXHhT5lymb", name: "Spartan Crew Bookings 7/29/26" };
 const WEBHOOK_PATH = "spartan-sweep";
 
 let seq = 0;
@@ -39,35 +42,55 @@ const nid = () => `sweep-${String(++seq).padStart(4, "0")}`;
 
 // ---------------------------------------------------------------- code nodes
 
-// The window comes from the webhook body so one workflow can sweep any month:
-//   { "after": "2025/09/01", "before": "2025/10/01" }   explicit, or
+// The window comes from the webhook body so one workflow can sweep any span:
+//   { "after": "2025-09-01", "before": "2025-10-01" }   explicit, or
 //   { "monthsAgo": 3 }                                  the whole of that month.
-// Gmail reads after: as inclusive and before: as exclusive, so consecutive windows
-// built this way tile without a seam and without double-counting.
+//
+// The window is emitted twice: as ISO instants, which are what a human reads in the
+// execution, and as a Gmail search string in epoch seconds, which is what actually
+// filters the list. after is inclusive and before exclusive, so consecutive windows
+// meet without a seam or a double-fetch.
 const BUILD_WINDOW = `
 const body = $input.first().json.body || $input.first().json || {};
-const pad = (n) => String(n).padStart(2, '0');
-const fmt = (d) => d.getUTCFullYear() + '/' + (d.getUTCMonth() + 1) + '/' + d.getUTCDate();
 
 let after = body.after, before = body.before;
 if (!after || !before) {
   const back = Number(body.monthsAgo);
   if (!Number.isFinite(back)) throw new Error('need {after,before} or {monthsAgo}');
   const now = new Date();
-  after = fmt(new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - back, 1)));
-  before = fmt(new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - back + 1, 1)));
+  after = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - back, 1)).toISOString();
+  before = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - back + 1, 1)).toISOString();
+} else {
+  after = new Date(after).toISOString();
+  before = new Date(before).toISOString();
 }
-const label = String(after).replace(/\\//g, '-');
-return [{ json: { q: 'after:' + after + ' before:' + before, label, after, before } }];
+if (!(new Date(after) < new Date(before))) throw new Error('window ends before it starts: ' + after + ' .. ' + before);
+const label = after.slice(0, 10);
+// Epoch seconds, not a Y/M/D string: Gmail reads bare dates in the account's own
+// timezone, so a BST boundary drifts by an hour, while after:<unix> is an exact
+// instant. It goes in the q filter rather than receivedAfter/receivedBefore because
+// those were ignored by this node version — the list then tried to return the whole
+// mailbox and the execution died out of memory.
+const secs = (iso) => Math.floor(new Date(iso).getTime() / 1000);
+const q = 'after:' + secs(after) + ' before:' + secs(before);
+return [{ json: { after, before, label, q } }];
 `.trim();
 
 // Gmail's message list gives a threadId per message, so collapsing to distinct
 // threads before fetching turns tens of thousands of message reads into a few
-// thousand thread reads. Distinct threads only, and the window carried forward.
+// thousand thread reads.
 const DISTINCT_THREADS = `
+const all = $input.all();
+// A window filter that stops being honoured turns this into "list the whole mailbox",
+// which is how the first attempt died out of memory rather than saying anything. No
+// real window in this mailbox is anywhere near this size, so a number this big means
+// the filter was ignored, not that the month was busy.
+if (all.length > 4000) {
+  throw new Error('listed ' + all.length + ' messages for one window — the date filter looks ignored, refusing to continue');
+}
 const seen = new Set();
 const out = [];
-for (const item of $input.all()) {
+for (const item of all) {
   const id = item.json.threadId || item.json.id;
   if (!id || seen.has(id)) continue;
   seen.add(id);
@@ -80,8 +103,11 @@ return out;
 // same mapping as scripts/sweep-gmail.ts so a corpus gathered either way is the
 // same corpus: plain text preferred over HTML, recursing past attachments, and
 // internalDate over the Date header because a forwarded mail's header lies.
+// runOnceForEachItem, so $input.first() is unavailable — n8n refuses it with
+// "Can't use .first() here" and the whole month dies at the last step. $input.item
+// is the per-item equivalent.
 const BUILD_SWEEP_PAYLOAD = `
-const thread = $input.first().json;
+const thread = $input.item.json;
 const messages = Array.isArray(thread.messages) ? thread.messages : [];
 
 function decodeB64(d) {
@@ -142,7 +168,21 @@ const mapped = messages.map((m) => {
   };
 });
 
-return [{ json: { thread_id: String(thread.id), messages: mapped, sweep: { mailbox: 'bookings@spartancrew.co.uk', swept: true } } }];
+return { json: { thread_id: String(thread.id), messages: mapped, sweep: { mailbox: 'bookings@spartancrew.co.uk', swept: true } } };
+`.trim();
+
+// One POST per thread would be ~20k requests for a year — the mailbox runs about 60
+// threads a day. /api/sweep-ingest accepts an array, so threads go up in batches.
+// Kept small enough that a batch stays well inside the route's 60s ceiling and a
+// failure loses 25 threads rather than a month.
+const BATCH_THREADS = `
+const SIZE = 25;
+const out = [];
+const all = $input.all();
+for (let i = 0; i < all.length; i += SIZE) {
+  out.push({ json: { batch: all.slice(i, i + SIZE).map((it) => it.json) } });
+}
+return out;
 `.trim();
 
 // ---------------------------------------------------------------- nodes
@@ -151,7 +191,11 @@ const nodes = [
     parameters: {
       httpMethod: "POST",
       path: WEBHOOK_PATH,
-      responseMode: "lastNode",
+      // Answer as soon as the request lands. A month of mail takes far longer than
+      // the 125s Cloudflare allows a webhook response in front of n8n Cloud, and
+      // waiting for the last node meant the caller saw a 524 while the sweep's fate
+      // was unknown. Progress is read from /api/sweep-ingest instead.
+      responseMode: "onReceived",
       options: {},
     },
     type: "n8n-nodes-base.webhook",
@@ -221,6 +265,14 @@ const nodes = [
     name: "Build Sweep Payload",
   },
   {
+    parameters: { mode: "runOnceForAllItems", jsCode: BATCH_THREADS },
+    type: "n8n-nodes-base.code",
+    typeVersion: 2,
+    position: [220, 0],
+    id: nid(),
+    name: "Batch Threads",
+  },
+  {
     parameters: {
       method: "POST",
       url: INGEST_URL,
@@ -228,12 +280,12 @@ const nodes = [
       headerParameters: { parameters: [{ name: "x-webhook-secret", value: "REPLACE_WITH_N8N_WEBHOOK_SECRET" }] },
       sendBody: true,
       specifyBody: "json",
-      jsonBody: "={{ JSON.stringify({ thread_id: $json.thread_id, messages: $json.messages, sweep: $json.sweep }) }}",
+      jsonBody: "={{ JSON.stringify($json.batch) }}",
       options: {},
     },
     type: "n8n-nodes-base.httpRequest",
     typeVersion: 4.4,
-    position: [220, 0],
+    position: [440, 0],
     id: nid(),
     name: "POST to Sweep Ingest",
     // Storing is idempotent on thread_id, so a retry costs nothing and a dropped
@@ -270,7 +322,7 @@ const nodes = [
   },
 ];
 
-const chain = ["Sweep Window In", "Build Window", "List Window", "Distinct Threads", "Get Thread", "Build Sweep Payload", "POST to Sweep Ingest"];
+const chain = ["Sweep Window In", "Build Window", "List Window", "Distinct Threads", "Get Thread", "Build Sweep Payload", "Batch Threads", "POST to Sweep Ingest"];
 const connections = {};
 for (let i = 0; i < chain.length - 1; i++) {
   connections[chain[i]] = { main: [[{ node: chain[i + 1], type: "main", index: 0 }]] };
@@ -280,7 +332,16 @@ const workflow = {
   name: "Spartan Sweep — 12 months to corpus",
   nodes,
   connections,
-  settings: { executionOrder: "v1" },
+  // Execution saving is set explicitly, not left to the instance default: a sweep
+  // that fails silently with no execution to open is unauditable, and the first run
+  // recorded nothing at all.
+  settings: {
+    executionOrder: "v1",
+    saveDataErrorExecution: "all",
+    saveDataSuccessExecution: "all",
+    saveManualExecutions: true,
+    saveExecutionProgress: true,
+  },
 };
 
 mkdirSync(join(ROOT_DIR, "n8n"), { recursive: true });

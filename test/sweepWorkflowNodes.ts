@@ -26,47 +26,61 @@ const code = (name: string): string => {
   return node.parameters.jsCode;
 };
 
-/** n8n's Code-node contract, as much of it as these nodes use. */
+/**
+ * n8n's Code-node contract, as much of it as these nodes use. In runOnceForEachItem
+ * mode n8n exposes `$input.item` and forbids `.first()`/`.all()`; in
+ * runOnceForAllItems it is the other way round. The stub mirrors that, so a node that
+ * reaches for the wrong one fails here instead of mid-sweep — which is how
+ * "Can't use .first() here" was first found, in production.
+ */
 function runNode(jsCode: string, items: Array<{ json: any }>): Array<{ json: any }> {
-  const $input = {
-    first: () => items[0],
-    all: () => items,
-  };
+  const node = wf.nodes.find((n: any) => n.parameters?.jsCode === jsCode);
+  const perItem = node?.parameters?.mode === "runOnceForEachItem";
+  const forbidden = (what: string) => () => { throw new Error(`Can't use .${what}() here`); };
+  const $input = perItem
+    ? { item: items[0], first: forbidden("first"), all: forbidden("all") }
+    : { first: () => items[0], all: () => items, get item(): never { throw new Error("Can't use .item here"); } };
   const fn = new Function("$input", "Buffer", `${jsCode}`);
-  return fn($input, Buffer);
+  const out = fn($input, Buffer);
+  return Array.isArray(out) ? out : [out];
 }
 
 const b64url = (s: string) => Buffer.from(s, "utf8").toString("base64url");
 
-console.log("\n[1] Build Window turns a request into a Gmail query");
+console.log("\n[1] Build Window turns a request into an instant range");
 {
-  const explicit = runNode(code("Build Window"), [{ json: { body: { after: "2025/09/01", before: "2025/10/01" } } }]);
-  ok("explicit window becomes after:/before:", explicit[0].json.q === "after:2025/09/01 before:2025/10/01", explicit[0].json.q);
+  const explicit = runNode(code("Build Window"), [{ json: { body: { after: "2025-09-01", before: "2025-10-01" } } }]);
+  ok("explicit window becomes ISO instants", explicit[0].json.after === "2025-09-01T00:00:00.000Z" && explicit[0].json.before === "2025-10-01T00:00:00.000Z", `${explicit[0].json.after} .. ${explicit[0].json.before}`);
   ok("label is filename-safe", explicit[0].json.label === "2025-09-01", explicit[0].json.label);
 
-  const rel = runNode(code("Build Window"), [{ json: { body: { monthsAgo: 1 } } }]);
-  const q = rel[0].json.q as string;
-  const m = /^after:(\d{4})\/(\d{1,2})\/1 before:(\d{4})\/(\d{1,2})\/1$/.exec(q);
-  ok("monthsAgo yields a whole calendar month", !!m, q);
-  if (m) {
-    const from = Date.UTC(+m[1], +m[2] - 1, 1);
-    const to = Date.UTC(+m[3], +m[4] - 1, 1);
-    const days = (to - from) / 86_400_000;
-    ok("that month is 28-31 days long", days >= 28 && days <= 31, `${days} days`);
-    const now = new Date();
-    const expected = Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1);
-    ok("monthsAgo:1 is last month, not this one", from === expected, new Date(from).toISOString().slice(0, 10));
+  const rel = runNode(code("Build Window"), [{ json: { body: { monthsAgo: 1 } } }])[0].json;
+  const from = Date.parse(rel.after), to = Date.parse(rel.before);
+  const days = (to - from) / 86_400_000;
+  ok("monthsAgo yields a whole calendar month", days >= 28 && days <= 31, `${days} days`);
+  const now = new Date();
+  ok("monthsAgo:1 is last month, not this one", from === Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1), rel.after);
+  ok("the window starts at midnight UTC, not a local hour", rel.after.endsWith("T00:00:00.000Z"), rel.after);
+
+  // The Gmail query has to carry exact instants. Bare Y/M/D dates are read in the
+  // account's timezone, which drifts the boundary by an hour under BST.
+  const qm = /^after:(\d+) before:(\d+)$/.exec(rel.q);
+  ok("query uses epoch seconds, not a Y/M/D date", !!qm, rel.q);
+  if (qm) {
+    ok("query bounds match the window exactly", +qm[1] * 1000 === from && +qm[2] * 1000 === to, `${qm[1]}..${qm[2]}`);
   }
 
-  // Consecutive windows must meet exactly — a seam loses a day of mail, an overlap
-  // costs a re-fetch. Checked against the node's own output, not re-derived maths.
+  // Consecutive windows must meet exactly — a seam loses mail, an overlap costs a
+  // re-fetch. Checked against the node's own output, not re-derived maths.
   const w0 = runNode(code("Build Window"), [{ json: { body: { monthsAgo: 0 } } }])[0].json;
-  const w1 = runNode(code("Build Window"), [{ json: { body: { monthsAgo: 1 } } }])[0].json;
-  ok("last month's window ends where this month's begins", w1.before === w0.after, `${w1.before} vs ${w0.after}`);
+  ok("last month's window ends where this month's begins", rel.before === w0.after, `${rel.before} vs ${w0.after}`);
 
   let threw = false;
   try { runNode(code("Build Window"), [{ json: { body: {} } }]); } catch { threw = true; }
   ok("a request with no window at all is refused", threw);
+
+  let backwards = false;
+  try { runNode(code("Build Window"), [{ json: { body: { after: "2025-10-01", before: "2025-09-01" } } }]); } catch { backwards = true; }
+  ok("a backwards window is refused rather than sweeping nothing", backwards);
 }
 
 console.log("\n[2] Distinct Threads collapses a message list to threads");
@@ -86,6 +100,16 @@ console.log("\n[2] Distinct Threads collapses a message list to threads");
   ok("every distinct thread kept", ids.includes("t1") && ids.includes("t2"), JSON.stringify(ids));
   ok("falls back to id when threadId is absent", ids.includes("t3"));
   ok("nothing empty got through", ids.every(Boolean));
+
+  // The guard that turns "the date filter stopped working" into a refusal instead of
+  // an out-of-memory crash — which is how the first live attempt failed.
+  const flood = Array.from({ length: 4001 }, (_, i) => ({ json: { id: `m${i}`, threadId: `t${i}` } }));
+  let refused = false;
+  try { runNode(code("Distinct Threads"), flood); } catch { refused = true; }
+  ok("an impossibly large window is refused, not swept", refused);
+  let allowed = true;
+  try { runNode(code("Distinct Threads"), flood.slice(0, 3999)); } catch { allowed = false; }
+  ok("a merely busy window still passes", allowed);
 }
 
 console.log("\n[3] Build Sweep Payload matches what the terminal sweep produces");
