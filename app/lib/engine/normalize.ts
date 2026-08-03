@@ -137,12 +137,75 @@ export function isFromSpartan(from: string): boolean {
  * duplicates of the most-recent inbound email so the compiler can ignore them.
  * Returns { latest, history } where history excludes the latest + dupes.
  */
+/**
+ * Gmail's quote attribution, which is machine-written and therefore parseable:
+ *   On Mon, 3 Aug 2026 at 11:42, June Thompson <june@farago-projects.com> wrote:
+ */
+const QUOTE_ATTRIBUTION = /^\s*On\s+.{0,80}?(?:<([^>\s]+@[^>\s]+)>|\b([\w.+-]+@[\w.-]+\.\w+)\b)\s*wrote:\s*$/im;
+
+/**
+ * Recover a client enquiry that only exists as quoted text inside a colleague's
+ * forward.
+ *
+ * Spartan's workflow routes some client requests into bookings@ second-hand: a
+ * colleague replies to the client and loops bookings in. The bookings mailbox
+ * therefore never receives the client's own email — live thread 19fc73c87a9f16ba
+ * is entirely @spartancrew.co.uk, with June Thompson's actual request surviving
+ * only as "> Do you have availability on September 19th 2026 for a fashion show?".
+ * cleanEmailBody strips those lines and selectLatest, finding no client message,
+ * falls back to one of OUR emails — so the engine classified Spartan's own reply
+ * and dismissed a real enquiry.
+ *
+ * Returns null unless it can name the sender: an unattributable quote is left
+ * alone rather than guessed at.
+ */
+function recoverForwardedEnquiry(messages: ThreadMessage[]): ThreadMessage | null {
+  // newest first — the most recent forward carries the freshest request
+  for (const m of [...messages].sort((a, b) => Date.parse(b.date_iso) - Date.parse(a.date_iso))) {
+    const raw = m.body || "";
+    const attribution = QUOTE_ATTRIBUTION.exec(raw);
+    if (!attribution) continue;
+    const from = (attribution[1] || attribution[2] || "").toLowerCase();
+    // Quoting ourselves is not a client enquiry.
+    if (!from || isFromSpartan(from)) continue;
+
+    // The quoted block is everything after the attribution line, de-quoted.
+    const after = raw.slice(attribution.index + attribution[0].length);
+    const quoted = after
+      .split("\n")
+      .filter((l) => l.trim().startsWith(">"))
+      .map((l) => l.replace(/^\s*>+\s?/, ""))
+      .join("\n")
+      .trim();
+    if (quoted.length < 10) continue;
+
+    return {
+      message_id: `${m.message_id}:quoted`,
+      from,
+      to: [m.from],
+      date_iso: m.date_iso,
+      subject: m.subject,
+      body: quoted,
+      is_from_spartan: false,
+    };
+  }
+  return null;
+}
+
 export function normalizeThread(thread: HydratedThread): {
   latest: ThreadMessage;
   history: ThreadMessage[];
   machine: boolean;
 } {
-  const cleaned = thread.messages
+  let source = thread.messages;
+  // Only when there is no client message at all — precisely the shape that is
+  // otherwise guaranteed to be judged on Spartan's own words.
+  if (source.length && source.every((m) => m.is_from_spartan)) {
+    const recovered = recoverForwardedEnquiry(source);
+    if (recovered) source = [...source, recovered];
+  }
+
+  const cleaned = source
     .map((m) => ({ ...m, body: cleanEmailBody(m.body) }))
     // keep short-but-real client replies ("yes", "ok", "cancel"); only drop empties
     .filter((m) => m.body && m.body.trim().length >= 2)
