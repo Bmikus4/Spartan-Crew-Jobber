@@ -26,6 +26,7 @@ const argv = process.argv.slice(2);
 const DRY = argv.includes("--dry") || !argv.includes("--apply");
 const MONTHS = Number(argv[argv.indexOf("--months") + 1]) || 12;
 const MAILBOX = "bookings@spartancrew.co.uk";
+const PAGE_CAP = Number(process.env.SWEEP_PAGE_CAP) || 40;   // 40 x 500 = 20k messages/month
 
 // The sweep and the app's Google sign-in cannot always share one OAuth client:
 // a Desktop client only accepts loopback redirects, so it cannot serve the web
@@ -36,12 +37,18 @@ const CLIENT_ID = (process.env.GMAIL_OAUTH_CLIENT_ID || "").trim() || requireEnv
 const CLIENT_SECRET = (process.env.GMAIL_OAUTH_CLIENT_SECRET || "").trim() || requireEnv("GOOGLE_CLIENT_SECRET");
 const REFRESH = requireEnv("GMAIL_REFRESH_TOKEN");
 
+// Overridable so the sweep can be run against a stand-in Gmail (test/sweepGmail.ts).
+// A 12-month live sweep is the one run you cannot rehearse, so the paging, the month
+// windows and the MIME decoding are proved against a fake mailbox first.
+const API_BASE = (process.env.GMAIL_API_BASE || "https://gmail.googleapis.com/gmail/v1/users/me").replace(/\/$/, "");
+const TOKEN_URL = process.env.GMAIL_TOKEN_URL || "https://oauth2.googleapis.com/token";
+
 // ---------------------------------------------------------------- auth
 let token: string | null = null;
 let tokenExpiry = 0;
 async function accessToken() {
   if (token && Date.now() < tokenExpiry - 60_000) return token;
-  const r = await fetch("https://oauth2.googleapis.com/token", {
+  const r = await fetch(TOKEN_URL, {
     method: "POST",
     headers: { "content-type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({ client_id: CLIENT_ID, client_secret: CLIENT_SECRET, refresh_token: REFRESH, grant_type: "refresh_token" }),
@@ -53,17 +60,27 @@ async function accessToken() {
   return token;
 }
 
-/** Gmail GET with one retry on 429/5xx — a sweep of this size will meet both. */
+/** Gmail GET with backoff on 429/5xx — a sweep of this size will meet both. */
 async function gmail(path: string, attempt = 0): Promise<any> {
   const t = await accessToken();
-  const r = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/${path}`, { headers: { Authorization: `Bearer ${t}` } });
-  if (r.status === 429 || r.status >= 500) {
+  const r = await fetch(`${API_BASE}/${path}`, { headers: { Authorization: `Bearer ${t}` } });
+  // Gmail signals its per-user rate limit as 403 with a rateLimitExceeded reason,
+  // not 429. Treating that as fatal aborts a thread mid-sweep for a condition that
+  // clears on its own within a second, so it has to back off like a 429 — but a
+  // plain 403 (revoked token, wrong scope) must still fail immediately.
+  let rateLimited403 = false;
+  let body = "";
+  if (r.status === 403) {
+    body = await r.text();
+    rateLimited403 = /rateLimitExceeded|userRateLimitExceeded|backendError/i.test(body);
+  }
+  if (r.status === 429 || r.status >= 500 || rateLimited403) {
     if (attempt >= 4) throw new Error(`${path} -> ${r.status} after ${attempt} retries`);
     const wait = 2 ** attempt * 1000;
     await new Promise((s) => setTimeout(s, wait));
     return gmail(path, attempt + 1);
   }
-  if (!r.ok) throw new Error(`${path} -> ${r.status}: ${(await r.text()).slice(0, 200)}`);
+  if (!r.ok) throw new Error(`${path} -> ${r.status}: ${(body || (await r.text())).slice(0, 200)}`);
   return r.json();
 }
 
@@ -142,17 +159,26 @@ async function main() {
   }
   console.log(`${DRY ? "DRY RUN — nothing will be stored" : "APPLY — threads will be stored in sweep_threads"}\n`);
 
-  const threadIds = new Set();
+  const threadIds = new Set<string>();
+  const truncated: string[] = [];
   for (const w of monthWindows(MONTHS)) {
     let pageToken = "", pages = 0, seen = 0;
     do {
       const qs = new URLSearchParams({ q: w.q, maxResults: "500", ...(pageToken ? { pageToken } : {}) });
       const page = await gmail(`messages?${qs}`);
-      for (const m of page.messages ?? []) { seen++; if (m.threadId) threadIds.add(m.threadId); }
+      for (const m of page.messages ?? []) { seen++; if (m.threadId) threadIds.add(String(m.threadId)); }
       pageToken = page.nextPageToken || "";
       pages++;
-    } while (pageToken && pages < 40);
-    console.log(`  ${w.label}: ${seen} message(s)   running distinct threads: ${threadIds.size}`);
+    } while (pageToken && pages < PAGE_CAP);
+    // The cap is a runaway guard, not a limit anyone chose. If it ever bites, the
+    // month is short of mail and the corpus is quietly incomplete — say so, because
+    // a partial sweep that reports success is worse than one that fails.
+    if (pageToken) truncated.push(w.label);
+    console.log(`  ${w.label}: ${seen} message(s)${pageToken ? " (CAPPED — more remain)" : ""}   running distinct threads: ${threadIds.size}`);
+  }
+  if (truncated.length) {
+    console.log(`\nWARNING: hit the ${PAGE_CAP}-page cap in ${truncated.join(", ")} — those months are INCOMPLETE.`);
+    console.log(`         re-run those months with a narrower window, or raise SWEEP_PAGE_CAP.`);
   }
 
   console.log(`\n${threadIds.size} distinct thread(s) across ${MONTHS} month(s)`);
