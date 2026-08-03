@@ -131,8 +131,15 @@ export function composeOrder(inp: ComposeInput): ComposeResult {
 
   const base: DesiredSlotTeam[] = blocks.map((r, i) => {
     const date = r.date; // may be undefined => TBC
+    // The default stays — an email that states no time must still produce a block
+    // rather than nothing — but a defaulted finish is now SAID rather than hidden.
+    // 70 of 101 real threads stated an end time or a duration, and every one that was
+    // dropped became a job booked to 18:00 that nobody could tell apart from a job
+    // genuinely running to 18:00.
     const start = r.start_time || "08:00";
     const end = r.end_time || "18:00";
+    if (!r.start_time) warnings.push(`SlotTeam[${i}] start time not stated — defaulted to 08:00`);
+    if (!r.end_time) warnings.push(`SlotTeam[${i}] finish time not stated — defaulted to 18:00`);
     if (!date) warnings.push(`SlotTeam[${i}] has no confirmed date (TBC)`);
     const profession_id = professionFromHint(r.profession_hint);
     const nameBase = r.task ? r.task : "Crew";

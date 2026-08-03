@@ -155,7 +155,12 @@ FIELD RULES:
 
 REQUESTS (one entry per DISTINCT work block — a different date, crew size, or task is a new block):
 - date: the work date, formatted YYYY-MM-DD. Infer the year from surrounding context (thread dates); if a date is TBC/unconfirmed, still record the best available date. If a start OR end date is given but not the other, use the given date for both.
-- start_time / end_time: "HH:MM" 24h if stated. If a date is given with no start time, you may leave start_time empty (downstream defaults apply); same for end.
+- start_time / end_time: "HH:MM" 24h. READ THESE — do not leave them empty when the email says anything about when the work runs. They are stated in several shapes and all of them count:
+  · a range: "09:00 - 16:00", "9am-4pm", "10.00 til 15.30", "23:01 - 05:59" (an end earlier than the start is an overnight shift — record it as given, the roll to the next day happens downstream)
+  · an explicit finish: "until 15:30", "till 11pm", "finishing around midnight" ("midnight" → "00:00")
+  · a DURATION with a start, which you must convert: "4 crew from 08:00 for 4 hours" → start 08:00, end 12:00; "6x3hr at 17:00" → start 17:00, end 20:00; "2hr call at 19:00" → start 19:00, end 21:00; "0700 onsite, 4 hour shift" → start 07:00, end 11:00
+  · a duration with no start at all: leave both empty rather than inventing a start to hang it on.
+  Only leave a time empty when the email genuinely does not say. Measured over 101 real threads, 70 stated an end time or a duration and it was being dropped, so every one of those jobs was booked to a default 18:00 finish.
 - size: integer headcount for THIS block (e.g. "4 personnel", "team of 4").
 - task: short free-text describing the work for this block (e.g. "door delivery", "site induction", "AV rig").
 - profession_hint: free text describing the skill if stated (e.g. "CSCS", "driver", "carpenter", "AV", "telehandler", "forklift"). Leave empty for general crew/manual labour. Do NOT output a numeric id — the id mapping is done downstream.

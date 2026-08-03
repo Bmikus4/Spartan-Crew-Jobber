@@ -86,6 +86,13 @@ async function main() {
       (r.state.notes || []).some((n) => /deferring to the extractor/i.test(n)),
       "the override is recorded in the notes, not silent"
     );
+    // The classifier's job_summary on a rejected thread is its REASON for rejecting.
+    // Left as the specification, an overruled thread would create an order whose
+    // description says no job was requested.
+    const spec = String(r.state.desired_order?.specification ?? "");
+    ok(!/not-a-job|no crew request|acknowledgement only|^N\/A/i.test(spec),
+      "the order's specification is not the rejection reason", JSON.stringify(spec).slice(0, 60));
+    ok(spec.length > 0, "the order still has a specification");
   }
 
   console.log("\n[2] a date with NO crew size does not overrule it");

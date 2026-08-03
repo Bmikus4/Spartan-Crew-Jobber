@@ -186,6 +186,7 @@ export async function compile(
   // job costs a booking; a spurious one costs someone ten seconds deleting a draft.
   // Costs one extra extraction call on threads the classifier rejected.
   let classification = cls.classification;
+  let overruled = false;
   let probed: ConversationFacts | null = null;
   if (classification === "not-a-job") {
     probed = await reasoner.extractFacts(latest, history);
@@ -194,6 +195,7 @@ export async function compile(
     );
     if (usable) {
       classification = prior?.onsinch_order_id ? "update" : "new-job";
+      overruled = true;
       notes.push("classified as not-a-job, but the thread carries a dated request with a crew size — deferring to the extractor");
     } else {
       const why = (cls.job_summary ?? "").replace(/^\s*N\/A\s*[-–—:]\s*/i, "").trim();
@@ -267,7 +269,13 @@ export async function compile(
         pricelist_category_id,
         orderName: (latest.subject || facts.requests[0]?.task || "Spartan Crew job").slice(0, 80),
         jobName: jobNameFrom(facts),
-        specification: cls.job_summary,
+        // The classifier's job_summary is its REASON, and on an overruled thread that
+        // reason is a rejection ("N/A - acknowledgement only, no crew request"). Writing
+        // that into the order specification would put a denial on the face of the job it
+        // just created, so an overruled thread describes itself by its work instead.
+        specification: overruled
+          ? facts.requests.map((r) => r.task).filter(Boolean).join("; ").slice(0, 200) || "Crew request read from the thread"
+          : cls.job_summary,
         intern_name: facts.customer_reference,
       });
       composed.warnings.forEach((w) => notes.push(w));
