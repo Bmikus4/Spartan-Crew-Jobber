@@ -22,7 +22,8 @@
     "test:sharing": "tsx test/orderSharing.ts",
     "test:dismiss": "tsx test/dismissReason.ts",
     "test:autoreply": "tsx test/autoReply.ts",
-    "test:forwarded": "tsx test/forwardedEnquiry.ts"
+    "test:forwarded": "tsx test/forwardedEnquiry.ts",
+    "test:company": "tsx test/companyMatch.ts"
   },
   "dependencies": {
     "@neondatabase/serverless": "^0.10.4",
