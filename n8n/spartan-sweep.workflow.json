@@ -1,0 +1,235 @@
+{
+  "name": "Spartan Sweep — 12 months to corpus",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "spartan-sweep",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -1100,
+        0
+      ],
+      "id": "sweep-0001",
+      "name": "Sweep Window In",
+      "webhookId": "spartan-sweep-webhook"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const body = $input.first().json.body || $input.first().json || {};\nconst pad = (n) => String(n).padStart(2, '0');\nconst fmt = (d) => d.getUTCFullYear() + '/' + (d.getUTCMonth() + 1) + '/' + d.getUTCDate();\n\nlet after = body.after, before = body.before;\nif (!after || !before) {\n  const back = Number(body.monthsAgo);\n  if (!Number.isFinite(back)) throw new Error('need {after,before} or {monthsAgo}');\n  const now = new Date();\n  after = fmt(new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - back, 1)));\n  before = fmt(new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - back + 1, 1)));\n}\nconst label = String(after).replace(/\\//g, '-');\nreturn [{ json: { q: 'after:' + after + ' before:' + before, label, after, before } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -880,
+        0
+      ],
+      "id": "sweep-0002",
+      "name": "Build Window"
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "getAll",
+        "returnAll": true,
+        "simple": true,
+        "filters": {
+          "q": "={{ $json.q }}"
+        }
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        -660,
+        0
+      ],
+      "id": "sweep-0003",
+      "name": "List Window",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "bgRJXZINuY5e6a3x",
+          "name": "BOOKINGS 5/18/26"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const seen = new Set();\nconst out = [];\nfor (const item of $input.all()) {\n  const id = item.json.threadId || item.json.id;\n  if (!id || seen.has(id)) continue;\n  seen.add(id);\n  out.push({ json: { threadId: id } });\n}\nreturn out;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -440,
+        0
+      ],
+      "id": "sweep-0004",
+      "name": "Distinct Threads"
+    },
+    {
+      "parameters": {
+        "resource": "thread",
+        "operation": "get",
+        "threadId": "={{ $json.threadId }}",
+        "simple": false,
+        "options": {
+          "returnOnlyMessages": false
+        }
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        -220,
+        0
+      ],
+      "id": "sweep-0005",
+      "name": "Get Thread",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "bgRJXZINuY5e6a3x",
+          "name": "BOOKINGS 5/18/26"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const thread = $input.first().json;\nconst messages = Array.isArray(thread.messages) ? thread.messages : [];\n\nfunction decodeB64(d) {\n  if (!d) return '';\n  try { return Buffer.from(String(d).replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf-8'); }\n  catch (e) { return ''; }\n}\nfunction stripHtml(h) {\n  return h.replace(/<style[^>]*>[\\s\\S]*?<\\/style>/gi, '')\n          .replace(/<script[^>]*>[\\s\\S]*?<\\/script>/gi, '')\n          .replace(/<\\/?[^>]+>/gi, ' ')\n          .replace(/&nbsp;/gi, ' ')\n          .replace(/\\s+/g, ' ')\n          .trim();\n}\nfunction bodyOf(part) {\n  if (!part) return '';\n  if (Array.isArray(part.parts)) {\n    const plain = part.parts.find((p) => p.mimeType === 'text/plain');\n    if (plain && plain.body && plain.body.data) return decodeB64(plain.body.data);\n    const html = part.parts.find((p) => p.mimeType === 'text/html');\n    if (html && html.body && html.body.data) return stripHtml(decodeB64(html.body.data));\n    for (const p of part.parts) { const n = bodyOf(p); if (n) return n; }\n  }\n  if (part.body && part.body.data) {\n    const raw = decodeB64(part.body.data);\n    return part.mimeType === 'text/html' ? stripHtml(raw) : raw;\n  }\n  return '';\n}\nfunction headerMap(m) {\n  const out = {};\n  const hs = (m && m.payload && m.payload.headers) || [];\n  for (const h of hs) if (h && h.name) out[String(h.name).toLowerCase()] = h.value;\n  return out;\n}\nfunction addr(v) {\n  const s = String(v || '');\n  const m = s.match(/<([^>]+)>/);\n  return (m ? m[1] : s).trim().toLowerCase();\n}\nconst SPARTAN = /@spartancrew\\.co\\.uk/i;\n\nconst mapped = messages.map((m) => {\n  const h = headerMap(m);\n  const from = addr(h.from);\n  const iso = m.internalDate\n    ? new Date(Number(m.internalDate)).toISOString()\n    : (h.date ? new Date(h.date).toISOString() : new Date(0).toISOString());\n  return {\n    message_id: String(m.id || ''),\n    from,\n    to: String(h.to || '').split(',').map(addr).filter(Boolean),\n    date_iso: iso,\n    subject: String(h.subject || ''),\n    body: bodyOf(m.payload) || String(m.snippet || ''),\n    is_from_spartan: SPARTAN.test(from),\n  };\n});\n\nreturn [{ json: { thread_id: String(thread.id), messages: mapped, sweep: { mailbox: 'bookings@spartancrew.co.uk', swept: true } } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ],
+      "id": "sweep-0006",
+      "name": "Build Sweep Payload"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://spartan-crew-jobber.vercel.app/api/sweep-ingest",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-webhook-secret",
+              "value": "REPLACE_WITH_N8N_WEBHOOK_SECRET"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ thread_id: $json.thread_id, messages: $json.messages, sweep: $json.sweep }) }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        220,
+        0
+      ],
+      "id": "sweep-0007",
+      "name": "POST to Sweep Ingest",
+      "onError": "continueRegularOutput",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000
+    },
+    {
+      "parameters": {
+        "content": "## 12-month sweep -> corpus (TEST DATA)\n\nRead-only on the mailbox: list + get only. No label, no send, no delete,\nso the live workflow's label ledger is untouched.\n\nPosts to /api/sweep-ingest, which stores into `sweep_threads` and nothing\nelse — no model call, no OnSinch call, no Jobs Board projection.\n\n**One run = one window.** Call the webhook with `{\"monthsAgo\": 3}` or\n`{\"after\":\"2025/09/01\",\"before\":\"2025/10/01\"}`.\n\nSet `x-webhook-secret` on the HTTP node to N8N_WEBHOOK_SECRET before use.",
+        "height": 320,
+        "width": 460
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -1100,
+        -420
+      ],
+      "id": "sweep-0008",
+      "name": "What this is"
+    }
+  ],
+  "connections": {
+    "Sweep Window In": {
+      "main": [
+        [
+          {
+            "node": "Build Window",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Window": {
+      "main": [
+        [
+          {
+            "node": "List Window",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "List Window": {
+      "main": [
+        [
+          {
+            "node": "Distinct Threads",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Distinct Threads": {
+      "main": [
+        [
+          {
+            "node": "Get Thread",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Thread": {
+      "main": [
+        [
+          {
+            "node": "Build Sweep Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Sweep Payload": {
+      "main": [
+        [
+          {
+            "node": "POST to Sweep Ingest",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}
