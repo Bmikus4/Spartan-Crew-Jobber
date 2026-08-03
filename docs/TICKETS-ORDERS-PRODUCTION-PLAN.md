@@ -86,7 +86,12 @@ The heart of System A: **pull and sort EVERY email in the Spartan Crew inbox.**
   `status in (error, needs_human)` so the sweep actually heals them.
 - **M5 — durability ordering:** state `put` before best-effort metric emits;
   emits `.catch(()=>{})` and can never abort the state write.
-- **M7 — DB invariants:** unique constraint on `onsinch_order_id`; `idempotency_key`,
+- **M7 — DB invariants:** `onsinch_order_id` is indexed but deliberately NOT unique —
+  several threads may own one order, because a client raises one job and then emails
+  about it more than once (Ben, 2026-08-03: "both threads should own it, its the same
+  job"). It WAS unique, which silently left the second thread with no ticket at all.
+  The invariant that matters — never create a duplicate order for one job — is
+  `resolve.matchExistingOrder`, not a DB constraint. Also `idempotency_key`,
   `locked_until`, `status` columns. The DB is the last line when app logic races.
 - **Auth:** fail-closed — require `N8N_WEBHOOK_SECRET` in production (today it's
   optional → the order-creating endpoint is open if unset). Add tickets-UI access

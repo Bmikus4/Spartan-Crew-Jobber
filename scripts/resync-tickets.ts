@@ -45,6 +45,13 @@ async function main() {
     else {
       if (t.status !== s.status) reasons.push(`ticket status ${t.status} != ${s.status}`);
       if (t.classification !== s.classification) reasons.push(`ticket class ${t.classification} != ${s.classification}`);
+      // The order link matters as much as the status: a ticket that lost its link
+      // shows no OnSinch order on the board even though the thread has one. The
+      // first version of this check omitted it and reported "nothing to do" while
+      // 19fb8a6d756a916b was still missing order 13639.
+      const st = s.onsinch_order_id ?? null;
+      const tt = t.onsinch_order_id == null ? null : Number(t.onsinch_order_id);
+      if (st != null && tt !== st) reasons.push(`ticket order ${tt ?? "none"} != ${st}`);
     }
     if (reasons.length) drift.push({ thread_id: r.thread_id, why: reasons.join("; "), state: s });
   }
