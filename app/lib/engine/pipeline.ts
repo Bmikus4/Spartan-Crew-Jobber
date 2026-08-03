@@ -5,6 +5,7 @@
 // metrics here (not inside pure compile()) preserves compile's re-runnability.
 // ============================================================================
 import { compile, type CompileDeps } from "./compiler";
+import { selectLatest } from "./normalize";
 import type { StateStore } from "./store";
 import type { MetricSink } from "./metrics";
 import type { Actions, ConversationState, HydratedThread, Settings } from "./types";
@@ -41,15 +42,12 @@ export async function handleThread(
   // aggressively (re-POSTing everything for full coverage) at ~zero cost; only
   // genuinely new/changed threads run the model. A new email changes the latest
   // message id, so it always processes.
-  // Key on the newest CLIENT message (matches normalizeThread's "latest"): our
-  // own Spartan replies land in the thread but must not count as new activity,
-  // or every drafted reply would retrigger processing.
-  const pool = thread.messages.filter((m) => !m.is_from_spartan);
-  const latestId =
-    (pool.length ? pool : thread.messages).reduce<(typeof thread.messages)[number] | undefined>(
-      (top, m) => (!top || m.date_iso >= top.date_iso ? m : top),
-      undefined
-    )?.message_id ?? "";
+  // Key on the newest CLIENT message: our own Spartan replies land in the thread
+  // but must not count as new activity, or every drafted reply would retrigger
+  // processing. selectLatest is the SAME choice the compiler acts on — if the
+  // two ever diverged, the key would never match what was stored and the thread
+  // would re-run the model on every sweep.
+  const latestId = selectLatest(thread.messages)?.latest.message_id ?? "";
   if (prior && prior.last_message_id === latestId) {
     return prior;
   }

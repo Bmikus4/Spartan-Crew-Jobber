@@ -111,8 +111,36 @@ export async function compile(
   deps: CompileDeps
 ): Promise<{ state: ConversationState; actions: Actions }> {
   const { reasoner, onsinch, now } = deps;
-  const { latest, history } = normalizeThread(thread);
+  const { latest, history, machine } = normalizeThread(thread);
   const notes: string[] = [];
+
+  // 0. machine mail — nothing here was written by a client, so there is nothing
+  // to reply to and nothing to book. Decided before the model runs: OnSinch's
+  // own order notifications read as perfect enquiries, and acting on one means
+  // patching a real order with invented hours and a guessed rate card. Prior
+  // linkage (company/order ids) is carried through untouched.
+  if (machine) {
+    return {
+      state: {
+        ...(prior ?? {}),
+        thread_id: thread.thread_id,
+        subject: latest.subject,
+        participants: [...new Set([latest.from, ...history.map((m) => m.from)])],
+        last_message_id: latest.message_id,
+        last_processed_epoch: now(),
+        classification: "not-a-job",
+        facts: prior?.facts ?? { requests: [] },
+        desired_order: null,
+        pending_order: prior?.pending_order,
+        priority: "low",
+        needs_human: false,
+        status: "ignored",
+        notes: [`machine mail from ${latest.from} — not a client enquiry`],
+        order_action_log: prior?.order_action_log ?? [],
+      },
+      actions: { none: true },
+    };
+  }
 
   // 1. classify the latest email
   const cls = await reasoner.classify(latest, history, !!prior?.onsinch_order_id);

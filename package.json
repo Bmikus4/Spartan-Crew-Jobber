@@ -14,7 +14,8 @@
     "test:dedupe": "node scripts/test-dedupe.mjs",
     "test:link": "tsx test/orderLink.ts",
     "test:settings": "tsx test/settings.ts",
-    "test:all": "tsx test/run.ts && tsx test/seam.ts && tsx test/orderLink.ts && tsx test/settings.ts && node scripts/test-engine-payload.mjs"
+    "test:machine": "tsx test/machineMail.ts",
+    "test:all": "tsx test/run.ts && tsx test/seam.ts && tsx test/orderLink.ts && tsx test/settings.ts && tsx test/machineMail.ts && node scripts/test-engine-payload.mjs"
   },
   "dependencies": {
     "@neondatabase/serverless": "^0.10.4",

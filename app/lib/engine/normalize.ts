@@ -18,6 +18,62 @@ const SPARTAN_SIG_MARKERS = [
 
 const SPARTAN_DOMAINS = ["@spartancrew.co.uk"];
 
+// Machine mail. Half of everything that reaches the engine is not a person
+// writing to Spartan: OnSinch's own "Client created new order" notifier,
+// HandsHQ signature requests, Xero/Crezco payment notices, out-of-office
+// bounces. The dangerous one is OnSinch's own notifier — it describes a real
+// booking in real detail (company, venue, date, crew count), so a classifier
+// reads it as an enquiry and the engine composes an order for a job OnSinch has
+// ALREADY created, patching the real order with the notification's subject line
+// and a guessed rate card and guessed hours. Sender shape, not content, is what
+// separates these, so it is decided here rather than by the model.
+const MACHINE_LOCALPARTS =
+  /^(no-?reply|do-?not-?reply|donotreply|mailer-daemon|postmaster|bounce[sd]?|notifications?|automated|auto-?confirm|messaging-service)\b/i;
+const MACHINE_DOMAINS = ["sinch.cz", "onsinch.com", "handshq.com", "crezco.com", "xero.com"];
+const AUTO_REPLY_SUBJECT = /^\s*(re:\s*)?(automatic reply|auto[- ]?reply|out of (the )?office|ooo\b|undeliverable|delivery status notification)/i;
+const AUTO_REPLY_BODY = [
+  "out of the office",
+  "currently on annual leave",
+  "away from the office",
+  "will not be checking emails",
+];
+
+export function isMachineSender(from: string): boolean {
+  const f = (from || "").toLowerCase().trim();
+  const [local, domain = ""] = f.split("@");
+  if (!domain) return false;
+  if (MACHINE_DOMAINS.some((d) => domain === d || domain.endsWith("." + d))) return true;
+  return MACHINE_LOCALPARTS.test(local || "");
+}
+
+/** An out-of-office / bounce sent BY a real person's address. */
+export function isAutoReply(subject: string, body: string): boolean {
+  if (AUTO_REPLY_SUBJECT.test(subject || "")) return true;
+  const b = (body || "").toLowerCase().slice(0, 600);
+  return AUTO_REPLY_BODY.some((p) => b.includes(p));
+}
+
+export function isMachineMessage(m: ThreadMessage): boolean {
+  return isMachineSender(m.from) || isAutoReply(m.subject, m.body);
+}
+
+/**
+ * Which message the engine should act on, and whether it is worth acting on.
+ *
+ * Preference order: newest message from a human client, then newest from anyone
+ * outside Spartan, then newest of all. Shared with the pipeline's idempotency
+ * key — if the two disagreed, a thread whose newest message is machine mail
+ * would re-run the model on every sweep forever.
+ */
+export function selectLatest(messages: ThreadMessage[]): { latest: ThreadMessage; machine: boolean } | null {
+  const sorted = [...messages].sort((a, b) => Date.parse(a.date_iso) - Date.parse(b.date_iso));
+  if (!sorted.length) return null;
+  const client = sorted.filter((m) => !m.is_from_spartan);
+  const human = client.filter((m) => !isMachineMessage(m));
+  const latest = human[human.length - 1] ?? client[client.length - 1] ?? sorted[sorted.length - 1];
+  return { latest, machine: isMachineMessage(latest) };
+}
+
 function stripHtml(html: string): string {
   return html
     .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, "")
@@ -61,6 +117,7 @@ export function isFromSpartan(from: string): boolean {
 export function normalizeThread(thread: HydratedThread): {
   latest: ThreadMessage;
   history: ThreadMessage[];
+  machine: boolean;
 } {
   const cleaned = thread.messages
     .map((m) => ({ ...m, body: cleanEmailBody(m.body) }))
@@ -75,12 +132,10 @@ export function normalizeThread(thread: HydratedThread): {
   // Act on the newest CLIENT message. Our own Spartan replies (drafted or sent)
   // show up in the thread as the newest message — they must NEVER be treated as
   // the inbound to classify/reply to (that would reply to ourselves and loop).
-  // They remain in history as context only.
-  const clientMsgs = cleaned.filter((m) => !m.is_from_spartan);
-  const latest = clientMsgs.length
-    ? clientMsgs[clientMsgs.length - 1]
-    : cleaned[cleaned.length - 1];
+  // They remain in history as context only. Machine mail is skipped the same
+  // way, so an out-of-office landing on top of a live enquiry does not hide it.
+  const { latest, machine } = selectLatest(cleaned)!;
   const history = cleaned.filter((m) => m !== latest && m.body !== latest.body);
 
-  return { latest, history };
+  return { latest, history, machine };
 }
