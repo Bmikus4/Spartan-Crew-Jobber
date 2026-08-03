@@ -14,7 +14,14 @@ import type { Actions, ConversationState, HydratedThread, Settings } from "./typ
 export interface Executor {
   createReplyDraft(a: NonNullable<Actions["createReplyDraft"]>): Promise<string>; // -> draft id
   createOrder(order: NonNullable<Actions["createOrder"]>): Promise<{ id: number; number: string }>;
-  patchOrder(p: NonNullable<Actions["patchOrder"]>): Promise<void>;
+  /**
+   * Apply what can safely be applied to an EXISTING order, and report which
+   * fields actually went. Returning the applied list is what stops the engine
+   * claiming success for a write that carried nothing — OnSinch's PATCH /orders
+   * is top-level only, so the substance of most updates (crew size, times) can
+   * never be applied this way, and there is no GET /slotTeams to even diff it.
+   */
+  patchOrder(p: NonNullable<Actions["patchOrder"]>): Promise<string[] | void>;
 }
 
 export interface PipelineDeps extends CompileDeps {
@@ -114,12 +121,34 @@ async function executeOrder(
       next.order_action_log = [...next.order_action_log, { ts: now(), kind: "create", order_id: created.id, ok: true }];
       await emit("order_created", { order_id: created.id, size: intended.desired.slot_teams.reduce((n, s) => n + s.size, 0) });
     } else {
-      await executor.patchOrder({ order_id: intended.order_id!, desired: intended.desired });
+      // An update to an EXISTING order is never fully applied by the API alone:
+      // PATCH /orders takes top-level fields only, slot teams created nested in
+      // the original POST have no exposed ids, and there is no GET /slotTeams to
+      // diff against. So report exactly what went, and hand the rest to a human
+      // instead of marking the job done.
+      const applied = (await executor.patchOrder({ order_id: intended.order_id!, desired: intended.desired })) || [];
+      const teams = intended.desired.slot_teams ?? [];
+      const crew = teams.reduce((n, s) => n + (s.size || 0), 0);
+      const manual =
+        `crew and times must be applied by hand on OnSinch order #${intended.order_id}` +
+        (teams.length ? ` — this thread asks for ${crew} crew across ${teams.length} block(s)` : "");
+
       next.last_ordered_hash = hashOrder(intended.desired);
-      next.status = "ordered";
       next.pending_order = undefined;
-      next.order_action_log = [...next.order_action_log, { ts: now(), kind: "patch", order_id: intended.order_id, ok: true }];
-      await emit("order_updated", { order_id: intended.order_id });
+      next.needs_human = true; // always: the crew change cannot be verified as landed
+      if (applied.length) {
+        next.status = "ordered";
+        next.notes = [...next.notes, `updated ${applied.join(", ")} on order #${intended.order_id}; ${manual}`];
+      } else {
+        // Nothing reached OnSinch. Saying "ordered" here is the bug this replaces.
+        next.status = "needs-info";
+        next.notes = [...next.notes, `update NOT applied — nothing could be sent to OnSinch; ${manual}`];
+      }
+      next.order_action_log = [
+        ...next.order_action_log,
+        { ts: now(), kind: "patch", order_id: intended.order_id, ok: applied.length > 0, ...(applied.length ? {} : { error: "patch carried no fields" }) },
+      ];
+      await emit("order_updated", { order_id: intended.order_id, applied: applied.length });
     }
   } catch (err: any) {
     next.status = "error";

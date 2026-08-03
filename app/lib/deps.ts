@@ -61,7 +61,7 @@ function onsinch(): OnsinchClient {
   );
 }
 
-function executor(client: OnsinchClient): Executor {
+export function executor(client: OnsinchClient): Executor {
   return {
     async createReplyDraft(a) {
       const hook = process.env.GMAIL_DRAFT_WEBHOOK;
@@ -78,8 +78,33 @@ function executor(client: OnsinchClient): Executor {
     async createOrder(order) {
       return createOrderWithPlace(client, order);
     },
+    /**
+     * Update an EXISTING order with the fields it is safe to overwrite, and
+     * return which ones went so the pipeline can be honest about the rest.
+     *
+     * This used to send `[{ id }]` and nothing else — a guaranteed no-op that
+     * the pipeline then recorded as a completed update.
+     *
+     * Deliberately NOT sent:
+     *  - `name`: Spartan's orders are named "<Company> @ <Venue>" throughout the
+     *    tenant. Overwriting that with an email subject ("RE: UKLE26-2841.01 //
+     *    ★LOCAL CREW★ ...") destroys the convention every human and the
+     *    order->thread linkage both rely on.
+     *  - the rate card: on an existing order it is the real, invoiced one. Ours
+     *    is inferred from history and has been wrong; it must never overwrite.
+     *  - slot teams: nested teams from the original POST expose no ids, and there
+     *    is no GET /slotTeams, so a crew change cannot be applied or verified.
+     */
     async patchOrder(p) {
-      await client.patchOrder([{ id: p.order_id }]);
+      const body: Record<string, unknown> = { id: p.order_id };
+      const applied: string[] = [];
+      const spec = p.desired.specification?.trim();
+      if (spec) { body.specification = spec; applied.push("specification"); }
+      const po = p.desired.intern_name?.trim();
+      if (po) { body.intern_name = po; applied.push("intern_name"); }
+      if (!applied.length) return []; // nothing safe to send — do not call at all
+      await client.patchOrder([body as { id: number }]);
+      return applied;
     },
   };
 }
