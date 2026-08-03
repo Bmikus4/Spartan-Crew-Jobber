@@ -24,6 +24,7 @@
 //   npx tsx scripts/reprocess-from-n8n.ts            # dry run
 //   npx tsx scripts/reprocess-from-n8n.ts --apply
 //   npx tsx scripts/reprocess-from-n8n.ts --apply --limit 20
+//   npx tsx scripts/reprocess-from-n8n.ts --thread 19fc73c87a9f16ba --apply
 // ============================================================================
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -48,6 +49,9 @@ const h = { "X-N8N-API-KEY": KEY };
 const argv = process.argv.slice(2);
 const APPLY = argv.includes("--apply");
 const LIMIT = Number(argv[argv.indexOf("--limit") + 1]) || 30;
+// Re-drive ONE thread. Re-driving thirty to correct one costs thirty model calls
+// and risks changing tickets nobody asked about, on a live client system.
+const ONLY = argv.includes("--thread") ? String(argv[argv.indexOf("--thread") + 1] || "").trim() : "";
 
 const src = readFileSync(join(ROOT_DIR, "n8n", "nodes", "build-engine-payload.js"), "utf8");
 
@@ -147,6 +151,11 @@ async function main() {
     if (!prev || (payload.messages?.length ?? 0) > (prev.payload.messages?.length ?? 0)) {
       byThread.set(payload.thread_id, { id, payload });
     }
+  }
+  if (ONLY) {
+    for (const k of [...byThread.keys()]) if (k !== ONLY) byThread.delete(k);
+    console.log(`--thread ${ONLY}: ${byThread.size} match(es)`);
+    if (!byThread.size) { console.log("that thread is not in the recent executions — raise --limit."); return; }
   }
   console.log(`${byThread.size} distinct thread(s) rebuilt from ${ids.length} execution(s)\n`);
 
