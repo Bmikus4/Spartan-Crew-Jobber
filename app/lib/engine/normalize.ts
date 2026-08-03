@@ -46,10 +46,33 @@ export function isMachineSender(from: string): boolean {
   return MACHINE_LOCALPARTS.test(local || "");
 }
 
-/** An out-of-office / bounce sent BY a real person's address. */
+/**
+ * Something a person asked for. Deliberately broad: it only ever RESCUES a
+ * message from the body heuristic below, so a false positive here costs one model
+ * call and a false negative costs a booking.
+ */
+const ASKS_FOR_SOMETHING =
+  /\b\d+\s*(crew|staff|technicians?|carpenters?|drivers?|locals?)\b|\bneed\s+(a\s+)?(crew|staff)\b|\bcan you (confirm|quote|crew|cover|provide)\b|\b(booking|quote) (request|enquiry|for)\b/i;
+
+/**
+ * An out-of-office / bounce sent BY a real person's address.
+ *
+ * The SUBJECT rule is anchored and safe — a message titled "Out of Office …" is
+ * one. The BODY rule is an unanchored substring search, and that is the risky
+ * half: a client can write "our manager is out of the office this week, so deal
+ * with me: we need 6 crew on the 12th" and machine mail is decided BEFORE the
+ * model runs, so the whole enquiry would be dropped with nothing able to rescue
+ * it. So the body heuristic stands down when the message actually asks for
+ * something; the subject rule and the sender-shape rules are unaffected.
+ *
+ * This had not yet happened — 0 occurrences in 252 live messages — but the trade
+ * is lopsided: the guard costs a model call, the failure costs a booking.
+ */
 export function isAutoReply(subject: string, body: string): boolean {
   if (AUTO_REPLY_SUBJECT.test(subject || "")) return true;
-  const b = (body || "").toLowerCase().slice(0, 600);
+  const raw = body || "";
+  if (ASKS_FOR_SOMETHING.test(raw)) return false;
+  const b = raw.toLowerCase().slice(0, 600);
   return AUTO_REPLY_BODY.some((p) => b.includes(p));
 }
 

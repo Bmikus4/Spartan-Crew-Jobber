@@ -20,7 +20,8 @@
     "test:patch": "tsx test/patchApply.ts",
     "test:queue": "tsx test/confirmQueue.ts",
     "test:sharing": "tsx test/orderSharing.ts",
-    "test:dismiss": "tsx test/dismissReason.ts"
+    "test:dismiss": "tsx test/dismissReason.ts",
+    "test:autoreply": "tsx test/autoReply.ts"
   },
   "dependencies": {
     "@neondatabase/serverless": "^0.10.4",
