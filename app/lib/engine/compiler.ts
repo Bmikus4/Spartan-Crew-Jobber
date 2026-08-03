@@ -173,21 +173,44 @@ export async function compile(
   // everything else, so the board's Dismissed lane had nothing to show — 18 of
   // the first 25 dismissals recorded no reason at all. The "N/A -" prefix is a
   // machine artefact of the prompt's output format, not something to show a human.
-  if (cls.classification === "not-a-job") {
-    const why = (cls.job_summary ?? "").replace(/^\s*N\/A\s*[-–—:]\s*/i, "").trim();
-    if (why) notes.push(why);
+  // THE CLASSIFIER DEFERS TO THE EXTRACTOR.
+  // The classifier judges only the latest email — the live prompt says so outright
+  // ("Never classify Thread History messages. Only classify Current Email") — so a
+  // thread whose newest message is Spartan's own reply, a bounce or an emoji reaction
+  // is called junk while the client's actual request sits one message earlier. Over a
+  // 150-thread random sample of the year, 91 threads were labelled not-a-job, 28 of
+  // them carried a crew number and a date, and 21 of the 41 with a dated block became
+  // real OnSinch orders anyway. Fifteen were read by hand: 13 were genuine jobs.
+  //
+  // So where the extractor finds a dated request WITH a crew size, it wins. A missed
+  // job costs a booking; a spurious one costs someone ten seconds deleting a draft.
+  // Costs one extra extraction call on threads the classifier rejected.
+  let classification = cls.classification;
+  let probed: ConversationFacts | null = null;
+  if (classification === "not-a-job") {
+    probed = await reasoner.extractFacts(latest, history);
+    const usable = (probed.requests ?? []).some(
+      (r) => /^\d{4}-\d{2}-\d{2}$/.test(String(r.date ?? "")) && Number(r.size) > 0
+    );
+    if (usable) {
+      classification = prior?.onsinch_order_id ? "update" : "new-job";
+      notes.push("classified as not-a-job, but the thread carries a dated request with a crew size — deferring to the extractor");
+    } else {
+      const why = (cls.job_summary ?? "").replace(/^\s*N\/A\s*[-–—:]\s*/i, "").trim();
+      if (why) notes.push(why);
+    }
   }
 
   // 2. compose the reply — Tool 1, gated by the replies_enabled setting.
   // Off by default: classification + order work still run, but no reply is drafted.
   const repliesEnabled = deps.repliesEnabled !== false;
   const reply = repliesEnabled
-    ? await reasoner.composeReply(latest, history, cls.classification)
+    ? await reasoner.composeReply(latest, history, classification)
     : null;
   const replyHash = reply ? hash(reply.html) : undefined;
 
   // 3. only a real job triggers the order path
-  const isJob = cls.classification === "new-job" || cls.classification === "update";
+  const isJob = classification === "new-job" || classification === "update";
   let facts: ConversationFacts = prior?.facts ?? { requests: [] };
   let desired = null as ConversationState["desired_order"];
   let needs_human = false;
@@ -198,7 +221,9 @@ export async function compile(
   let provisionPlace: DesiredOrder["provision_place"];
 
   if (isJob) {
-    facts = await reasoner.extractFacts(latest, history);
+    // The probe above already extracted this thread's facts when the classifier was
+    // overruled; extracting again would be a second identical model call.
+    facts = probed ?? (await reasoner.extractFacts(latest, history));
 
     // company first (contact resolution needs it)
     const co = await resolveCompany(facts, prior, onsinch);
@@ -290,7 +315,7 @@ export async function compile(
     ? "needs-info"
     : desired
     ? "ordered"
-    : cls.classification === "not-a-job"
+    : classification === "not-a-job"
     ? "ignored"
     : "drafted";
 
@@ -300,7 +325,7 @@ export async function compile(
     participants: [...new Set([latest.from, ...history.map((m) => m.from)])],
     last_message_id: latest.message_id,
     last_processed_epoch: now(),
-    classification: cls.classification,
+    classification,
     facts,
     company_id,
     user_id,
