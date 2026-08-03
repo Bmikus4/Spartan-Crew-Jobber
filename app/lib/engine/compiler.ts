@@ -38,12 +38,34 @@ function hash(s: string): string {
   return createHash("sha256").update(s).digest("hex").slice(0, 16);
 }
 
-function jobNameFrom(facts: ConversationFacts): string {
+/** OnSinch caps the Job name; keep it under this. */
+const JOB_NAME_MAX = 100;
+
+/**
+ * "<size> at <venue> on <date>", capped at JOB_NAME_MAX.
+ *
+ * The cap is applied to the VENUE, not to the finished string. Truncating the
+ * whole thing lopped the date off the end whenever the address was long: live
+ * order 13632's name read "...London E16 2HB on 2026", cut four characters into
+ * the year, because that address is 87 chars and the full name is 106.
+ *
+ * The date is the load-bearing token here - it is what a human scans a crew job
+ * name for, and what the order->thread linkage matches on. The venue tail is the
+ * only part that can afford to be lost.
+ */
+export function jobNameFrom(facts: ConversationFacts): string {
   const r = facts.requests[0];
   const size = r?.size ?? "?";
-  const loc = facts.location_text ?? "TBC";
   const date = r?.date ?? "TBC";
-  return `${size} at ${loc} on ${date}`.slice(0, 100);
+  const loc = facts.location_text ?? "TBC";
+
+  const head = `${size} at `;
+  const tail = ` on ${date}`;
+  const room = JOB_NAME_MAX - head.length - tail.length;
+  // Nothing sane left for a venue: keep the ends, which still identify the job.
+  if (room <= 0) return `${head}${tail}`.slice(0, JOB_NAME_MAX);
+  const venue = loc.length > room ? loc.slice(0, room).trimEnd() : loc;
+  return `${head}${venue}${tail}`;
 }
 
 /** Earliest requested date (YYYY-MM-DD) — the order-dedup key. */
