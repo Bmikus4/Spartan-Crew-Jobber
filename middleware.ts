@@ -15,7 +15,8 @@ import { safeEqual } from "./app/lib/safeEqual";
 //  - /api/auth*         the login flow itself (Google OAuth + session probe)
 //  - /api/n8n-inbound    authenticated by its own N8N_WEBHOOK_SECRET
 //  - /api/dedupe         same secret; the n8n dedupe claim (replaces Airtable)
-const SKIP = ["/api/auth", "/api/n8n-inbound", "/api/dedupe"];
+//  - /api/sweep-ingest   same secret; the 12-month historical sweep (test corpus)
+const SKIP = ["/api/auth", "/api/n8n-inbound", "/api/dedupe", "/api/sweep-ingest"];
 
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
