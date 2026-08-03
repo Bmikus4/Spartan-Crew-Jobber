@@ -23,7 +23,8 @@
     "test:dismiss": "tsx test/dismissReason.ts",
     "test:autoreply": "tsx test/autoReply.ts",
     "test:forwarded": "tsx test/forwardedEnquiry.ts",
-    "test:company": "tsx test/companyMatch.ts"
+    "test:company": "tsx test/companyMatch.ts",
+    "test:chief": "tsx test/crewChief.ts"
   },
   "dependencies": {
     "@neondatabase/serverless": "^0.10.4",
