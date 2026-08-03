@@ -217,25 +217,58 @@ function Detail({ threadId, onBack, onChanged }: { threadId: string; onBack: () 
                   it is written to OnSinch the button is replaced by its number,
                   so a second click can never create a duplicate job. */}
               {d.status === "proposed" ? (
-                <div style={{ borderTop: `1px solid ${BORDER}`, marginTop: 4, paddingTop: 12, display: "flex", flexDirection: "column", gap: 8 }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
-                    <button onClick={confirm} disabled={confirming}
-                      style={{ padding: "10px 18px", borderRadius: 9, border: "1px solid var(--accent-border)", background: confirming ? "var(--surface-2)" : "var(--accent-subtle)", color: confirming ? MUT : A, fontWeight: 700, fontSize: 13, cursor: confirming ? "default" : "pointer", transition: "all 200ms" }}>
-                      {confirming ? "Sending to OnSinch…" : "Confirm draft order"}
-                    </button>
-                    <span style={{ fontSize: 12, color: MUT }}>
-                      {d.needs_human ? "Flagged for a human — check the notes above first." : "Creates the draft order in OnSinch."}
-                    </span>
-                  </div>
-                  {confirmErr && (
-                    <div style={{ background: "var(--danger-subtle)", border: "1px solid rgba(239,68,68,0.3)", borderRadius: 8, padding: "9px 12px", fontSize: 12, color: SUB }}>
-                      Couldn&apos;t confirm: {confirmErr}
+                // A staged item is one of two very different actions, and the
+                // button used to read the same for both. With an order already
+                // linked, confirming EDITS a real OnSinch order; without one it
+                // creates a new draft. The edit path also cannot apply crew or
+                // times (nested slot teams have no ids and there is no
+                // GET /slotTeams), so it must say so before it is clicked.
+                (() => {
+                  const isEdit = d.order_id != null;
+                  return (
+                    <div style={{ borderTop: `1px solid ${BORDER}`, marginTop: 4, paddingTop: 12, display: "flex", flexDirection: "column", gap: 8 }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+                        <button onClick={confirm} disabled={confirming}
+                          style={{ padding: "10px 18px", borderRadius: 9, border: "1px solid var(--accent-border)", background: confirming ? "var(--surface-2)" : "var(--accent-subtle)", color: confirming ? MUT : A, fontWeight: 700, fontSize: 13, cursor: confirming ? "default" : "pointer", transition: "all 200ms" }}>
+                          {confirming
+                            ? "Sending to OnSinch…"
+                            : isEdit
+                            ? `Update order #${d.order_number ?? d.order_id}`
+                            : "Create draft order"}
+                        </button>
+                        <span style={{ fontSize: 12, color: MUT }}>
+                          {isEdit
+                            ? "Updates the job summary on the existing order."
+                            : "Creates a new provisional draft order in OnSinch."}
+                        </span>
+                      </div>
+                      {isEdit && (
+                        <div style={{ background: "rgba(245,158,11,0.1)", border: "1px solid rgba(245,158,11,0.3)", borderRadius: 8, padding: "9px 12px", fontSize: 12, color: SUB }}>
+                          Crew numbers and times are <b>not</b> applied automatically on an existing
+                          order — OnSinch gives no way to edit its shift blocks. Enter those by hand on
+                          order <b>#{d.order_number ?? d.order_id}</b>; the slot teams listed above are what
+                          this thread asks for.
+                        </div>
+                      )}
+                      {d.needs_human && (
+                        <div style={{ fontSize: 12, color: MUT }}>Flagged for a human — read the notes above first.</div>
+                      )}
+                      {confirmErr && (
+                        <div style={{ background: "var(--danger-subtle)", border: "1px solid rgba(239,68,68,0.3)", borderRadius: 8, padding: "9px 12px", fontSize: 12, color: SUB }}>
+                          Couldn&apos;t confirm: {confirmErr}
+                        </div>
+                      )}
                     </div>
-                  )}
-                </div>
+                  );
+                })()
               ) : d.status === "ordered" ? (
+                // "Written to OnSinch" was shown for an edit too, which is the
+                // over-claim this pass exists to remove: on an existing order only
+                // the summary went, and the notes say what is still by hand.
                 <div style={{ borderTop: `1px solid ${BORDER}`, marginTop: 4, paddingTop: 12, fontSize: 12.5, color: MUT }}>
-                  Written to OnSinch{d.order_number ? <> as <b style={{ color: SUB }}>#{d.order_number}</b></> : null}.
+                  {d.needs_human
+                    ? <>Partly applied to OnSinch order <b style={{ color: SUB }}>#{d.order_number ?? d.order_id}</b> — the notes above say what is left to do by hand.</>
+                    : <>Written to OnSinch{d.order_number ? <> as <b style={{ color: SUB }}>#{d.order_number}</b></> : null}.</>}
                 </div>
               ) : null}
             </div>
