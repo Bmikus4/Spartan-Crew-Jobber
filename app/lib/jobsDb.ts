@@ -39,6 +39,15 @@ export interface Job {
   dates: string[];
   location: string | null;
   updated_at: string;
+  /**
+   * False when the engine judged this not a client enquiry. These used to be
+   * filtered out of the board entirely, so there was no way to see what had been
+   * dismissed — which reads as data loss when 45 threads show up as 25 rows.
+   * They now come through and the board lanes them into "Dismissed".
+   */
+  is_client_inquiry?: boolean;
+  /** Why it was dismissed, when it was. The useful half of a dismissal. */
+  gate_reason?: string | null;
 }
 
 function toJob(s: ConversationState, updated_at: string): Job {

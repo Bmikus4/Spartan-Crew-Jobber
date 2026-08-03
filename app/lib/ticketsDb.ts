@@ -236,11 +236,17 @@ export async function listTickets(limit = 300): Promise<Job[]> {
     const rows = (await sql`
       SELECT thread_id, subject, contact, company_id, onsinch_order_id, onsinch_order_number,
              classification, status, priority, needs_human, ai_replied, crew_size, dates, location,
+             is_client_inquiry, gate_reason,
              extract(epoch from updated_at) * 1000 AS ts
       FROM tickets
-      WHERE is_client_inquiry = true OR onsinch_order_id IS NOT NULL
       ORDER BY updated_at DESC
       LIMIT ${limit}`) as any[];
+      // No WHERE. This used to be
+      //   WHERE is_client_inquiry = true OR onsinch_order_id IS NOT NULL
+      // which dropped every dismissed thread that had no order link, so the board
+      // could not show what the engine had rejected and 45 stored threads appeared
+      // as 25 rows. The board lanes them into "Dismissed" instead of hiding them:
+      // a rejection you cannot see is a rejection you cannot audit.
     return rows.map((r) => ({
       thread_id: r.thread_id,
       subject: r.subject || "(no subject)",
@@ -257,6 +263,8 @@ export async function listTickets(limit = 300): Promise<Job[]> {
       dates: Array.isArray(r.dates) ? r.dates : [],
       location: r.location ?? null,
       updated_at: new Date(Number(r.ts)).toISOString(),
+      is_client_inquiry: !!r.is_client_inquiry,
+      gate_reason: r.gate_reason ?? null,
     }));
   } catch (err) {
     console.error("[tickets] list failed", err);

@@ -167,6 +167,17 @@ export async function compile(
   // 1. classify the latest email
   const cls = await reasoner.classify(latest, history, !!prior?.onsinch_order_id);
 
+  // Keep the classifier's own explanation for a rejection. job_summary is the
+  // reason ("N/A - Acknowledgment/confirmation only, no changes requested"); it
+  // was used as the order specification for real jobs and discarded for
+  // everything else, so the board's Dismissed lane had nothing to show — 18 of
+  // the first 25 dismissals recorded no reason at all. The "N/A -" prefix is a
+  // machine artefact of the prompt's output format, not something to show a human.
+  if (cls.classification === "not-a-job") {
+    const why = (cls.job_summary ?? "").replace(/^\s*N\/A\s*[-–—:]\s*/i, "").trim();
+    if (why) notes.push(why);
+  }
+
   // 2. compose the reply — Tool 1, gated by the replies_enabled setting.
   // Off by default: classification + order work still run, but no reply is drafted.
   const repliesEnabled = deps.repliesEnabled !== false;

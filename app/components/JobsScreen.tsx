@@ -19,6 +19,7 @@ interface Job {
   company_id: number | null; order_id: number | null; order_number: string | null;
   classification: string; status: string; priority: string;
   needs_human: boolean; ai_replied: boolean; crew_size: number | null;
+  is_client_inquiry?: boolean; gate_reason?: string | null;
   dates: string[]; location: string | null; updated_at: string;
 }
 
@@ -30,7 +31,17 @@ const A = "var(--accent)";
 const OK = "var(--ok)";
 const BORDER = "var(--border)";
 
-type Filter = "all" | "proposed" | "needs_human" | "failed" | "booked";
+type Filter = "all" | "proposed" | "needs_human" | "failed" | "booked" | "dismissed";
+
+/**
+ * A thread the engine judged not to be a client enquiry. These were filtered out
+ * of the board entirely, so 45 stored threads showed as 25 rows and there was no
+ * way to audit what had been rejected. They are laned here rather than hidden —
+ * every other lane, "All" included, excludes them so the working set stays the
+ * work.
+ */
+const isDismissed = (j: Job) =>
+  j.classification === "not-a-job" || j.status === "ignored" || j.is_client_inquiry === false;
 
 function badge(j: Job): { label: string; color: string; bg: string; bd: string } {
   // A real failure is called out separately from a routine needs-a-human. Both
@@ -44,6 +55,9 @@ function badge(j: Job): { label: string; color: string; bg: string; bd: string }
     return { label: "Awaiting confirm", color: A, bg: "var(--accent-subtle)", bd: "var(--accent-border)" };
   if (j.status === "ordered")
     return { label: "Booked", color: OK, bg: "rgba(52,211,153,0.12)", bd: "rgba(52,211,153,0.32)" };
+  // Dismissed reads as its own quiet state rather than "Replied", which it never was.
+  if (isDismissed(j))
+    return { label: "Dismissed", color: FAINT, bg: "transparent", bd: BORDER };
   return { label: "Replied", color: SUB, bg: "var(--surface-2)", bd: BORDER };
 }
 
@@ -57,11 +71,16 @@ function CheckMark() {
 
 function JobRow({ j, onSelect }: { j: Job; onSelect: (id: string) => void }) {
   const b = badge(j);
-  const meta = [
-    j.dates.length ? j.dates.join(", ") : null,
-    j.crew_size ? `${j.crew_size} crew` : null,
-    j.location,
-  ].filter(Boolean).join("  ·  ");
+  const dismissed = isDismissed(j);
+  // For a dismissed thread the reason IS the information — "not a job" on its own
+  // tells you nothing about whether the engine was right to drop it.
+  const meta = dismissed
+    ? (j.gate_reason || "no reason recorded")
+    : [
+        j.dates.length ? j.dates.join(", ") : null,
+        j.crew_size ? `${j.crew_size} crew` : null,
+        j.location,
+      ].filter(Boolean).join("  ·  ");
   return (
     <div onClick={() => onSelect(j.thread_id)} style={{ background: "var(--surface)", border: `1px solid ${BORDER}`, borderRadius: "var(--radius)", padding: "14px 16px", display: "flex", alignItems: "center", gap: 14, cursor: "pointer" }}>
       <div style={{ flex: 1, minWidth: 0 }}>
@@ -313,22 +332,28 @@ export default function JobsScreen({ isActive }: Props) {
 
   const counts = useMemo(() => {
     const j = jobs ?? [];
+    // Every count is over the LIVE set, so a tab's number always equals the
+    // number of rows that tab shows. Dismissed is the one deliberate exception.
+    const live = j.filter((x) => !isDismissed(x));
     return {
-      all: j.length,
-      proposed: j.filter((x) => x.status === "proposed" && !x.needs_human).length,
-      needs_human: j.filter((x) => (x.needs_human || x.status === "needs-info") && x.status !== "error").length,
-      failed: j.filter((x) => x.status === "error").length,
-      booked: j.filter((x) => x.order_id != null).length,
+      all: live.length,
+      proposed: live.filter((x) => x.status === "proposed" && !x.needs_human).length,
+      needs_human: live.filter((x) => (x.needs_human || x.status === "needs-info") && x.status !== "error").length,
+      failed: live.filter((x) => x.status === "error").length,
+      booked: live.filter((x) => x.order_id != null).length,
+      dismissed: j.filter(isDismissed).length,
     };
   }, [jobs]);
 
   const shown = useMemo(() => {
     const j = jobs ?? [];
-    if (filter === "all") return j;
-    if (filter === "proposed") return j.filter((x) => x.status === "proposed" && !x.needs_human);
-    if (filter === "needs_human") return j.filter((x) => (x.needs_human || x.status === "needs-info") && x.status !== "error");
-    if (filter === "failed") return j.filter((x) => x.status === "error");
-    return j.filter((x) => x.order_id != null);
+    const live = j.filter((x) => !isDismissed(x));
+    if (filter === "dismissed") return j.filter(isDismissed);
+    if (filter === "all") return live;
+    if (filter === "proposed") return live.filter((x) => x.status === "proposed" && !x.needs_human);
+    if (filter === "needs_human") return live.filter((x) => (x.needs_human || x.status === "needs-info") && x.status !== "error");
+    if (filter === "failed") return live.filter((x) => x.status === "error");
+    return live.filter((x) => x.order_id != null);
   }, [jobs, filter]);
 
   const wrap: React.CSSProperties = { height: "100%", overflowY: "auto", padding: "24px clamp(16px, 4vw, 40px) 56px" };
@@ -345,6 +370,7 @@ export default function JobsScreen({ isActive }: Props) {
     // be noise, but a non-empty one must be impossible to miss.
     ...(counts.failed ? [{ id: "failed" as Filter, label: `Failed ${counts.failed}` }] : []),
     { id: "booked", label: `Booked ${counts.booked}` },
+    { id: "dismissed", label: `Dismissed ${counts.dismissed}` },
   ];
 
   return (
