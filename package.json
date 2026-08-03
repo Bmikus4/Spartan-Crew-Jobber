@@ -17,7 +17,8 @@
     "test:machine": "tsx test/machineMail.ts",
     "test:all": "tsx test/run.ts && tsx test/seam.ts && tsx test/orderLink.ts && tsx test/settings.ts && tsx test/machineMail.ts && node scripts/test-engine-payload.mjs",
     "test:jobname": "tsx test/jobName.ts",
-    "test:patch": "tsx test/patchApply.ts"
+    "test:patch": "tsx test/patchApply.ts",
+    "test:queue": "tsx test/confirmQueue.ts"
   },
   "dependencies": {
     "@neondatabase/serverless": "^0.10.4",

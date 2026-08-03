@@ -18,12 +18,16 @@ import { loadEnv, requireEnv } from "./_env.mjs";
 import { neon } from "@neondatabase/serverless";
 import { coerceThread } from "../app/lib/engine/intake";
 import { isMachineMessage, selectLatest } from "../app/lib/engine/normalize";
+import { NeonStateStore } from "../app/lib/stateDb";
+import { upsertTicketFromState } from "../app/lib/ticketsDb";
+import type { ConversationState } from "../app/lib/engine/types";
 
 loadEnv();
 const sql = neon(requireEnv("DATABASE_URL"));
 const APPLY = process.argv.includes("--apply");
 
 async function main() {
+  const store = new NeonStateStore();
 const raw = await sql`SELECT thread_id, payload FROM inbound_raw ORDER BY id`;
 const byThread = new Map<string, any[]>();
 for (const r of raw as any[]) {
@@ -59,8 +63,17 @@ for (const row of states) {
     pending_order: undefined,
     notes: [`machine mail from ${latest.from} — not a client enquiry`],
   };
-  await sql`UPDATE conversation_state SET state=${JSON.stringify(next)}::jsonb, updated_at=now() WHERE thread_id=${row.thread_id}`;
-  console.log(`   now: status=ignored, staged order withdrawn`);
+  // Write through the real writers, NOT a direct UPDATE of `state`.
+  //
+  // The first version of this script did `UPDATE conversation_state SET state=...`
+  // and nothing else. That left two things stale behind it: the denormalised
+  // `status` column (so the confirm queue still offered these threads) and the
+  // `tickets` row the Jobs Board actually reads (so the board still showed them
+  // as new-job / proposed, with a Confirm button). The repair was invisible
+  // everywhere it mattered.
+  await store.put(next as ConversationState);
+  await upsertTicketFromState(next as ConversationState);
+  console.log(`   now: status=ignored, staged order withdrawn, ticket re-projected`);
 }
 
 console.log(`\n${hits} machine-only thread(s)${APPLY ? " updated" : " — run with --apply to update"}`);

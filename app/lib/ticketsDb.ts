@@ -110,9 +110,11 @@ function project(s: ConversationState) {
 export async function upsertTicketFromState(s: ConversationState): Promise<void> {
   const sql = db();
   if (!sql) return;
+  // Declared outside the try: the order-link-conflict fallback in the catch needs
+  // the same projection to write the ticket without its order link.
+  const p = project(s);
   try {
     await ensure(sql);
-    const p = project(s);
     await sql`
       INSERT INTO tickets (
         thread_id, subject, contact, company_id, user_id, place_id,
@@ -151,7 +153,42 @@ export async function upsertTicketFromState(s: ConversationState): Promise<void>
         updated_at           = now()`;
     await sql`INSERT INTO ticket_events (thread_id, kind, meta) VALUES (${s.thread_id}, ${"processed"}, ${JSON.stringify({ classification: s.classification, status: s.status, order_id: p.onsinch_order_id })})`;
   } catch (err) {
-    console.error("[tickets] upsert failed", s.thread_id, err);
+    // tickets_order_uniq: another thread already claims this OnSinch order.
+    // Order dedup matches on company + happening date, so two separate threads
+    // from one client about one day legitimately land on the same order. The
+    // index is right to refuse the second link — but swallowing the whole insert
+    // left that thread with NO ticket, i.e. silently invisible on the board.
+    // Live example: 19fb8a6d756a916b lost to 19fb421845dd47b4 over order 13639.
+    // Write the ticket WITHOUT the order link and say why, so a human can see it.
+    const dup = /tickets_order_uniq|duplicate key/i.test(String((err as Error)?.message ?? err));
+    if (!dup) { console.error("[tickets] upsert failed", s.thread_id, err); return; }
+    try {
+      const p2 = { ...p, onsinch_order_id: null, onsinch_order_number: null };
+      const note = `OnSinch order #${p.onsinch_order_id} is already linked to another thread — link left off this ticket; a human should decide which thread owns it`;
+      await sql`
+        INSERT INTO tickets (
+          thread_id, subject, contact, company_id, user_id, place_id,
+          onsinch_order_id, onsinch_order_number, classification, status,
+          is_client_inquiry, gate_reason, priority, crew_size, dates, location,
+          reply_state, reply_draft_id, ai_replied, needs_human, extracted, notes, updated_at)
+        VALUES (
+          ${s.thread_id}, ${p2.subject}, ${p2.contact}, ${p2.company_id}, ${p2.user_id}, ${p2.place_id},
+          ${null}, ${null}, ${p2.classification}, ${p2.status},
+          ${p2.is_client_inquiry}, ${p2.gate_reason}, ${p2.priority}, ${p2.crew_size},
+          ${JSON.stringify(p2.dates)}, ${p2.location},
+          ${p2.reply_state}, ${p2.reply_draft_id}, ${p2.ai_replied}, ${true},
+          ${JSON.stringify(p2.extracted)}, ${JSON.stringify([...(p2.notes ?? []), note])}, now())
+        ON CONFLICT (thread_id) DO UPDATE SET
+          classification = EXCLUDED.classification,
+          status         = EXCLUDED.status,
+          needs_human    = true,
+          notes          = EXCLUDED.notes,
+          updated_at     = now()`;
+      await sql`INSERT INTO ticket_events (thread_id, kind, meta) VALUES (${s.thread_id}, ${"order-link-conflict"}, ${JSON.stringify({ order_id: p.onsinch_order_id })})`;
+      console.warn(`[tickets] ${s.thread_id}: order #${p.onsinch_order_id} already linked elsewhere — ticket written without the link`);
+    } catch (err2) {
+      console.error("[tickets] upsert failed even without the order link", s.thread_id, err2);
+    }
   }
 }
 

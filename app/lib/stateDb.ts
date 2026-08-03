@@ -65,11 +65,33 @@ export class NeonStateStore implements StateStore {
     return rows.map((r) => r.state);
   }
   /** The confirm queue: conversations with a staged order awaiting approval. */
+  /**
+   * The confirm queue: conversations with a staged order awaiting approval.
+   *
+   * Derived from the state JSONB, not the `status` column, and it requires an
+   * actual pending_order.
+   *
+   * The column is a denormalised copy for indexing, and it CAN drift: any
+   * maintenance script that repairs `state` with a direct UPDATE leaves it
+   * behind. clear-machine-threads.ts did exactly that, so the OnSinch-notifier
+   * threads it had correctly retired still read status='proposed' in their column
+   * and were still being offered for confirmation — the precise thing that script
+   * existed to prevent.
+   *
+   * Requiring pending_order is the second guard: "proposed" with nothing staged
+   * cannot be confirmed (confirmOrder no-ops), so offering it is only ever a
+   * button that lies.
+   */
   async listProposed(): Promise<ConversationState[]> {
     const sql = db();
     if (!sql) return [];
     await ensure(sql);
-    const rows = (await sql`SELECT state FROM conversation_state WHERE status = 'proposed' ORDER BY updated_at DESC LIMIT 100`) as { state: ConversationState }[];
+    const rows = (await sql`
+      SELECT state FROM conversation_state
+      WHERE state->>'status' = 'proposed'
+        AND state->'pending_order' IS NOT NULL
+        AND state->'pending_order' <> 'null'::jsonb
+      ORDER BY updated_at DESC LIMIT 100`) as { state: ConversationState }[];
     return rows.map((r) => r.state);
   }
 }
