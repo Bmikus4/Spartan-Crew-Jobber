@@ -96,12 +96,22 @@ async function sweepWindow(w) {
   for (let i = 0; i < 60; i++) {
     const e = await executionById(id);
     if (e && e.status && e.status !== "running" && e.status !== "new") {
-      const d = await (await fetch(`${BASE}/executions/${id}?includeData=true`, { headers: H })).json();
-      const rd = d.data?.resultData || {};
-      const items = (name) => (rd.runData?.[name]?.[0]?.data?.main?.[0] || []).length;
+      // n8n flips status to success before it has flushed the run data, so reading the
+      // detail immediately can return an execution with no nodes at all. Reported as
+      // zero, that looked exactly like six consecutive weeks of empty mailbox — the
+      // mail was in fact swept. Retry once, then say "unknown" rather than "0".
+      let rd = {};
+      for (let t = 0; t < 2; t++) {
+        const d = await (await fetch(`${BASE}/executions/${id}?includeData=true`, { headers: H })).json();
+        rd = d.data?.resultData || {};
+        if (Object.keys(rd.runData || {}).length) break;
+        await sleep(4000);
+      }
+      const known = Object.keys(rd.runData || {}).length > 0;
+      const items = (name) => (known ? (rd.runData?.[name]?.[0]?.data?.main?.[0] || []).length : null);
       return {
         ok: e.status === "success",
-        status: e.status,
+        status: e.status + (known ? "" : " (run data not retained)"),
         execution: id,
         listed: items("List Window"),
         threads: items("Get Thread"),
@@ -148,7 +158,7 @@ for (const w of plan) {
   }
 
   done++;
-  console.log(`  [${String(done).padStart(2)}/${plan.length}] ${label}  ${r.status}  listed=${r.listed ?? "-"} threads=${r.threads ?? "-"}`);
+  console.log(`  [${String(done).padStart(2)}/${plan.length}] ${label}  ${r.status}  listed=${r.listed ?? "?"} threads=${r.threads ?? "?"}`);
 }
 
 const end = await corpus();
