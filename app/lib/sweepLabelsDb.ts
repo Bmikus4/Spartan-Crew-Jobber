@@ -84,12 +84,18 @@ export interface SweptThread {
  * by default so an interrupted pass resumes instead of paying for the same threads
  * twice — a full pass is thousands of model calls and real money.
  */
-export async function unlabelledThreads(model: string, limit: number, includeLabelled = false): Promise<SweptThread[]> {
+export async function unlabelledThreads(model: string, limit: number, random = false): Promise<SweptThread[]> {
   const sql = await ensure();
-  const rows = includeLabelled
+  // Random, when asked: newest-first is a recency sample, and a rate measured on it
+  // describes last month rather than the year. md5 of the id is a stable shuffle, so
+  // a resumed pass keeps drawing from the same order instead of re-sampling.
+  const rows = random
     ? await sql`
-        SELECT thread_id, subject, message_count, first_date, last_date, payload
-        FROM sweep_threads ORDER BY last_date DESC NULLS LAST LIMIT ${limit}`
+        SELECT t.thread_id, t.subject, t.message_count, t.first_date, t.last_date, t.payload
+        FROM sweep_threads t
+        LEFT JOIN sweep_labels l ON l.thread_id = t.thread_id AND l.model = ${model}
+        WHERE l.thread_id IS NULL
+        ORDER BY md5(t.thread_id) LIMIT ${limit}`
     : await sql`
         SELECT t.thread_id, t.subject, t.message_count, t.first_date, t.last_date, t.payload
         FROM sweep_threads t

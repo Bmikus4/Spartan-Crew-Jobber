@@ -183,7 +183,7 @@ async function isCancellation(latest: ThreadMessage, history: ThreadMessage[]): 
   return !!parsed?.cancels;
 }
 
-const threads = await unlabelledThreads(MODEL, LIMIT);
+const threads = await unlabelledThreads(MODEL, LIMIT, flag("--random"));
 console.log(`\nmodel: ${MODEL}`);
 console.log(`${threads.length} unlabelled thread(s) to sort${DRY ? "  (DRY RUN — nothing stored)" : ""}\n`);
 if (!threads.length) {
