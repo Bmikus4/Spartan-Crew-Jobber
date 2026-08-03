@@ -33,15 +33,22 @@ const argv = process.argv.slice(2);
 const MONTHS_ARG = argv.includes("--months") ? Number(argv[argv.indexOf("--months") + 1]) : NaN;
 const MONTHS = Number.isFinite(MONTHS_ARG) ? MONTHS_ARG : 12;
 const PLAN_ONLY = argv.includes("--plan");
-const WEEK = 7 * 86_400_000;
+// Window length. A week suits most of the year, but the most recent weeks carry enough
+// mail to kill the n8n worker, and a crashed worker takes the webhook down with it —
+// which is what turned nine windows into "webhook 503" and left holes.
+const WINDOW_DAYS = argv.includes("--window-days") ? Number(argv[argv.indexOf("--window-days") + 1]) || 7 : 7;
+const WEEK = WINDOW_DAYS * 86_400_000;
+// An explicit span, for re-sweeping exactly the windows that failed.
+const AFTER = argv.includes("--after") ? argv[argv.indexOf("--after") + 1] : null;
+const BEFORE = argv.includes("--before") ? argv[argv.indexOf("--before") + 1] : null;
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 /** Weekly windows covering the last N months, oldest first, ending at today. */
 function windows(months) {
   const now = new Date();
-  const end = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1);
-  const start = Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - months, 1);
+  const end = BEFORE ? Date.parse(`${BEFORE}T00:00:00Z`) : Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1);
+  const start = AFTER ? Date.parse(`${AFTER}T00:00:00Z`) : Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - months, 1);
   const out = [];
   for (let t = start; t < end; t += WEEK) {
     out.push({ after: new Date(t).toISOString(), before: new Date(Math.min(t + WEEK, end)).toISOString() });
@@ -77,12 +84,21 @@ async function executionById(id) {
 /** Fire one window and wait for its execution to finish. */
 async function sweepWindow(w) {
   const firedAt = Date.now();
-  const res = await fetch(HOOK, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ after: w.after, before: w.before }),
-  });
-  if (!res.ok) return { ok: false, status: `webhook ${res.status}` };
+  // A 503 means the n8n worker is restarting — usually because the PREVIOUS window
+  // crashed it. Retrying after it comes back is the difference between a hole in the
+  // corpus and a window that simply took longer.
+  let res = null;
+  for (let attempt = 0; attempt < 4; attempt++) {
+    res = await fetch(HOOK, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ after: w.after, before: w.before }),
+    });
+    if (res.ok) break;
+    if (res.status !== 503 && res.status !== 502) break;
+    await sleep(60_000);
+  }
+  if (!res || !res.ok) return { ok: false, status: `webhook ${res ? res.status : "no response"}` };
 
   // The webhook answers on receipt, so the outcome lives in the execution it started.
   let id = null;
