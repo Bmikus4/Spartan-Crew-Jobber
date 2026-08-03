@@ -27,8 +27,13 @@ const DRY = argv.includes("--dry") || !argv.includes("--apply");
 const MONTHS = Number(argv[argv.indexOf("--months") + 1]) || 12;
 const MAILBOX = "bookings@spartancrew.co.uk";
 
-const CLIENT_ID = requireEnv("GOOGLE_CLIENT_ID");
-const CLIENT_SECRET = requireEnv("GOOGLE_CLIENT_SECRET");
+// The sweep and the app's Google sign-in cannot always share one OAuth client:
+// a Desktop client only accepts loopback redirects, so it cannot serve the web
+// sign-in, and a Web client cannot serve the loopback login here. GMAIL_OAUTH_*
+// is the sweep's own client when they differ; GOOGLE_* is used when one client
+// covers both.
+const CLIENT_ID = (process.env.GMAIL_OAUTH_CLIENT_ID || "").trim() || requireEnv("GOOGLE_CLIENT_ID");
+const CLIENT_SECRET = (process.env.GMAIL_OAUTH_CLIENT_SECRET || "").trim() || requireEnv("GOOGLE_CLIENT_SECRET");
 const REFRESH = requireEnv("GMAIL_REFRESH_TOKEN");
 
 // ---------------------------------------------------------------- auth

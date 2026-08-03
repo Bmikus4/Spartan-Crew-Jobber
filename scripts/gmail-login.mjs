@@ -23,6 +23,9 @@
 //   3. Put the two values in .env.local:
 //        GOOGLE_CLIENT_ID=...
 //        GOOGLE_CLIENT_SECRET=...
+//      Use GMAIL_OAUTH_CLIENT_ID / GMAIL_OAUTH_CLIENT_SECRET instead if GOOGLE_*
+//      already holds the Web client the app's Google sign-in uses — a Web client
+//      cannot take the loopback redirect below.
 //   4. If the consent screen is in "Testing", add the bookings address as a test
 //      user, or the login will be refused.
 //
@@ -35,13 +38,17 @@ import { randomBytes } from "node:crypto";
 import { loadEnv, ROOT_DIR } from "./_env.mjs";
 
 loadEnv();
-const CLIENT_ID = (process.env.GOOGLE_CLIENT_ID || "").trim();
-const CLIENT_SECRET = (process.env.GOOGLE_CLIENT_SECRET || "").trim();
+// GMAIL_OAUTH_* is this script's own client when the app sign-in uses a different
+// one (a Web client cannot take the loopback redirect below); GOOGLE_* otherwise.
+const CLIENT_ID = (process.env.GMAIL_OAUTH_CLIENT_ID || process.env.GOOGLE_CLIENT_ID || "").trim();
+const CLIENT_SECRET = (process.env.GMAIL_OAUTH_CLIENT_SECRET || process.env.GOOGLE_CLIENT_SECRET || "").trim();
 const SCOPE = "https://www.googleapis.com/auth/gmail.readonly";
 const PORT = Number(process.env.GMAIL_LOGIN_PORT || 53682);
 
 if (!CLIENT_ID || !CLIENT_SECRET) {
-  console.error("\nGOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET are not in .env.local.");
+  console.error("\nNo OAuth client in .env.local: set GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET,");
+  console.error("or GMAIL_OAUTH_CLIENT_ID / GMAIL_OAUTH_CLIENT_SECRET if the app sign-in uses");
+  console.error("a different (Web) client.");
   console.error("Create a Desktop-app OAuth client for the project that owns the bookings");
   console.error("mailbox, enable the Gmail API, and put both values in .env.local. The header");
   console.error("of this file has the exact steps.\n");
@@ -125,4 +132,4 @@ if (who.emailAddress && !/bookings@spartancrew\.co\.uk/i.test(who.emailAddress))
   console.log(`\nNOTE: that is not bookings@spartancrew.co.uk. Re-run and pick the right account`);
   console.log(`      before sweeping, or the corpus will be the wrong mailbox.`);
 }
-console.log(`\nNext: node scripts/sweep-gmail.mjs --months 12 --dry\n`);
+console.log(`\nNext: npx tsx scripts/sweep-gmail.ts --months 12 --dry\n`);
