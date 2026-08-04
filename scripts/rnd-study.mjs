@@ -47,6 +47,7 @@ const say = (...a) => { if (!AS_JSON) console.log(...a); };
 
 // ---------------------------------------------------------------- 2. who writes in
 {
+  const MACHINE = /(no-?reply|noreply|do-?not-?reply|mailer-daemon|postmaster|notification|@sinch\.cz)/i;
   const senders = await sql`
     SELECT lower(m.v->>'from') AS addr, COUNT(*)::int n
     FROM sweep_threads t, jsonb_array_elements(t.payload->'messages') AS m(v)
@@ -74,11 +75,14 @@ const say = (...a) => { if (!AS_JSON) console.log(...a); };
            COUNT(*) FILTER (WHERE threads > 1)::int repeat_senders,
            COUNT(*)::int senders
     FROM s`;
-  out.senders = { top: senders, distinct: reach.distinct_senders, domains, repeat };
+  const human = senders.filter((r) => !MACHINE.test(String(r.addr)));
+  const machine = senders.filter((r) => MACHINE.test(String(r.addr)));
+  out.senders = { top: human, machine, distinct: reach.distinct_senders, domains, repeat };
   say(`\n=== 2. WHO WRITES IN ===`);
   say(`distinct client senders ${reach.distinct_senders}`);
   say(`repeat senders ${repeat.repeat_senders}/${repeat.senders} — they account for ${repeat.repeat_threads}/${repeat.total_threads} thread-appearances`);
-  for (const s of senders.slice(0, 8)) say(`  ${String(s.addr).padEnd(42)} ${s.n}`);
+  for (const s of human.slice(0, 8)) say(`  ${String(s.addr).padEnd(42)} ${s.n}`);
+  say(`machine senders excluded from the top list: ${machine.map((m) => m.addr).join(", ") || "none"}`);
 }
 
 // ---------------------------------------------------------------- 3. what the engine made of it
@@ -241,6 +245,22 @@ const say = (...a) => { if (!AS_JSON) console.log(...a); };
   say(`${n.threads} threads x 3 model calls = ${n.threads * 3} calls`);
 }
 
+// ---------------------------------------------------------------- 9b. the disagreement, counted
+{
+  const [d] = await sql`
+    SELECT COUNT(*)::int labelled,
+      COUNT(*) FILTER (WHERE classification = 'not-a-job')::int junk,
+      COUNT(*) FILTER (WHERE classification = 'not-a-job'
+        AND EXISTS (SELECT 1 FROM jsonb_array_elements(blocks) b WHERE (b->>'date_confirmed')::bool))::int junk_dated,
+      COUNT(*) FILTER (WHERE classification = 'not-a-job' AND crew_peak > 0
+        AND EXISTS (SELECT 1 FROM jsonb_array_elements(blocks) b WHERE (b->>'date_confirmed')::bool))::int junk_dated_crew
+    FROM sweep_labels WHERE model = ${MODEL} AND error IS NULL`;
+  out.disagreement = d;
+  say(`
+=== 9b. CLASSIFIER vs EXTRACTOR (repaired corpus) ===`);
+  say(`labelled ${d.labelled} | not-a-job ${d.junk} | of those with a dated block ${d.junk_dated} | and a crew size ${d.junk_dated_crew}`);
+}
+
 // ---------------------------------------------------------------- 10. who does the talking
 {
   const [split] = await sql`
@@ -299,8 +319,8 @@ const say = (...a) => { if (!AS_JSON) console.log(...a); };
       FROM sweep_labels l WHERE l.model = ${MODEL} AND l.error IS NULL
     )
     SELECT
-      COUNT(*) FILTER (WHERE (lb.location_text IS NULL OR lb.location_text = ''))::int missing_venue,
-      COUNT(*) FILTER (WHERE (lb.location_text IS NULL OR lb.location_text = '')
+      COUNT(DISTINCT lb.thread_id) FILTER (WHERE (lb.location_text IS NULL OR lb.location_text = ''))::int missing_venue,
+      COUNT(DISTINCT lb.thread_id) FILTER (WHERE (lb.location_text IS NULL OR lb.location_text = '')
                          AND EXISTS (SELECT 1 FROM sender s2 WHERE s2.addr = s.addr AND s2.thread_id <> s.thread_id))::int missing_venue_with_history
     FROM labelled lb JOIN sender s ON s.thread_id = lb.thread_id`;
   out.history = hist;

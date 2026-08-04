@@ -112,7 +112,7 @@ async function main() {
            l.first_start, l.last_end, l.crew_peak, l.blocks,
            t.first_date, t.last_date
     FROM sweep_labels l JOIN sweep_threads t ON t.thread_id = l.thread_id
-    WHERE l.error IS NULL
+    WHERE l.error IS NULL AND l.model = 'anthropic/claude-opus-4.8' 
     ORDER BY t.last_date DESC`) as unknown as Label[];
 
   const set = LIMIT ? labels.slice(0, LIMIT) : labels;
