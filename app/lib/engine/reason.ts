@@ -31,6 +31,17 @@ export interface ReplyResult {
 }
 
 export interface Reasoner {
+  /**
+   * Classification AND facts from one model call. Optional: a mock, or a provider that
+   * cannot hold both schemas at once, still satisfies the interface — the compiler
+   * falls back to classify + extractFacts when this is absent.
+   */
+  classifyAndExtract?(
+    latest: ThreadMessage,
+    history: ThreadMessage[],
+    priorOrderExists: boolean
+  ): Promise<ClassifyResult & { facts: ConversationFacts }>;
+
   classify(
     latest: ThreadMessage,
     history: ThreadMessage[],
@@ -110,12 +121,53 @@ export function createOpenRouterReasoner(cfg: OpenRouterConfig): Reasoner {
     return typeof args === "string" ? JSON.parse(args) : args;
   }
 
-  const threadText = (latest: ThreadMessage, history: ThreadMessage[]) =>
-    `LATEST (${latest.date_iso}) from ${latest.from}\nSubject: ${latest.subject}\n${latest.body}\n\n` +
-    `HISTORY (oldest first):\n` +
-    history.map((m) => `[${m.date_iso}] ${m.from}: ${m.body}`).join("\n");
+  // History is capped. Uncapped, a thread averaging 31k characters was re-sent on every
+  // call — 402M characters to label the corpus once, at $0.247 a thread. The newest
+  // message is never truncated, and history is kept NEWEST-FIRST up to the cap, because
+  // what a client last said outranks what they said in March.
+  const HISTORY_CAP = Number(process.env.REASONER_HISTORY_CAP || 12_000);
+  const threadText = (latest: ThreadMessage, history: ThreadMessage[]) => {
+    const head =
+      `LATEST (${latest.date_iso}) from ${latest.from}\nSubject: ${latest.subject}\n${latest.body}\n\n`;
+    const lines: string[] = [];
+    let used = 0, dropped = 0;
+    for (let i = history.length - 1; i >= 0; i--) {
+      const m = history[i];
+      const line = `[${m.date_iso}] ${m.from}: ${m.body}`;
+      if (used + line.length > HISTORY_CAP) { dropped = i + 1; break; }
+      lines.unshift(line);
+      used += line.length;
+    }
+    const note = dropped ? `[${dropped} earlier message(s) omitted for length]\n` : "";
+    return `${head}HISTORY (oldest first):\n${note}${lines.join("\n")}`;
+  };
 
   return {
+    // One call where there were two, sometimes three. classify and extractFacts were
+    // handed identical thread text and differed only in the question asked, so the
+    // thread crossed the wire twice to interrogate the same evidence; the deferral rule
+    // then needed the facts even on a rejection, making it three.
+    async classifyAndExtract(latest, history, priorOrderExists) {
+      const r = await call(
+        `${CLASSIFY_SYSTEM}
+
+---
+
+In the SAME response, also extract the thread's facts under \"facts\", following these rules:
+
+${EXTRACT_SYSTEM}`,
+        `priorOrderExists=${priorOrderExists}
+
+` + threadText(latest, history),
+        COMBINED_SCHEMA
+      );
+      return {
+        classification: r.classification,
+        priority: r.priority,
+        job_summary: r.job_summary,
+        facts: (r.facts ?? { requests: [] }) as ConversationFacts,
+      };
+    },
     async classify(latest, history, priorOrderExists) {
       return call(
         CLASSIFY_SYSTEM,
@@ -136,7 +188,6 @@ export function createOpenRouterReasoner(cfg: OpenRouterConfig): Reasoner {
   };
 }
 
-// --- schemas (structured output) -------------------------------------------
 const CLASSIFY_SCHEMA = {
   type: "object",
   required: ["classification", "priority", "job_summary"],
@@ -170,6 +221,22 @@ const FACTS_SCHEMA = {
         },
       },
     },
+  },
+};
+
+/**
+ * Both answers in one tool call: the classification fields, plus the very same facts
+ * schema the standalone extractor uses, nested under "facts". Declared after
+ * FACTS_SCHEMA so it can reference it directly rather than through a deferred getter.
+ */
+const COMBINED_SCHEMA = {
+  type: "object",
+  required: ["classification", "priority", "job_summary", "facts"],
+  properties: {
+    classification: { type: "string", enum: ["new-job", "update", "confirmation-only", "not-a-job"] },
+    priority: { type: "string", enum: ["low", "medium", "high"] },
+    job_summary: { type: "string" },
+    facts: FACTS_SCHEMA,
   },
 };
 const REPLY_SCHEMA = {

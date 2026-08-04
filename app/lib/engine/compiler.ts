@@ -164,8 +164,14 @@ export async function compile(
     };
   }
 
-  // 1. classify the latest email
-  const cls = await reasoner.classify(latest, history, !!prior?.onsinch_order_id);
+  // 1. classify, and take the facts from the same call when the reasoner can do both.
+  // The two questions were asked of identical thread text, so asking them separately
+  // sent the whole thread twice — 402M characters to label the corpus once. A reasoner
+  // without the combined method (a mock, a different provider) still works.
+  const combined = reasoner.classifyAndExtract
+    ? await reasoner.classifyAndExtract(latest, history, !!prior?.onsinch_order_id)
+    : null;
+  const cls = combined ?? (await reasoner.classify(latest, history, !!prior?.onsinch_order_id));
 
   // Keep the classifier's own explanation for a rejection. job_summary is the
   // reason ("N/A - Acknowledgment/confirmation only, no changes requested"); it
@@ -187,9 +193,11 @@ export async function compile(
   // Costs one extra extraction call on threads the classifier rejected.
   let classification = cls.classification;
   let overruled = false;
-  let probed: ConversationFacts | null = null;
+  // The combined call already returned facts, so overruling a rejection now costs
+  // nothing; only the two-call fallback has to pay for a second request.
+  let probed: ConversationFacts | null = combined ? combined.facts : null;
   if (classification === "not-a-job") {
-    probed = await reasoner.extractFacts(latest, history);
+    probed = probed ?? (await reasoner.extractFacts(latest, history));
     const usable = (probed.requests ?? []).some(
       (r) => /^\d{4}-\d{2}-\d{2}$/.test(String(r.date ?? "")) && Number(r.size) > 0
     );
