@@ -345,6 +345,40 @@ async function runConfirm(opts: {
   ok(out?.order_replace === undefined, "with the in-flight marker cleared");
 }
 
+{
+  // A replace that answers with neither a replacement nor a reason must not fall through
+  // to the patch branch — that would PATCH an order that may already be gone and then
+  // record it as done. Unreachable through replaceProvisionalOrder; asserted anyway,
+  // because the consequence of being wrong is a lost booking marked complete.
+  const store = new InMemoryStore();
+  await store.put(staged() as never);
+  const patched: number[] = [];
+  const { client } = fakeOnsinch();
+  const deps = {
+    reasoner: mockReasoner, onsinch: client, store, metrics: new InMemoryMetrics(),
+    settings: { ...DEFAULT_SETTINGS }, now: () => 2, hashOrder,
+    executor: {
+      async createReplyDraft() { return "d1"; },
+      async createOrder(o: DesiredOrder) { return client.createOrder(buildOrderBody(o)); },
+      async patchOrder(p: { order_id: number }) { patched.push(p.order_id); return ["specification"]; },
+      // The malformed answer, with the delete reported as having happened.
+      async replaceOrder(p: Parameters<NonNullable<Executor["replaceOrder"]>>[0]) {
+        await p.onIntent({ id: 13632 });
+        await p.onDeleted();
+        return { deleted: true };
+      },
+    } as unknown as Executor,
+  } as unknown as PipelineDeps;
+
+  const out = await confirmOrder("t-rep", deps);
+  ok(!patched.length, "a resultless replace does NOT fall through to a patch", JSON.stringify(patched));
+  ok(out?.status === "error", "it is an error", String(out?.status));
+  ok(out?.needs_human === true, "and a human is called");
+  ok(out?.order_replace?.deleted === true, "the marker survives, because a delete was reported");
+  ok(out?.order_action_log.at(-1)?.ok === false, "and nothing is logged as ok",
+     JSON.stringify(out?.order_action_log.at(-1)));
+}
+
 console.log(fails ? `\n${fails} FAILED` : "\nall passed");
 if (fails) process.exit(1);
 }

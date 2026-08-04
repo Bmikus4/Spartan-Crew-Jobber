@@ -202,7 +202,24 @@ async function tryReplace(
       return true;
     }
 
-    return false;
+    // Neither created nor refused. replaceProvisionalOrder always sets one of them, so
+    // this is unreachable — but the cost of being wrong about that is falling through to
+    // the patch branch and PATCHing an order that may already be deleted, then recording
+    // it as done. An answer this path does not understand is treated as a failure, and if
+    // a delete did happen the marker is left in place for the retry.
+    const deletedBlind = next.order_replace?.deleted === true;
+    next.status = "error";
+    next.needs_human = true;
+    next.notes = [
+      ...next.notes,
+      `replace of order #${order_id} returned neither a replacement nor a reason` +
+        (deletedBlind ? " AFTER the old order was deleted — see order_replace for the snapshot" : " — nothing was deleted"),
+    ];
+    next.order_action_log = [...next.order_action_log, { ts: now(), kind: "replace", order_id, ok: false, error: "no result" }];
+    if (!deletedBlind) next.order_replace = undefined;
+    await store.put(next);
+    await emit("order_error", { error: "replace returned no result", order_id, deleted: deletedBlind });
+    return true;
   } catch (err: any) {
     // The dangerous branch: if the delete went through and the create did not, a real
     // order is gone. order_replace is deliberately LEFT in place — it holds the snapshot
