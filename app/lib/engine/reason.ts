@@ -85,6 +85,12 @@ export function createOpenRouterReasoner(cfg: OpenRouterConfig): Reasoner {
       body: JSON.stringify({
         model,
         temperature: 0,
+        // Every reply here is a small tool-call object — a classification, a facts
+        // record, an email. Without a ceiling OpenRouter reserves the model's entire
+        // context (65,536 tokens) and refuses the request unless the account can cover
+        // all of it, which is how a topped-up account still returned
+        // "requires more credits" on every call.
+        max_tokens: Number(process.env.REASONER_MAX_TOKENS || 4096),
         messages: [
           { role: "system", content: system },
           { role: "user", content: user },

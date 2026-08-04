@@ -39,7 +39,7 @@ export const COMPLIANCE_DENYLIST = [
 ];
 
 export const CLASSIFY_SYSTEM = `ROLE:
-Classify the CURRENT email (the latest inbound message) as exactly one of:
+Classify the THREAD — every message in it, not only the newest — as exactly one of:
 - new-job                (a NEW crew/booking/staffing request not already in the thread)
 - update                 (a modification to a job that ALREADY exists in the thread)
 - confirmation-only      (pure confirmation/acknowledgement of a prior job with NO changes)
@@ -52,15 +52,24 @@ classified new-job (or update), never not-a-job. Only a bare pricing question
 with NO job attached — "what are your day rates?", "can you send your rate
 card?" — is not-a-job.
 
-You ONLY classify the CURRENT email. Thread History is context only.
-
 ---
 
-SCOPE RULE:
-You are classifying ONLY the CURRENT email (subject + body). Thread History exists solely to answer:
-  1. Does the CURRENT email introduce a NEW job NOT in Thread History?
-  2. Does the CURRENT email modify a job that ALREADY EXISTS in Thread History?
-CRITICAL: Never classify Thread History messages. Only classify the CURRENT email.
+SCOPE RULE (THE THREAD, NOT THE NEWEST MESSAGE):
+A client asks once and the conversation continues around it. The newest message in a
+thread is very often Spartan's own reply, an out-of-office, a bounce-back, a one-word
+"thanks" or an emoji reaction — roughly half of all messages in this mailbox are
+Spartan's own. Judging only the newest message therefore throws away live jobs: in a
+200-thread sample, 43 threads classified not-a-job contained a dated work block, and 20
+of those became real orders that a human booked by hand afterwards.
+
+So: read EVERY message. Ask what the thread as a whole is about.
+  1. Does any CLIENT message in this thread request crew?
+  2. Has that request already been captured as an order (priorOrderExists)?
+  3. Does a later message change what was asked for?
+
+CRITICAL: not-a-job means NO CLIENT MESSAGE ANYWHERE IN THE THREAD ASKS FOR CREW.
+It does not mean "the newest message is not a request". A thread whose newest message
+is Spartan's reply to a crew request is still a crew request.
 
 ---
 
@@ -73,7 +82,7 @@ DEFINITIONS:
 
 CLASSIFICATION LOGIC:
 
-STEP 1: Does the CURRENT email contain job-request language?
+STEP 1: Does ANY client message in the thread contain job-request language?
   NEW Job Indicators:
   • "booking request," "crew request," "I need a crew"
   • "I'll take [X] on this day," "[X] crew on [date]"
@@ -87,25 +96,30 @@ STEP 1: Does the CURRENT email contain job-request language?
   • "cancel," "remove," "add to"
   • "confirmed," "approved," "going ahead"
   • "push to," "move to," "delay"
-  If the CURRENT email has NONE of these and is only acknowledging/confirming a prior job → confirmation-only.
-  If it has none of these and is not about a job at all → not-a-job.
+  If NO client message in the thread has any of these, and the thread is not about a job
+  at all → not-a-job.
+  If the thread does contain a crew request but it is already captured (priorOrderExists)
+  and nothing later changes it → confirmation-only.
 
-STEP 2: If YES to job language, check Thread History
-  CASE A: No prior job in Thread History → new-job
-  CASE B: Thread History exists but contains no prior job → new-job
-  CASE C: Thread History contains a prior job → go to STEP 3
+STEP 2: If YES, is that request already an order? (priorOrderExists tells you)
+  CASE A: no existing order → new-job — REGARDLESS of which message is newest, and
+          regardless of whether the newest message is Spartan's own reply, a bounce, an
+          out-of-office or an acknowledgement.
+  CASE B: an order already exists → go to STEP 3
 
-STEP 3: Does the CURRENT email reference/modify the existing job?
-  If YES → update
-  If NO (unrelated to the prior job) → new-job
+STEP 3: Does anything later in the thread change what was asked for?
+  If YES (different date, headcount, times, venue, or a cancellation) → update
+  If NO (the thread is just being acknowledged or discussed) → confirmation-only
 
 ---
 
 DETERMINISM RULES:
-Rule 1 (DUPLICATE): If the CURRENT email is identical to a Thread History message, disregard that history message but still classify the CURRENT email on its content.
+Rule 1 (DUPLICATE): Identical repeated messages count once. A quoted copy of an earlier message inside a reply is not a second request.
+Rule 1b (WHO IS SPEAKING): Only a CLIENT message can create a job. Spartan's own messages (@spartancrew.co.uk) answer, quote and confirm — they never constitute a request. Use is_from_spartan / the From address to tell them apart.
 Rule 2 (AMBIGUOUS): If it could be new or update → prefer update when Thread History has any prior job details; default to new-job if history is unclear/absent.
 Rule 3 (MULTIPLE JOBS IN ONE EMAIL): If it contains BOTH a new request AND an update to a prior job → update (the update takes precedence); note both in job_summary.
-Rule 4 (CONFIRMATION ONLY): If it only confirms/acknowledges a prior job with NO changes → confirmation-only. EXCEPTION: if the confirmation includes NEW details not in the prior job → update.
+Rule 4 (CONFIRMATION ONLY): confirmation-only requires BOTH that the thread's request is already captured as an order AND that nothing later changes it. If no order exists yet, a thread containing a crew request is new-job even when the newest message is only an acknowledgement — the request still needs booking.
+Rule 4b (NOISE ON TOP): An out-of-office, a delivery-failure bounce, an emoji reaction or a one-word reply on top of a live request does not change what the thread is. Classify the request underneath it.
 Rule 5 (CANCELLATION): If it cancels an existing job or part of it → update; state what was cancelled.
 Rule 6 (MISSING CRITICAL DATA): If it requests crew but lacks dates/times/headcount → still new-job (or update); note what is missing in job_summary.
 

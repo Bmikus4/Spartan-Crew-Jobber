@@ -157,6 +157,7 @@ async function isCancellation(latest: ThreadMessage, history: ThreadMessage[]): 
     body: JSON.stringify({
       model: MODEL,
       temperature: 0,
+      max_tokens: 512,   // one boolean and a reason; see reason.ts on the 65k reservation
       messages: [
         { role: "system", content: CANCELLATION_SYSTEM },
         { role: "user", content: `LATEST (${latest.date_iso}) from ${latest.from}\nSubject: ${latest.subject}\n${latest.body}\n\nHISTORY:\n${history.map((m) => `[${m.date_iso}] ${m.from}: ${m.body}`).join("\n").slice(0, 12_000)}` },
