@@ -16,9 +16,11 @@ import type {
   HydratedThread,
 } from "./types";
 import { normalizeThread } from "./normalize";
+import { mergeFacts, describeMerge } from "./mergeFacts";
+import { reconcileRequests } from "./parseWork";
 import { composeOrder } from "./compose";
 import { validateOrder } from "./format";
-import { matchCompany, matchContact, matchPlace, matchExistingOrder } from "./resolve";
+import { matchCompany, matchContact, matchPlace, matchExistingOrder, normName, normAddr } from "./resolve";
 import { resolveRateCard } from "./rates";
 import type { Reasoner } from "./reason";
 import type { OnsinchClient } from "./onsinch";
@@ -32,6 +34,44 @@ export interface CompileDeps {
   // Seeded rate-card lookup (Phase B rate_cards). Injected so the engine stays
   // DB-agnostic; when absent, rates.ts falls back to a live history scan.
   seededRateCard?: (companyId: number) => Promise<number | null>;
+  /**
+   * Names this system has already resolved once, so it stops solving the same ones from
+   * scratch. Injected rather than imported for the same reason as seededRateCard: the
+   * engine must compile offline, and every test here runs without a database.
+   *
+   * `lookup` answers only for aliases safe to trust automatically (human-confirmed, or a
+   * cached exact match). `record` is fire-and-forget — a resolution that already worked
+   * must not fail because remembering it did.
+   */
+  aliases?: {
+    lookup: (kind: "company" | "place", aliasNorm: string) => Promise<number | null>;
+    record: (a: { kind: "company" | "place"; alias_norm: string; entity_id: number; source: "exact" | "fuzzy"; raw_example?: string }) => Promise<void>;
+  };
+}
+
+/**
+ * The alias store is a convenience, never a dependency. If it is unreachable the answer
+ * is still derivable from the whole-list pull, so a broken memory must degrade to the
+ * slow path rather than fail an enquiry — losing a booking to a cache outage would be
+ * an absurd trade.
+ */
+async function aliasLookup(
+  aliases: CompileDeps["aliases"],
+  kind: "company" | "place",
+  key: string
+): Promise<number | null> {
+  if (!aliases || !key) return null;
+  try { return await aliases.lookup(kind, key); }
+  catch (err) { console.error("[aliases] lookup failed", kind, key, err); return null; }
+}
+
+async function aliasRecord(
+  aliases: CompileDeps["aliases"],
+  a: { kind: "company" | "place"; alias_norm: string; entity_id: number; source: "exact" | "fuzzy"; raw_example?: string }
+): Promise<void> {
+  if (!aliases || !a.alias_norm) return;
+  try { await aliases.record(a); }
+  catch (err) { console.error("[aliases] record failed", a.kind, a.alias_norm, err); }
 }
 
 function hash(s: string): string {
@@ -83,12 +123,31 @@ function firstDate(facts: ConversationFacts): string | undefined {
 async function resolveCompany(
   facts: ConversationFacts,
   prior: ConversationState | undefined,
-  onsinch: OnsinchClient
+  onsinch: OnsinchClient,
+  aliases?: CompileDeps["aliases"]
 ): Promise<{ id?: number; note?: string }> {
   if (prior?.company_id) return { id: prior.company_id };
   if (!facts.company_name) return { note: "no company name extracted" };
-  const id = matchCompany(facts.company_name, await onsinch.allCompanies());
-  if (id) return { id };
+
+  // A name seen before, already settled. Checked before the whole-list pull because it
+  // is the answer to the same question, arrived at once instead of every time.
+  const key = normName(facts.company_name);
+  const remembered = await aliasLookup(aliases, "company", key);
+  if (remembered) return { id: remembered, note: `company from a name resolved before ("${facts.company_name}")` };
+
+  const companies = await onsinch.allCompanies();
+  const id = matchCompany(facts.company_name, companies);
+  if (id) {
+    // How it was matched decides whether it may be trusted next time. An exact hit is a
+    // deterministic answer worth caching; anything the bounded token fallback found is a
+    // judgement, and is only ever recorded for a human to confirm.
+    const wasExact = companies.some(
+      (c) => c.id === id && (normName(c.name) === key || normName(c.invoice_name) === key)
+    );
+    await aliasRecord(aliases, { kind: "company", alias_norm: key, entity_id: id,
+                                 source: wasExact ? "exact" : "fuzzy", raw_example: facts.company_name });
+    return { id };
+  }
   return { note: `new company "${facts.company_name}" — add it in OnSinch (a contact is needed too)` };
 }
 
@@ -115,12 +174,28 @@ async function resolveContact(
 async function resolvePlace(
   facts: ConversationFacts,
   prior: ConversationState | undefined,
-  onsinch: OnsinchClient
+  onsinch: OnsinchClient,
+  aliases?: CompileDeps["aliases"]
 ): Promise<{ id?: number; provision?: DesiredOrder["provision_place"]; note?: string }> {
   if (prior?.place_id) return { id: prior.place_id };
   if (!facts.location_text) return { note: "no location extracted" };
-  const id = matchPlace(facts.location_text, await onsinch.allPlaces());
-  if (id) return { id };
+
+  const key = normAddr(facts.location_text);
+  const remembered = await aliasLookup(aliases, "place", key);
+  if (remembered) return { id: remembered, note: `venue from a name resolved before ("${facts.location_text}")` };
+
+  const places = await onsinch.allPlaces();
+  const id = matchPlace(facts.location_text, places);
+  if (id) {
+    // matchPlace resolves on several rules, only one of which is equality; the others
+    // are containment, which is a judgement. Only equality is cached as trusted.
+    const wasExact = places.some(
+      (p) => p.id === id && (normAddr(p.name) === key || normAddr(p.address) === key)
+    );
+    await aliasRecord(aliases, { kind: "place", alias_norm: key, entity_id: id,
+                                 source: wasExact ? "exact" : "fuzzy", raw_example: facts.location_text });
+    return { id };
+  }
   return {
     provision: { name: facts.location_text.slice(0, 120), country: "GB", address: facts.location_text },
     note: `new venue "${facts.location_text}" — will be created in OnSinch on confirm`,
@@ -168,9 +243,25 @@ export async function compile(
   // The two questions were asked of identical thread text, so asking them separately
   // sent the whole thread twice — 402M characters to label the corpus once. A reasoner
   // without the combined method (a mock, a different provider) still works.
-  const combined = reasoner.classifyAndExtract
-    ? await reasoner.classifyAndExtract(latest, history, !!prior?.onsinch_order_id)
-    : null;
+  //
+  // And when the thread has already been read, the earlier messages are not sent at
+  // all — the facts they produced are sent instead. A thread is re-processed on every
+  // new client message, so re-sending the history each time read the corpus 6.26 times
+  // over. mergeFacts below is what makes this safe: the model can answer narrowly
+  // without deleting what four earlier emails established.
+  const priorFacts = prior?.facts;
+  const incremental =
+    reasoner.classifyAndExtractIncremental &&
+    priorFacts &&
+    (Object.keys(priorFacts).length > 1 || (priorFacts.requests ?? []).length > 0) &&
+    history.length > 0;
+
+  const combined = incremental
+    ? await reasoner.classifyAndExtractIncremental!(latest, priorFacts!, prior?.classification, !!prior?.onsinch_order_id)
+    : reasoner.classifyAndExtract
+      ? await reasoner.classifyAndExtract(latest, history, !!prior?.onsinch_order_id)
+      : null;
+  if (incremental) notes.push("read this message against stored facts — earlier messages not re-read");
   const cls = combined ?? (await reasoner.classify(latest, history, !!prior?.onsinch_order_id));
 
   // Keep the classifier's own explanation for a rejection. job_summary is the
@@ -195,7 +286,20 @@ export async function compile(
   let overruled = false;
   // The combined call already returned facts, so overruling a rejection now costs
   // nothing; only the two-call fallback has to pay for a second request.
-  let probed: ConversationFacts | null = combined ? combined.facts : null;
+  // Merged against what the thread already knew, ALWAYS — not only on the incremental
+  // path. A model shown the whole thread can still answer thinly, and an overwrite would
+  // drop a venue established in March because August's message did not repeat it.
+  let mergeNote = "";
+  let probed: ConversationFacts | null = null;
+  if (combined) {
+    const m = mergeFacts(prior?.facts, combined.facts);
+    probed = m.facts;
+    mergeNote = describeMerge(m.report);
+    if (m.report.kept.length) {
+      notes.push(`kept from earlier messages: ${m.report.kept.join(", ")}`);
+    }
+    if (mergeNote) notes.push(mergeNote);
+  }
   if (classification === "not-a-job") {
     probed = probed ?? (await reasoner.extractFacts(latest, history));
     const usable = (probed.requests ?? []).some(
@@ -233,15 +337,32 @@ export async function compile(
   if (isJob) {
     // The probe above already extracted this thread's facts when the classifier was
     // overruled; extracting again would be a second identical model call.
-    facts = probed ?? (await reasoner.extractFacts(latest, history));
+    facts = probed ?? mergeFacts(prior?.facts, await reasoner.extractFacts(latest, history)).facts;
+
+    // Check the model's reading against the words on the page. The 18:00 finish that
+    // reached 4 of 10 real orders was a prompt instruction the model quietly stopped
+    // following, and nothing noticed because a defaulted order looks exactly like a
+    // real one. The parser fills what the model left blank and REPORTS what it reads
+    // differently — it never overrules, because it cannot see prose and the model can.
+    //
+    // The reference date is the message's own timestamp, not today: "12 Sept" in a
+    // thread from last October means October's year.
+    const rec = reconcileRequests(
+      `${latest.subject}\n${latest.body}`,
+      facts.requests ?? [],
+      new Date(Date.parse(latest.date_iso) || Date.now())
+    );
+    facts = { ...facts, requests: rec.requests };
+    if (rec.report.filled.length) notes.push(`read from the email text: ${rec.report.filled.join(", ")}`);
+    for (const c of rec.report.conflicts) notes.push(`DISAGREEMENT — ${c}`);
 
     // company first (contact resolution needs it)
-    const co = await resolveCompany(facts, prior, onsinch);
+    const co = await resolveCompany(facts, prior, onsinch, deps.aliases);
     company_id = co.id ?? company_id;
     if (co.note) notes.push(co.note);
 
     const [pl, us] = await Promise.all([
-      resolvePlace(facts, prior, onsinch),
+      resolvePlace(facts, prior, onsinch, deps.aliases),
       resolveContact(facts, prior, company_id, onsinch),
     ]);
     place_id = pl.id ?? place_id;

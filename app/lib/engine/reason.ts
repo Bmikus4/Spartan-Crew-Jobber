@@ -42,6 +42,20 @@ export interface Reasoner {
     priorOrderExists: boolean
   ): Promise<ClassifyResult & { facts: ConversationFacts }>;
 
+  /**
+   * The same combined question, but shown the facts already established instead of the
+   * messages they came from. A thread is re-processed on every new client message, and
+   * re-sending the whole thread each time means the corpus is read 6.26 times over
+   * (77,523 message-reads for 12,380 messages). Optional for the same reason as
+   * classifyAndExtract: the compiler falls back to the full-thread call.
+   */
+  classifyAndExtractIncremental?(
+    latest: ThreadMessage,
+    priorFacts: ConversationFacts,
+    priorClassification: Classification | undefined,
+    priorOrderExists: boolean
+  ): Promise<ClassifyResult & { facts: ConversationFacts }>;
+
   classify(
     latest: ThreadMessage,
     history: ThreadMessage[],
@@ -102,6 +116,27 @@ export function createOpenRouterReasoner(cfg: OpenRouterConfig): Reasoner {
   // takes 1.5-5s; 25s means something is wrong, and saying so beats hanging.
   const TIMEOUT_MS = Number(process.env.REASONER_TIMEOUT_MS || 25_000);
 
+  // The system prompt is byte-identical on every call and is 2,744 tokens — 34M tokens
+  // over a pass of the corpus, about $170 of a $289 bill. Marked cacheable it is charged
+  // at 0.1x after a 1.25x write.
+  //
+  // OFF by default, and that is the honest setting rather than a timid one: live traffic
+  // is ~34 events a day, so a 5-minute cache is cold on nearly every live call and the
+  // saving is ~0 while the request-shape change is a real risk to the one path that must
+  // not break. Turn it on for a batch, where calls are back-to-back and it pays:
+  //
+  //   SPARTAN_PROMPT_CACHE=1
+  //
+  // Only for anthropic/* — cache_control is the Anthropic breakpoint format; other
+  // providers cache implicitly and ignore it, but sending an unfamiliar content shape to
+  // them buys nothing. NOT yet confirmed against a live call: it needs one 20-thread
+  // paid run to verify, which is exactly the check the cost report asks for.
+  const CACHE_PROMPT = process.env.SPARTAN_PROMPT_CACHE === "1" && model.startsWith("anthropic/");
+  const systemBlocks = (system: string) =>
+    CACHE_PROMPT
+      ? [{ type: "text", text: system, cache_control: { type: "ephemeral" } }]
+      : system;
+
   async function call(system: string, user: string, schema: object) {
     let res: Response;
     try {
@@ -124,7 +159,7 @@ export function createOpenRouterReasoner(cfg: OpenRouterConfig): Reasoner {
         // "requires more credits" on every call.
         max_tokens: Number(process.env.REASONER_MAX_TOKENS || 4096),
         messages: [
-          { role: "system", content: system },
+          { role: "system", content: systemBlocks(system) },
           { role: "user", content: user },
         ],
         tools: [{ type: "function", function: { name: "emit", description: "Return the structured result", parameters: schema } }],
@@ -188,6 +223,45 @@ ${EXTRACT_SYSTEM}`,
         `priorOrderExists=${priorOrderExists}
 
 ` + threadText(latest, history),
+        COMBINED_SCHEMA
+      );
+      return {
+        classification: r.classification,
+        priority: r.priority,
+        job_summary: r.job_summary,
+        facts: (r.facts ?? { requests: [] }) as ConversationFacts,
+      };
+    },
+    // Prior FACTS in place of prior MESSAGES. The system prompts are the ones ported
+    // verbatim from the live n8n workflow and are not altered here — only the evidence
+    // that accompanies them changes, from "the whole thread again" to "what we already
+    // established, plus the one message that just arrived".
+    //
+    // It asks for the COMPLETE updated facts rather than a diff: a patch language is a
+    // second thing to get right, and the caller merges the answer conservatively anyway
+    // (mergeFacts refuses to blank a known field), so a lazy reply cannot erase history.
+    async classifyAndExtractIncremental(latest, priorFacts, priorClassification, priorOrderExists) {
+      const r = await call(
+        `${CLASSIFY_SYSTEM}
+
+---
+
+In the SAME response, also extract the thread's facts under \"facts\", following these rules:
+
+${EXTRACT_SYSTEM}`,
+        `priorOrderExists=${priorOrderExists}
+priorClassification=${priorClassification ?? "none"}
+
+FACTS ALREADY ESTABLISHED FROM THE EARLIER MESSAGES IN THIS THREAD.
+These were read from messages you are not being shown again. Treat them as the thread
+history: the NEW MESSAGE below either adds to them, changes them, or leaves them alone.
+Return the COMPLETE facts as they now stand, not only what changed.
+
+${JSON.stringify(priorFacts)}
+
+NEW MESSAGE (${latest.date_iso}) from ${latest.from}
+Subject: ${latest.subject}
+${latest.body}`,
         COMBINED_SCHEMA
       );
       return {
