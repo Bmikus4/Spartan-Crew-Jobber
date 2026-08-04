@@ -138,10 +138,22 @@ function bodyOf(part) {
   }
   return '';
 }
+// n8n's Gmail node with simple:false FLATTENS the headers onto the message itself
+// (m.From, m.To, m.Subject, m.Date) and leaves payload.headers empty. Reading only
+// payload.headers produced a corpus of 27,704 messages with no sender and no subject,
+// every one of them scored is_from_spartan:false — so the brain could not tell a
+// client's request from Spartan's own reply. Top-level first, raw headers as fallback
+// for any shape that carries them.
 function headerMap(m) {
   const out = {};
   const hs = (m && m.payload && m.payload.headers) || [];
   for (const h of hs) if (h && h.name) out[String(h.name).toLowerCase()] = h.value;
+  for (const k of Object.keys(m || {})) {
+    const lk = k.toLowerCase();
+    if (['from', 'to', 'cc', 'subject', 'date', 'message-id', 'in-reply-to', 'references'].includes(lk)) {
+      if (out[lk] === undefined || out[lk] === '') out[lk] = m[k];
+    }
+  }
   return out;
 }
 function addr(v) {

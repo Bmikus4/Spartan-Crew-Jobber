@@ -97,7 +97,14 @@ export async function storeSweptThread(payload: unknown, mailbox = "bookings@spa
             participants  = EXCLUDED.participants,
             payload       = EXCLUDED.payload,
             swept_at      = now()
+        -- Take the new copy when it holds more messages, OR when it carries sender
+        -- information the stored copy lacks. The first sweep read Gmail's headers from
+        -- payload.headers, which n8n leaves empty, so 27,704 messages were stored with
+        -- no From and no Subject; without this clause a corrected re-sweep would be
+        -- declined as "we already hold a copy" and the corpus would stay broken.
         WHERE EXCLUDED.message_count > sweep_threads.message_count
+           OR (jsonb_array_length(COALESCE(EXCLUDED.participants, '[]'::jsonb)) > 0
+               AND jsonb_array_length(COALESCE(sweep_threads.participants, '[]'::jsonb)) = 0)
       RETURNING (xmax = 0) AS inserted`) as { inserted: boolean }[];
     // No row back means the conflict clause declined it: we already hold a fuller copy.
     if (!rows.length) return { ...base, ok: true, stored: false };
