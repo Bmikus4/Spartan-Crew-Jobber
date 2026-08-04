@@ -48,26 +48,26 @@ const say = (...a) => { if (!AS_JSON) console.log(...a); };
 // ---------------------------------------------------------------- 2. who writes in
 {
   const senders = await sql`
-    SELECT lower(p->>'from') AS addr, COUNT(*)::int n
-    FROM sweep_threads t, LATERAL jsonb_array_elements(t.payload->'messages') p
-    WHERE COALESCE((p->>'is_from_spartan')::bool, false) = false
-      AND p->>'from' <> ''
+    SELECT lower(m.v->>'from') AS addr, COUNT(*)::int n
+    FROM sweep_threads t, jsonb_array_elements(t.payload->'messages') AS m(v)
+    WHERE COALESCE((m.v->>'is_from_spartan')::bool, false) = false
+      AND m.v->>'from' <> ''
     GROUP BY 1 ORDER BY n DESC LIMIT 25`;
   const [reach] = await sql`
-    SELECT COUNT(DISTINCT lower(p->>'from'))::int distinct_senders
-    FROM sweep_threads t, LATERAL jsonb_array_elements(t.payload->'messages') p
-    WHERE COALESCE((p->>'is_from_spartan')::bool, false) = false AND p->>'from' <> ''`;
+    SELECT COUNT(DISTINCT lower(m.v->>'from'))::int distinct_senders
+    FROM sweep_threads t, jsonb_array_elements(t.payload->'messages') AS m(v)
+    WHERE COALESCE((m.v->>'is_from_spartan')::bool, false) = false AND m.v->>'from' <> ''`;
   const domains = await sql`
-    SELECT split_part(lower(p->>'from'), '@', 2) AS domain, COUNT(DISTINCT t.thread_id)::int threads
-    FROM sweep_threads t, LATERAL jsonb_array_elements(t.payload->'messages') p
-    WHERE COALESCE((p->>'is_from_spartan')::bool, false) = false AND p->>'from' LIKE '%@%'
+    SELECT split_part(lower(m.v->>'from'), '@', 2) AS domain, COUNT(DISTINCT t.thread_id)::int threads
+    FROM sweep_threads t, jsonb_array_elements(t.payload->'messages') AS m(v)
+    WHERE COALESCE((m.v->>'is_from_spartan')::bool, false) = false AND m.v->>'from' LIKE '%@%'
     GROUP BY 1 ORDER BY threads DESC LIMIT 20`;
   // How much of the year's mail comes from senders we have seen before?
   const [repeat] = await sql`
     WITH s AS (
-      SELECT lower(p->>'from') addr, COUNT(DISTINCT t.thread_id)::int threads
-      FROM sweep_threads t, LATERAL jsonb_array_elements(t.payload->'messages') p
-      WHERE COALESCE((p->>'is_from_spartan')::bool, false) = false AND p->>'from' <> ''
+      SELECT lower(m.v->>'from') addr, COUNT(DISTINCT t.thread_id)::int threads
+      FROM sweep_threads t, jsonb_array_elements(t.payload->'messages') AS m(v)
+      WHERE COALESCE((m.v->>'is_from_spartan')::bool, false) = false AND m.v->>'from' <> ''
       GROUP BY 1)
     SELECT SUM(threads) FILTER (WHERE threads > 1)::int repeat_threads,
            SUM(threads)::int total_threads,
@@ -239,6 +239,74 @@ const say = (...a) => { if (!AS_JSON) console.log(...a); };
   };
   say(`\n=== 9. COST OF A FULL PASS ===`);
   say(`${n.threads} threads x 3 model calls = ${n.threads * 3} calls`);
+}
+
+// ---------------------------------------------------------------- 10. who does the talking
+{
+  const [split] = await sql`
+    SELECT COUNT(*)::int messages,
+      COUNT(*) FILTER (WHERE (m.v->>'is_from_spartan')::bool)::int from_spartan,
+      COUNT(*) FILTER (WHERE NOT COALESCE((m.v->>'is_from_spartan')::bool, false))::int from_client
+    FROM sweep_threads t, jsonb_array_elements(t.payload->'messages') AS m(v)`;
+  out.talk = split;
+  say(`
+=== 10. WHO DOES THE TALKING ===`);
+  say(`messages ${split.messages} | from Spartan ${split.from_spartan} | from clients ${split.from_client}`);
+}
+
+// ---------------------------------------------------------------- 11. reply latency
+{
+  // Time from a client's message to Spartan's next message in the same thread. This is
+  // the human cost the tool is meant to remove, so it bounds the prize.
+  const [lat] = await sql`
+    WITH msgs AS (
+      SELECT t.thread_id,
+             (m.v->>'date_iso')::timestamptz AS at,
+             COALESCE((m.v->>'is_from_spartan')::bool, false) AS spartan
+      FROM sweep_threads t, jsonb_array_elements(t.payload->'messages') AS m(v)
+      WHERE m.v->>'date_iso' <> ''
+    ), pairs AS (
+      SELECT c.thread_id, c.at AS asked,
+             MIN(s.at) AS answered
+      FROM msgs c JOIN msgs s ON s.thread_id = c.thread_id AND s.spartan AND s.at > c.at
+      WHERE NOT c.spartan
+      GROUP BY 1, 2
+    )
+    SELECT COUNT(*)::int pairs,
+      ROUND(AVG(EXTRACT(EPOCH FROM (answered - asked))/60))::int mean_minutes,
+      ROUND(PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY EXTRACT(EPOCH FROM (answered - asked))/60))::int median_minutes,
+      COUNT(*) FILTER (WHERE answered - asked < INTERVAL '15 minutes')::int within_15m,
+      COUNT(*) FILTER (WHERE answered - asked > INTERVAL '4 hours')::int over_4h
+    FROM pairs`;
+  out.latency = lat;
+  say(`
+=== 11. REPLY LATENCY (client message -> Spartan reply) ===`);
+  say(`pairs ${lat.pairs} | median ${lat.median_minutes} min | mean ${lat.mean_minutes} min | <15min ${lat.within_15m} | >4h ${lat.over_4h}`);
+}
+
+// ---------------------------------------------------------------- 12. what a sender's history could fill
+{
+  // The venue/company gaps are only fillable if the same sender has written before AND
+  // an earlier thread of theirs names a venue. This measures the ceiling of that idea
+  // rather than assuming it.
+  const [hist] = await sql`
+    WITH sender AS (
+      SELECT t.thread_id, lower(m.v->>'from') AS addr, t.first_date
+      FROM sweep_threads t, jsonb_array_elements(t.payload->'messages') AS m(v)
+      WHERE NOT COALESCE((m.v->>'is_from_spartan')::bool, false) AND m.v->>'from' <> ''
+    ), labelled AS (
+      SELECT l.thread_id, l.location_text, l.company_name
+      FROM sweep_labels l WHERE l.model = ${MODEL} AND l.error IS NULL
+    )
+    SELECT
+      COUNT(*) FILTER (WHERE (lb.location_text IS NULL OR lb.location_text = ''))::int missing_venue,
+      COUNT(*) FILTER (WHERE (lb.location_text IS NULL OR lb.location_text = '')
+                         AND EXISTS (SELECT 1 FROM sender s2 WHERE s2.addr = s.addr AND s2.thread_id <> s.thread_id))::int missing_venue_with_history
+    FROM labelled lb JOIN sender s ON s.thread_id = lb.thread_id`;
+  out.history = hist;
+  say(`
+=== 12. WHAT A SENDER'S OWN HISTORY COULD FILL ===`);
+  say(`labelled threads missing a venue ${hist.missing_venue} | of those, the sender has written before ${hist.missing_venue_with_history}`);
 }
 
 if (AS_JSON) console.log(JSON.stringify(out, null, 1));
