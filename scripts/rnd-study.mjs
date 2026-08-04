@@ -347,25 +347,27 @@ const say = (...a) => { if (!AS_JSON) console.log(...a); };
   const CAP = 12000;
   const chars = rows.map((r) => r.chars);
   const sum = (a) => a.reduce((x, y) => x + y, 0);
-  // classify and extractFacts send the whole thread; only the cancellation probe caps.
-  const current = sum(chars.map((c) => 2 * c + Math.min(c, CAP)));
-  const capped = sum(chars.map((c) => 3 * Math.min(c, CAP)));
-  const combined = sum(chars.map((c) => Math.min(c, CAP)));
+  // BEFORE: classify and extractFacts each sent the whole thread, uncapped; only the
+  // cancellation probe truncated. AFTER (shipped): one combined call, history capped.
+  const before = sum(chars.map((c) => 2 * c + Math.min(c, CAP)));
+  const cappedOnly = sum(chars.map((c) => 3 * Math.min(c, CAP)));
+  const now = sum(chars.map((c) => Math.min(c, CAP)));
   out.economics = {
     labelledThreads: cov.threads, labelRows: cov.labels, corpusThreads: tot.n,
     coveragePct: Math.round((cov.threads / tot.n) * 1000) / 10,
     meanChars: Math.round(sum(chars) / chars.length),
     overCap: chars.filter((c) => c > CAP).length,
-    currentChars: current, cappedChars: capped, combinedChars: combined,
-    cappedSavingPct: Math.round(100 - (capped / current) * 100),
-    combinedSavingPct: Math.round(100 - (combined / current) * 100),
+    currentChars: before, cappedChars: cappedOnly, combinedChars: now,
+    cappedSavingPct: Math.round(100 - (cappedOnly / before) * 100),
+    combinedSavingPct: Math.round(100 - (now / before) * 100),
+    shipped: true,
     costPerThread: 0.247,   // reported: 231 labels for $57.08
   };
   say(`
 === 13. COVERAGE AND ECONOMICS ===`);
   say(`labelled ${cov.threads} distinct threads (${out.economics.coveragePct}% of ${tot.n}) across ${cov.labels} label rows`);
   say(`mean thread text ${out.economics.meanChars} chars | over the 12k cap: ${out.economics.overCap}`);
-  say(`input chars: current ${current} | capped ${capped} (-${out.economics.cappedSavingPct}%) | capped+combined ${combined} (-${out.economics.combinedSavingPct}%)`);
+  say(`input chars: was ${before} | cap only ${cappedOnly} (-${out.economics.cappedSavingPct}%) | SHIPPED cap+combined ${now} (-${out.economics.combinedSavingPct}%)`);
 }
 
 if (AS_JSON) console.log(JSON.stringify(out, null, 1));

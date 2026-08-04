@@ -201,20 +201,26 @@ ${bars([
 ${calc(`(${ET.before18} − ${ET.after18}) / ${ET.before18} = ${pct(ET.before18 - ET.after18, ET.before18)}% of defaulted finishes recovered`)}
 <p>The default itself was kept deliberately — an email that states nothing must still produce a block — but a defaulted start or finish now says so in the order's notes, so it can be counted rather than rediscovered.</p>
 
-<h2>8b · What a pass costs, and why</h2>
-<p>${M} Labelling costs <strong>$${EC.costPerThread} per thread</strong> (231 labels for $57.08). At that rate a single pass over the corpus is <strong>$${(EC.costPerThread * EC.corpusThreads).toFixed(0)}</strong>, which is why this study runs on ${EC.coveragePct}% of it rather than all of it.</p>
-<p>The cost is not the model's price, it is what gets sent. A thread averages <strong>${n(EC.meanChars)} characters</strong> of message text, and <code>threadText()</code> re-sends the entire history on <em>every</em> call — classify and extractFacts are uncapped, and only the cancellation probe truncates at 12k. So each thread's text goes over the wire roughly three times.</p>
+<h2>8b · What a pass cost, and what it costs now</h2>
+<p>${M} Labelling ran at <strong>$${EC.costPerThread} a thread</strong> (231 labels for $57.08), putting one pass over the corpus at <strong>$${(EC.costPerThread * EC.corpusThreads).toFixed(0)}</strong>. That is why this study covers ${EC.coveragePct}% of the corpus rather than all of it, and why the OpenRouter key ran out mid-comparison.</p>
+<p>The driver was not the model's price but what crossed the wire. A thread averages <strong>${n(EC.meanChars)} characters</strong> of message text, and <code>threadText()</code> re-sent the entire history on <em>every</em> call — classify and extractFacts uncapped, only the cancellation probe truncating at 12k — so each thread went over roughly three times.</p>
+<p><strong>Fixed and shipped since this study was first written.</strong> One combined call answers classification and facts together, and history is capped at 12k characters with the newest message never truncated and the oldest dropped first. Overruling a rejection used to need a third call for facts; it is now free, because the facts arrive with the classification.</p>
 ${bars([
-  { label: "today: 2 uncapped + 1 capped", value: EC.currentChars, tone: "bad", display: (EC.currentChars/1e6).toFixed(0) + "M chars" },
-  { label: "cap history at 12k", value: EC.cappedChars, tone: "warn", display: (EC.cappedChars/1e6).toFixed(0) + "M chars" },
-  { label: "cap + one combined call", value: EC.combinedChars, tone: "good", display: (EC.combinedChars/1e6).toFixed(0) + "M chars" },
+  { label: "was: 2 uncapped + 1 capped", value: EC.currentChars, tone: "bad", display: (EC.currentChars/1e6).toFixed(0) + "M chars" },
+  { label: "cap alone (not shipped)", value: EC.cappedChars, tone: "warn", display: (EC.cappedChars/1e6).toFixed(0) + "M chars" },
+  { label: "shipped: cap + one call", value: EC.combinedChars, tone: "good", display: (EC.combinedChars/1e6).toFixed(0) + "M chars" },
 ], { labelW: 250 })}
-<p class="sub">Input characters to label the whole corpus ${M}. ${n(EC.overCap)} of ${n(EC.corpusThreads)} threads exceed the 12k cap, so most threads are unaffected by capping — the saving comes from the long tail.</p>
-${calc(`current = Σ(2 × full + min(full, 12k)) = ${EC.currentChars.toLocaleString()} chars
-capped  = Σ(3 × min(full, 12k)) = ${EC.cappedChars.toLocaleString()} chars  → ${EC.cappedSavingPct}% less
-combined = Σ(min(full, 12k)) = ${EC.combinedChars.toLocaleString()} chars  → ${EC.combinedSavingPct}% less`)}
-<p>${E} Holding the reported rate constant, capping history takes a thread from $${EC.costPerThread} to about <strong>$${(EC.costPerThread * EC.cappedChars / EC.currentChars).toFixed(3)}</strong>, and capping plus a single combined call to about <strong>$${(EC.costPerThread * EC.combinedChars / EC.currentChars).toFixed(3)}</strong> — a full-corpus pass falling from $${(EC.costPerThread * EC.corpusThreads).toFixed(0)} to roughly <strong>$${(EC.costPerThread * EC.corpusThreads * EC.combinedChars / EC.currentChars).toFixed(0)}</strong>. ${A} This assumes cost scales with input length, which holds while output is a small fixed JSON object but understates the saving from dropping two round-trips.</p>
-<p>${M} Note the immediate blocker this measurement came out of: the OpenRouter key hit its own cap (limit 150, usage 150.31) with $16.17 of account credit left, so the remaining 179 threads of the classifier comparison could not run. A failed call returns an error, not an empty result — no result in this study is a silent failure.</p>
+<p class="sub">Input characters to label the whole corpus ${M}. Only ${n(EC.overCap)} of ${n(EC.corpusThreads)} threads exceed the cap, so the saving comes from the long tail rather than from shortening the typical thread.</p>
+${calc(`was      = Σ(2 × full + min(full, 12k)) = ${EC.currentChars.toLocaleString()} chars
+cap only = Σ(3 × min(full, 12k))          = ${EC.cappedChars.toLocaleString()} chars  → ${EC.cappedSavingPct}% less
+shipped  = Σ(min(full, 12k))              = ${EC.combinedChars.toLocaleString()} chars  → ${EC.combinedSavingPct}% less`)}
+${table(["Measure", "Before", "After (shipped)"], [
+  ["Model calls per thread", "2–3", "1"],
+  ["Input characters, whole corpus", (EC.currentChars/1e6).toFixed(0) + "M", (EC.combinedChars/1e6).toFixed(0) + "M"],
+  ["Cost per thread " + E, "$" + EC.costPerThread, "$" + (EC.costPerThread * EC.combinedChars / EC.currentChars).toFixed(3)],
+  ["One pass over " + n(EC.corpusThreads) + " threads " + E, "$" + (EC.costPerThread * EC.corpusThreads).toFixed(0), "$" + (EC.costPerThread * EC.corpusThreads * EC.combinedChars / EC.currentChars).toFixed(0)],
+])}
+<p>${A} The after-figures are arithmetic on measured input sizes, not an observed invoice: cost is assumed to scale with input length, which holds while the reply is a small fixed JSON object. It understates the gain from dropping two round-trips, and it will be wrong if the provider prices a combined call differently. <strong>It has not been confirmed against a bill</strong> — the key remains capped out (limit 150, usage 150.31, $16.17 account credit), which is also why the classifier comparison stopped at 21 of 200 threads. A failed call raises an error rather than returning nothing, so no figure here is a silent failure.</p>
 
 <h2>9 · Redesign proposals, ordered by measured impact</h2>
 <ol class="props">
@@ -255,11 +261,11 @@ combined = Σ(min(full, 12k)) = ${EC.combinedChars.toLocaleString()} chars  → 
 <p><strong>Cost:</strong> a day, using the thread's own customer reference / PO number as the join key where present.</p>
 <p class="disproof"><strong>What would prove it wrong:</strong> if PO numbers appear in fewer than half of threads, this join is not available and the date+company pairing is as good as it gets.</p></li>
 
-<li><h3>7. Send the thread once, capped — not three times in full</h3>
-<p><strong>Failure removed:</strong> a pass costs $${(EC.costPerThread * EC.corpusThreads).toFixed(0)} and exhausts the budget before the corpus is covered, which is why coverage here is ${EC.coveragePct}%.</p>
-<p><strong>Expected effect:</strong> ${E} ${EC.combinedSavingPct}% fewer input characters — about $${(EC.costPerThread * EC.combinedChars / EC.currentChars).toFixed(3)} per thread against $${EC.costPerThread} today. It also removes two round-trips per thread, so latency falls with it.</p>
-<p><strong>Cost:</strong> one to two days. classify + extract + the cancellation question share one input already; merging them into a single tool call with one schema is mechanical, and the 12k cap already exists in the cancellation probe.</p>
-<p class="disproof"><strong>What would prove it wrong:</strong> if accuracy drops when the model answers three questions in one call, or if truncating at 12k loses requests that live early in long threads. Test both against the gold set — measure classification agreement before and after, and check how many of the ${n(EC.overCap)} over-cap threads carry their request in the first 12k.</p></li>
+<li><h3>7. Send the thread once, capped — <em>shipped</em></h3>
+<p><strong>Failure removed:</strong> a pass cost $${(EC.costPerThread * EC.corpusThreads).toFixed(0)} and exhausted the budget before the corpus could be covered, which is why coverage here is ${EC.coveragePct}%.</p>
+<p><strong>Effect:</strong> ${M} input characters for a full pass fall from ${(EC.currentChars/1e6).toFixed(0)}M to ${(EC.combinedChars/1e6).toFixed(0)}M (${EC.combinedSavingPct}% less) and calls per thread from 2–3 to 1. ${E} About $${(EC.costPerThread * EC.combinedChars / EC.currentChars).toFixed(3)} a thread against $${EC.costPerThread}.</p>
+<p><strong>Cost:</strong> built. classifyAndExtract is optional on the Reasoner interface, so a provider that cannot hold both schemas falls back to the old two-call path; both paths are tested.</p>
+<p class="disproof"><strong>What would prove it wrong:</strong> if classification agreement drops when one call answers both questions, or if the ${n(EC.overCap)} over-cap threads carry their request in the part that got dropped. Both are gold-set tests, and neither has run — the budget that would pay for them is the thing this change exists to protect.</p></li>
 
 <li><h3>8. Unblock slot-team reads (needs Ben, not code)</h3>
 <p><strong>Failure removed:</strong> two of the three accuracy criteria are currently unmeasurable.</p>
