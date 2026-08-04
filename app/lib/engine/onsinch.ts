@@ -125,6 +125,39 @@ export class OnsinchClient {
     return r.data.data[0] as { id: number; number: string };
   }
 
+  /**
+   * One order, by id, with its Job. Used before a destructive write to check what is
+   * actually there rather than trusting our own stored copy of it — the stored copy is
+   * what we wrote weeks ago, and a human may have approved, edited or already deleted
+   * the order since.
+   */
+  async orderById(id: number) {
+    const rows = await this.getOrders({ id });
+    return (rows.find((o) => Number(o?.id) === Number(id)) ?? null) as
+      | (Record<string, unknown> & { id: number; provisional?: boolean; quote?: boolean; company_id?: number; status?: string })
+      | null;
+  }
+
+  /**
+   * DELETE /orders — array of ids at the tag root. Deleting an order cascades to its
+   * job and slot teams, which is what makes replace-by-recreate viable at all.
+   *
+   * The signature takes ids and nothing else on purpose: there is no filter form here,
+   * so no call site can accidentally express "delete the orders matching X" and be one
+   * typo away from emptying a tenant. An empty array is refused rather than sent, since
+   * what an empty DELETE body means to this API is not documented and not worth finding
+   * out on production data.
+   */
+  async deleteOrders(ids: number[]) {
+    const clean = ids.map(Number).filter((n) => Number.isInteger(n) && n > 0);
+    if (!clean.length) throw new Error("deleteOrders called with no valid ids — refusing to send");
+    if (clean.length !== ids.length) throw new Error(`deleteOrders got a non-id in ${JSON.stringify(ids)} — refusing to send`);
+    const r = await this.t("DELETE", "/orders", clean);
+    if (r.status !== 200 && r.status !== 204)
+      throw new Error(`deleteOrders ${r.status}: ${JSON.stringify(r.data)}`);
+    return true;
+  }
+
   /** PATCH /orders — array w/ id, returns 204 no body. */
   async patchOrder(patch: Array<{ id: number } & Record<string, unknown>>) {
     const r = await this.t("PATCH", "/orders", patch);

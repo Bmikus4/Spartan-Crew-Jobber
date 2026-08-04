@@ -149,10 +149,35 @@ export interface ConversationState {
   // an order the engine WANTS to write but is holding for human confirm
   // (always set in draft-only mode; this is the dashboard confirm queue).
   pending_order?: {
-    kind: "create" | "patch";
+    kind: "create" | "patch" | "replace";
     desired: DesiredOrder;
-    order_id?: number;               // present for a patch
+    order_id?: number;               // present for a patch or a replace
   };
+  /**
+   * A destructive replace that is part-way through. Crew and time changes cannot be
+   * PATCHed (nested slot teams expose no ids, GET /slot_teams is 405), so the only
+   * route is delete-then-post — and that has a window in which the old order is gone
+   * and the new one does not exist yet.
+   *
+   * This is what closes that window. It is written BEFORE the delete, carries a full
+   * snapshot of the order about to be destroyed, and `deleted` is flipped the moment
+   * it is gone. A resumed run reads this instead of guessing: `deleted: true` means
+   * post the replacement, never delete again.
+   */
+  order_replace?: {
+    order_id: number;
+    deleted: boolean;
+    /** The order as OnSinch held it, read immediately before deletion. */
+    snapshot?: unknown;
+    ts: number;
+  };
+  /**
+   * Fingerprint of the slot teams last actually written to OnSinch. This is what
+   * distinguishes "the client changed the crew" (needs a replace) from "the client
+   * sent a PO number" (a patch will do), so a harmless follow-up never triggers a
+   * delete-and-repost of a real order.
+   */
+  last_ordered_teams_hash?: string;
   /**
    * needs-info = the engine did its job but cannot proceed without a human
    *              (no company name in the email, unknown sender, new venue).
@@ -167,7 +192,7 @@ export interface ConversationState {
   notes: string[];
   order_action_log: Array<{
     ts: number;
-    kind: "create" | "patch";
+    kind: "create" | "patch" | "replace" | "replace-refused";
     order_id?: number;
     ok: boolean;
     error?: string;

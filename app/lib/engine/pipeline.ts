@@ -8,7 +8,7 @@ import { compile, type CompileDeps } from "./compiler";
 import { selectLatest } from "./normalize";
 import type { StateStore } from "./store";
 import type { MetricSink } from "./metrics";
-import type { Actions, ConversationState, HydratedThread, Settings } from "./types";
+import type { Actions, ConversationState, DesiredOrder, HydratedThread, Settings } from "./types";
 
 /** The side-effecting edges. Injected so the pipeline stays testable. */
 export interface Executor {
@@ -22,6 +22,25 @@ export interface Executor {
    * never be applied this way, and there is no GET /slotTeams to even diff it.
    */
   patchOrder(p: NonNullable<Actions["patchOrder"]>): Promise<string[] | void>;
+  /**
+   * Apply a crew or time change to a DRAFT order by deleting it and posting the
+   * corrected one — the only route the API leaves (see replaceOrder.ts).
+   *
+   * Optional so an executor that has no business destroying orders (a test double, a
+   * read-only deployment) simply omits it, and the pipeline falls back to patching what
+   * it can and telling a human the rest.
+   *
+   * The hooks are the crash-safety contract, not a convenience: `onIntent` must have
+   * persisted the snapshot before the delete happens, and `onDeleted` before the
+   * replacement is attempted.
+   */
+  replaceOrder?(p: {
+    order_id: number;
+    desired: DesiredOrder;
+    alreadyDeleted?: boolean;
+    onIntent(snapshot: unknown): Promise<void>;
+    onDeleted(): Promise<void>;
+  }): Promise<{ created?: { id: number; number: string }; refused?: string; deleted: boolean }>;
 }
 
 export interface PipelineDeps extends CompileDeps {
@@ -102,6 +121,110 @@ export async function handleThread(
   return next;
 }
 
+/**
+ * Delete-and-repost, when a crew or time change needs to reach a draft order.
+ *
+ * Returns false when it does not apply, and the caller then patches as before. That
+ * fallback matters: every reason to decline here (no executor support, the order is
+ * no longer a draft, only the PO changed) is a reason the OLD behaviour is correct.
+ *
+ * The two `store.put` calls are the whole point. The pipeline normally persists once,
+ * at the end, which is fine when the worst interruption loses a write. Here an
+ * interruption can leave a real order deleted, so the intent and the deletion are each
+ * committed as they happen — a resumed run reads them and finishes the job instead of
+ * repeating the destructive half.
+ */
+async function tryReplace(
+  next: ConversationState,
+  intended: NonNullable<ConversationState["pending_order"]>,
+  deps: PipelineDeps,
+  emit: (type: any, meta?: Record<string, unknown>) => Promise<void>
+): Promise<boolean> {
+  const { executor, store, now, hashOrder } = deps;
+  const order_id = intended.order_id;
+  if (!executor.replaceOrder || !order_id) return false;
+
+  // Resume first: a part-finished replace outranks any judgement about whether one is
+  // needed, because the order may already be gone.
+  const resuming = next.order_replace?.order_id === order_id;
+
+  // Otherwise only when the crew or the times actually moved. A follow-up carrying a PO
+  // number must never delete a real order to apply it.
+  const teamsHash = hashOrder(intended.desired.slot_teams ?? []);
+  const teamsChanged = !!next.last_ordered_teams_hash && teamsHash !== next.last_ordered_teams_hash;
+  if (!resuming && !teamsChanged) return false;
+
+  try {
+    const res = await executor.replaceOrder({
+      order_id,
+      desired: intended.desired,
+      alreadyDeleted: resuming ? next.order_replace?.deleted === true : false,
+      async onIntent(snapshot) {
+        next.order_replace = { order_id, deleted: false, snapshot, ts: now() };
+        await store.put(next);
+      },
+      async onDeleted() {
+        next.order_replace = { ...(next.order_replace ?? { order_id, ts: now() }), order_id, deleted: true };
+        await store.put(next);
+      },
+    });
+
+    if (res.refused) {
+      // Nothing was touched. Say why, keep the crew change visible to a human, and do
+      // NOT claim the update landed.
+      next.status = "needs-info";
+      next.notes = [...next.notes, `crew/time change NOT applied — ${res.refused}`];
+      next.order_action_log = [...next.order_action_log, { ts: now(), kind: "replace-refused", order_id, ok: false, error: res.refused }];
+      next.order_replace = undefined;
+      await emit("order_updated", { order_id, applied: 0, refused: res.refused });
+      return true;
+    }
+
+    if (res.created) {
+      const old = order_id;
+      next.onsinch_order_id = res.created.id;
+      next.onsinch_order_number = res.created.number;
+      next.last_ordered_hash = hashOrder(intended.desired);
+      next.last_ordered_teams_hash = teamsHash;
+      next.status = "ordered";
+      next.pending_order = undefined;
+      next.order_replace = undefined;
+      next.notes = [
+        ...next.notes,
+        `crew/time change applied by replacing draft order #${old} with #${res.created.id} — PATCH cannot carry slot teams`,
+      ];
+      next.order_action_log = [...next.order_action_log, { ts: now(), kind: "replace", order_id: res.created.id, ok: true }];
+      await emit("order_updated", {
+        order_id: res.created.id,
+        replaced: old,
+        applied: (intended.desired.slot_teams ?? []).length,
+      });
+      return true;
+    }
+
+    return false;
+  } catch (err: any) {
+    // The dangerous branch: if the delete went through and the create did not, a real
+    // order is gone. order_replace is deliberately LEFT in place — it holds the snapshot
+    // and the deleted flag, so the retry re-posts instead of deleting again — and the
+    // thread is marked for a human rather than left looking merely errored.
+    const deleted = next.order_replace?.deleted === true;
+    next.status = "error";
+    next.needs_human = true;
+    next.notes = [
+      ...next.notes,
+      deleted
+        ? `URGENT: draft order #${order_id} was DELETED and its replacement failed to post (${String(err?.message ?? err)}). ` +
+          `The order it held is snapshotted in order_replace and will be re-posted on the next run.`
+        : `replace of order #${order_id} failed before anything was deleted (${String(err?.message ?? err)}) — the order is untouched`,
+    ];
+    next.order_action_log = [...next.order_action_log, { ts: now(), kind: "replace", order_id, ok: false, error: String(err?.message ?? err) }];
+    await store.put(next);
+    await emit("order_error", { error: String(err?.message ?? err), order_id, deleted });
+    return true;
+  }
+}
+
 /** Execute a staged/intended order write and fold the result into state. */
 async function executeOrder(
   next: ConversationState,
@@ -116,10 +239,15 @@ async function executeOrder(
       next.onsinch_order_id = created.id;
       next.onsinch_order_number = created.number;
       next.last_ordered_hash = hashOrder(intended.desired);
+      next.last_ordered_teams_hash = hashOrder(intended.desired.slot_teams);
       next.status = "ordered";
       next.pending_order = undefined;
       next.order_action_log = [...next.order_action_log, { ts: now(), kind: "create", order_id: created.id, ok: true }];
       await emit("order_created", { order_id: created.id, size: intended.desired.slot_teams.reduce((n, s) => n + s.size, 0) });
+    } else if (await tryReplace(next, intended, deps, emit)) {
+      // Handled by delete-and-repost: the crew or the times moved, which PATCH cannot
+      // carry. tryReplace returns false when it does not apply, and the patch path below
+      // then runs exactly as it did before.
     } else {
       // An update to an EXISTING order is never fully applied by the API alone:
       // PATCH /orders takes top-level fields only, slot teams created nested in

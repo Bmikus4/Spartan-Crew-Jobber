@@ -13,6 +13,7 @@ import { createOpenRouterReasoner, type Reasoner } from "./engine/reason";
 import { guardReasoner } from "./engine/spend";
 import { tieredReasoner } from "./engine/tiered";
 import { buildOrderBody } from "./engine/format";
+import { replaceProvisionalOrder } from "./engine/replaceOrder";
 import type { DesiredOrder } from "./engine/types";
 import type { Executor, PipelineDeps } from "./engine/pipeline";
 
@@ -115,6 +116,33 @@ export function executor(client: OnsinchClient): Executor {
       return createOrderWithPlace(client, order);
     },
     /**
+     * The crew/time change PATCH cannot carry. Gated by an env flag because it DELETES
+     * a real order to apply an email: the capability is built and tested, but arming it
+     * on a live tenant is an operational decision.
+     *
+     *   SPARTAN_ALLOW_ORDER_REPLACE=1
+     *
+     * Unset, the method is absent and the pipeline falls back to patching what it can and
+     * telling a human the rest — exactly the behaviour before this existed.
+     */
+    ...(process.env.SPARTAN_ALLOW_ORDER_REPLACE === "1"
+      ? {
+          async replaceOrder(p: {
+            order_id: number;
+            desired: DesiredOrder;
+            alreadyDeleted?: boolean;
+            onIntent(snapshot: unknown): Promise<void>;
+            onDeleted(): Promise<void>;
+          }) {
+            return replaceProvisionalOrder(
+              client,
+              { order_id: p.order_id, desired: p.desired, alreadyDeleted: p.alreadyDeleted },
+              { onIntent: p.onIntent, onDeleted: p.onDeleted }
+            );
+          },
+        }
+      : {}),
+    /**
      * Update an EXISTING order with the fields it is safe to overwrite, and
      * return which ones went so the pipeline can be honest about the rest.
      *
@@ -130,6 +158,7 @@ export function executor(client: OnsinchClient): Executor {
      *    is inferred from history and has been wrong; it must never overwrite.
      *  - slot teams: nested teams from the original POST expose no ids, and there
      *    is no GET /slotTeams, so a crew change cannot be applied or verified.
+     *    A crew or time change goes through replaceOrder above instead.
      */
     async patchOrder(p) {
       const body: Record<string, unknown> = { id: p.order_id };
