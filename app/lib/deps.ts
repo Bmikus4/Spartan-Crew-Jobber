@@ -11,6 +11,7 @@ import { createHash } from "node:crypto";
 import { OnsinchClient, httpTransport } from "./engine/onsinch";
 import { createOpenRouterReasoner, type Reasoner } from "./engine/reason";
 import { guardReasoner } from "./engine/spend";
+import { tieredReasoner } from "./engine/tiered";
 import { buildOrderBody } from "./engine/format";
 import type { DesiredOrder } from "./engine/types";
 import type { Executor, PipelineDeps } from "./engine/pipeline";
@@ -50,6 +51,22 @@ function reasoner(): Reasoner {
     const apiKey = process.env.OPENROUTER_API_KEY;
     if (!apiKey) throw new Error("OPENROUTER_API_KEY not set");
     const model = process.env.SPARTAN_MODEL || "anthropic/claude-opus-4.6";
+    // Tiering, only when a cheap model is named. The escalation rules live in
+    // tiered.ts and are deterministic; what is unknown is how often they fire, and
+    // that needs a paid run to establish. Until then this stays opt-in, because
+    // changing which model reads Spartan's mail is a decision, not a default.
+    const cheapModel = process.env.SPARTAN_MODEL_CHEAP;
+    if (cheapModel) {
+      real = guardReasoner(
+        tieredReasoner(
+          createOpenRouterReasoner({ apiKey, model: cheapModel }),
+          createOpenRouterReasoner({ apiKey, model }),
+          { onEscalate: (r) => console.log(`[tier] escalated to ${model}: ${r}`) }
+        ),
+        { model, label: "pipeline (tiered)" }
+      );
+      return real;
+    }
     // One request handles one thread, so a handful of calls is the whole job. The
     // ceiling exists for the runaway case — a retry loop, a thread that re-enters the
     // pipeline — where the cost is unbounded and nothing else would notice.

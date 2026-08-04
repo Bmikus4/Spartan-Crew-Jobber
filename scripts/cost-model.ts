@@ -165,8 +165,15 @@ const v2VarIn = TOK(acc.v2In) - sysTok * v2Calls;          // input minus the ca
 const cachedSysCost = (sysTok * 1.25 / 1e6) * opus.in + (sysTok * 0.1 / 1e6) * opus.in * (v2Calls - 1);
 
 // V4: the small model answers, and a share of events escalate to Opus for a second,
-// authoritative pass. ESCALATE is the design dial, not a measurement.
-const ESCALATE = 0.2;
+// authoritative pass.
+//
+// 32.5% is MEASURED, not chosen: scripts/parser-coverage.ts runs the escalation triggers
+// against the labels the EXPENSIVE model itself produced, and 114 of 351 fail them (86
+// jobs with no usable work block, 26 contradicted by the text, 2 with no company and no
+// venue). It is a FLOOR — a weaker reader fails these checks more often, not less — so
+// the true tiered cost sits above this row, not below it. The first version of this
+// model used 0.2 as a guess and understated the tiered option by a third.
+const ESCALATE = 0.325;
 
 const rows = [
   // What production was ACTUALLY paying. deps.ts built the reasoner wrapper by hand and
@@ -178,7 +185,7 @@ const rows = [
   ["V1  + deterministic gate", price(TOK(acc.v1In), TOK(acc.v1Out), opus), v2Calls],
   ["V2  + incremental (prior facts, not prior mail)", price(TOK(acc.v2In), TOK(acc.v2Out), opus), v2Calls],
   ["V3  + system prompt cached", cachedSysCost + price(v2VarIn, TOK(acc.v2Out), opus), v2Calls],
-  ["V4  + Flash first, 20% escalated to Opus",
+  ["V4  + Flash first, 32.5% escalated (measured floor)",
     price(TOK(acc.v2In), TOK(acc.v2Out), flash) +
     ESCALATE * (cachedSysCost + price(v2VarIn, TOK(acc.v2Out), opus)), v2Calls],
 ] as [string, number, number][];

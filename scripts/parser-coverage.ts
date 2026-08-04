@@ -19,6 +19,7 @@ import { neon } from "@neondatabase/serverless";
 import { readFileSync } from "node:fs";
 import { normalizeThread } from "../app/lib/engine/normalize";
 import { parseTimes, parseCrew, parseDates, reconcileRequests } from "../app/lib/engine/parseWork";
+import { escalationReason } from "../app/lib/engine/tiered";
 import type { HydratedThread, ThreadMessage } from "../app/lib/engine/types";
 
 const AS_JSON = process.argv.includes("--json");
@@ -73,12 +74,13 @@ async function main() {
   // sweep_labels holds what the engine's brain made of these threads. Comparing the
   // parser to it is the only comparison available without paying for a fresh pass.
   const labelled = (await sql`
-    SELECT l.thread_id, l.blocks, l.crew_peak, t.payload
+    SELECT l.thread_id, l.blocks, l.crew_peak, l.company_name, l.location_text, t.payload
     FROM sweep_labels l
     JOIN sweep_threads t ON t.thread_id = l.thread_id
     WHERE l.error IS NULL AND jsonb_array_length(l.blocks) > 0`) as Array<{
       thread_id: string; blocks: Array<{ beginning?: string; end?: string; size?: number }>;
-      crew_peak: number | null; payload: { messages?: unknown[] };
+      crew_peak: number | null; company_name: string | null; location_text: string | null;
+      payload: { messages?: unknown[] };
     }>;
 
   // The clean signal, separated from the noise. A contradiction where the model said
@@ -132,6 +134,41 @@ async function main() {
     else vs.agreed++;
   }
 
+  // ---------------------------------------- 3. how often would tiering escalate?
+  // Run the escalation triggers against the labels the ENGINE'S OWN model produced.
+  // That is not the rate a cheap model would produce — a weaker reader escalates more
+  // often, not less — so this is a FLOOR, and the honest way to read it is "even the
+  // expensive model's answers fail these checks this often".
+  const esc = { checked: 0, wouldEscalate: 0, reasons: {} as Record<string, number> };
+  for (const row of labelled) {
+    const msgs = (row.payload?.messages ?? []) as ThreadMessage[];
+    if (!msgs.length) continue;
+    let latest: ThreadMessage;
+    try { ({ latest } = normalizeThread({ thread_id: row.thread_id, messages: msgs } as HydratedThread)); }
+    catch { continue; }
+    esc.checked++;
+    const reason = escalationReason(latest, {
+      classification: "new-job",
+      priority: "medium",
+      job_summary: "",
+      facts: {
+        company_name: row.company_name ?? undefined,
+        location_text: row.location_text ?? undefined,
+        requests: row.blocks.map((b) => ({
+          date: b.beginning ? String(b.beginning).slice(0, 10) : undefined,
+          start_time: b.beginning ? String(b.beginning).slice(11, 16) : undefined,
+          end_time: b.end ? String(b.end).slice(11, 16) : undefined,
+          size: b.size,
+        })),
+      },
+    });
+    if (reason) {
+      esc.wouldEscalate++;
+      const key = reason.replace(/\(\d+\)/, "(n)");
+      esc.reasons[key] = (esc.reasons[key] ?? 0) + 1;
+    }
+  }
+
   const pct = (n: number, d: number) => (d ? (100 * n / d).toFixed(1) + "%" : "n/a");
 
   say(`\n=== WHAT THE TEXT STATES (deterministic, ${cov.threads} threads) ===`);
@@ -156,7 +193,12 @@ async function main() {
     for (const e of examples) say(`  ${e}`);
   }
 
-  if (AS_JSON) console.log(JSON.stringify({ coverage: cov, versusModel: vs }, null, 2));
+  say(`
+=== TIERING: HOW OFTEN THE CHECKS FIRE (${esc.checked} labelled threads) ===`);
+  say(`would escalate to the strong model  ${esc.wouldEscalate} = ${pct(esc.wouldEscalate, esc.checked)}   (a FLOOR — measured on the expensive model's own answers)`);
+  for (const [r, n] of Object.entries(esc.reasons).sort((a, b) => b[1] - a[1])) say(`   ${String(n).padStart(4)}  ${r}`);
+
+  if (AS_JSON) console.log(JSON.stringify({ coverage: cov, versusModel: vs, escalation: esc }, null, 2));
 }
 
 main().catch((e) => { console.error(e); process.exit(1); });
