@@ -1,0 +1,2184 @@
+{
+ "updatedAt": "2026-08-03T13:03:47.573Z",
+ "createdAt": "2025-10-20T16:15:41.065Z",
+ "id": "CPIRu7CpezvKjU8d",
+ "name": "Email SamurAI v3.4 Spartan Crew Bookings",
+ "description": "This Agent contains two objectives for the Spartan Crew Team.\n\n1 - Analyze and write draft replies to every email within thier inbox:\n\n2- Analyze and send Client Job Requests to the Onsinch API.",
+ "active": true,
+ "isArchived": false,
+ "nodes": [
+  {
+   "parameters": {
+    "content": "## https://airtable.com/appKTOJbXpUz34KCZ/tbl1SETRx7gbfDFDe/viwd8rn6UcwvMsywV?blocks=hide",
+    "width": 166
+   },
+   "type": "n8n-nodes-base.stickyNote",
+   "position": [
+    3840,
+    3456
+   ],
+   "typeVersion": 1,
+   "id": "19676484-0df2-4b14-ac5e-84c19e34a569",
+   "name": "Sticky Note3"
+  },
+  {
+   "parameters": {
+    "pollTimes": {
+     "item": [
+      {
+       "mode": "everyMinute"
+      },
+      {
+       "mode": "everyX",
+       "value": 3,
+       "unit": "minutes"
+      }
+     ]
+    },
+    "filters": {
+     "includeDrafts": false,
+     "labelIds": [
+      "Label_5089401050847698788"
+     ],
+     "readStatus": "both"
+    }
+   },
+   "type": "n8n-nodes-base.gmailTrigger",
+   "typeVersion": 1.3,
+   "position": [
+    -3344,
+    3648
+   ],
+   "id": "1ce92e0a-e940-4223-a21f-72670e48b03d",
+   "name": "Poll1",
+   "credentials": {
+    "gmailOAuth2": {
+     "id": "LIVJMrWXHhT5lymb",
+     "name": "Spartan Crew Bookings 7/29/26"
+    }
+   }
+  },
+  {
+   "parameters": {
+    "assignments": {
+     "assignments": [
+      {
+       "id": "506f7dc6-256f-4c95-b274-0937af09f530",
+       "name": "id",
+       "value": "={{ $json.id }}",
+       "type": "string"
+      },
+      {
+       "id": "696eda32-d10b-44bc-8232-378c50d0ba7b",
+       "name": "threadId",
+       "value": "={{ $json.threadId }}",
+       "type": "string"
+      },
+      {
+       "id": "56f8a8e6-696b-4b6e-b84d-adf753618cb4",
+       "name": "historyId",
+       "value": "={{ $json.historyId }}",
+       "type": "string"
+      },
+      {
+       "id": "49cc6e52-6534-4c98-b13e-7b5a54ea51a6",
+       "name": "from[0].email",
+       "value": "={{ $json.from[0].email }}",
+       "type": "string"
+      },
+      {
+       "id": "04d2bd7e-28ba-45e5-afaa-ba5af8fa02de",
+       "name": "to[0].email",
+       "value": "={{ $json.to[0].email }}",
+       "type": "string"
+      },
+      {
+       "id": "e7fc51da-6651-465a-adc9-2ff486b89b5b",
+       "name": "ccEmails[0]",
+       "value": "={{ $json.ccEmails[0] }}",
+       "type": "string"
+      }
+     ]
+    },
+    "options": {}
+   },
+   "type": "n8n-nodes-base.set",
+   "typeVersion": 3.4,
+   "position": [
+    -1936,
+    3904
+   ],
+   "id": "ad8815a1-7477-4103-91de-c06c567d8b39",
+   "name": "Get IDs1"
+  },
+  {
+   "parameters": {
+    "operation": "get",
+    "messageId": "={{ $('Get IDs1').item.json.id }}",
+    "simple": false,
+    "options": {}
+   },
+   "id": "6cc566da-3982-43a3-b0d1-c917c5c42f74",
+   "name": "Get Hydrated Emails1",
+   "type": "n8n-nodes-base.gmail",
+   "position": [
+    -1680,
+    3904
+   ],
+   "webhookId": "53b5e765-33e2-44f8-8e0c-d1a72322a603",
+   "typeVersion": 2.1,
+   "credentials": {
+    "gmailOAuth2": {
+     "id": "LIVJMrWXHhT5lymb",
+     "name": "Spartan Crew Bookings 7/29/26"
+    }
+   }
+  },
+  {
+   "parameters": {
+    "mode": "combine",
+    "combineBy": "combineByPosition",
+    "options": {}
+   },
+   "type": "n8n-nodes-base.merge",
+   "typeVersion": 3.2,
+   "position": [
+    -1456,
+    3904
+   ],
+   "id": "f7929a44-3684-484b-ae23-d5a394fd65ed",
+   "name": "Merge1"
+  },
+  {
+   "parameters": {
+    "mode": "runOnceForEachItem",
+    "jsCode": "// ===================== HELPERS =====================\nfunction decodeBase64(data) {\n  if (!data) return '';\n  return Buffer.from(\n    data.replace(/-/g, '+').replace(/_/g, '/'),\n    'base64'\n  ).toString('utf-8');\n}\n\nfunction stripHtml(html) {\n  return html\n    .replace(/<style[^>]*>[\\s\\S]*?<\\/style>/gi, '')\n    .replace(/<script[^>]*>[\\s\\S]*?<\\/script>/gi, '')\n    .replace(/<\\/?[^>]+>/gi, '')\n    .replace(/\\s+/g, ' ')\n    .trim();\n}\n\nfunction extractBody(payload) {\n  if (!payload) return '';\n\n  if (Array.isArray(payload.parts)) {\n    const textPart = payload.parts.find(p => p.mimeType === 'text/plain');\n    if (textPart?.body?.data) {\n      return decodeBase64(textPart.body.data);\n    }\n\n    const htmlPart = payload.parts.find(p => p.mimeType === 'text/html');\n    if (htmlPart?.body?.data) {\n      return decodeBase64(htmlPart.body.data);\n    }\n  }\n\n  if (payload.body?.data) {\n    return decodeBase64(payload.body.data);\n  }\n\n  return '';\n}\n\n// ===================== HARD CLEANER =====================\nfunction cleanEmailBody(raw) {\n  if (!raw) return '';\n\n  let text = raw;\n\n  // Remove quoted replies\n  text = text.split(/\\nOn .*wrote:\\n/i)[0];\n\n  // Remove quoted lines\n  text = text\n    .split('\\n')\n    .filter(line => !line.trim().startsWith('>'))\n    .join('\\n');\n\n  // Remove image placeholders\n  text = text.replace(/\\[image:[^\\]]+\\]/gi, '');\n\n  // Remove Spartan Crew signatures\n  const signatureMarkers = [\n    'spartan crew ltd',\n    'operations spartan crew',\n    'designexpert44.com/signature',\n    'spartan_crew/logo.png',\n    'unit 7 titan business estate',\n    'www.spartancrew.co.uk',\n    '03333 053374'\n  ];\n\n  for (const marker of signatureMarkers) {\n    const idx = text.toLowerCase().indexOf(marker);\n    if (idx !== -1) {\n      text = text.slice(0, idx);\n    }\n  }\n\n  return stripHtml(text);\n}\n\n// ===================== ORIGINAL EMAIL =====================\nconst originalBody = cleanEmailBody(\n  $json.text || extractBody($json.payload)\n);\n\nconst original_email = {\n  email_id: $json.id,\n  thread_id: $json.threadId,\n  from: $json.from?.value?.[0]?.address || '',\n  subject: $json.headers?.subject || '',\n  body: originalBody\n};\n\n// ===================== THREAD HISTORY =====================\nconst messages = Array.isArray($json.messages) ? $json.messages : [];\n\nconst thread_messages = messages\n  .map(m => cleanEmailBody(extractBody(m.payload)))\n  .filter(body =>\n    body &&\n    body.length > 5 &&\n    body !== originalBody // ✅ remove original email from history\n  );\n\n// ===================== FINAL OUTPUT =====================\nreturn {\n  original_email,\n  thread_history: {\n    messages: thread_messages\n  }\n};\n\n"
+   },
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    -1344,
+    3904
+   ],
+   "id": "02707657-72d5-4b24-920a-ebea06bb252f",
+   "name": "Normalize Data"
+  },
+  {
+   "parameters": {
+    "resource": "thread",
+    "operation": "get",
+    "threadId": "={{ $('Get Hydrated Emails1').item.json.threadId }}",
+    "simple": false,
+    "options": {
+     "returnOnlyMessages": false
+    }
+   },
+   "type": "n8n-nodes-base.gmail",
+   "typeVersion": 2.2,
+   "position": [
+    -1568,
+    3904
+   ],
+   "id": "7beb4bd0-a4a7-4362-93e7-0e7062d6a7ec",
+   "name": "Get a thread2",
+   "webhookId": "edb9194f-b8d4-40e1-a599-4c5496a5889e",
+   "credentials": {
+    "gmailOAuth2": {
+     "id": "LIVJMrWXHhT5lymb",
+     "name": "Spartan Crew Bookings 7/29/26"
+    }
+   },
+   "onError": "continueRegularOutput"
+  },
+  {
+   "parameters": {
+    "options": {}
+   },
+   "type": "n8n-nodes-base.splitInBatches",
+   "typeVersion": 3,
+   "position": [
+    -2064,
+    3904
+   ],
+   "id": "7aaa9748-5702-459d-b74a-8db2d258bbed",
+   "name": "Loop Over Items"
+  },
+  {
+   "parameters": {
+    "operation": "removeLabels",
+    "messageId": "={{ $json.id }}",
+    "labelIds": [
+     "Label_5089401050847698788"
+    ]
+   },
+   "type": "n8n-nodes-base.gmail",
+   "typeVersion": 2.2,
+   "position": [
+    -2736,
+    3568
+   ],
+   "id": "5a9c77e1-a32c-4d1d-b4d0-d62b9c374845",
+   "name": "Remove label from message",
+   "webhookId": "9981a7bb-5e30-4df8-9d31-c4a6424efa2d",
+   "credentials": {
+    "gmailOAuth2": {
+     "id": "LIVJMrWXHhT5lymb",
+     "name": "Spartan Crew Bookings 7/29/26"
+    }
+   }
+  },
+  {
+   "parameters": {
+    "operation": "getAll",
+    "returnAll": true,
+    "filters": {
+     "labelIds": [
+      "Label_5089401050847698788"
+     ],
+     "receivedAfter": "={{ $json.receivedAfter }}"
+    }
+   },
+   "type": "n8n-nodes-base.gmail",
+   "typeVersion": 2.2,
+   "position": [
+    -2976,
+    3744
+   ],
+   "id": "8861bfa1-bb99-4047-a630-2e34aff2b3cb",
+   "name": "Get many messages",
+   "webhookId": "0433aa9d-3109-445b-82a8-a5c94a0f0edb",
+   "credentials": {
+    "gmailOAuth2": {
+     "id": "LIVJMrWXHhT5lymb",
+     "name": "Spartan Crew Bookings 7/29/26"
+    }
+   }
+  },
+  {
+   "parameters": {
+    "rule": {
+     "interval": [
+      {
+       "field": "minutes"
+      }
+     ]
+    }
+   },
+   "type": "n8n-nodes-base.scheduleTrigger",
+   "typeVersion": 1.3,
+   "position": [
+    -3344,
+    3840
+   ],
+   "id": "54154154-d51b-47b7-9c6f-05a9294b9575",
+   "name": "Schedule Trigger"
+  },
+  {
+   "parameters": {
+    "options": {
+     "timezone": ""
+    }
+   },
+   "type": "n8n-nodes-base.dateTime",
+   "typeVersion": 2,
+   "position": [
+    -3200,
+    3744
+   ],
+   "id": "cc5400b4-f7ec-4723-a52a-5f0f3020c5a3",
+   "name": "Date & Time"
+  },
+  {
+   "parameters": {
+    "jsCode": "// n8n Code node (JavaScript)\n// Input:  { \"currentDate\": \"2026-02-26T17:41:48.851+00:00\" }\n// Output: { \"receivedAfter\": \"2026-02-26T17:31:48.851Z\" }\n\nconst s = $input.first()?.json?.currentDate;\n\nif (typeof s !== \"string\" || !s.trim()) {\n  throw new Error(\"Missing `currentDate` (expected a string).\");\n}\n\nconst d = new Date(s);\nif (Number.isNaN(d.getTime())) {\n  throw new Error(`Invalid currentDate: ${s}`);\n}\n\n// subtract 10 minutes\nconst d2 = new Date(d.getTime() - 10 * 60 * 1000);\n\n// Graph-native ISO UTC: YYYY-MM-DDTHH:mm:ss.sssZ\nconst isoUtc = d2.toISOString();\n\nreturn [\n  {\n    json: {\n      receivedAfter: isoUtc,\n    },\n  },\n];"
+   },
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    -3088,
+    3744
+   ],
+   "id": "17348440-ad1f-4f9a-82e5-b3b27ca980b5",
+   "name": "-10 mins"
+  },
+  {
+   "parameters": {
+    "options": {}
+   },
+   "type": "n8n-nodes-base.splitInBatches",
+   "typeVersion": 3,
+   "position": [
+    -2848,
+    3552
+   ],
+   "id": "42634ab5-f76e-4b36-88d0-c5e3259b8be3",
+   "name": "Loop Over Items1"
+  },
+  {
+   "parameters": {
+    "assignments": {
+     "assignments": [
+      {
+       "id": "d8d85a97-6dfd-49eb-aea6-319a9a2256ac",
+       "name": "id",
+       "value": "={{ $('Normalize Data').item.json.original_email.email_id }}",
+       "type": "string"
+      },
+      {
+       "id": "f8c9343c-dfe5-41a8-adde-5e2abb3ffa64",
+       "name": "conversationId",
+       "value": "={{ $('Normalize Data').item.json.original_email.thread_id }}",
+       "type": "string"
+      },
+      {
+       "id": "109ff9c0-c3ca-45cf-8869-7611c5ba90bc",
+       "name": "subject",
+       "value": "={{ $('Normalize Data').item.json.original_email.subject }}",
+       "type": "string"
+      },
+      {
+       "id": "a39f2491-5224-4634-8436-3e3a89162f71",
+       "name": "bodyContent",
+       "value": "={{ $('Normalize Data').item.json.original_email.body }}",
+       "type": "string"
+      },
+      {
+       "id": "2c623902-e855-4233-8b70-f256d95c73f3",
+       "name": "sentDateTime",
+       "value": "={{ $('Merge1').item.json.date || ($('Merge1').item.json.internalDate ? new Date(Number($('Merge1').item.json.internalDate)).toISOString() : $now.toISO()) }}",
+       "type": "string"
+      },
+      {
+       "id": "bb7cd69d-101a-4784-8201-ab4fd1ab2734",
+       "name": "sentDate",
+       "value": "=",
+       "type": "string"
+      },
+      {
+       "id": "1190b2ec-2789-4715-a3ce-bd77fc2c9284",
+       "name": "sentTime",
+       "value": "=",
+       "type": "string"
+      },
+      {
+       "id": "85dd5785-7406-4f46-8af6-61179ac4dd3e",
+       "name": "receivedDateTime",
+       "value": "={{ $('Merge1').item.json.date || ($('Merge1').item.json.internalDate ? new Date(Number($('Merge1').item.json.internalDate)).toISOString() : $now.toISO()) }}",
+       "type": "string"
+      },
+      {
+       "id": "dd913ffe-8755-40aa-812b-e35a216b6aa5",
+       "name": "receivedDate",
+       "value": "=",
+       "type": "string"
+      },
+      {
+       "id": "9becc5a0-22f4-49bb-8f8f-e393c94a3984",
+       "name": "receivedTime",
+       "value": "=",
+       "type": "string"
+      },
+      {
+       "id": "0ecab68d-ee8b-4098-aa95-7dd596cc02f6",
+       "name": "createdDateTime",
+       "value": "=",
+       "type": "string"
+      },
+      {
+       "id": "ef459def-dc0e-4693-b2da-18621b783460",
+       "name": "lastModifiedDateTime",
+       "value": "=",
+       "type": "string"
+      },
+      {
+       "id": "479b0612-8933-41b5-b501-40a65dfa260d",
+       "name": "fromAddress",
+       "value": "={{ $('Normalize Data').item.json.original_email.from }}",
+       "type": "string"
+      },
+      {
+       "id": "ef58c0de-be1e-4393-b3e3-d8e707027f2b",
+       "name": "fromName",
+       "value": "=",
+       "type": "string"
+      },
+      {
+       "id": "46e01773-f754-49d0-a1cb-e4ced2a2fa31",
+       "name": "toRecipients[0].name",
+       "value": "=",
+       "type": "string"
+      },
+      {
+       "id": "0646c489-8499-42c8-9898-f01274424519",
+       "name": "toRecipients[0].address",
+       "value": "=bookings@spartancrew.co.uk",
+       "type": "string"
+      },
+      {
+       "id": "2f48daa6-cd63-42bc-8a3d-3a81aceb43b5",
+       "name": "ccRecipients",
+       "value": "={{ [] }}",
+       "type": "array"
+      },
+      {
+       "id": "86769e80-075e-4526-b036-f9be8a17ac3a",
+       "name": "threadHistory",
+       "value": "={{ ($('Normalize Data').item.json.thread_history?.messages || []).join('\\n\\n---\\n\\n') }}",
+       "type": "string"
+      },
+      {
+       "id": "43dd42b1-fdd5-41ba-bc49-cdf954790c24",
+       "name": "category",
+       "value": "=",
+       "type": "string"
+      },
+      {
+       "id": "8046efe8-1680-40ff-8de0-ea49cacc4e78",
+       "name": "found",
+       "value": "={{ $('Dedupe Claim').item.json.found }}",
+       "type": "string"
+      },
+      {
+       "id": "bc32f637-ffee-4395-80f6-2244ea9fa1e5",
+       "name": "last_sent_message",
+       "value": "=",
+       "type": "string"
+      },
+      {
+       "id": "877eb95f-7ad2-4303-9321-8448685c0462",
+       "name": "last_place_in_follow_up",
+       "value": "=",
+       "type": "string"
+      },
+      {
+       "id": "eb1b4eba-309e-411a-acf8-e68735cded45",
+       "name": "added_to_whatsapp",
+       "value": "=false",
+       "type": "string"
+      },
+      {
+       "id": "2d9d17bd-8f30-4edd-9d57-958d046e49bc",
+       "name": "id",
+       "value": "={{ $('Normalize Data').item.json.original_email.email_id }}",
+       "type": "string"
+      }
+     ]
+    },
+    "options": {}
+   },
+   "type": "n8n-nodes-base.set",
+   "typeVersion": 3.4,
+   "position": [
+    -1232,
+    3904
+   ],
+   "id": "bf2efbd4-ee50-4e80-b831-0d5187bafa1f",
+   "name": "MAINDATA"
+  },
+  {
+   "parameters": {
+    "jsCode": "// ╔═══════════════════════════════════════════════════════════════════╗\n// ║                                                                   ║\n// ║   ██╗  ██╗ ██████╗ ██╗   ██╗███████╗███████╗                     ║\n// ║   ██║  ██║██╔═══██╗██║   ██║██╔════╝██╔════╝                     ║\n// ║   ███████║██║   ██║██║   ██║███████╗█████╗                       ║\n// ║   ██╔══██║██║   ██║██║   ██║╚════██║██╔══╝                       ║\n// ║   ██║  ██║╚██████╔╝╚██████╔╝███████║███████╗                     ║\n// ║   ╚═╝  ╚═╝ ╚═════╝  ╚═════╝ ╚══════╝╚══════╝                     ║\n// ║    ██████╗ ███████╗    ██╗  ██╗██╗   ██╗██████╗                   ║\n// ║   ██╔═══██╗██╔════╝    ██║  ██║██║   ██║██╔══██╗                  ║\n// ║   ██║   ██║█████╗      ███████║██║   ██║██║  ██║                  ║\n// ║   ██║   ██║██╔══╝      ██╔══██║██║   ██║██║  ██║                  ║\n// ║   ╚██████╔╝██║         ██║  ██║╚██████╔╝██████╔╝                  ║\n// ║    ╚═════╝ ╚═╝         ╚═╝  ╚═╝ ╚═════╝ ╚═════╝                  ║\n// ║                                                                   ║\n// ║   C O N V E R S A T I O N A L   R E N D E R I N G   E N G I N E  ║\n// ║                                                                   ║\n// ║   Deterministic thread parser · Classifier · Client extractor     ║\n// ║   Runs once per item · No external libs required                  ║\n// ║                                                                   ║\n// ╚═══════════════════════════════════════════════════════════════════╝\n\nconst crypto = require('crypto');\n\n// ---------- CONSTANTS ----------\nconst ENQUIRY_FORM_SENDERS = new Set([\n  // Spartan enquiry-form senders go here once known (was House of Hud's list).\n]);\n\nconst AI_SEND_ADDRESS = 'bookings@spartancrew.co.uk';\n\nconst INTERNAL_SENDERS = new Set([\n  // Covered by the @spartancrew.co.uk domain test; list any off-domain staff here.\n]);\n\nconst MONTHS = {jan:0,feb:1,mar:2,apr:3,may:4,jun:5,jul:6,aug:7,sep:8,oct:9,nov:10,dec:11};\n\n// ---------- HTML / TEXT ----------\nfunction decodeEntities(s) {\n  if (!s) return '';\n  return s\n    .replace(/&nbsp;/gi,' ').replace(/&amp;/gi,'&').replace(/&lt;/gi,'<')\n    .replace(/&gt;/gi,'>').replace(/&quot;/gi,'\"').replace(/&#39;/gi,\"'\")\n    .replace(/&apos;/gi,\"'\").replace(/&#(\\d+);/g,(_,n)=>String.fromCharCode(+n))\n    .replace(/&#x([0-9a-f]+);/gi,(_,h)=>String.fromCharCode(parseInt(h,16)));\n}\nfunction stripHtmlToText(html) {\n  if (!html) return '';\n  let s = String(html);\n  s = s.replace(/<style[\\s\\S]*?<\\/style>/gi,' ').replace(/<script[\\s\\S]*?<\\/script>/gi,' ');\n  s = s.replace(/<!--[\\s\\S]*?-->/g,' ');\n  s = s.replace(/<\\s*br\\s*\\/?>/gi,'\\n');\n  s = s.replace(/<\\/(p|div|tr|li|h[1-6])\\s*>/gi,'\\n');\n  s = s.replace(/<[^>]+>/g,' ');\n  s = decodeEntities(s);\n  s = s.replace(/\\r/g,'').replace(/[ \\t]+/g,' ').replace(/\\n[ \\t]+/g,'\\n').replace(/\\n{3,}/g,'\\n\\n');\n  return s.trim();\n}\nfunction normalizeForMatch(s) {\n  return String(s||'').toLowerCase().replace(/\\s+/g,' ').replace(/[^\\p{L}\\p{N} ]/gu,'').trim();\n}\nfunction jaccardTokenSet(a,b) {\n  const A = new Set(normalizeForMatch(a).split(' ').filter(Boolean));\n  const B = new Set(normalizeForMatch(b).split(' ').filter(Boolean));\n  if (!A.size || !B.size) return 0;\n  let inter = 0; for (const t of A) if (B.has(t)) inter++;\n  return inter / (A.size + B.size - inter);\n}\nfunction sha256(s){return crypto.createHash('sha256').update(s).digest('hex');}\n\n// ---------- DATE PARSING (UK log preserved) ----------\nfunction parseUkDate(str) {\n  if (!str) return null;\n  const m = String(str).match(/(\\d{1,2})\\s+([A-Za-z]{3,})\\s+(\\d{4})(?:[,\\s]+(\\d{1,2}):(\\d{2}))?/);\n  if (!m) return null;\n  const d=+m[1], mo=MONTHS[m[2].slice(0,3).toLowerCase()], y=+m[3];\n  const hh=m[4]?+m[4]:0, mm=m[5]?+m[5]:0;\n  if (mo==null) return null;\n  const utcGuess = Date.UTC(y,mo,d,hh,mm);\n  const isBST = (() => {\n    const lastSun = (yr,mon) => { const dt=new Date(Date.UTC(yr,mon+1,0)); return dt.getUTCDate() - dt.getUTCDay(); };\n    const startBST = Date.UTC(y,2,lastSun(y,2),1,0);\n    const endBST   = Date.UTC(y,9,lastSun(y,9),1,0);\n    return utcGuess >= startBST && utcGuess < endBST;\n  })();\n  return new Date(utcGuess - (isBST?60:0)*60000);\n}\n\n// ---------- SENDER CLASSIFIERS ----------\nconst addrOf = s => String(s||'').toLowerCase().trim();\nconst isEnquiryFormSender = a => ENQUIRY_FORM_SENDERS.has(addrOf(a));\nconst isInternalSender    = a => /@spartancrew\\.co\\.uk$/i.test(addrOf(a)) || INTERNAL_SENDERS.has(addrOf(a));\nconst isAiSender          = a => addrOf(a) === AI_SEND_ADDRESS;\n\n// ---------- THREAD PARSER ----------\nfunction parseThreadHistory(raw) {\n  if (!raw) return [];\n  const blocks = String(raw).split(/---\\s*Message\\s+\\d+\\s+of\\s+\\d+\\s*---/i).map(b=>b.trim()).filter(Boolean);\n  const out = [];\n  for (const b of blocks) {\n    const fromM = b.match(/^From:\\s*(.+)$/mi);\n    const dateM = b.match(/^Date:\\s*(.+)$/mi);\n    const subjM = b.match(/^Subject:\\s*(.+)$/mi);\n    const headerEnd = b.search(/\\n\\s*\\n/);\n    const body = headerEnd>-1 ? b.slice(headerEnd).trim() : '';\n    const fromRaw = fromM ? fromM[1].trim() : '';\n    const emailM = fromRaw.match(/<([^>]+)>/) || fromRaw.match(/([\\w.+-]+@[\\w.-]+)/);\n    const fromAddress = emailM ? emailM[1] : fromRaw;\n    out.push({\n      fromAddress: addrOf(fromAddress),\n      fromRaw,\n      date: parseUkDate(dateM?dateM[1]:''),\n      dateRaw: dateM?dateM[1].trim():'',\n      subject: subjM?subjM[1].trim():'',\n      bodyHtml: body,\n      bodyText: stripHtmlToText(body),\n    });\n  }\n  return out;\n}\n\n// ================================================================\n// SIGNATURE / EXIT-GREETING EXTRACTION\n// ================================================================\n// IMPORTANT: The regex scans BACKWARDS (last match wins) so that\n// phrases like \"Thank you for...\" in the body are not mistaken\n// for a sign-off. Do NOT change to a forward scan.\n// ================================================================\n\nconst EXIT_GREETING_RE = /^[ \\t]*(?:kind(?:est)?\\s*regards|best\\s*(?:wishes|regards)?|regards|sincerely|yours\\s*(?:sincerely|faithfully|truly)|many\\s*thanks|warm(?:est)?\\s*(?:regards|wishes)?|cheers|with\\s*(?:thanks|gratitude)|all\\s*the\\s*best|take\\s*care|speak\\s*soon|looking\\s*forward|thanks\\s*(?:again|so\\s*much|very\\s*much|in\\s*advance)?|thank\\s*you\\s*(?:very\\s*much|so\\s*much|kindly|in\\s*advance)?)[,.\\s!]*$/im;\n\nconst SIG_NOISE_RE = /^(?:--|___|\\*\\*\\*|===|~~~|sent\\s+from|get\\s+outlook|this\\s+email\\s+(?:was|is)|https?:\\/\\/|www\\.|disclaimer|confidential|unsubscribe)/i;\n\nconst PHONE_RE = /(?:(?:Tel(?:ephone)?|Phone|Mobile|Mob|Cell|Direct|Office|Fax|M|T|P|O)\\s*[:.]\\s*)?([+\\d][\\d\\s().-]{5,}\\d)/gi;\n\nconst SIG_EMAIL_RE = /([\\w.+-]+@[\\w.-]+\\.[a-z]{2,})/i;\n\nfunction extractFromSignature(text) {\n  if (!text) return { name: '', phone: '', email: '' };\n\n  const lines = text.split('\\n');\n\n  let greetingIdx = -1;\n  for (let i = lines.length - 1; i >= 0; i--) {\n    if (EXIT_GREETING_RE.test(lines[i])) {\n      greetingIdx = i;\n      break;\n    }\n  }\n\n  if (greetingIdx === -1) return { name: '', phone: '', email: '' };\n\n  const sigLines = lines.slice(greetingIdx + 1);\n\n  let name = '';\n  for (const raw of sigLines) {\n    const line = raw.trim();\n    if (!line) continue;\n    if (SIG_NOISE_RE.test(line)) continue;\n    if (/^\\d{2,}/.test(line)) continue;\n    if (/@/.test(line)) continue;\n    if (/^https?:\\/\\//i.test(line)) continue;\n    if (/^[+\\d\\s().-]+$/.test(line)) continue;\n\n    let candidate = line\n      .replace(/^(?:Mr\\.?|Mrs\\.?|Ms\\.?|Miss|Dr\\.?|Prof\\.?)\\s*/i, '')\n      .replace(/[|–—·•].*$/, '')\n      .trim();\n\n    if (candidate.length >= 2 && candidate.length <= 60 &&\n        /^[\\p{L}\\s'.-]+$/u.test(candidate) &&\n        candidate.split(/\\s+/).length >= 1 && candidate.split(/\\s+/).length <= 6) {\n      const titleMatch = line.match(/^(Mr\\.?|Mrs\\.?|Ms\\.?|Miss|Dr\\.?|Prof\\.?)\\s*/i);\n      name = titleMatch ? titleMatch[0].trim() + ' ' + candidate : candidate;\n      break;\n    }\n  }\n\n  const sigBlock = sigLines.join('\\n');\n  let phone = '';\n  const phoneMatches = [];\n  let pm;\n  const phoneRe = new RegExp(PHONE_RE.source, PHONE_RE.flags);\n  while ((pm = phoneRe.exec(sigBlock)) !== null) {\n    const cleaned = pm[1].replace(/[^+\\d]/g, '');\n    if (cleaned.length >= 7 && cleaned.length <= 15) {\n      phoneMatches.push(pm[1].trim());\n    }\n  }\n  if (phoneMatches.length) {\n    const mobile = phoneMatches.find(p => /(?:^07|^\\+?\\d{1,3}\\s*7)/i.test(p.replace(/[^+\\d]/g, '')));\n    phone = mobile || phoneMatches[0];\n  }\n\n  let email = '';\n  const emailMatch = sigBlock.match(SIG_EMAIL_RE);\n  if (emailMatch) email = emailMatch[1];\n\n  return { name, phone, email };\n}\n\n// ================================================================\n// GREETING INTRO EXTRACTION\n// ================================================================\n\nconst COMMON_WORDS = new Set([\n  'a','about','after','all','also','an','and','any','are','as','at','back','be',\n  'been','but','by','can','come','could','do','down','each','even','find','first',\n  'for','from','get','give','go','going','good','got','great','had','has','have',\n  'he','her','here','him','his','how','i','if','in','into','is','it','its','just',\n  'know','let','like','look','looking','lot','make','me','more','much','my','new',\n  'no','not','now','of','off','on','one','only','or','other','our','out','over',\n  'own','really','right','said','say','see','she','so','some','still','such',\n  'sure','take','than','that','the','their','them','then','there','these','they',\n  'think','this','those','through','time','to','too','try','two','up','us','use',\n  'very','want','was','way','we','well','were','what','when','where','which',\n  'while','who','will','with','wonder','wondering','work','would','writing','year',\n  'you','your','emailing','enquiring','contacting','reaching','planning','hoping',\n  'interested','happy','delighted','pleased','sorry','afraid','able','unable',\n]);\n\nfunction looksLikeName(str) {\n  if (!str || str.length < 2 || str.length > 40) return false;\n  if (!/^[A-Z\\u00C0-\\u024F]/.test(str)) return false;\n  if (!/^[\\p{L}\\s'.-]+$/u.test(str)) return false;\n  const firstWord = str.split(/\\s+/)[0].toLowerCase();\n  if (COMMON_WORDS.has(firstWord)) return false;\n  const words = str.split(/\\s+/);\n  if (words.length < 1 || words.length > 5) return false;\n  return true;\n}\n\nfunction extractFromGreeting(text) {\n  if (!text) return { name: '' };\n  const intro = text.slice(0, 500);\n\n  const p1 = intro.match(/[Mm]y\\s+name\\s+is\\s+([\\p{L}][\\p{L}\\s'.-]{1,39}?)(?:\\s*[,.\\n;]|\\s+and\\b|\\s+from\\b)/u);\n  if (p1 && looksLikeName(p1[1].trim())) return { name: p1[1].trim() };\n\n  const p2 = intro.match(/I[''\\u2019]m\\s+([\\p{L}][\\p{L}\\s'.-]{1,39}?)(?:\\s*[,.\\n;]|\\s+and\\b|\\s+from\\b)/u)\n          || intro.match(/I\\s+am\\s+([\\p{L}][\\p{L}\\s'.-]{1,39}?)(?:\\s*[,.\\n;]|\\s+and\\b|\\s+from\\b)/u);\n  if (p2 && looksLikeName(p2[1].trim())) return { name: p2[1].trim() };\n\n  const p3 = intro.match(/[Tt]his\\s+is\\s+([\\p{L}][\\p{L}\\s'.-]{1,39}?)(?:\\s*[,.\\n;]|\\s+from\\b|\\s+at\\b|\\s+with\\b)/u);\n  if (p3 && looksLikeName(p3[1].trim())) return { name: p3[1].trim() };\n\n  return { name: '' };\n}\n\n// ================================================================\n// INLINE CONTEXTUAL PHONE EXTRACTION\n// ================================================================\n\nfunction extractInlinePhone(text) {\n  if (!text) return '';\n\n  const patterns = [\n    /(?:call|reach|contact|text|ring|get)\\s+me\\s+(?:on|at)\\s*:?\\s*([+\\d][\\d\\s().-]{5,}\\d)/i,\n    /my\\s+(?:number|phone|mobile|cell|tel|telephone|mob|direct\\s+(?:number|line))\\s+(?:is|:)\\s*([+\\d][\\d\\s().-]{5,}\\d)/i,\n    /I[\\u2019'']\\s*m\\s+on\\s+([+\\d][\\d\\s().-]{5,}\\d)/i,\n    /I\\s+am\\s+on\\s+([+\\d][\\d\\s().-]{5,}\\d)/i,\n    /you\\s+can\\s+(?:get|reach|contact|call)\\s+me\\s+(?:on|at)\\s*:?\\s*([+\\d][\\d\\s().-]{5,}\\d)/i,\n    /best\\s+to\\s+(?:call|ring|text|reach\\s+me\\s+on)\\s*:?\\s*([+\\d][\\d\\s().-]{5,}\\d)/i,\n  ];\n\n  for (const re of patterns) {\n    const m = text.match(re);\n    if (m) {\n      const cleaned = m[1].replace(/[^+\\d]/g, '');\n      if (cleaned.length >= 7 && cleaned.length <= 15) {\n        return m[1].trim();\n      }\n    }\n  }\n  return '';\n}\n\n// ---------- CLIENT INFO EXTRACTION ----------\n// Priority: Form fields > Signature > Greeting intro > Inline phone > Fallback email\n// EMAIL RULE: Sender address ALWAYS wins for non-form messages.\nfunction extractClientInfo(text, fallbackEmail, isFormMessage) {\n  const t = text || '';\n  const pick = re => { const m=t.match(re); return m?m[1].trim():''; };\n\n  const info = {\n    name:      pick(/(?:^|\\n)\\s*(?:From|What'?s your name\\??|Name)\\s*[:\\n]\\s*([^\\n]+)/i),\n    email:     pick(/(?:E-?mail|EMAIL)\\s*[:\\n]\\s*([\\w.+-]+@[\\w.-]+)/i),\n    phone:     pick(/(?:Telephone|PHONE|Phone)\\s*[:\\n]\\s*([+\\d\\s()-]{6,})/i),\n    event_type:pick(/(?:Type of event|What kind of event[^\\n?]*\\??)\\s*[:\\n]\\s*([^\\n]+)/i),\n    event_date:pick(/(?:Date(?: of your event)?|DATE OF YOUR EVENT|Have you set a date\\??)\\s*[:\\n]\\s*([^\\n]+)/i),\n    location:  pick(/(?:Postcode\\/?location|Where will your event be(?:\\s+held)?\\??|Location|Venue)\\s*[:\\n]\\s*([^\\n]+)/i),\n    guests:    pick(/(?:How many (?:G|g)uests\\??|Guests)\\s*[:\\n]\\s*([^\\n]+)/i),\n    budget:    pick(/Budget\\s*[:\\n]\\s*([^\\n]+)/i),\n    sent_from: pick(/(?:Sent from|Where did you find us\\??)\\s*[:\\n]\\s*([^\\n]+)/i),\n  };\n\n  const sig = extractFromSignature(t);\n  if (!info.name  && sig.name)  info.name  = sig.name;\n  if (!info.phone && sig.phone) info.phone = sig.phone;\n  if (!info.email && sig.email && isFormMessage) info.email = sig.email;\n\n  if (!info.name) {\n    const greeting = extractFromGreeting(t);\n    if (greeting.name) info.name = greeting.name;\n  }\n\n  if (!info.phone) {\n    const inlinePhone = extractInlinePhone(t);\n    if (inlinePhone) info.phone = inlinePhone;\n  }\n\n  if (!info.email && fallbackEmail) info.email = fallbackEmail;\n\n  return info;\n}\n\nfunction extractClientMessageOnly(text) {\n  const m = text.match(/(?:^|\\n)\\s*(?:Message|What are you planning\\??|Mobile message[^\\n]*)\\s*[:\\n]\\s*([\\s\\S]+?)(?:\\n\\s*---|\\n\\s*This email is a system notification|\\n\\s*Where did you find us\\??|$)/i);\n  return m ? m[1].trim() : text.trim();\n}\n\n// ---------- AI MATCHING ----------\nfunction matchAiReplies(messages, lastSentList, lastPlaceList) {\n  const assignments = [];\n  const used = new Set();\n  for (let i=0;i<lastSentList.length;i++) {\n    const ai = normalizeForMatch(lastSentList[i]);\n    if (!ai) continue;\n    const head = ai.slice(0,200);\n    let best = {idx:-1, score:0};\n    for (let j=0;j<messages.length;j++) {\n      if (used.has(j)) continue;\n      const body = normalizeForMatch(messages[j].bodyText);\n      if (!body) continue;\n      let score = 0;\n      if (body.includes(head)) score = 1;\n      else score = jaccardTokenSet(ai, body);\n      if (score > best.score) best = {idx:j, score};\n    }\n    if (best.idx>=0 && best.score>=0.75) {\n      used.add(best.idx);\n      assignments.push({aiIndex:i, messageIndex:best.idx, score:best.score, followUp:lastPlaceList[i]||null});\n    }\n  }\n  return assignments;\n}\n\n// ---------- CLASSIFY ----------\n// Priority: Form sender → AI match → Internal sender → External (from_client)\nfunction classifyAll(messages, aiAssignments) {\n  const aiMap = new Map(aiAssignments.map(a=>[a.messageIndex, a]));\n  return messages.map((m,idx) => {\n    if (isEnquiryFormSender(m.fromAddress))\n      return {index:idx, from:m.fromAddress, label:'from_client', followUp:null, reason:'enquiry_form_sender', dateUTC:m.date?m.date.toISOString():null};\n    if (aiMap.has(idx)) {\n      const a = aiMap.get(idx);\n      return {index:idx, from:m.fromAddress, label:'reply_AI', followUp:a.followUp, reason:'matched_last_sent', dateUTC:m.date?m.date.toISOString():null};\n    }\n    if (isInternalSender(m.fromAddress))\n      return {index:idx, from:m.fromAddress, label:'reply_manual', followUp:null, reason:isAiSender(m.fromAddress)?'ai_address_unmatched':'internal_sender', dateUTC:m.date?m.date.toISOString():null};\n    return {index:idx, from:m.fromAddress, label:'from_client', followUp:null, reason:'external_sender', dateUTC:m.date?m.date.toISOString():null};\n  });\n}\n\n// ---------- DEDUPE ----------\nfunction dedupeInbound(messages, inbound) {\n  if (!inbound) return messages;\n  const inboundNorm = normalizeForMatch(stripHtmlToText(inbound.bodyContent||'')).slice(0,400);\n  const inboundFrom = addrOf(inbound.fromAddress);\n  const inboundTs = inbound.sentDateTime ? new Date(inbound.sentDateTime).getTime() : null;\n  return messages.filter(m => {\n    if (m.fromAddress !== inboundFrom) return true;\n    if (inboundTs && m.date && Math.abs(m.date.getTime()-inboundTs) > 5*60*1000) return true;\n    const mNorm = normalizeForMatch(m.bodyText).slice(0,400);\n    if (!inboundNorm || !mNorm) return true;\n    return !(mNorm.includes(inboundNorm.slice(0,150)) || inboundNorm.includes(mNorm.slice(0,150)));\n  });\n}\n\n// ---------- RENDER (conversation only) ----------\nfunction renderConversation(messages, classifications) {\n  if (!messages.length) return '(no conversation messages)';\n  const lines = [];\n  messages.forEach((m,i) => {\n    const c = classifications[i];\n    const isForm = isEnquiryFormSender(m.fromAddress);\n    const body = isForm ? extractClientMessageOnly(m.bodyText) : m.bodyText;\n    const ts = m.date ? formatUK(m.date) : (m.dateRaw||'unknown');\n    const fu = c.followUp ? ` {${c.followUp}}` : '';\n    lines.push(`[${ts} UK] <${m.fromAddress}> [${c.label}]${fu}`);\n    lines.push(body.trim());\n    lines.push('');\n  });\n  return lines.join('\\n').trim();\n}\n\nfunction formatUK(d) {\n  const months=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];\n  const pad=n=>String(n).padStart(2,'0');\n  const y=d.getUTCFullYear(), mo=d.getUTCMonth(), da=d.getUTCDate(), h=d.getUTCHours(), mi=d.getUTCMinutes();\n  const utcMs = Date.UTC(y,mo,da,h,mi);\n  const lastSun=(yr,m)=>{const dt=new Date(Date.UTC(yr,m+1,0));return dt.getUTCDate()-dt.getUTCDay();};\n  const bstStart=Date.UTC(y,2,lastSun(y,2),1,0), bstEnd=Date.UTC(y,9,lastSun(y,9),1,0);\n  const offset = (utcMs>=bstStart && utcMs<bstEnd) ? 60 : 0;\n  const local = new Date(utcMs + offset*60000);\n  return `${pad(local.getUTCDate())} ${months[local.getUTCMonth()]} ${local.getUTCFullYear()} ${pad(local.getUTCHours())}:${pad(local.getUTCMinutes())}`;\n}\n\n// ---------- MAIN ----------\nconst results = [];\nfor (const item of items) {\n  const j = item.json;\n  const warnings = [];\n\n  const inboundMsg = {\n    fromAddress: addrOf(j.fromAddress),\n    date: j.sentDateTime?new Date(j.sentDateTime):null,\n    bodyHtml: j.bodyContent||'',\n    bodyText: stripHtmlToText(j.bodyContent||''),\n    subject: j.subject||'',\n  };\n\n  let threadMsgs = parseThreadHistory(j.threadHistory||'');\n  threadMsgs = dedupeInbound(threadMsgs, j);\n\n  const hasInbound = threadMsgs.some(m =>\n    m.fromAddress===inboundMsg.fromAddress &&\n    Math.abs((m.date?.getTime()||0)-(inboundMsg.date?.getTime()||0)) < 5*60*1000\n  );\n  if (!hasInbound) threadMsgs.push(inboundMsg);\n\n  threadMsgs.sort((a,b)=>(a.date?.getTime()||0)-(b.date?.getTime()||0));\n\n  // AI matching — split last_sent_message on -NEXT- delimiter, last_place on comma\n  const lastSent = Array.isArray(j.last_sent_message) ? j.last_sent_message\n                 : (typeof j.last_sent_message==='string' && j.last_sent_message.trim()\n                    ? j.last_sent_message.split(/\\s*-NEXT-\\s*/i).map(s=>s.trim()).filter(Boolean)\n                    : []);\n  const lastPlace = Array.isArray(j.last_place_in_follow_up) ? j.last_place_in_follow_up\n                  : (typeof j.last_place_in_follow_up==='string' && j.last_place_in_follow_up.trim()\n                     ? j.last_place_in_follow_up.split(/\\s*,\\s*/).map(s=>s.trim()).filter(Boolean)\n                     : []);\n  const aiAssignments = matchAiReplies(threadMsgs, lastSent, lastPlace);\n  if (lastSent.length && aiAssignments.length < lastSent.length) warnings.push(`Only matched ${aiAssignments.length}/${lastSent.length} AI replies`);\n\n  const classifications = classifyAll(threadMsgs, aiAssignments);\n\n  // Client information — form extraction first, then first client message\n  // EMAIL RULE: Sender address ALWAYS wins for non-form messages.\n  let clientInfo = {name:'',email:'',phone:'',event_type:'',event_date:'',location:'',guests:'',budget:'',sent_from:''};\n  const formMsg = threadMsgs.find(m => isEnquiryFormSender(m.fromAddress));\n  if (formMsg) {\n    clientInfo = extractClientInfo(formMsg.bodyText, '', true);\n  } else {\n    const firstClientIdx = classifications.findIndex(c=>c.label==='from_client');\n    if (firstClientIdx>=0) {\n      const m = threadMsgs[firstClientIdx];\n      const extracted = extractClientInfo(m.bodyText, m.fromAddress, false);\n      clientInfo = {...clientInfo, ...extracted, email: m.fromAddress};\n    }\n  }\n\n  // Derive email_reply_to — always populated, never a form sender address\n  const senderAddr = addrOf(j.fromAddress);\n  let emailReplyTo;\n  if (isEnquiryFormSender(senderAddr)) {\n    // Form: use extracted client email, fall back to form sender address\n    emailReplyTo = clientInfo.email || senderAddr;\n  } else {\n    // Non-form: always the original sender\n    emailReplyTo = senderAddr;\n  }\n\n  const rendered = renderConversation(threadMsgs, classifications);\n  const render_hash = sha256(rendered);\n\n  results.push({\n    json: {\n      rendered,\n      email_reply_to: emailReplyTo,\n      client_information: {\n        name:        clientInfo.name        || null,\n        email:       clientInfo.email       || null,\n        phone:       clientInfo.phone       || null,\n        event_type:  clientInfo.event_type  || null,\n        event_date:  clientInfo.event_date  || null,\n        location:    clientInfo.location    || null,\n        guests:      clientInfo.guests      || null,\n        budget:      clientInfo.budget      || null,\n        sent_from:   clientInfo.sent_from   || null,\n      },\n      metadata: {\n        subject: j.subject || null,\n        found: j.found === true || String(j.found).toLowerCase() === 'true',\n        added_to_whatsapp: j.added_to_whatsapp === true || String(j.added_to_whatsapp).toLowerCase() === 'true',\n        messageCount: threadMsgs.length,\n        classifications,\n        id: j.id || null,\n        conversationId: j.conversationId || null,\n        render_hash,\n        warnings,\n      },\n    },\n  });\n}\nreturn results;"
+   },
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    -1120,
+    3904
+   ],
+   "id": "e9e5c6ed-3bc4-45ef-b1f6-a71429cbec75",
+   "name": "Conversational Renderer",
+   "onError": "continueErrorOutput"
+  },
+  {
+   "parameters": {
+    "conditions": {
+     "options": {
+      "caseSensitive": true,
+      "leftValue": "",
+      "typeValidation": "loose",
+      "version": 3
+     },
+     "conditions": [
+      {
+       "id": "5b0b9146-35d4-4405-a22e-92911bc0f259",
+       "leftValue": "={{ true }}",
+       "rightValue": "={{ true }}",
+       "operator": {
+        "type": "boolean",
+        "operation": "equals"
+       }
+      }
+     ],
+     "combinator": "and"
+    },
+    "options": {}
+   },
+   "type": "n8n-nodes-base.if",
+   "typeVersion": 2.3,
+   "position": [
+    -784,
+    3904
+   ],
+   "id": "f881bbe8-2aed-4dd7-b83c-89f1d2dd9db6",
+   "name": "If"
+  },
+  {
+   "parameters": {
+    "options": {}
+   },
+   "type": "n8n-nodes-base.set",
+   "typeVersion": 3.4,
+   "position": [
+    -672,
+    3904
+   ],
+   "id": "1a970bfd-803d-477a-ac52-818b29489e4d",
+   "name": "Combine all Email Data"
+  },
+  {
+   "parameters": {
+    "method": "POST",
+    "url": "https://spartan-crew-jobber.vercel.app/api/n8n-inbound",
+    "sendHeaders": true,
+    "headerParameters": {
+     "parameters": [
+      {
+       "name": "x-webhook-secret",
+       "value": "REPLACE_WITH_N8N_WEBHOOK_SECRET"
+      }
+     ]
+    },
+    "sendBody": true,
+    "specifyBody": "json",
+    "jsonBody": "={{ JSON.stringify($json) }}",
+    "options": {}
+   },
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.4,
+   "position": [
+    -448,
+    3904
+   ],
+   "id": "9189a5ae-76a1-41d8-888f-6661507b9bb9",
+   "name": "POST to Engine",
+   "onError": "continueRegularOutput"
+  },
+  {
+   "parameters": {
+    "method": "POST",
+    "url": "https://spartan-crew-jobber.vercel.app/api/dedupe",
+    "sendHeaders": true,
+    "headerParameters": {
+     "parameters": [
+      {
+       "name": "x-webhook-secret",
+       "value": "REPLACE_WITH_N8N_WEBHOOK_SECRET"
+      }
+     ]
+    },
+    "sendBody": true,
+    "specifyBody": "json",
+    "jsonBody": "={{ JSON.stringify({ message_id: $json.id, thread_id: $json.threadId, from_address: $json.from?.[0]?.email, note: \"n8n bookings poll\" }) }}",
+    "options": {}
+   },
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.4,
+   "position": [
+    -1808,
+    3904
+   ],
+   "id": "93c7c880-17fe-49c5-b8fa-cffb03aeca07",
+   "name": "Dedupe Claim",
+   "onError": "continueRegularOutput"
+  },
+  {
+   "parameters": {
+    "jsCode": "// ============================================================================\n// n8n Code node body: \"Build Engine Payload\"\n// ----------------------------------------------------------------------------\n// The tap node the engine hangs off (\"Combine all Email Data\") is an EMPTY Set\n// node, so \"POST to Engine\" was posting whatever $json happened to be. The\n// engine's intake contract is:\n//\n//   { thread_id, messages: [{ message_id, from, to[], date_iso, subject, body }] }\n//\n// Anything else is stored in inbound_raw and never reaches the pipeline. This\n// node builds that contract from the Gmail data already in the branch.\n//\n// Bodies are handed over RAW and uncleaned on purpose: app/lib/engine/normalize.ts\n// is a faithful port of the workflow's own cleaner and runs on our side, so\n// cleaning here would only give us two cleaners to keep in step.\n//\n// Lives in the repo (not only inside n8n) so it can be tested without n8n --\n// see scripts/test-engine-payload.mjs. Installed by scripts/install-payload-builder.mjs.\n//\n// Sources, in order of preference:\n//   $('Get a thread2')       full Gmail thread resource -> ids, dates, subjects\n//   $('Normalize Data')      original_email + thread_history (bodies only)\n//   $('Conversational Renderer') / $('Determine if Order')  -> carried as context\n// ============================================================================\n\n/** Safely read a node's output; returns null when the node did not run. */\nfunction nodeJson(name) {\n  try {\n    const item = $(name).item;\n    return item && item.json ? item.json : null;\n  } catch (e) {\n    return null;\n  }\n}\n/** Same, but the node's full item list (for multi-message nodes). */\nfunction nodeAll(name) {\n  try {\n    return $(name).all().map((i) => i.json);\n  } catch (e) {\n    return [];\n  }\n}\n\nfunction decodeB64(data) {\n  if (!data) return '';\n  try {\n    return Buffer.from(String(data).replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf-8');\n  } catch (e) {\n    return '';\n  }\n}\n\n/** Pull the best body out of a Gmail message payload (prefers text/plain). */\nfunction extractBody(msg) {\n  if (!msg) return '';\n  if (typeof msg.text === 'string' && msg.text.trim()) return msg.text;\n  const walk = (part) => {\n    if (!part) return '';\n    if (Array.isArray(part.parts)) {\n      const plain = part.parts.find((p) => p.mimeType === 'text/plain');\n      if (plain && plain.body && plain.body.data) return decodeB64(plain.body.data);\n      const html = part.parts.find((p) => p.mimeType === 'text/html');\n      if (html && html.body && html.body.data) return decodeB64(html.body.data);\n      for (const p of part.parts) {\n        const nested = walk(p);\n        if (nested) return nested;\n      }\n    }\n    if (part.body && part.body.data) return decodeB64(part.body.data);\n    return '';\n  };\n  const body = walk(msg.payload);\n  if (body) return body;\n  if (typeof msg.snippet === 'string') return msg.snippet;\n  return '';\n}\n\n// Header names n8n's Gmail node flattens straight onto the message item, in\n// their wire casing. Everything here is looked up case-insensitively.\nconst FLAT_HEADER_KEYS = [\n  'From', 'To', 'Cc', 'Bcc', 'Subject', 'Date', 'Message-ID', 'In-Reply-To',\n  'References', 'Reply-To', 'Content-Type', 'MIME-Version',\n];\n\nfunction headerMap(msg) {\n  const out = {};\n  if (!msg) return out;\n\n  const hs = (msg.payload && msg.payload.headers) || [];\n  for (const h of hs) if (h && h.name) out[String(h.name).toLowerCase()] = h.value;\n\n  if (msg.headers && typeof msg.headers === 'object') {\n    for (const [k, v] of Object.entries(msg.headers)) if (out[k.toLowerCase()] === undefined) out[k.toLowerCase()] = v;\n  }\n\n  // The case that actually bit us. \"Get a thread\" returns messages whose\n  // payload has NO headers array (it holds only the MIME parts) and no\n  // msg.headers object - the headers are flattened onto the item itself as\n  // \"From\", \"To\", \"Subject\", \"Date\", \"Message-ID\". Reading only msg.from /\n  // msg.subject therefore yielded \"\" for every real message, so every thread\n  // reached the engine with no sender and no subject. The bodies arrived fine,\n  // which is why it looked like it was working: three live threads were\n  // classified with the sender and subject blanked out.\n  for (const k of FLAT_HEADER_KEYS) {\n    const lower = k.toLowerCase();\n    if (out[lower] !== undefined) continue;\n    if (msg[k] !== undefined && msg[k] !== null && msg[k] !== '') out[lower] = msg[k];\n    else if (msg[lower] !== undefined && msg[lower] !== null && msg[lower] !== '') out[lower] = msg[lower];\n  }\n  return out;\n}\n\n/** \"Ben <ben@x.com>\" | {value:[{address}]} | \"ben@x.com\" -> \"ben@x.com\" */\nfunction addrOf(v) {\n  if (!v) return '';\n  if (Array.isArray(v)) return addrOf(v[0]);\n  if (typeof v === 'object') {\n    if (v.address) return String(v.address).toLowerCase();\n    if (v.email) return String(v.email).toLowerCase();\n    if (v.value) return addrOf(v.value);\n    return '';\n  }\n  const s = String(v);\n  const m = s.match(/<([^>]+)>/);\n  return (m ? m[1] : s).trim().toLowerCase();\n}\n\n/** Split a To/Cc header into addresses. */\nfunction addrList(v) {\n  if (!v) return [];\n  if (Array.isArray(v)) return v.map(addrOf).filter(Boolean);\n  return String(v)\n    .split(',')\n    .map((s) => addrOf(s))\n    .filter(Boolean);\n}\n\nfunction toIso(msg, headers) {\n  const raw = msg && (msg.internalDate || msg.date);\n  if (raw) {\n    const n = Number(raw);\n    const d = Number.isFinite(n) && String(raw).length >= 10 ? new Date(n) : new Date(raw);\n    if (!isNaN(d.getTime())) return d.toISOString();\n  }\n  if (headers && headers.date) {\n    const d = new Date(headers.date);\n    if (!isNaN(d.getTime())) return d.toISOString();\n  }\n  return new Date().toISOString();\n}\n\nconst SPARTAN_DOMAINS = ['@spartancrew.co.uk'];\nconst isSpartan = (from) => SPARTAN_DOMAINS.some((d) => String(from || '').toLowerCase().includes(d));\n\n/** One Gmail message resource -> one engine ThreadMessage. */\nfunction toThreadMessage(msg) {\n  const h = headerMap(msg);\n  const from = addrOf(msg.from || h.from);\n  return {\n    message_id: String(msg.id || h['message-id'] || ''),\n    from,\n    to: addrList(msg.to || h.to),\n    date_iso: toIso(msg, h),\n    subject: String((msg.subject !== undefined ? msg.subject : h.subject) || ''),\n    body: extractBody(msg),\n    is_from_spartan: isSpartan(from),\n  };\n}\n\n// ---------------------------------------------------------------- build\nconst norm = nodeJson('Normalize Data') || {};\nconst original = norm.original_email || {};\nconst threadNode = nodeJson('Get a thread2') || {};\n// The classifier node has been rebuilt more than once - it was \"Determine if\n// Order\" (+ Failsafe) as a plain openAi node, and is now an AI Agent feeding\n// \"Parse Job Determinism Output\", with gpt-5 primary and opus 4.6 as fallback.\n// nodeJson swallows a missing node, so a rename does not break the run - it just\n// silently drops the verdict from the durable record, which is the one field that\n// lets anyone compare n8n's judgement against the engine's. Try the current names\n// first and keep the old ones so this works against either shape.\nconst VERDICT_NODES = [\n  'Parse Job Determinism Output',\n  'AI Agent',\n  'Determine if Order',\n  'Determine if Order Failsafe',\n];\nlet verdict = {};\nlet verdict_source = null;\nfor (const name of VERDICT_NODES) {\n  const j = nodeJson(name);\n  if (j) { verdict = j; verdict_source = name; break; }\n}\nconst renderer = nodeJson('Conversational Renderer') || {};\n\nconst thread_id = String(threadNode.id || original.thread_id || norm.thread_id || $json.threadId || $json.thread_id || '').trim();\n\n// Prefer the full Gmail thread; fall back to the merged hydrated items, then to\n// the single original email. Never emit zero messages when we have any content.\nlet source = Array.isArray(threadNode.messages) && threadNode.messages.length ? threadNode.messages : null;\nif (!source) {\n  const merged = nodeAll('Merge1').filter((m) => m && (m.id || m.payload || m.text));\n  if (merged.length) source = merged;\n}\n\nlet messages = (source || []).map(toThreadMessage).filter((m) => m.body && m.body.trim());\n\nif (!messages.length && (original.body || original.email_id)) {\n  messages = [\n    {\n      message_id: String(original.email_id || ''),\n      from: addrOf(original.from),\n      to: [],\n      date_iso: new Date().toISOString(),\n      subject: String(original.subject || ''),\n      body: String(original.body || ''),\n      is_from_spartan: isSpartan(original.from),\n    },\n  ];\n}\n\n// The cleaned history Normalize Data produced is bodies-only (no ids or dates),\n// so it cannot become a ThreadMessage. Carry it as context rather than drop it.\nconst history_text = (norm.thread_history && Array.isArray(norm.thread_history.messages))\n  ? norm.thread_history.messages\n  : [];\n\nmessages.sort((a, b) => Date.parse(a.date_iso) - Date.parse(b.date_iso));\n\nreturn [\n  {\n    json: {\n      thread_id,\n      messages,\n      // Everything below is context the engine records for transparency; the\n      // contract above is what drives the pipeline.\n      n8n: {\n        workflow: 'Email SamurAI v3.4 Spartan Crew Bookings',\n        latest_message_id: String(original.email_id || (messages.length ? messages[messages.length - 1].message_id : '')),\n        // The old openAi node wrapped its answer in message/content; the parse\n        // node emits the fields directly (is_job, type_job, job_summary). Fall\n        // back to the whole object rather than recording null for a shape we did\n        // not anticipate - this field is pure transparency, so keeping too much\n        // costs nothing and keeping nothing costs the audit trail.\n        verdict: verdict.message || verdict.content || verdict.text || verdict.output ||\n          (verdict_source && Object.keys(verdict).length ? verdict : null),\n        verdict_source: verdict_source,\n        client_information: renderer.client_information || null,\n        render_hash: (renderer.metadata && renderer.metadata.render_hash) || null,\n        classifications: (renderer.metadata && renderer.metadata.classifications) || null,\n        // Read these off the Dedupe Claim node, NOT $json. At this point in the\n        // branch $json is the classifier's item, which never carries them, so\n        // reading $json silently reported found:false for every message.\n        dedupe: (function () {\n          const d = nodeJson('Dedupe Claim') || $json || {};\n          return {\n            found: d.found === true,\n            first_seen: d.first_seen === true,\n            thread_first_seen: d.thread_first_seen === true,\n            thread_message_count: d.thread_message_count || null,\n            degraded: d.degraded || null,\n          };\n        })(),\n        history_text,\n        message_count: messages.length,\n      },\n    },\n  },\n];\n"
+   },
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    -560,
+    3904
+   ],
+   "id": "16ecc5e6-aff6-406a-b413-9352ab5c1a5c",
+   "name": "Build Engine Payload"
+  },
+  {
+   "parameters": {
+    "promptType": "define",
+    "text": "=USER PROMPT (INPUT DATA)\n\nCurrent Email Subject: \n{{ $('Normalize Data').item.json.original_email.subject }}\n\nCurrent Email Body: \n{{ $('Normalize Data').item.json.original_email.body }}\n\nThread History: \n{{ $('Normalize Data').item.json.thread_history.messages }}\n\nemail_id: \n{{ $('Normalize Data').item.json.original_email.email_id }}\n\nthread_id: \n{{ $('Normalize Data').item.json.original_email.thread_id }}\n\nfrom: \n{{ $('Normalize Data').item.json.original_email.from }}",
+    "needsFallback": true,
+    "options": {
+     "systemMessage": "ROLE:\nClassify incoming emails as either:\n1. NEW job request\n2. UPDATE to existing job request\n3. NOT a job request\n\nYou ONLY classify the Current Email. Thread History is context only.\n\n---\n\nSCOPE RULE:\n\nYou are classifying ONLY the \"Current Email\" (subject + body).\n\nThread History exists solely to answer these two questions:\n  1. Does Current Email introduce a NEW job NOT in Thread History?\n  2. Does Current Email modify a job that ALREADY EXISTS in Thread History?\n\nIf neither is true → NOT a job request.\n\nCRITICAL: Never classify Thread History messages. Only classify Current Email.\n\n---\n\nDEFINITIONS:\n\n\"Job Request\" = Any message requesting crew, booking, order, shift, or staffing.\n\n\"Current Email\" = The most recent email (the one just arrived).\n\n\"Thread History\" = All previous emails in this conversation thread.\n\n---\n\nCLASSIFICATION LOGIC:\n\nSTEP 1: Does Current Email contain job request language?\n\n  NEW Job Indicators:\n  • \"booking request,\" \"crew request,\" \"I need a crew\"\n  • \"I'll take [X] on this day,\" \"[X] crew on [date]\"\n  • \"new order,\" \"crew chief,\" \"can you crew this\"\n  • Any explicit request for staffing with numbers/dates/details\n\n  UPDATE Job Indicators:\n  • \"change this,\" \"make it [X] instead\"\n  • \"update,\" \"amend,\" \"adjust,\" \"modify\"\n  • \"actually,\" \"instead,\" \"can we switch\"\n  • \"cancel,\" \"remove,\" \"add to\"\n  • \"confirmed,\" \"approved,\" \"going ahead\"\n  • \"push to,\" \"move to,\" \"delay\"\n\n  If Current Email has NONE of these → is_job: false → STOP\n\n---\n\nSTEP 2: If YES to job language, check Thread History\n\n  CASE A: No Thread History exists\n    → is_job: true / type_job: new\n    → Job summary: What this email requests\n\n  CASE B: Thread History exists but NO prior job mentioned\n    → is_job: true / type_job: new\n    → Job summary: What this email requests\n\n  CASE C: Thread History EXISTS and CONTAINS a prior job\n    → Continue to STEP 3\n\n---\n\nSTEP 3: Does Current Email reference/modify the existing job?\n\n  If YES:\n    → is_job: true / type_job: update\n    → Job summary: Original job + what changed\n\n  If NO (Current Email is unrelated to prior job):\n    → is_job: true / type_job: new\n    → Job summary: What this email requests (separate from prior job)\n\n---\n\nDETERMINISM RULES:\n\nRule 1: DUPLICATE DETECTION\n  If Current Email is identical to any message in Thread History:\n  → Mark as duplicate and disregard from thread history context\n  → Still classify Current Email normally based on content\n\nRule 2: AMBIGUOUS LANGUAGE\n  If Current Email COULD be either new or update:\n  → Prioritize UPDATE if Thread History has any prior job details\n  → Default to NEW if Thread History is unclear or absent\n  → REASON: Safer to categorize as update than miss context\n\nRule 3: MULTIPLE JOBS IN ONE EMAIL\n  If Current Email contains BOTH a new request AND update to prior:\n  → type_job: update (the update takes precedence)\n  → job_summary: Describe the original job, what changed, AND what new request was added\n\nRule 4: CONFIRMATION ONLY\n  If Current Email only confirms/acknowledges prior job with NO changes:\n  → is_job: false (confirmation alone is not a new classified request)\n  \n  Exception: If confirmation includes NEW details not in prior job:\n  → is_job: true / type_job: update\n  → job_summary: Note what new information was provided\n\nRule 5: CANCELLATION\n  If Current Email cancels an existing job or part of it:\n  → is_job: true / type_job: update\n  → job_summary: State what was cancelled and from what prior job\n\nRule 6: MISSING CRITICAL DATA\n  If Current Email requests crew but lacks dates/times/headcount:\n  → Still classify as is_job: true\n  → job_summary: Note what details are missing (\"Date unclear,\" \"Crew size not specified\")\n\n---\n\nOUTPUT FORMAT (EXACTLY):\n\nfrom: [email address from passthrough]\nemail_id: [ID from passthrough]\nthread_id: [ID from passthrough]\nis_job: [true or false]\ntype_job: [new or update, blank if is_job is false]\njob_summary: [technical summary, see below]\n\n---\n\nJOB_SUMMARY SPECIFICATIONS:\n\nIf is_job: true / type_job: new\n  Format: \"[Date/Time] - [Headcount] crew at [Location] - [Any other key details]\"\n  Example: \"Thursday 9am - 3 crew at 123 Main St - Crew chief: Mike\"\n  Include: Dates, times, headcount, location, crew chief, any IDs, payment terms if mentioned\n\nIf is_job: true / type_job: update\n  Format: \"[Original job details] → UPDATED: [what changed]\"\n  Example: \"Thursday 9am - 3 crew → UPDATED: Now 4 crew instead of 3\"\n  Include: What changed FROM what TO what (if discernible)\n  If change is unclear, state: \"Change requested but specifics unclear\"\n\nIf is_job: false\n  Write: \"N/A - [brief reason]\"\n  Examples: \"N/A - General conversation, no crew request\"\n            \"N/A - Status update only, no changes requested\"\n            \"N/A - Thank you/confirmation without modifications\"\n\n---\n\nTHREAD HISTORY REFERENCE:\n\nThread History is provided chronologically:\n  • Oldest message = Top\n  • Newest message = Bottom\n  • Current Email = NOT in Thread History (it's separate)\n\nWhen analyzing Thread History:\n  1. Read from top to bottom\n  2. Identify job requests in the order they appear\n  3. Track what changes between messages\n  4. Use dates/timestamps to prioritize newer information\n  5. Remember: Current Email is always more recent than everything in history\n\n---\n\nEDGE CASES:\n\nScenario 1: \"Can you send me a quote?\"\n  → is_job: false (request for information, not a booking)\n\nScenario 2: \"I'd like to move the crew from Friday to Saturday\"\n  → is_job: true / type_job: update (references existing job, modifies it)\n\nScenario 3: Current Email says \"Sounds good\" with no changes\n  → is_job: false (pure confirmation/acknowledgment)\n  → UNLESS Thread History shows no prior job, then it's ambiguous\n    → is_job: false (no actionable request in Current Email itself)\n\nScenario 4: \"We'll need 5 crew Thursday AND can we cancel Monday?\"\n  → is_job: true / type_job: update (both are modifications to prior job context)\n  → job_summary: \"Thursday - 5 crew requested. Monday booking cancelled.\"\n\nScenario 5: Current Email references \"the job\" but Thread History is unclear\n  → is_job: true / type_job: update (Current Email clearly references prior job)\n  → job_summary: \"Update to existing booking (prior details unclear from thread)\"\n\n---\n\nCRITICAL OUTPUTS:\n\n✓ Only output the 6 required fields\n✓ No markdown, no JSON, no code blocks, no extra formatting\n✓ type_job NEVER contains \"-new\", \"-update\", or variations\n✓ type_job is blank if is_job is false\n✓ Passthrough fields (from, email_id, thread_id) are exactly as provided in input\n✓ No assumptions about missing data — note it in job_summary if unclear"
+    }
+   },
+   "type": "@n8n/n8n-nodes-langchain.agent",
+   "typeVersion": 3.1,
+   "position": [
+    -960,
+    3760
+   ],
+   "id": "a1364aa5-501e-49b4-a84b-3b53b9f50824",
+   "name": "AI Agent"
+  },
+  {
+   "parameters": {
+    "jsCode": "// Loop over input items and add a new field called 'myNewField' to the JSON of each one\nfor (const item of $input.all()) {\n  item.json.myNewField = 1;\n}\n\nreturn $input.all();"
+   },
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    -720,
+    3760
+   ],
+   "id": "f1008304-edde-4300-bf67-035b9f1143e4",
+   "name": "Parse Job Determinism Output"
+  },
+  {
+   "parameters": {
+    "model": {
+     "__rl": true,
+     "value": "openai/gpt-5",
+     "mode": "list",
+     "cachedResultName": "openai/gpt-5",
+     "cachedResultUrl": ""
+    },
+    "builtInTools": {},
+    "options": {}
+   },
+   "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+   "typeVersion": 1.3,
+   "position": [
+    -912,
+    3872
+   ],
+   "id": "6795010d-e3d9-4670-b471-f19fc97f85f4",
+   "name": "gpt-5",
+   "credentials": {
+    "openAiApi": {
+     "id": "SPBzLNvmmXvROMN4",
+     "name": "SPARTAN CREW NEW"
+    }
+   }
+  },
+  {
+   "parameters": {
+    "model": {
+     "__rl": true,
+     "value": "anthropic/claude-opus-4.6",
+     "mode": "list",
+     "cachedResultName": "anthropic/claude-opus-4.6",
+     "cachedResultUrl": ""
+    },
+    "builtInTools": {},
+    "options": {}
+   },
+   "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+   "typeVersion": 1.3,
+   "position": [
+    -992,
+    3872
+   ],
+   "id": "b7af4e43-5f2f-45cc-93a5-1cc5926898ff",
+   "name": "opus 4.6",
+   "credentials": {
+    "openAiApi": {
+     "id": "SPBzLNvmmXvROMN4",
+     "name": "SPARTAN CREW NEW"
+    }
+   }
+  }
+ ],
+ "connections": {
+  "Poll1": {
+   "main": [
+    [
+     {
+      "node": "Date & Time",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Get IDs1": {
+   "main": [
+    [
+     {
+      "node": "Dedupe Claim",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Get Hydrated Emails1": {
+   "main": [
+    [
+     {
+      "node": "Get a thread2",
+      "type": "main",
+      "index": 0
+     },
+     {
+      "node": "Merge1",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Merge1": {
+   "main": [
+    [
+     {
+      "node": "Normalize Data",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Normalize Data": {
+   "main": [
+    [
+     {
+      "node": "MAINDATA",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Get a thread2": {
+   "main": [
+    [
+     {
+      "node": "Merge1",
+      "type": "main",
+      "index": 1
+     }
+    ]
+   ]
+  },
+  "Loop Over Items": {
+   "main": [
+    [],
+    [
+     {
+      "node": "Get IDs1",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Remove label from message": {
+   "main": [
+    [
+     {
+      "node": "Loop Over Items1",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Get many messages": {
+   "main": [
+    [
+     {
+      "node": "Loop Over Items1",
+      "type": "main",
+      "index": 0
+     },
+     {
+      "node": "Loop Over Items",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Schedule Trigger": {
+   "main": [
+    [
+     {
+      "node": "Date & Time",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Date & Time": {
+   "main": [
+    [
+     {
+      "node": "-10 mins",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "-10 mins": {
+   "main": [
+    [
+     {
+      "node": "Get many messages",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Loop Over Items1": {
+   "main": [
+    [],
+    [
+     {
+      "node": "Remove label from message",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "MAINDATA": {
+   "main": [
+    [
+     {
+      "node": "Conversational Renderer",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Conversational Renderer": {
+   "main": [
+    [
+     {
+      "node": "AI Agent",
+      "type": "main",
+      "index": 0
+     }
+    ],
+    []
+   ]
+  },
+  "If": {
+   "main": [
+    [
+     {
+      "node": "Combine all Email Data",
+      "type": "main",
+      "index": 0
+     }
+    ],
+    [
+     {
+      "node": "Loop Over Items",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Combine all Email Data": {
+   "main": [
+    [
+     {
+      "node": "Build Engine Payload",
+      "type": "main",
+      "index": 0
+     },
+     {
+      "node": "Loop Over Items",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "POST to Engine": {
+   "main": [
+    []
+   ]
+  },
+  "Dedupe Claim": {
+   "main": [
+    [
+     {
+      "node": "Get Hydrated Emails1",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Build Engine Payload": {
+   "main": [
+    [
+     {
+      "node": "POST to Engine",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "AI Agent": {
+   "main": [
+    [
+     {
+      "node": "Parse Job Determinism Output",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Parse Job Determinism Output": {
+   "main": [
+    [
+     {
+      "node": "If",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "gpt-5": {
+   "ai_languageModel": [
+    [
+     {
+      "node": "AI Agent",
+      "type": "ai_languageModel",
+      "index": 1
+     }
+    ]
+   ],
+   "main": []
+  },
+  "opus 4.6": {
+   "ai_languageModel": [
+    [
+     {
+      "node": "AI Agent",
+      "type": "ai_languageModel",
+      "index": 0
+     }
+    ]
+   ],
+   "main": []
+  }
+ },
+ "settings": {
+  "callerPolicy": "workflowsFromSameOwner",
+  "executionOrder": "v0",
+  "errorWorkflow": "NZ9lV5RxNz77ttBx",
+  "timeSavedPerExecution": 1,
+  "timeSavedMode": "fixed",
+  "availableInMCP": false,
+  "binaryMode": "separate"
+ },
+ "staticData": {
+  "node:On Message Received": {
+   "lastTimeChecked": 1769321797,
+   "possibleDuplicates": [
+    "19bf3cc1bc20a344"
+   ]
+  },
+  "node:Gmail Trigger": {
+   "Gmail Trigger": {
+    "lastTimeChecked": 1769603155,
+    "possibleDuplicates": [
+     "19c0491664efe505"
+    ]
+   }
+  },
+  "node:Schedule Trigger": {
+   "recurrenceRules": [
+    null
+   ],
+   "recurrenceRuleSignatures": [
+    null
+   ]
+  },
+  "node:Gmail Trigger1": {
+   "Gmail Trigger1": {
+    "lastTimeChecked": 1769603155,
+    "possibleDuplicates": [
+     "19c0491664efe505"
+    ]
+   }
+  },
+  "node:Gmail Trigger3": {
+   "Gmail Trigger3": {
+    "lastTimeChecked": 1769603076,
+    "possibleDuplicates": [
+     "19c04901ba391c4d",
+     "19c04895fd236539"
+    ]
+   }
+  },
+  "node:Gmail Trigger4": {
+   "Gmail Trigger4": {
+    "lastTimeChecked": 1769553365,
+    "possibleDuplicates": [
+     "19c01998f2db1f70",
+     "19c01997a9d49cd8",
+     "19c0198a7f0976c4",
+     "19c0198931b3e068",
+     "19c0197bf366a0f7"
+    ]
+   }
+  },
+  "node:Gmail Trigger2": {
+   "Gmail Trigger2": {
+    "lastTimeChecked": 1769603155,
+    "possibleDuplicates": [
+     "19c0491664efe505"
+    ]
+   }
+  },
+  "node:Poll1": {
+   "Poll1": {
+    "lastTimeChecked": 1785785052,
+    "possibleDuplicates": [
+     "19fc9159dd4553e2"
+    ]
+   }
+  },
+  "node:Poll": {
+   "Poll": {
+    "lastTimeChecked": 1772216660,
+    "possibleDuplicates": [
+     "19ca0583341b44a6",
+     "19ca056291584d0e",
+     "19ca04629fa797ea"
+    ]
+   }
+  },
+  "node:Poll2": {
+   "Poll2": {
+    "lastTimeChecked": 1772216660,
+    "possibleDuplicates": [
+     "19ca0583341b44a6",
+     "19ca056291584d0e",
+     "19ca04629fa797ea"
+    ]
+   }
+  },
+  "node:Poll4": {
+   "Poll4": {
+    "lastTimeChecked": 1772336647,
+    "possibleDuplicates": [
+     "19ca77f0fc8aa160"
+    ]
+   }
+  },
+  "node:Schedule Trigger1": {
+   "recurrenceRules": []
+  },
+  "node:Microsoft Outlook Trigger1": {
+   "lastTimeChecked": "2026-07-02T18:30:48.005+01:00"
+  }
+ },
+ "meta": {
+  "templateId": "4722",
+  "templateCredsSetupCompleted": true
+ },
+ "nodeGroups": [],
+ "pinData": {
+  "Poll1": [
+   {
+    "json": {
+     "id": "19faf172efeebfc4",
+     "threadId": "19fa40433f323c10",
+     "snippet": "Heya, Hope you&#39;re well. Thanks so much for today the crew were great! We were wondering if we could increase to 4 members for the derig tomorrow? Cheers, Macy Trieu-Dingle (she/her) Production",
+     "payload": {
+      "mimeType": "multipart/alternative"
+     },
+     "sizeEstimate": 123445,
+     "historyId": "41068365",
+     "internalDate": "1785348946000",
+     "labels": [
+      {
+       "id": "INBOX",
+       "name": "INBOX"
+      },
+      {
+       "id": "IMPORTANT",
+       "name": "IMPORTANT"
+      },
+      {
+       "id": "CATEGORY_PERSONAL",
+       "name": "CATEGORY_PERSONAL"
+      },
+      {
+       "id": "UNREAD",
+       "name": "UNREAD"
+      },
+      {
+       "id": "Label_5089401050847698788",
+       "name": "New"
+      }
+     ],
+     "From": "Macy Trieu <macy@matridi.co.uk>",
+     "Subject": "Re: Film shoot support Wednesday",
+     "To": "Bookings Spartan Crew <bookings@spartancrew.co.uk>"
+    },
+    "pairedItem": {
+     "item": 0
+    }
+   }
+  ]
+ },
+ "versionId": "b9113f02-edc1-4f98-b522-1c5b2f864385",
+ "activeVersionId": "b9113f02-edc1-4f98-b522-1c5b2f864385",
+ "versionCounter": 10215,
+ "triggerCount": 2,
+ "sourceWorkflowId": null,
+ "shared": [
+  {
+   "updatedAt": "2025-10-20T16:16:08.416Z",
+   "createdAt": "2025-10-20T16:16:08.416Z",
+   "role": "workflow:owner",
+   "workflowId": "CPIRu7CpezvKjU8d",
+   "projectId": "QYhxf5wADFAhnwUD",
+   "project": {
+    "updatedAt": "2026-01-27T21:19:32.000Z",
+    "createdAt": "2025-02-26T17:02:01.251Z",
+    "id": "QYhxf5wADFAhnwUD",
+    "name": "SamurAI Solutions",
+    "type": "team",
+    "icon": {
+     "type": "icon",
+     "value": "layer-group"
+    },
+    "description": "",
+    "customTelemetryTags": [],
+    "creatorId": null
+   }
+  }
+ ],
+ "tags": [
+  {
+   "updatedAt": "2026-01-25T07:05:38.404Z",
+   "createdAt": "2026-01-25T07:05:38.404Z",
+   "id": "b1ysvLXPnQdfcx9e",
+   "name": "DO NOT EDIT"
+  },
+  {
+   "updatedAt": "2026-02-22T17:46:15.512Z",
+   "createdAt": "2026-02-22T17:46:15.512Z",
+   "id": "r0PSFYkr8I9ECsFp",
+   "name": "PRODUCTION"
+  }
+ ],
+ "activeVersion": {
+  "updatedAt": "2026-08-03T13:03:47.575Z",
+  "createdAt": "2026-08-03T13:03:47.575Z",
+  "versionId": "b9113f02-edc1-4f98-b522-1c5b2f864385",
+  "workflowId": "CPIRu7CpezvKjU8d",
+  "nodes": [
+   {
+    "parameters": {
+     "content": "## https://airtable.com/appKTOJbXpUz34KCZ/tbl1SETRx7gbfDFDe/viwd8rn6UcwvMsywV?blocks=hide",
+     "width": 166
+    },
+    "type": "n8n-nodes-base.stickyNote",
+    "position": [
+     3840,
+     3456
+    ],
+    "typeVersion": 1,
+    "id": "19676484-0df2-4b14-ac5e-84c19e34a569",
+    "name": "Sticky Note3"
+   },
+   {
+    "parameters": {
+     "pollTimes": {
+      "item": [
+       {
+        "mode": "everyMinute"
+       },
+       {
+        "mode": "everyX",
+        "value": 3,
+        "unit": "minutes"
+       }
+      ]
+     },
+     "filters": {
+      "includeDrafts": false,
+      "labelIds": [
+       "Label_5089401050847698788"
+      ],
+      "readStatus": "both"
+     }
+    },
+    "type": "n8n-nodes-base.gmailTrigger",
+    "typeVersion": 1.3,
+    "position": [
+     -3344,
+     3648
+    ],
+    "id": "1ce92e0a-e940-4223-a21f-72670e48b03d",
+    "name": "Poll1",
+    "credentials": {
+     "gmailOAuth2": {
+      "id": "LIVJMrWXHhT5lymb",
+      "name": "Spartan Crew Bookings 7/29/26"
+     }
+    }
+   },
+   {
+    "parameters": {
+     "assignments": {
+      "assignments": [
+       {
+        "id": "506f7dc6-256f-4c95-b274-0937af09f530",
+        "name": "id",
+        "value": "={{ $json.id }}",
+        "type": "string"
+       },
+       {
+        "id": "696eda32-d10b-44bc-8232-378c50d0ba7b",
+        "name": "threadId",
+        "value": "={{ $json.threadId }}",
+        "type": "string"
+       },
+       {
+        "id": "56f8a8e6-696b-4b6e-b84d-adf753618cb4",
+        "name": "historyId",
+        "value": "={{ $json.historyId }}",
+        "type": "string"
+       },
+       {
+        "id": "49cc6e52-6534-4c98-b13e-7b5a54ea51a6",
+        "name": "from[0].email",
+        "value": "={{ $json.from[0].email }}",
+        "type": "string"
+       },
+       {
+        "id": "04d2bd7e-28ba-45e5-afaa-ba5af8fa02de",
+        "name": "to[0].email",
+        "value": "={{ $json.to[0].email }}",
+        "type": "string"
+       },
+       {
+        "id": "e7fc51da-6651-465a-adc9-2ff486b89b5b",
+        "name": "ccEmails[0]",
+        "value": "={{ $json.ccEmails[0] }}",
+        "type": "string"
+       }
+      ]
+     },
+     "options": {}
+    },
+    "type": "n8n-nodes-base.set",
+    "typeVersion": 3.4,
+    "position": [
+     -1936,
+     3904
+    ],
+    "id": "ad8815a1-7477-4103-91de-c06c567d8b39",
+    "name": "Get IDs1"
+   },
+   {
+    "parameters": {
+     "operation": "get",
+     "messageId": "={{ $('Get IDs1').item.json.id }}",
+     "simple": false,
+     "options": {}
+    },
+    "id": "6cc566da-3982-43a3-b0d1-c917c5c42f74",
+    "name": "Get Hydrated Emails1",
+    "type": "n8n-nodes-base.gmail",
+    "position": [
+     -1680,
+     3904
+    ],
+    "webhookId": "53b5e765-33e2-44f8-8e0c-d1a72322a603",
+    "typeVersion": 2.1,
+    "credentials": {
+     "gmailOAuth2": {
+      "id": "LIVJMrWXHhT5lymb",
+      "name": "Spartan Crew Bookings 7/29/26"
+     }
+    }
+   },
+   {
+    "parameters": {
+     "mode": "combine",
+     "combineBy": "combineByPosition",
+     "options": {}
+    },
+    "type": "n8n-nodes-base.merge",
+    "typeVersion": 3.2,
+    "position": [
+     -1456,
+     3904
+    ],
+    "id": "f7929a44-3684-484b-ae23-d5a394fd65ed",
+    "name": "Merge1"
+   },
+   {
+    "parameters": {
+     "mode": "runOnceForEachItem",
+     "jsCode": "// ===================== HELPERS =====================\nfunction decodeBase64(data) {\n  if (!data) return '';\n  return Buffer.from(\n    data.replace(/-/g, '+').replace(/_/g, '/'),\n    'base64'\n  ).toString('utf-8');\n}\n\nfunction stripHtml(html) {\n  return html\n    .replace(/<style[^>]*>[\\s\\S]*?<\\/style>/gi, '')\n    .replace(/<script[^>]*>[\\s\\S]*?<\\/script>/gi, '')\n    .replace(/<\\/?[^>]+>/gi, '')\n    .replace(/\\s+/g, ' ')\n    .trim();\n}\n\nfunction extractBody(payload) {\n  if (!payload) return '';\n\n  if (Array.isArray(payload.parts)) {\n    const textPart = payload.parts.find(p => p.mimeType === 'text/plain');\n    if (textPart?.body?.data) {\n      return decodeBase64(textPart.body.data);\n    }\n\n    const htmlPart = payload.parts.find(p => p.mimeType === 'text/html');\n    if (htmlPart?.body?.data) {\n      return decodeBase64(htmlPart.body.data);\n    }\n  }\n\n  if (payload.body?.data) {\n    return decodeBase64(payload.body.data);\n  }\n\n  return '';\n}\n\n// ===================== HARD CLEANER =====================\nfunction cleanEmailBody(raw) {\n  if (!raw) return '';\n\n  let text = raw;\n\n  // Remove quoted replies\n  text = text.split(/\\nOn .*wrote:\\n/i)[0];\n\n  // Remove quoted lines\n  text = text\n    .split('\\n')\n    .filter(line => !line.trim().startsWith('>'))\n    .join('\\n');\n\n  // Remove image placeholders\n  text = text.replace(/\\[image:[^\\]]+\\]/gi, '');\n\n  // Remove Spartan Crew signatures\n  const signatureMarkers = [\n    'spartan crew ltd',\n    'operations spartan crew',\n    'designexpert44.com/signature',\n    'spartan_crew/logo.png',\n    'unit 7 titan business estate',\n    'www.spartancrew.co.uk',\n    '03333 053374'\n  ];\n\n  for (const marker of signatureMarkers) {\n    const idx = text.toLowerCase().indexOf(marker);\n    if (idx !== -1) {\n      text = text.slice(0, idx);\n    }\n  }\n\n  return stripHtml(text);\n}\n\n// ===================== ORIGINAL EMAIL =====================\nconst originalBody = cleanEmailBody(\n  $json.text || extractBody($json.payload)\n);\n\nconst original_email = {\n  email_id: $json.id,\n  thread_id: $json.threadId,\n  from: $json.from?.value?.[0]?.address || '',\n  subject: $json.headers?.subject || '',\n  body: originalBody\n};\n\n// ===================== THREAD HISTORY =====================\nconst messages = Array.isArray($json.messages) ? $json.messages : [];\n\nconst thread_messages = messages\n  .map(m => cleanEmailBody(extractBody(m.payload)))\n  .filter(body =>\n    body &&\n    body.length > 5 &&\n    body !== originalBody // ✅ remove original email from history\n  );\n\n// ===================== FINAL OUTPUT =====================\nreturn {\n  original_email,\n  thread_history: {\n    messages: thread_messages\n  }\n};\n\n"
+    },
+    "type": "n8n-nodes-base.code",
+    "typeVersion": 2,
+    "position": [
+     -1344,
+     3904
+    ],
+    "id": "02707657-72d5-4b24-920a-ebea06bb252f",
+    "name": "Normalize Data"
+   },
+   {
+    "parameters": {
+     "resource": "thread",
+     "operation": "get",
+     "threadId": "={{ $('Get Hydrated Emails1').item.json.threadId }}",
+     "simple": false,
+     "options": {
+      "returnOnlyMessages": false
+     }
+    },
+    "type": "n8n-nodes-base.gmail",
+    "typeVersion": 2.2,
+    "position": [
+     -1568,
+     3904
+    ],
+    "id": "7beb4bd0-a4a7-4362-93e7-0e7062d6a7ec",
+    "name": "Get a thread2",
+    "webhookId": "edb9194f-b8d4-40e1-a599-4c5496a5889e",
+    "credentials": {
+     "gmailOAuth2": {
+      "id": "LIVJMrWXHhT5lymb",
+      "name": "Spartan Crew Bookings 7/29/26"
+     }
+    },
+    "onError": "continueRegularOutput"
+   },
+   {
+    "parameters": {
+     "options": {}
+    },
+    "type": "n8n-nodes-base.splitInBatches",
+    "typeVersion": 3,
+    "position": [
+     -2064,
+     3904
+    ],
+    "id": "7aaa9748-5702-459d-b74a-8db2d258bbed",
+    "name": "Loop Over Items"
+   },
+   {
+    "parameters": {
+     "operation": "removeLabels",
+     "messageId": "={{ $json.id }}",
+     "labelIds": [
+      "Label_5089401050847698788"
+     ]
+    },
+    "type": "n8n-nodes-base.gmail",
+    "typeVersion": 2.2,
+    "position": [
+     -2736,
+     3568
+    ],
+    "id": "5a9c77e1-a32c-4d1d-b4d0-d62b9c374845",
+    "name": "Remove label from message",
+    "webhookId": "9981a7bb-5e30-4df8-9d31-c4a6424efa2d",
+    "credentials": {
+     "gmailOAuth2": {
+      "id": "LIVJMrWXHhT5lymb",
+      "name": "Spartan Crew Bookings 7/29/26"
+     }
+    }
+   },
+   {
+    "parameters": {
+     "operation": "getAll",
+     "returnAll": true,
+     "filters": {
+      "labelIds": [
+       "Label_5089401050847698788"
+      ],
+      "receivedAfter": "={{ $json.receivedAfter }}"
+     }
+    },
+    "type": "n8n-nodes-base.gmail",
+    "typeVersion": 2.2,
+    "position": [
+     -2976,
+     3744
+    ],
+    "id": "8861bfa1-bb99-4047-a630-2e34aff2b3cb",
+    "name": "Get many messages",
+    "webhookId": "0433aa9d-3109-445b-82a8-a5c94a0f0edb",
+    "credentials": {
+     "gmailOAuth2": {
+      "id": "LIVJMrWXHhT5lymb",
+      "name": "Spartan Crew Bookings 7/29/26"
+     }
+    }
+   },
+   {
+    "parameters": {
+     "rule": {
+      "interval": [
+       {
+        "field": "minutes"
+       }
+      ]
+     }
+    },
+    "type": "n8n-nodes-base.scheduleTrigger",
+    "typeVersion": 1.3,
+    "position": [
+     -3344,
+     3840
+    ],
+    "id": "54154154-d51b-47b7-9c6f-05a9294b9575",
+    "name": "Schedule Trigger"
+   },
+   {
+    "parameters": {
+     "options": {
+      "timezone": ""
+     }
+    },
+    "type": "n8n-nodes-base.dateTime",
+    "typeVersion": 2,
+    "position": [
+     -3200,
+     3744
+    ],
+    "id": "cc5400b4-f7ec-4723-a52a-5f0f3020c5a3",
+    "name": "Date & Time"
+   },
+   {
+    "parameters": {
+     "jsCode": "// n8n Code node (JavaScript)\n// Input:  { \"currentDate\": \"2026-02-26T17:41:48.851+00:00\" }\n// Output: { \"receivedAfter\": \"2026-02-26T17:31:48.851Z\" }\n\nconst s = $input.first()?.json?.currentDate;\n\nif (typeof s !== \"string\" || !s.trim()) {\n  throw new Error(\"Missing `currentDate` (expected a string).\");\n}\n\nconst d = new Date(s);\nif (Number.isNaN(d.getTime())) {\n  throw new Error(`Invalid currentDate: ${s}`);\n}\n\n// subtract 10 minutes\nconst d2 = new Date(d.getTime() - 10 * 60 * 1000);\n\n// Graph-native ISO UTC: YYYY-MM-DDTHH:mm:ss.sssZ\nconst isoUtc = d2.toISOString();\n\nreturn [\n  {\n    json: {\n      receivedAfter: isoUtc,\n    },\n  },\n];"
+    },
+    "type": "n8n-nodes-base.code",
+    "typeVersion": 2,
+    "position": [
+     -3088,
+     3744
+    ],
+    "id": "17348440-ad1f-4f9a-82e5-b3b27ca980b5",
+    "name": "-10 mins"
+   },
+   {
+    "parameters": {
+     "options": {}
+    },
+    "type": "n8n-nodes-base.splitInBatches",
+    "typeVersion": 3,
+    "position": [
+     -2848,
+     3552
+    ],
+    "id": "42634ab5-f76e-4b36-88d0-c5e3259b8be3",
+    "name": "Loop Over Items1"
+   },
+   {
+    "parameters": {
+     "assignments": {
+      "assignments": [
+       {
+        "id": "d8d85a97-6dfd-49eb-aea6-319a9a2256ac",
+        "name": "id",
+        "value": "={{ $('Normalize Data').item.json.original_email.email_id }}",
+        "type": "string"
+       },
+       {
+        "id": "f8c9343c-dfe5-41a8-adde-5e2abb3ffa64",
+        "name": "conversationId",
+        "value": "={{ $('Normalize Data').item.json.original_email.thread_id }}",
+        "type": "string"
+       },
+       {
+        "id": "109ff9c0-c3ca-45cf-8869-7611c5ba90bc",
+        "name": "subject",
+        "value": "={{ $('Normalize Data').item.json.original_email.subject }}",
+        "type": "string"
+       },
+       {
+        "id": "a39f2491-5224-4634-8436-3e3a89162f71",
+        "name": "bodyContent",
+        "value": "={{ $('Normalize Data').item.json.original_email.body }}",
+        "type": "string"
+       },
+       {
+        "id": "2c623902-e855-4233-8b70-f256d95c73f3",
+        "name": "sentDateTime",
+        "value": "={{ $('Merge1').item.json.date || ($('Merge1').item.json.internalDate ? new Date(Number($('Merge1').item.json.internalDate)).toISOString() : $now.toISO()) }}",
+        "type": "string"
+       },
+       {
+        "id": "bb7cd69d-101a-4784-8201-ab4fd1ab2734",
+        "name": "sentDate",
+        "value": "=",
+        "type": "string"
+       },
+       {
+        "id": "1190b2ec-2789-4715-a3ce-bd77fc2c9284",
+        "name": "sentTime",
+        "value": "=",
+        "type": "string"
+       },
+       {
+        "id": "85dd5785-7406-4f46-8af6-61179ac4dd3e",
+        "name": "receivedDateTime",
+        "value": "={{ $('Merge1').item.json.date || ($('Merge1').item.json.internalDate ? new Date(Number($('Merge1').item.json.internalDate)).toISOString() : $now.toISO()) }}",
+        "type": "string"
+       },
+       {
+        "id": "dd913ffe-8755-40aa-812b-e35a216b6aa5",
+        "name": "receivedDate",
+        "value": "=",
+        "type": "string"
+       },
+       {
+        "id": "9becc5a0-22f4-49bb-8f8f-e393c94a3984",
+        "name": "receivedTime",
+        "value": "=",
+        "type": "string"
+       },
+       {
+        "id": "0ecab68d-ee8b-4098-aa95-7dd596cc02f6",
+        "name": "createdDateTime",
+        "value": "=",
+        "type": "string"
+       },
+       {
+        "id": "ef459def-dc0e-4693-b2da-18621b783460",
+        "name": "lastModifiedDateTime",
+        "value": "=",
+        "type": "string"
+       },
+       {
+        "id": "479b0612-8933-41b5-b501-40a65dfa260d",
+        "name": "fromAddress",
+        "value": "={{ $('Normalize Data').item.json.original_email.from }}",
+        "type": "string"
+       },
+       {
+        "id": "ef58c0de-be1e-4393-b3e3-d8e707027f2b",
+        "name": "fromName",
+        "value": "=",
+        "type": "string"
+       },
+       {
+        "id": "46e01773-f754-49d0-a1cb-e4ced2a2fa31",
+        "name": "toRecipients[0].name",
+        "value": "=",
+        "type": "string"
+       },
+       {
+        "id": "0646c489-8499-42c8-9898-f01274424519",
+        "name": "toRecipients[0].address",
+        "value": "=bookings@spartancrew.co.uk",
+        "type": "string"
+       },
+       {
+        "id": "2f48daa6-cd63-42bc-8a3d-3a81aceb43b5",
+        "name": "ccRecipients",
+        "value": "={{ [] }}",
+        "type": "array"
+       },
+       {
+        "id": "86769e80-075e-4526-b036-f9be8a17ac3a",
+        "name": "threadHistory",
+        "value": "={{ ($('Normalize Data').item.json.thread_history?.messages || []).join('\\n\\n---\\n\\n') }}",
+        "type": "string"
+       },
+       {
+        "id": "43dd42b1-fdd5-41ba-bc49-cdf954790c24",
+        "name": "category",
+        "value": "=",
+        "type": "string"
+       },
+       {
+        "id": "8046efe8-1680-40ff-8de0-ea49cacc4e78",
+        "name": "found",
+        "value": "={{ $('Dedupe Claim').item.json.found }}",
+        "type": "string"
+       },
+       {
+        "id": "bc32f637-ffee-4395-80f6-2244ea9fa1e5",
+        "name": "last_sent_message",
+        "value": "=",
+        "type": "string"
+       },
+       {
+        "id": "877eb95f-7ad2-4303-9321-8448685c0462",
+        "name": "last_place_in_follow_up",
+        "value": "=",
+        "type": "string"
+       },
+       {
+        "id": "eb1b4eba-309e-411a-acf8-e68735cded45",
+        "name": "added_to_whatsapp",
+        "value": "=false",
+        "type": "string"
+       },
+       {
+        "id": "2d9d17bd-8f30-4edd-9d57-958d046e49bc",
+        "name": "id",
+        "value": "={{ $('Normalize Data').item.json.original_email.email_id }}",
+        "type": "string"
+       }
+      ]
+     },
+     "options": {}
+    },
+    "type": "n8n-nodes-base.set",
+    "typeVersion": 3.4,
+    "position": [
+     -1232,
+     3904
+    ],
+    "id": "bf2efbd4-ee50-4e80-b831-0d5187bafa1f",
+    "name": "MAINDATA"
+   },
+   {
+    "parameters": {
+     "jsCode": "// ╔═══════════════════════════════════════════════════════════════════╗\n// ║                                                                   ║\n// ║   ██╗  ██╗ ██████╗ ██╗   ██╗███████╗███████╗                     ║\n// ║   ██║  ██║██╔═══██╗██║   ██║██╔════╝██╔════╝                     ║\n// ║   ███████║██║   ██║██║   ██║███████╗█████╗                       ║\n// ║   ██╔══██║██║   ██║██║   ██║╚════██║██╔══╝                       ║\n// ║   ██║  ██║╚██████╔╝╚██████╔╝███████║███████╗                     ║\n// ║   ╚═╝  ╚═╝ ╚═════╝  ╚═════╝ ╚══════╝╚══════╝                     ║\n// ║    ██████╗ ███████╗    ██╗  ██╗██╗   ██╗██████╗                   ║\n// ║   ██╔═══██╗██╔════╝    ██║  ██║██║   ██║██╔══██╗                  ║\n// ║   ██║   ██║█████╗      ███████║██║   ██║██║  ██║                  ║\n// ║   ██║   ██║██╔══╝      ██╔══██║██║   ██║██║  ██║                  ║\n// ║   ╚██████╔╝██║         ██║  ██║╚██████╔╝██████╔╝                  ║\n// ║    ╚═════╝ ╚═╝         ╚═╝  ╚═╝ ╚═════╝ ╚═════╝                  ║\n// ║                                                                   ║\n// ║   C O N V E R S A T I O N A L   R E N D E R I N G   E N G I N E  ║\n// ║                                                                   ║\n// ║   Deterministic thread parser · Classifier · Client extractor     ║\n// ║   Runs once per item · No external libs required                  ║\n// ║                                                                   ║\n// ╚═══════════════════════════════════════════════════════════════════╝\n\nconst crypto = require('crypto');\n\n// ---------- CONSTANTS ----------\nconst ENQUIRY_FORM_SENDERS = new Set([\n  // Spartan enquiry-form senders go here once known (was House of Hud's list).\n]);\n\nconst AI_SEND_ADDRESS = 'bookings@spartancrew.co.uk';\n\nconst INTERNAL_SENDERS = new Set([\n  // Covered by the @spartancrew.co.uk domain test; list any off-domain staff here.\n]);\n\nconst MONTHS = {jan:0,feb:1,mar:2,apr:3,may:4,jun:5,jul:6,aug:7,sep:8,oct:9,nov:10,dec:11};\n\n// ---------- HTML / TEXT ----------\nfunction decodeEntities(s) {\n  if (!s) return '';\n  return s\n    .replace(/&nbsp;/gi,' ').replace(/&amp;/gi,'&').replace(/&lt;/gi,'<')\n    .replace(/&gt;/gi,'>').replace(/&quot;/gi,'\"').replace(/&#39;/gi,\"'\")\n    .replace(/&apos;/gi,\"'\").replace(/&#(\\d+);/g,(_,n)=>String.fromCharCode(+n))\n    .replace(/&#x([0-9a-f]+);/gi,(_,h)=>String.fromCharCode(parseInt(h,16)));\n}\nfunction stripHtmlToText(html) {\n  if (!html) return '';\n  let s = String(html);\n  s = s.replace(/<style[\\s\\S]*?<\\/style>/gi,' ').replace(/<script[\\s\\S]*?<\\/script>/gi,' ');\n  s = s.replace(/<!--[\\s\\S]*?-->/g,' ');\n  s = s.replace(/<\\s*br\\s*\\/?>/gi,'\\n');\n  s = s.replace(/<\\/(p|div|tr|li|h[1-6])\\s*>/gi,'\\n');\n  s = s.replace(/<[^>]+>/g,' ');\n  s = decodeEntities(s);\n  s = s.replace(/\\r/g,'').replace(/[ \\t]+/g,' ').replace(/\\n[ \\t]+/g,'\\n').replace(/\\n{3,}/g,'\\n\\n');\n  return s.trim();\n}\nfunction normalizeForMatch(s) {\n  return String(s||'').toLowerCase().replace(/\\s+/g,' ').replace(/[^\\p{L}\\p{N} ]/gu,'').trim();\n}\nfunction jaccardTokenSet(a,b) {\n  const A = new Set(normalizeForMatch(a).split(' ').filter(Boolean));\n  const B = new Set(normalizeForMatch(b).split(' ').filter(Boolean));\n  if (!A.size || !B.size) return 0;\n  let inter = 0; for (const t of A) if (B.has(t)) inter++;\n  return inter / (A.size + B.size - inter);\n}\nfunction sha256(s){return crypto.createHash('sha256').update(s).digest('hex');}\n\n// ---------- DATE PARSING (UK log preserved) ----------\nfunction parseUkDate(str) {\n  if (!str) return null;\n  const m = String(str).match(/(\\d{1,2})\\s+([A-Za-z]{3,})\\s+(\\d{4})(?:[,\\s]+(\\d{1,2}):(\\d{2}))?/);\n  if (!m) return null;\n  const d=+m[1], mo=MONTHS[m[2].slice(0,3).toLowerCase()], y=+m[3];\n  const hh=m[4]?+m[4]:0, mm=m[5]?+m[5]:0;\n  if (mo==null) return null;\n  const utcGuess = Date.UTC(y,mo,d,hh,mm);\n  const isBST = (() => {\n    const lastSun = (yr,mon) => { const dt=new Date(Date.UTC(yr,mon+1,0)); return dt.getUTCDate() - dt.getUTCDay(); };\n    const startBST = Date.UTC(y,2,lastSun(y,2),1,0);\n    const endBST   = Date.UTC(y,9,lastSun(y,9),1,0);\n    return utcGuess >= startBST && utcGuess < endBST;\n  })();\n  return new Date(utcGuess - (isBST?60:0)*60000);\n}\n\n// ---------- SENDER CLASSIFIERS ----------\nconst addrOf = s => String(s||'').toLowerCase().trim();\nconst isEnquiryFormSender = a => ENQUIRY_FORM_SENDERS.has(addrOf(a));\nconst isInternalSender    = a => /@spartancrew\\.co\\.uk$/i.test(addrOf(a)) || INTERNAL_SENDERS.has(addrOf(a));\nconst isAiSender          = a => addrOf(a) === AI_SEND_ADDRESS;\n\n// ---------- THREAD PARSER ----------\nfunction parseThreadHistory(raw) {\n  if (!raw) return [];\n  const blocks = String(raw).split(/---\\s*Message\\s+\\d+\\s+of\\s+\\d+\\s*---/i).map(b=>b.trim()).filter(Boolean);\n  const out = [];\n  for (const b of blocks) {\n    const fromM = b.match(/^From:\\s*(.+)$/mi);\n    const dateM = b.match(/^Date:\\s*(.+)$/mi);\n    const subjM = b.match(/^Subject:\\s*(.+)$/mi);\n    const headerEnd = b.search(/\\n\\s*\\n/);\n    const body = headerEnd>-1 ? b.slice(headerEnd).trim() : '';\n    const fromRaw = fromM ? fromM[1].trim() : '';\n    const emailM = fromRaw.match(/<([^>]+)>/) || fromRaw.match(/([\\w.+-]+@[\\w.-]+)/);\n    const fromAddress = emailM ? emailM[1] : fromRaw;\n    out.push({\n      fromAddress: addrOf(fromAddress),\n      fromRaw,\n      date: parseUkDate(dateM?dateM[1]:''),\n      dateRaw: dateM?dateM[1].trim():'',\n      subject: subjM?subjM[1].trim():'',\n      bodyHtml: body,\n      bodyText: stripHtmlToText(body),\n    });\n  }\n  return out;\n}\n\n// ================================================================\n// SIGNATURE / EXIT-GREETING EXTRACTION\n// ================================================================\n// IMPORTANT: The regex scans BACKWARDS (last match wins) so that\n// phrases like \"Thank you for...\" in the body are not mistaken\n// for a sign-off. Do NOT change to a forward scan.\n// ================================================================\n\nconst EXIT_GREETING_RE = /^[ \\t]*(?:kind(?:est)?\\s*regards|best\\s*(?:wishes|regards)?|regards|sincerely|yours\\s*(?:sincerely|faithfully|truly)|many\\s*thanks|warm(?:est)?\\s*(?:regards|wishes)?|cheers|with\\s*(?:thanks|gratitude)|all\\s*the\\s*best|take\\s*care|speak\\s*soon|looking\\s*forward|thanks\\s*(?:again|so\\s*much|very\\s*much|in\\s*advance)?|thank\\s*you\\s*(?:very\\s*much|so\\s*much|kindly|in\\s*advance)?)[,.\\s!]*$/im;\n\nconst SIG_NOISE_RE = /^(?:--|___|\\*\\*\\*|===|~~~|sent\\s+from|get\\s+outlook|this\\s+email\\s+(?:was|is)|https?:\\/\\/|www\\.|disclaimer|confidential|unsubscribe)/i;\n\nconst PHONE_RE = /(?:(?:Tel(?:ephone)?|Phone|Mobile|Mob|Cell|Direct|Office|Fax|M|T|P|O)\\s*[:.]\\s*)?([+\\d][\\d\\s().-]{5,}\\d)/gi;\n\nconst SIG_EMAIL_RE = /([\\w.+-]+@[\\w.-]+\\.[a-z]{2,})/i;\n\nfunction extractFromSignature(text) {\n  if (!text) return { name: '', phone: '', email: '' };\n\n  const lines = text.split('\\n');\n\n  let greetingIdx = -1;\n  for (let i = lines.length - 1; i >= 0; i--) {\n    if (EXIT_GREETING_RE.test(lines[i])) {\n      greetingIdx = i;\n      break;\n    }\n  }\n\n  if (greetingIdx === -1) return { name: '', phone: '', email: '' };\n\n  const sigLines = lines.slice(greetingIdx + 1);\n\n  let name = '';\n  for (const raw of sigLines) {\n    const line = raw.trim();\n    if (!line) continue;\n    if (SIG_NOISE_RE.test(line)) continue;\n    if (/^\\d{2,}/.test(line)) continue;\n    if (/@/.test(line)) continue;\n    if (/^https?:\\/\\//i.test(line)) continue;\n    if (/^[+\\d\\s().-]+$/.test(line)) continue;\n\n    let candidate = line\n      .replace(/^(?:Mr\\.?|Mrs\\.?|Ms\\.?|Miss|Dr\\.?|Prof\\.?)\\s*/i, '')\n      .replace(/[|–—·•].*$/, '')\n      .trim();\n\n    if (candidate.length >= 2 && candidate.length <= 60 &&\n        /^[\\p{L}\\s'.-]+$/u.test(candidate) &&\n        candidate.split(/\\s+/).length >= 1 && candidate.split(/\\s+/).length <= 6) {\n      const titleMatch = line.match(/^(Mr\\.?|Mrs\\.?|Ms\\.?|Miss|Dr\\.?|Prof\\.?)\\s*/i);\n      name = titleMatch ? titleMatch[0].trim() + ' ' + candidate : candidate;\n      break;\n    }\n  }\n\n  const sigBlock = sigLines.join('\\n');\n  let phone = '';\n  const phoneMatches = [];\n  let pm;\n  const phoneRe = new RegExp(PHONE_RE.source, PHONE_RE.flags);\n  while ((pm = phoneRe.exec(sigBlock)) !== null) {\n    const cleaned = pm[1].replace(/[^+\\d]/g, '');\n    if (cleaned.length >= 7 && cleaned.length <= 15) {\n      phoneMatches.push(pm[1].trim());\n    }\n  }\n  if (phoneMatches.length) {\n    const mobile = phoneMatches.find(p => /(?:^07|^\\+?\\d{1,3}\\s*7)/i.test(p.replace(/[^+\\d]/g, '')));\n    phone = mobile || phoneMatches[0];\n  }\n\n  let email = '';\n  const emailMatch = sigBlock.match(SIG_EMAIL_RE);\n  if (emailMatch) email = emailMatch[1];\n\n  return { name, phone, email };\n}\n\n// ================================================================\n// GREETING INTRO EXTRACTION\n// ================================================================\n\nconst COMMON_WORDS = new Set([\n  'a','about','after','all','also','an','and','any','are','as','at','back','be',\n  'been','but','by','can','come','could','do','down','each','even','find','first',\n  'for','from','get','give','go','going','good','got','great','had','has','have',\n  'he','her','here','him','his','how','i','if','in','into','is','it','its','just',\n  'know','let','like','look','looking','lot','make','me','more','much','my','new',\n  'no','not','now','of','off','on','one','only','or','other','our','out','over',\n  'own','really','right','said','say','see','she','so','some','still','such',\n  'sure','take','than','that','the','their','them','then','there','these','they',\n  'think','this','those','through','time','to','too','try','two','up','us','use',\n  'very','want','was','way','we','well','were','what','when','where','which',\n  'while','who','will','with','wonder','wondering','work','would','writing','year',\n  'you','your','emailing','enquiring','contacting','reaching','planning','hoping',\n  'interested','happy','delighted','pleased','sorry','afraid','able','unable',\n]);\n\nfunction looksLikeName(str) {\n  if (!str || str.length < 2 || str.length > 40) return false;\n  if (!/^[A-Z\\u00C0-\\u024F]/.test(str)) return false;\n  if (!/^[\\p{L}\\s'.-]+$/u.test(str)) return false;\n  const firstWord = str.split(/\\s+/)[0].toLowerCase();\n  if (COMMON_WORDS.has(firstWord)) return false;\n  const words = str.split(/\\s+/);\n  if (words.length < 1 || words.length > 5) return false;\n  return true;\n}\n\nfunction extractFromGreeting(text) {\n  if (!text) return { name: '' };\n  const intro = text.slice(0, 500);\n\n  const p1 = intro.match(/[Mm]y\\s+name\\s+is\\s+([\\p{L}][\\p{L}\\s'.-]{1,39}?)(?:\\s*[,.\\n;]|\\s+and\\b|\\s+from\\b)/u);\n  if (p1 && looksLikeName(p1[1].trim())) return { name: p1[1].trim() };\n\n  const p2 = intro.match(/I[''\\u2019]m\\s+([\\p{L}][\\p{L}\\s'.-]{1,39}?)(?:\\s*[,.\\n;]|\\s+and\\b|\\s+from\\b)/u)\n          || intro.match(/I\\s+am\\s+([\\p{L}][\\p{L}\\s'.-]{1,39}?)(?:\\s*[,.\\n;]|\\s+and\\b|\\s+from\\b)/u);\n  if (p2 && looksLikeName(p2[1].trim())) return { name: p2[1].trim() };\n\n  const p3 = intro.match(/[Tt]his\\s+is\\s+([\\p{L}][\\p{L}\\s'.-]{1,39}?)(?:\\s*[,.\\n;]|\\s+from\\b|\\s+at\\b|\\s+with\\b)/u);\n  if (p3 && looksLikeName(p3[1].trim())) return { name: p3[1].trim() };\n\n  return { name: '' };\n}\n\n// ================================================================\n// INLINE CONTEXTUAL PHONE EXTRACTION\n// ================================================================\n\nfunction extractInlinePhone(text) {\n  if (!text) return '';\n\n  const patterns = [\n    /(?:call|reach|contact|text|ring|get)\\s+me\\s+(?:on|at)\\s*:?\\s*([+\\d][\\d\\s().-]{5,}\\d)/i,\n    /my\\s+(?:number|phone|mobile|cell|tel|telephone|mob|direct\\s+(?:number|line))\\s+(?:is|:)\\s*([+\\d][\\d\\s().-]{5,}\\d)/i,\n    /I[\\u2019'']\\s*m\\s+on\\s+([+\\d][\\d\\s().-]{5,}\\d)/i,\n    /I\\s+am\\s+on\\s+([+\\d][\\d\\s().-]{5,}\\d)/i,\n    /you\\s+can\\s+(?:get|reach|contact|call)\\s+me\\s+(?:on|at)\\s*:?\\s*([+\\d][\\d\\s().-]{5,}\\d)/i,\n    /best\\s+to\\s+(?:call|ring|text|reach\\s+me\\s+on)\\s*:?\\s*([+\\d][\\d\\s().-]{5,}\\d)/i,\n  ];\n\n  for (const re of patterns) {\n    const m = text.match(re);\n    if (m) {\n      const cleaned = m[1].replace(/[^+\\d]/g, '');\n      if (cleaned.length >= 7 && cleaned.length <= 15) {\n        return m[1].trim();\n      }\n    }\n  }\n  return '';\n}\n\n// ---------- CLIENT INFO EXTRACTION ----------\n// Priority: Form fields > Signature > Greeting intro > Inline phone > Fallback email\n// EMAIL RULE: Sender address ALWAYS wins for non-form messages.\nfunction extractClientInfo(text, fallbackEmail, isFormMessage) {\n  const t = text || '';\n  const pick = re => { const m=t.match(re); return m?m[1].trim():''; };\n\n  const info = {\n    name:      pick(/(?:^|\\n)\\s*(?:From|What'?s your name\\??|Name)\\s*[:\\n]\\s*([^\\n]+)/i),\n    email:     pick(/(?:E-?mail|EMAIL)\\s*[:\\n]\\s*([\\w.+-]+@[\\w.-]+)/i),\n    phone:     pick(/(?:Telephone|PHONE|Phone)\\s*[:\\n]\\s*([+\\d\\s()-]{6,})/i),\n    event_type:pick(/(?:Type of event|What kind of event[^\\n?]*\\??)\\s*[:\\n]\\s*([^\\n]+)/i),\n    event_date:pick(/(?:Date(?: of your event)?|DATE OF YOUR EVENT|Have you set a date\\??)\\s*[:\\n]\\s*([^\\n]+)/i),\n    location:  pick(/(?:Postcode\\/?location|Where will your event be(?:\\s+held)?\\??|Location|Venue)\\s*[:\\n]\\s*([^\\n]+)/i),\n    guests:    pick(/(?:How many (?:G|g)uests\\??|Guests)\\s*[:\\n]\\s*([^\\n]+)/i),\n    budget:    pick(/Budget\\s*[:\\n]\\s*([^\\n]+)/i),\n    sent_from: pick(/(?:Sent from|Where did you find us\\??)\\s*[:\\n]\\s*([^\\n]+)/i),\n  };\n\n  const sig = extractFromSignature(t);\n  if (!info.name  && sig.name)  info.name  = sig.name;\n  if (!info.phone && sig.phone) info.phone = sig.phone;\n  if (!info.email && sig.email && isFormMessage) info.email = sig.email;\n\n  if (!info.name) {\n    const greeting = extractFromGreeting(t);\n    if (greeting.name) info.name = greeting.name;\n  }\n\n  if (!info.phone) {\n    const inlinePhone = extractInlinePhone(t);\n    if (inlinePhone) info.phone = inlinePhone;\n  }\n\n  if (!info.email && fallbackEmail) info.email = fallbackEmail;\n\n  return info;\n}\n\nfunction extractClientMessageOnly(text) {\n  const m = text.match(/(?:^|\\n)\\s*(?:Message|What are you planning\\??|Mobile message[^\\n]*)\\s*[:\\n]\\s*([\\s\\S]+?)(?:\\n\\s*---|\\n\\s*This email is a system notification|\\n\\s*Where did you find us\\??|$)/i);\n  return m ? m[1].trim() : text.trim();\n}\n\n// ---------- AI MATCHING ----------\nfunction matchAiReplies(messages, lastSentList, lastPlaceList) {\n  const assignments = [];\n  const used = new Set();\n  for (let i=0;i<lastSentList.length;i++) {\n    const ai = normalizeForMatch(lastSentList[i]);\n    if (!ai) continue;\n    const head = ai.slice(0,200);\n    let best = {idx:-1, score:0};\n    for (let j=0;j<messages.length;j++) {\n      if (used.has(j)) continue;\n      const body = normalizeForMatch(messages[j].bodyText);\n      if (!body) continue;\n      let score = 0;\n      if (body.includes(head)) score = 1;\n      else score = jaccardTokenSet(ai, body);\n      if (score > best.score) best = {idx:j, score};\n    }\n    if (best.idx>=0 && best.score>=0.75) {\n      used.add(best.idx);\n      assignments.push({aiIndex:i, messageIndex:best.idx, score:best.score, followUp:lastPlaceList[i]||null});\n    }\n  }\n  return assignments;\n}\n\n// ---------- CLASSIFY ----------\n// Priority: Form sender → AI match → Internal sender → External (from_client)\nfunction classifyAll(messages, aiAssignments) {\n  const aiMap = new Map(aiAssignments.map(a=>[a.messageIndex, a]));\n  return messages.map((m,idx) => {\n    if (isEnquiryFormSender(m.fromAddress))\n      return {index:idx, from:m.fromAddress, label:'from_client', followUp:null, reason:'enquiry_form_sender', dateUTC:m.date?m.date.toISOString():null};\n    if (aiMap.has(idx)) {\n      const a = aiMap.get(idx);\n      return {index:idx, from:m.fromAddress, label:'reply_AI', followUp:a.followUp, reason:'matched_last_sent', dateUTC:m.date?m.date.toISOString():null};\n    }\n    if (isInternalSender(m.fromAddress))\n      return {index:idx, from:m.fromAddress, label:'reply_manual', followUp:null, reason:isAiSender(m.fromAddress)?'ai_address_unmatched':'internal_sender', dateUTC:m.date?m.date.toISOString():null};\n    return {index:idx, from:m.fromAddress, label:'from_client', followUp:null, reason:'external_sender', dateUTC:m.date?m.date.toISOString():null};\n  });\n}\n\n// ---------- DEDUPE ----------\nfunction dedupeInbound(messages, inbound) {\n  if (!inbound) return messages;\n  const inboundNorm = normalizeForMatch(stripHtmlToText(inbound.bodyContent||'')).slice(0,400);\n  const inboundFrom = addrOf(inbound.fromAddress);\n  const inboundTs = inbound.sentDateTime ? new Date(inbound.sentDateTime).getTime() : null;\n  return messages.filter(m => {\n    if (m.fromAddress !== inboundFrom) return true;\n    if (inboundTs && m.date && Math.abs(m.date.getTime()-inboundTs) > 5*60*1000) return true;\n    const mNorm = normalizeForMatch(m.bodyText).slice(0,400);\n    if (!inboundNorm || !mNorm) return true;\n    return !(mNorm.includes(inboundNorm.slice(0,150)) || inboundNorm.includes(mNorm.slice(0,150)));\n  });\n}\n\n// ---------- RENDER (conversation only) ----------\nfunction renderConversation(messages, classifications) {\n  if (!messages.length) return '(no conversation messages)';\n  const lines = [];\n  messages.forEach((m,i) => {\n    const c = classifications[i];\n    const isForm = isEnquiryFormSender(m.fromAddress);\n    const body = isForm ? extractClientMessageOnly(m.bodyText) : m.bodyText;\n    const ts = m.date ? formatUK(m.date) : (m.dateRaw||'unknown');\n    const fu = c.followUp ? ` {${c.followUp}}` : '';\n    lines.push(`[${ts} UK] <${m.fromAddress}> [${c.label}]${fu}`);\n    lines.push(body.trim());\n    lines.push('');\n  });\n  return lines.join('\\n').trim();\n}\n\nfunction formatUK(d) {\n  const months=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];\n  const pad=n=>String(n).padStart(2,'0');\n  const y=d.getUTCFullYear(), mo=d.getUTCMonth(), da=d.getUTCDate(), h=d.getUTCHours(), mi=d.getUTCMinutes();\n  const utcMs = Date.UTC(y,mo,da,h,mi);\n  const lastSun=(yr,m)=>{const dt=new Date(Date.UTC(yr,m+1,0));return dt.getUTCDate()-dt.getUTCDay();};\n  const bstStart=Date.UTC(y,2,lastSun(y,2),1,0), bstEnd=Date.UTC(y,9,lastSun(y,9),1,0);\n  const offset = (utcMs>=bstStart && utcMs<bstEnd) ? 60 : 0;\n  const local = new Date(utcMs + offset*60000);\n  return `${pad(local.getUTCDate())} ${months[local.getUTCMonth()]} ${local.getUTCFullYear()} ${pad(local.getUTCHours())}:${pad(local.getUTCMinutes())}`;\n}\n\n// ---------- MAIN ----------\nconst results = [];\nfor (const item of items) {\n  const j = item.json;\n  const warnings = [];\n\n  const inboundMsg = {\n    fromAddress: addrOf(j.fromAddress),\n    date: j.sentDateTime?new Date(j.sentDateTime):null,\n    bodyHtml: j.bodyContent||'',\n    bodyText: stripHtmlToText(j.bodyContent||''),\n    subject: j.subject||'',\n  };\n\n  let threadMsgs = parseThreadHistory(j.threadHistory||'');\n  threadMsgs = dedupeInbound(threadMsgs, j);\n\n  const hasInbound = threadMsgs.some(m =>\n    m.fromAddress===inboundMsg.fromAddress &&\n    Math.abs((m.date?.getTime()||0)-(inboundMsg.date?.getTime()||0)) < 5*60*1000\n  );\n  if (!hasInbound) threadMsgs.push(inboundMsg);\n\n  threadMsgs.sort((a,b)=>(a.date?.getTime()||0)-(b.date?.getTime()||0));\n\n  // AI matching — split last_sent_message on -NEXT- delimiter, last_place on comma\n  const lastSent = Array.isArray(j.last_sent_message) ? j.last_sent_message\n                 : (typeof j.last_sent_message==='string' && j.last_sent_message.trim()\n                    ? j.last_sent_message.split(/\\s*-NEXT-\\s*/i).map(s=>s.trim()).filter(Boolean)\n                    : []);\n  const lastPlace = Array.isArray(j.last_place_in_follow_up) ? j.last_place_in_follow_up\n                  : (typeof j.last_place_in_follow_up==='string' && j.last_place_in_follow_up.trim()\n                     ? j.last_place_in_follow_up.split(/\\s*,\\s*/).map(s=>s.trim()).filter(Boolean)\n                     : []);\n  const aiAssignments = matchAiReplies(threadMsgs, lastSent, lastPlace);\n  if (lastSent.length && aiAssignments.length < lastSent.length) warnings.push(`Only matched ${aiAssignments.length}/${lastSent.length} AI replies`);\n\n  const classifications = classifyAll(threadMsgs, aiAssignments);\n\n  // Client information — form extraction first, then first client message\n  // EMAIL RULE: Sender address ALWAYS wins for non-form messages.\n  let clientInfo = {name:'',email:'',phone:'',event_type:'',event_date:'',location:'',guests:'',budget:'',sent_from:''};\n  const formMsg = threadMsgs.find(m => isEnquiryFormSender(m.fromAddress));\n  if (formMsg) {\n    clientInfo = extractClientInfo(formMsg.bodyText, '', true);\n  } else {\n    const firstClientIdx = classifications.findIndex(c=>c.label==='from_client');\n    if (firstClientIdx>=0) {\n      const m = threadMsgs[firstClientIdx];\n      const extracted = extractClientInfo(m.bodyText, m.fromAddress, false);\n      clientInfo = {...clientInfo, ...extracted, email: m.fromAddress};\n    }\n  }\n\n  // Derive email_reply_to — always populated, never a form sender address\n  const senderAddr = addrOf(j.fromAddress);\n  let emailReplyTo;\n  if (isEnquiryFormSender(senderAddr)) {\n    // Form: use extracted client email, fall back to form sender address\n    emailReplyTo = clientInfo.email || senderAddr;\n  } else {\n    // Non-form: always the original sender\n    emailReplyTo = senderAddr;\n  }\n\n  const rendered = renderConversation(threadMsgs, classifications);\n  const render_hash = sha256(rendered);\n\n  results.push({\n    json: {\n      rendered,\n      email_reply_to: emailReplyTo,\n      client_information: {\n        name:        clientInfo.name        || null,\n        email:       clientInfo.email       || null,\n        phone:       clientInfo.phone       || null,\n        event_type:  clientInfo.event_type  || null,\n        event_date:  clientInfo.event_date  || null,\n        location:    clientInfo.location    || null,\n        guests:      clientInfo.guests      || null,\n        budget:      clientInfo.budget      || null,\n        sent_from:   clientInfo.sent_from   || null,\n      },\n      metadata: {\n        subject: j.subject || null,\n        found: j.found === true || String(j.found).toLowerCase() === 'true',\n        added_to_whatsapp: j.added_to_whatsapp === true || String(j.added_to_whatsapp).toLowerCase() === 'true',\n        messageCount: threadMsgs.length,\n        classifications,\n        id: j.id || null,\n        conversationId: j.conversationId || null,\n        render_hash,\n        warnings,\n      },\n    },\n  });\n}\nreturn results;"
+    },
+    "type": "n8n-nodes-base.code",
+    "typeVersion": 2,
+    "position": [
+     -1120,
+     3904
+    ],
+    "id": "e9e5c6ed-3bc4-45ef-b1f6-a71429cbec75",
+    "name": "Conversational Renderer",
+    "onError": "continueErrorOutput"
+   },
+   {
+    "parameters": {
+     "conditions": {
+      "options": {
+       "caseSensitive": true,
+       "leftValue": "",
+       "typeValidation": "loose",
+       "version": 3
+      },
+      "conditions": [
+       {
+        "id": "5b0b9146-35d4-4405-a22e-92911bc0f259",
+        "leftValue": "={{ true }}",
+        "rightValue": "={{ true }}",
+        "operator": {
+         "type": "boolean",
+         "operation": "equals"
+        }
+       }
+      ],
+      "combinator": "and"
+     },
+     "options": {}
+    },
+    "type": "n8n-nodes-base.if",
+    "typeVersion": 2.3,
+    "position": [
+     -784,
+     3904
+    ],
+    "id": "f881bbe8-2aed-4dd7-b83c-89f1d2dd9db6",
+    "name": "If"
+   },
+   {
+    "parameters": {
+     "options": {}
+    },
+    "type": "n8n-nodes-base.set",
+    "typeVersion": 3.4,
+    "position": [
+     -672,
+     3904
+    ],
+    "id": "1a970bfd-803d-477a-ac52-818b29489e4d",
+    "name": "Combine all Email Data"
+   },
+   {
+    "parameters": {
+     "method": "POST",
+     "url": "https://spartan-crew-jobber.vercel.app/api/n8n-inbound",
+     "sendHeaders": true,
+     "headerParameters": {
+      "parameters": [
+       {
+        "name": "x-webhook-secret",
+        "value": "REPLACE_WITH_N8N_WEBHOOK_SECRET"
+       }
+      ]
+     },
+     "sendBody": true,
+     "specifyBody": "json",
+     "jsonBody": "={{ JSON.stringify($json) }}",
+     "options": {}
+    },
+    "type": "n8n-nodes-base.httpRequest",
+    "typeVersion": 4.4,
+    "position": [
+     -448,
+     3904
+    ],
+    "id": "9189a5ae-76a1-41d8-888f-6661507b9bb9",
+    "name": "POST to Engine",
+    "onError": "continueRegularOutput"
+   },
+   {
+    "parameters": {
+     "method": "POST",
+     "url": "https://spartan-crew-jobber.vercel.app/api/dedupe",
+     "sendHeaders": true,
+     "headerParameters": {
+      "parameters": [
+       {
+        "name": "x-webhook-secret",
+        "value": "REPLACE_WITH_N8N_WEBHOOK_SECRET"
+       }
+      ]
+     },
+     "sendBody": true,
+     "specifyBody": "json",
+     "jsonBody": "={{ JSON.stringify({ message_id: $json.id, thread_id: $json.threadId, from_address: $json.from?.[0]?.email, note: \"n8n bookings poll\" }) }}",
+     "options": {}
+    },
+    "type": "n8n-nodes-base.httpRequest",
+    "typeVersion": 4.4,
+    "position": [
+     -1808,
+     3904
+    ],
+    "id": "93c7c880-17fe-49c5-b8fa-cffb03aeca07",
+    "name": "Dedupe Claim",
+    "onError": "continueRegularOutput"
+   },
+   {
+    "parameters": {
+     "jsCode": "// ============================================================================\n// n8n Code node body: \"Build Engine Payload\"\n// ----------------------------------------------------------------------------\n// The tap node the engine hangs off (\"Combine all Email Data\") is an EMPTY Set\n// node, so \"POST to Engine\" was posting whatever $json happened to be. The\n// engine's intake contract is:\n//\n//   { thread_id, messages: [{ message_id, from, to[], date_iso, subject, body }] }\n//\n// Anything else is stored in inbound_raw and never reaches the pipeline. This\n// node builds that contract from the Gmail data already in the branch.\n//\n// Bodies are handed over RAW and uncleaned on purpose: app/lib/engine/normalize.ts\n// is a faithful port of the workflow's own cleaner and runs on our side, so\n// cleaning here would only give us two cleaners to keep in step.\n//\n// Lives in the repo (not only inside n8n) so it can be tested without n8n --\n// see scripts/test-engine-payload.mjs. Installed by scripts/install-payload-builder.mjs.\n//\n// Sources, in order of preference:\n//   $('Get a thread2')       full Gmail thread resource -> ids, dates, subjects\n//   $('Normalize Data')      original_email + thread_history (bodies only)\n//   $('Conversational Renderer') / $('Determine if Order')  -> carried as context\n// ============================================================================\n\n/** Safely read a node's output; returns null when the node did not run. */\nfunction nodeJson(name) {\n  try {\n    const item = $(name).item;\n    return item && item.json ? item.json : null;\n  } catch (e) {\n    return null;\n  }\n}\n/** Same, but the node's full item list (for multi-message nodes). */\nfunction nodeAll(name) {\n  try {\n    return $(name).all().map((i) => i.json);\n  } catch (e) {\n    return [];\n  }\n}\n\nfunction decodeB64(data) {\n  if (!data) return '';\n  try {\n    return Buffer.from(String(data).replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf-8');\n  } catch (e) {\n    return '';\n  }\n}\n\n/** Pull the best body out of a Gmail message payload (prefers text/plain). */\nfunction extractBody(msg) {\n  if (!msg) return '';\n  if (typeof msg.text === 'string' && msg.text.trim()) return msg.text;\n  const walk = (part) => {\n    if (!part) return '';\n    if (Array.isArray(part.parts)) {\n      const plain = part.parts.find((p) => p.mimeType === 'text/plain');\n      if (plain && plain.body && plain.body.data) return decodeB64(plain.body.data);\n      const html = part.parts.find((p) => p.mimeType === 'text/html');\n      if (html && html.body && html.body.data) return decodeB64(html.body.data);\n      for (const p of part.parts) {\n        const nested = walk(p);\n        if (nested) return nested;\n      }\n    }\n    if (part.body && part.body.data) return decodeB64(part.body.data);\n    return '';\n  };\n  const body = walk(msg.payload);\n  if (body) return body;\n  if (typeof msg.snippet === 'string') return msg.snippet;\n  return '';\n}\n\n// Header names n8n's Gmail node flattens straight onto the message item, in\n// their wire casing. Everything here is looked up case-insensitively.\nconst FLAT_HEADER_KEYS = [\n  'From', 'To', 'Cc', 'Bcc', 'Subject', 'Date', 'Message-ID', 'In-Reply-To',\n  'References', 'Reply-To', 'Content-Type', 'MIME-Version',\n];\n\nfunction headerMap(msg) {\n  const out = {};\n  if (!msg) return out;\n\n  const hs = (msg.payload && msg.payload.headers) || [];\n  for (const h of hs) if (h && h.name) out[String(h.name).toLowerCase()] = h.value;\n\n  if (msg.headers && typeof msg.headers === 'object') {\n    for (const [k, v] of Object.entries(msg.headers)) if (out[k.toLowerCase()] === undefined) out[k.toLowerCase()] = v;\n  }\n\n  // The case that actually bit us. \"Get a thread\" returns messages whose\n  // payload has NO headers array (it holds only the MIME parts) and no\n  // msg.headers object - the headers are flattened onto the item itself as\n  // \"From\", \"To\", \"Subject\", \"Date\", \"Message-ID\". Reading only msg.from /\n  // msg.subject therefore yielded \"\" for every real message, so every thread\n  // reached the engine with no sender and no subject. The bodies arrived fine,\n  // which is why it looked like it was working: three live threads were\n  // classified with the sender and subject blanked out.\n  for (const k of FLAT_HEADER_KEYS) {\n    const lower = k.toLowerCase();\n    if (out[lower] !== undefined) continue;\n    if (msg[k] !== undefined && msg[k] !== null && msg[k] !== '') out[lower] = msg[k];\n    else if (msg[lower] !== undefined && msg[lower] !== null && msg[lower] !== '') out[lower] = msg[lower];\n  }\n  return out;\n}\n\n/** \"Ben <ben@x.com>\" | {value:[{address}]} | \"ben@x.com\" -> \"ben@x.com\" */\nfunction addrOf(v) {\n  if (!v) return '';\n  if (Array.isArray(v)) return addrOf(v[0]);\n  if (typeof v === 'object') {\n    if (v.address) return String(v.address).toLowerCase();\n    if (v.email) return String(v.email).toLowerCase();\n    if (v.value) return addrOf(v.value);\n    return '';\n  }\n  const s = String(v);\n  const m = s.match(/<([^>]+)>/);\n  return (m ? m[1] : s).trim().toLowerCase();\n}\n\n/** Split a To/Cc header into addresses. */\nfunction addrList(v) {\n  if (!v) return [];\n  if (Array.isArray(v)) return v.map(addrOf).filter(Boolean);\n  return String(v)\n    .split(',')\n    .map((s) => addrOf(s))\n    .filter(Boolean);\n}\n\nfunction toIso(msg, headers) {\n  const raw = msg && (msg.internalDate || msg.date);\n  if (raw) {\n    const n = Number(raw);\n    const d = Number.isFinite(n) && String(raw).length >= 10 ? new Date(n) : new Date(raw);\n    if (!isNaN(d.getTime())) return d.toISOString();\n  }\n  if (headers && headers.date) {\n    const d = new Date(headers.date);\n    if (!isNaN(d.getTime())) return d.toISOString();\n  }\n  return new Date().toISOString();\n}\n\nconst SPARTAN_DOMAINS = ['@spartancrew.co.uk'];\nconst isSpartan = (from) => SPARTAN_DOMAINS.some((d) => String(from || '').toLowerCase().includes(d));\n\n/** One Gmail message resource -> one engine ThreadMessage. */\nfunction toThreadMessage(msg) {\n  const h = headerMap(msg);\n  const from = addrOf(msg.from || h.from);\n  return {\n    message_id: String(msg.id || h['message-id'] || ''),\n    from,\n    to: addrList(msg.to || h.to),\n    date_iso: toIso(msg, h),\n    subject: String((msg.subject !== undefined ? msg.subject : h.subject) || ''),\n    body: extractBody(msg),\n    is_from_spartan: isSpartan(from),\n  };\n}\n\n// ---------------------------------------------------------------- build\nconst norm = nodeJson('Normalize Data') || {};\nconst original = norm.original_email || {};\nconst threadNode = nodeJson('Get a thread2') || {};\n// The classifier node has been rebuilt more than once - it was \"Determine if\n// Order\" (+ Failsafe) as a plain openAi node, and is now an AI Agent feeding\n// \"Parse Job Determinism Output\", with gpt-5 primary and opus 4.6 as fallback.\n// nodeJson swallows a missing node, so a rename does not break the run - it just\n// silently drops the verdict from the durable record, which is the one field that\n// lets anyone compare n8n's judgement against the engine's. Try the current names\n// first and keep the old ones so this works against either shape.\nconst VERDICT_NODES = [\n  'Parse Job Determinism Output',\n  'AI Agent',\n  'Determine if Order',\n  'Determine if Order Failsafe',\n];\nlet verdict = {};\nlet verdict_source = null;\nfor (const name of VERDICT_NODES) {\n  const j = nodeJson(name);\n  if (j) { verdict = j; verdict_source = name; break; }\n}\nconst renderer = nodeJson('Conversational Renderer') || {};\n\nconst thread_id = String(threadNode.id || original.thread_id || norm.thread_id || $json.threadId || $json.thread_id || '').trim();\n\n// Prefer the full Gmail thread; fall back to the merged hydrated items, then to\n// the single original email. Never emit zero messages when we have any content.\nlet source = Array.isArray(threadNode.messages) && threadNode.messages.length ? threadNode.messages : null;\nif (!source) {\n  const merged = nodeAll('Merge1').filter((m) => m && (m.id || m.payload || m.text));\n  if (merged.length) source = merged;\n}\n\nlet messages = (source || []).map(toThreadMessage).filter((m) => m.body && m.body.trim());\n\nif (!messages.length && (original.body || original.email_id)) {\n  messages = [\n    {\n      message_id: String(original.email_id || ''),\n      from: addrOf(original.from),\n      to: [],\n      date_iso: new Date().toISOString(),\n      subject: String(original.subject || ''),\n      body: String(original.body || ''),\n      is_from_spartan: isSpartan(original.from),\n    },\n  ];\n}\n\n// The cleaned history Normalize Data produced is bodies-only (no ids or dates),\n// so it cannot become a ThreadMessage. Carry it as context rather than drop it.\nconst history_text = (norm.thread_history && Array.isArray(norm.thread_history.messages))\n  ? norm.thread_history.messages\n  : [];\n\nmessages.sort((a, b) => Date.parse(a.date_iso) - Date.parse(b.date_iso));\n\nreturn [\n  {\n    json: {\n      thread_id,\n      messages,\n      // Everything below is context the engine records for transparency; the\n      // contract above is what drives the pipeline.\n      n8n: {\n        workflow: 'Email SamurAI v3.4 Spartan Crew Bookings',\n        latest_message_id: String(original.email_id || (messages.length ? messages[messages.length - 1].message_id : '')),\n        // The old openAi node wrapped its answer in message/content; the parse\n        // node emits the fields directly (is_job, type_job, job_summary). Fall\n        // back to the whole object rather than recording null for a shape we did\n        // not anticipate - this field is pure transparency, so keeping too much\n        // costs nothing and keeping nothing costs the audit trail.\n        verdict: verdict.message || verdict.content || verdict.text || verdict.output ||\n          (verdict_source && Object.keys(verdict).length ? verdict : null),\n        verdict_source: verdict_source,\n        client_information: renderer.client_information || null,\n        render_hash: (renderer.metadata && renderer.metadata.render_hash) || null,\n        classifications: (renderer.metadata && renderer.metadata.classifications) || null,\n        // Read these off the Dedupe Claim node, NOT $json. At this point in the\n        // branch $json is the classifier's item, which never carries them, so\n        // reading $json silently reported found:false for every message.\n        dedupe: (function () {\n          const d = nodeJson('Dedupe Claim') || $json || {};\n          return {\n            found: d.found === true,\n            first_seen: d.first_seen === true,\n            thread_first_seen: d.thread_first_seen === true,\n            thread_message_count: d.thread_message_count || null,\n            degraded: d.degraded || null,\n          };\n        })(),\n        history_text,\n        message_count: messages.length,\n      },\n    },\n  },\n];\n"
+    },
+    "type": "n8n-nodes-base.code",
+    "typeVersion": 2,
+    "position": [
+     -560,
+     3904
+    ],
+    "id": "16ecc5e6-aff6-406a-b413-9352ab5c1a5c",
+    "name": "Build Engine Payload"
+   },
+   {
+    "parameters": {
+     "promptType": "define",
+     "text": "=USER PROMPT (INPUT DATA)\n\nCurrent Email Subject: \n{{ $('Normalize Data').item.json.original_email.subject }}\n\nCurrent Email Body: \n{{ $('Normalize Data').item.json.original_email.body }}\n\nThread History: \n{{ $('Normalize Data').item.json.thread_history.messages }}\n\nemail_id: \n{{ $('Normalize Data').item.json.original_email.email_id }}\n\nthread_id: \n{{ $('Normalize Data').item.json.original_email.thread_id }}\n\nfrom: \n{{ $('Normalize Data').item.json.original_email.from }}",
+     "needsFallback": true,
+     "options": {
+      "systemMessage": "ROLE:\nClassify incoming emails as either:\n1. NEW job request\n2. UPDATE to existing job request\n3. NOT a job request\n\nYou ONLY classify the Current Email. Thread History is context only.\n\n---\n\nSCOPE RULE:\n\nYou are classifying ONLY the \"Current Email\" (subject + body).\n\nThread History exists solely to answer these two questions:\n  1. Does Current Email introduce a NEW job NOT in Thread History?\n  2. Does Current Email modify a job that ALREADY EXISTS in Thread History?\n\nIf neither is true → NOT a job request.\n\nCRITICAL: Never classify Thread History messages. Only classify Current Email.\n\n---\n\nDEFINITIONS:\n\n\"Job Request\" = Any message requesting crew, booking, order, shift, or staffing.\n\n\"Current Email\" = The most recent email (the one just arrived).\n\n\"Thread History\" = All previous emails in this conversation thread.\n\n---\n\nCLASSIFICATION LOGIC:\n\nSTEP 1: Does Current Email contain job request language?\n\n  NEW Job Indicators:\n  • \"booking request,\" \"crew request,\" \"I need a crew\"\n  • \"I'll take [X] on this day,\" \"[X] crew on [date]\"\n  • \"new order,\" \"crew chief,\" \"can you crew this\"\n  • Any explicit request for staffing with numbers/dates/details\n\n  UPDATE Job Indicators:\n  • \"change this,\" \"make it [X] instead\"\n  • \"update,\" \"amend,\" \"adjust,\" \"modify\"\n  • \"actually,\" \"instead,\" \"can we switch\"\n  • \"cancel,\" \"remove,\" \"add to\"\n  • \"confirmed,\" \"approved,\" \"going ahead\"\n  • \"push to,\" \"move to,\" \"delay\"\n\n  If Current Email has NONE of these → is_job: false → STOP\n\n---\n\nSTEP 2: If YES to job language, check Thread History\n\n  CASE A: No Thread History exists\n    → is_job: true / type_job: new\n    → Job summary: What this email requests\n\n  CASE B: Thread History exists but NO prior job mentioned\n    → is_job: true / type_job: new\n    → Job summary: What this email requests\n\n  CASE C: Thread History EXISTS and CONTAINS a prior job\n    → Continue to STEP 3\n\n---\n\nSTEP 3: Does Current Email reference/modify the existing job?\n\n  If YES:\n    → is_job: true / type_job: update\n    → Job summary: Original job + what changed\n\n  If NO (Current Email is unrelated to prior job):\n    → is_job: true / type_job: new\n    → Job summary: What this email requests (separate from prior job)\n\n---\n\nDETERMINISM RULES:\n\nRule 1: DUPLICATE DETECTION\n  If Current Email is identical to any message in Thread History:\n  → Mark as duplicate and disregard from thread history context\n  → Still classify Current Email normally based on content\n\nRule 2: AMBIGUOUS LANGUAGE\n  If Current Email COULD be either new or update:\n  → Prioritize UPDATE if Thread History has any prior job details\n  → Default to NEW if Thread History is unclear or absent\n  → REASON: Safer to categorize as update than miss context\n\nRule 3: MULTIPLE JOBS IN ONE EMAIL\n  If Current Email contains BOTH a new request AND update to prior:\n  → type_job: update (the update takes precedence)\n  → job_summary: Describe the original job, what changed, AND what new request was added\n\nRule 4: CONFIRMATION ONLY\n  If Current Email only confirms/acknowledges prior job with NO changes:\n  → is_job: false (confirmation alone is not a new classified request)\n  \n  Exception: If confirmation includes NEW details not in prior job:\n  → is_job: true / type_job: update\n  → job_summary: Note what new information was provided\n\nRule 5: CANCELLATION\n  If Current Email cancels an existing job or part of it:\n  → is_job: true / type_job: update\n  → job_summary: State what was cancelled and from what prior job\n\nRule 6: MISSING CRITICAL DATA\n  If Current Email requests crew but lacks dates/times/headcount:\n  → Still classify as is_job: true\n  → job_summary: Note what details are missing (\"Date unclear,\" \"Crew size not specified\")\n\n---\n\nOUTPUT FORMAT (EXACTLY):\n\nfrom: [email address from passthrough]\nemail_id: [ID from passthrough]\nthread_id: [ID from passthrough]\nis_job: [true or false]\ntype_job: [new or update, blank if is_job is false]\njob_summary: [technical summary, see below]\n\n---\n\nJOB_SUMMARY SPECIFICATIONS:\n\nIf is_job: true / type_job: new\n  Format: \"[Date/Time] - [Headcount] crew at [Location] - [Any other key details]\"\n  Example: \"Thursday 9am - 3 crew at 123 Main St - Crew chief: Mike\"\n  Include: Dates, times, headcount, location, crew chief, any IDs, payment terms if mentioned\n\nIf is_job: true / type_job: update\n  Format: \"[Original job details] → UPDATED: [what changed]\"\n  Example: \"Thursday 9am - 3 crew → UPDATED: Now 4 crew instead of 3\"\n  Include: What changed FROM what TO what (if discernible)\n  If change is unclear, state: \"Change requested but specifics unclear\"\n\nIf is_job: false\n  Write: \"N/A - [brief reason]\"\n  Examples: \"N/A - General conversation, no crew request\"\n            \"N/A - Status update only, no changes requested\"\n            \"N/A - Thank you/confirmation without modifications\"\n\n---\n\nTHREAD HISTORY REFERENCE:\n\nThread History is provided chronologically:\n  • Oldest message = Top\n  • Newest message = Bottom\n  • Current Email = NOT in Thread History (it's separate)\n\nWhen analyzing Thread History:\n  1. Read from top to bottom\n  2. Identify job requests in the order they appear\n  3. Track what changes between messages\n  4. Use dates/timestamps to prioritize newer information\n  5. Remember: Current Email is always more recent than everything in history\n\n---\n\nEDGE CASES:\n\nScenario 1: \"Can you send me a quote?\"\n  → is_job: false (request for information, not a booking)\n\nScenario 2: \"I'd like to move the crew from Friday to Saturday\"\n  → is_job: true / type_job: update (references existing job, modifies it)\n\nScenario 3: Current Email says \"Sounds good\" with no changes\n  → is_job: false (pure confirmation/acknowledgment)\n  → UNLESS Thread History shows no prior job, then it's ambiguous\n    → is_job: false (no actionable request in Current Email itself)\n\nScenario 4: \"We'll need 5 crew Thursday AND can we cancel Monday?\"\n  → is_job: true / type_job: update (both are modifications to prior job context)\n  → job_summary: \"Thursday - 5 crew requested. Monday booking cancelled.\"\n\nScenario 5: Current Email references \"the job\" but Thread History is unclear\n  → is_job: true / type_job: update (Current Email clearly references prior job)\n  → job_summary: \"Update to existing booking (prior details unclear from thread)\"\n\n---\n\nCRITICAL OUTPUTS:\n\n✓ Only output the 6 required fields\n✓ No markdown, no JSON, no code blocks, no extra formatting\n✓ type_job NEVER contains \"-new\", \"-update\", or variations\n✓ type_job is blank if is_job is false\n✓ Passthrough fields (from, email_id, thread_id) are exactly as provided in input\n✓ No assumptions about missing data — note it in job_summary if unclear"
+     }
+    },
+    "type": "@n8n/n8n-nodes-langchain.agent",
+    "typeVersion": 3.1,
+    "position": [
+     -960,
+     3760
+    ],
+    "id": "a1364aa5-501e-49b4-a84b-3b53b9f50824",
+    "name": "AI Agent"
+   },
+   {
+    "parameters": {
+     "jsCode": "// Loop over input items and add a new field called 'myNewField' to the JSON of each one\nfor (const item of $input.all()) {\n  item.json.myNewField = 1;\n}\n\nreturn $input.all();"
+    },
+    "type": "n8n-nodes-base.code",
+    "typeVersion": 2,
+    "position": [
+     -720,
+     3760
+    ],
+    "id": "f1008304-edde-4300-bf67-035b9f1143e4",
+    "name": "Parse Job Determinism Output"
+   },
+   {
+    "parameters": {
+     "model": {
+      "__rl": true,
+      "value": "openai/gpt-5",
+      "mode": "list",
+      "cachedResultName": "openai/gpt-5",
+      "cachedResultUrl": ""
+     },
+     "builtInTools": {},
+     "options": {}
+    },
+    "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+    "typeVersion": 1.3,
+    "position": [
+     -912,
+     3872
+    ],
+    "id": "6795010d-e3d9-4670-b471-f19fc97f85f4",
+    "name": "gpt-5",
+    "credentials": {
+     "openAiApi": {
+      "id": "SPBzLNvmmXvROMN4",
+      "name": "SPARTAN CREW NEW"
+     }
+    }
+   },
+   {
+    "parameters": {
+     "model": {
+      "__rl": true,
+      "value": "anthropic/claude-opus-4.6",
+      "mode": "list",
+      "cachedResultName": "anthropic/claude-opus-4.6",
+      "cachedResultUrl": ""
+     },
+     "builtInTools": {},
+     "options": {}
+    },
+    "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+    "typeVersion": 1.3,
+    "position": [
+     -992,
+     3872
+    ],
+    "id": "b7af4e43-5f2f-45cc-93a5-1cc5926898ff",
+    "name": "opus 4.6",
+    "credentials": {
+     "openAiApi": {
+      "id": "SPBzLNvmmXvROMN4",
+      "name": "SPARTAN CREW NEW"
+     }
+    }
+   }
+  ],
+  "connections": {
+   "Poll1": {
+    "main": [
+     [
+      {
+       "node": "Date & Time",
+       "type": "main",
+       "index": 0
+      }
+     ]
+    ]
+   },
+   "Get IDs1": {
+    "main": [
+     [
+      {
+       "node": "Dedupe Claim",
+       "type": "main",
+       "index": 0
+      }
+     ]
+    ]
+   },
+   "Get Hydrated Emails1": {
+    "main": [
+     [
+      {
+       "node": "Get a thread2",
+       "type": "main",
+       "index": 0
+      },
+      {
+       "node": "Merge1",
+       "type": "main",
+       "index": 0
+      }
+     ]
+    ]
+   },
+   "Merge1": {
+    "main": [
+     [
+      {
+       "node": "Normalize Data",
+       "type": "main",
+       "index": 0
+      }
+     ]
+    ]
+   },
+   "Normalize Data": {
+    "main": [
+     [
+      {
+       "node": "MAINDATA",
+       "type": "main",
+       "index": 0
+      }
+     ]
+    ]
+   },
+   "Get a thread2": {
+    "main": [
+     [
+      {
+       "node": "Merge1",
+       "type": "main",
+       "index": 1
+      }
+     ]
+    ]
+   },
+   "Loop Over Items": {
+    "main": [
+     [],
+     [
+      {
+       "node": "Get IDs1",
+       "type": "main",
+       "index": 0
+      }
+     ]
+    ]
+   },
+   "Remove label from message": {
+    "main": [
+     [
+      {
+       "node": "Loop Over Items1",
+       "type": "main",
+       "index": 0
+      }
+     ]
+    ]
+   },
+   "Get many messages": {
+    "main": [
+     [
+      {
+       "node": "Loop Over Items1",
+       "type": "main",
+       "index": 0
+      },
+      {
+       "node": "Loop Over Items",
+       "type": "main",
+       "index": 0
+      }
+     ]
+    ]
+   },
+   "Schedule Trigger": {
+    "main": [
+     [
+      {
+       "node": "Date & Time",
+       "type": "main",
+       "index": 0
+      }
+     ]
+    ]
+   },
+   "Date & Time": {
+    "main": [
+     [
+      {
+       "node": "-10 mins",
+       "type": "main",
+       "index": 0
+      }
+     ]
+    ]
+   },
+   "-10 mins": {
+    "main": [
+     [
+      {
+       "node": "Get many messages",
+       "type": "main",
+       "index": 0
+      }
+     ]
+    ]
+   },
+   "Loop Over Items1": {
+    "main": [
+     [],
+     [
+      {
+       "node": "Remove label from message",
+       "type": "main",
+       "index": 0
+      }
+     ]
+    ]
+   },
+   "MAINDATA": {
+    "main": [
+     [
+      {
+       "node": "Conversational Renderer",
+       "type": "main",
+       "index": 0
+      }
+     ]
+    ]
+   },
+   "Conversational Renderer": {
+    "main": [
+     [
+      {
+       "node": "AI Agent",
+       "type": "main",
+       "index": 0
+      }
+     ],
+     []
+    ]
+   },
+   "If": {
+    "main": [
+     [
+      {
+       "node": "Combine all Email Data",
+       "type": "main",
+       "index": 0
+      }
+     ],
+     [
+      {
+       "node": "Loop Over Items",
+       "type": "main",
+       "index": 0
+      }
+     ]
+    ]
+   },
+   "Combine all Email Data": {
+    "main": [
+     [
+      {
+       "node": "Build Engine Payload",
+       "type": "main",
+       "index": 0
+      },
+      {
+       "node": "Loop Over Items",
+       "type": "main",
+       "index": 0
+      }
+     ]
+    ]
+   },
+   "POST to Engine": {
+    "main": [
+     []
+    ]
+   },
+   "Dedupe Claim": {
+    "main": [
+     [
+      {
+       "node": "Get Hydrated Emails1",
+       "type": "main",
+       "index": 0
+      }
+     ]
+    ]
+   },
+   "Build Engine Payload": {
+    "main": [
+     [
+      {
+       "node": "POST to Engine",
+       "type": "main",
+       "index": 0
+      }
+     ]
+    ]
+   },
+   "AI Agent": {
+    "main": [
+     [
+      {
+       "node": "Parse Job Determinism Output",
+       "type": "main",
+       "index": 0
+      }
+     ]
+    ]
+   },
+   "Parse Job Determinism Output": {
+    "main": [
+     [
+      {
+       "node": "If",
+       "type": "main",
+       "index": 0
+      }
+     ]
+    ]
+   },
+   "gpt-5": {
+    "ai_languageModel": [
+     [
+      {
+       "node": "AI Agent",
+       "type": "ai_languageModel",
+       "index": 1
+      }
+     ]
+    ],
+    "main": []
+   },
+   "opus 4.6": {
+    "ai_languageModel": [
+     [
+      {
+       "node": "AI Agent",
+       "type": "ai_languageModel",
+       "index": 0
+      }
+     ]
+    ],
+    "main": []
+   }
+  },
+  "nodeGroups": [],
+  "authors": "Benjamin Mikus",
+  "name": null,
+  "description": null,
+  "autosaved": false,
+  "workflowPublishHistory": [
+   {
+    "createdAt": "2026-08-03T13:03:47.738Z",
+    "id": 2357,
+    "workflowId": "CPIRu7CpezvKjU8d",
+    "versionId": "b9113f02-edc1-4f98-b522-1c5b2f864385",
+    "event": "activated",
+    "userId": "82d33c4e-36f6-4cef-8957-45ce1ded0cb1"
+   },
+   {
+    "createdAt": "2026-08-03T13:03:47.736Z",
+    "id": 2356,
+    "workflowId": "CPIRu7CpezvKjU8d",
+    "versionId": "b9113f02-edc1-4f98-b522-1c5b2f864385",
+    "event": "deactivated",
+    "userId": "82d33c4e-36f6-4cef-8957-45ce1ded0cb1"
+   }
+  ]
+ }
+}
