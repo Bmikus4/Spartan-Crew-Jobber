@@ -34,6 +34,7 @@
 // ============================================================================
 import { loadEnv, requireEnv } from "./_env.mjs";
 import { createOpenRouterReasoner, ReasonerAuthError } from "../app/lib/engine/reason";
+import { guardReasoner, ceilingFromEnv, SpendCeilingError } from "../app/lib/engine/spend";
 import type { ThreadMessage } from "../app/lib/engine/types";
 import { unlabelledThreads, storeLabel, labelTally, type WorkBlock } from "../app/lib/sweepLabelsDb";
 
@@ -61,7 +62,29 @@ if (TALLY) {
   return;
 }
 
-const reasoner = createOpenRouterReasoner({ apiKey: requireEnv("OPENROUTER_API_KEY"), model: MODEL });
+// THIS is the script that spent $57 in a night and capped the key. It now runs under the
+// shared ceiling: three calls per thread means --limit 10 needs 30, and a pass over the
+// corpus has to be asked for explicitly (SPARTAN_ALLOW_BULK=1 SPARTAN_MAX_MODEL_CALLS=n).
+// The estimate is printed as it goes, so the bill is visible before it arrives rather
+// than afterwards.
+const CALLS_PER_THREAD = 3;
+const guarded = guardReasoner(
+  createOpenRouterReasoner({ apiKey: requireEnv("OPENROUTER_API_KEY"), model: MODEL }),
+  {
+    model: MODEL,
+    label: `classify-corpus --limit ${LIMIT}`,
+    limit: Math.max(ceilingFromEnv(), 0) === 25 && LIMIT * CALLS_PER_THREAD <= 100
+      // A default ceiling of 25 would refuse the documented `--limit 10`; allow exactly
+      // what the requested batch needs, and no more, while a genuinely large batch still
+      // has to raise the ceiling by hand.
+      ? LIMIT * CALLS_PER_THREAD
+      : ceilingFromEnv(),
+    onCall: (r) => {
+      if (r.calls % 30 === 0) console.log(`   [spend] ${r.calls} calls, ~$${r.estimatedUsd.toFixed(2)} estimated`);
+    },
+  }
+);
+const reasoner = guarded;
 
 /** The corpus stores messages in the engine's own inbound shape already. */
 function messagesOf(payload: { messages?: unknown[] }): ThreadMessage[] {
@@ -252,6 +275,14 @@ for (const t of threads) {
     // same way. Carrying on wrote 179 error rows in three minutes, which then made
     // those threads look "already labelled" to the retry. Stop, say why, and leave the
     // corpus untouched so the retry picks up exactly here.
+    // Same shape of failure, opposite cause: the ceiling stopped us on purpose. It must
+    // not be counted as a per-thread failure, or a guarded run reads as 90 broken threads.
+    if (e instanceof SpendCeilingError) {
+      console.error(`\n  STOPPING — ${e.message}`);
+      console.error(`  ${done} thread(s) labelled, ~$${guarded.spend().estimatedUsd.toFixed(2)} estimated spend.\n`);
+      process.exitCode = 3;
+      return;
+    }
     if (e instanceof ReasonerAuthError) {
       console.error(`
   STOPPING — ${e.message}`);

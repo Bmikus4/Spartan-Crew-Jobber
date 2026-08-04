@@ -10,6 +10,7 @@
 import { createHash } from "node:crypto";
 import { OnsinchClient, httpTransport } from "./engine/onsinch";
 import { createOpenRouterReasoner, type Reasoner } from "./engine/reason";
+import { guardReasoner } from "./engine/spend";
 import { buildOrderBody } from "./engine/format";
 import type { DesiredOrder } from "./engine/types";
 import type { Executor, PipelineDeps } from "./engine/pipeline";
@@ -31,21 +32,39 @@ import { NeonStateStore } from "./stateDb";
 import { NeonMetrics } from "./metricsDb";
 import { getSettings } from "./settingsDb";
 import { getRateCard } from "./rateCardsDb";
+import { lookupAlias, recordAlias } from "./aliasesDb";
 
 export const hashOrder = (o: unknown) => createHash("sha256").update(JSON.stringify(o)).digest("hex").slice(0, 16);
 
 // Lazy: the reasoner is only constructed when a language task actually runs, so
 // order-execution paths (confirm-order) work without the LLM key set.
+/** The production wrapper, exposed so test/depsForwardsReasoner.ts can inspect it. */
+export function buildReasonerForTest(): Reasoner {
+  return reasoner();
+}
+
 function reasoner(): Reasoner {
   let real: Reasoner | null = null;
   const get = (): Reasoner => {
     if (real) return real;
     const apiKey = process.env.OPENROUTER_API_KEY;
     if (!apiKey) throw new Error("OPENROUTER_API_KEY not set");
-    real = createOpenRouterReasoner({ apiKey, model: process.env.SPARTAN_MODEL || "anthropic/claude-opus-4.6" });
+    const model = process.env.SPARTAN_MODEL || "anthropic/claude-opus-4.6";
+    // One request handles one thread, so a handful of calls is the whole job. The
+    // ceiling exists for the runaway case — a retry loop, a thread that re-enters the
+    // pipeline — where the cost is unbounded and nothing else would notice.
+    real = guardReasoner(createOpenRouterReasoner({ apiKey, model }), { model, label: "pipeline" });
     return real;
   };
+  // classifyAndExtract MUST be forwarded. This wrapper is hand-written rather than a
+  // proxy, and while it listed only three methods the production reasoner had no
+  // `classifyAndExtract` property at all — so `compiler.ts`, which tests for it before
+  // using it, silently took the two-call fallback on every live email. The combined call
+  // shipped and never once ran on Vercel. Anything added to the Reasoner interface has to
+  // be added here too, or it does not exist in production.
   return {
+    classifyAndExtract: (...a) => get().classifyAndExtract!(...a),
+    classifyAndExtractIncremental: (...a) => get().classifyAndExtractIncremental!(...a),
     classify: (...a) => get().classify(...a),
     extractFacts: (...a) => get().extractFacts(...a),
     composeReply: (...a) => get().composeReply(...a),
@@ -120,6 +139,7 @@ export async function buildDeps(): Promise<PipelineDeps> {
     settings,
     repliesEnabled: settings.replies_enabled, // Tool 1: off by default
     seededRateCard: async (companyId: number) => (await getRateCard(companyId))?.card ?? null,
+    aliases: { lookup: lookupAlias, record: recordAlias },
     executor: executor(client),
     now: () => Date.now(),
     hashOrder,
