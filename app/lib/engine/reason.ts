@@ -5,7 +5,7 @@
 // it never resolves an integer id or builds the order body.
 //
 // Provider: OpenRouter (the same gateway the live n8n uses). Default model
-// anthropic/claude-opus-4.8 (temp 0) — one model, replacing the old
+// anthropic/claude-opus-4.6 (temp 0) — one model, replacing the old
 // gemini-flash / gemini-pro / glm-5 / gpt-5-nano sprawl. Swap via SPARTAN_MODEL.
 //
 // The interface is injectable so the compiler is testable offline (see
@@ -57,12 +57,12 @@ export interface Reasoner {
 // ---------------------------------------------------------------------------
 export interface OpenRouterConfig {
   apiKey: string;
-  model?: string;   // default anthropic/claude-opus-4.8
+  model?: string;   // default anthropic/claude-opus-4.6
   baseUrl?: string; // default https://openrouter.ai/api/v1
 }
 
 export function createOpenRouterReasoner(cfg: OpenRouterConfig): Reasoner {
-  const model = cfg.model ?? "anthropic/claude-opus-4.8";
+  const model = cfg.model ?? "anthropic/claude-opus-4.6";
   const baseUrl = cfg.baseUrl ?? "https://openrouter.ai/api/v1";
   // Same reasoning as the OnSinch transport: an open-ended model call can eat the
   // whole serverless invocation, and the workflow has already stripped the Gmail

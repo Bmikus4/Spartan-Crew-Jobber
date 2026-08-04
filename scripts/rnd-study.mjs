@@ -15,7 +15,11 @@ const ROOT = new URL("..", import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "
 const env = readFileSync(`${ROOT}/.env.local`, "utf8");
 const g = (k) => (env.match(new RegExp("^" + k + "=(.*)$", "m")) || [])[1];
 const sql = neon(g("DATABASE_URL").replace(/^"|"$/g, ""));
-const MODEL = "anthropic/claude-opus-4.8";
+// These are LABEL KEYS, not the runtime model: sweep_labels rows are tagged with the
+// model that produced them, and the study's figures were computed from the opus-4.8
+// run. They stay pinned so the published numbers remain reproducible after the engine
+// moved to opus-4.6 — a future run under 4.6 is a new key and a new comparison.
+const MODEL = process.env.STUDY_MODEL || "anthropic/claude-opus-4.8";
 const BEFORE = "anthropic/claude-opus-4.8 (before end-time fix)";
 const AS_JSON = process.argv.includes("--json");
 

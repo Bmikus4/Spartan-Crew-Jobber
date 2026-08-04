@@ -112,6 +112,7 @@ async function main() {
            l.first_start, l.last_end, l.crew_peak, l.blocks,
            t.first_date, t.last_date
     FROM sweep_labels l JOIN sweep_threads t ON t.thread_id = l.thread_id
+    -- label key of the scored run, not the runtime model (see scripts/rnd-study.mjs)
     WHERE l.error IS NULL AND l.model = 'anthropic/claude-opus-4.8' 
     ORDER BY t.last_date DESC`) as unknown as Label[];
 

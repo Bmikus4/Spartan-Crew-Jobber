@@ -23,7 +23,7 @@ import type { HydratedThread } from "../app/lib/engine/types";
 loadEnv();
 const reasoner = createOpenRouterReasoner({
   apiKey: requireEnv("OPENROUTER_API_KEY"),
-  model: process.env.SPARTAN_MODEL || "anthropic/claude-opus-4.8",
+  model: process.env.SPARTAN_MODEL || "anthropic/claude-opus-4.6",
 });
 
 let fails = 0;

@@ -50,7 +50,7 @@ const num = (name: string, dflt: number) => {
 const DRY = flag("--dry");
 const TALLY = flag("--tally");
 const LIMIT = num("--limit", 10);
-const MODEL = process.env.SPARTAN_MODEL || "anthropic/claude-opus-4.8";
+const MODEL = process.env.SPARTAN_MODEL || "anthropic/claude-opus-4.6";
 
 async function main() {
 if (TALLY) {

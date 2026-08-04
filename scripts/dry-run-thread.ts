@@ -70,7 +70,7 @@ function deps(): PipelineDeps {
   return {
     reasoner: createOpenRouterReasoner({
       apiKey: requireEnv("OPENROUTER_API_KEY"),
-      model: process.env.SPARTAN_MODEL || "anthropic/claude-opus-4.8",
+      model: process.env.SPARTAN_MODEL || "anthropic/claude-opus-4.6",
     }),
     onsinch: client,
     store: new InMemoryStore(),

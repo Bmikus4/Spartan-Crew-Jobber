@@ -42,7 +42,7 @@ function reasoner(): Reasoner {
     if (real) return real;
     const apiKey = process.env.OPENROUTER_API_KEY;
     if (!apiKey) throw new Error("OPENROUTER_API_KEY not set");
-    real = createOpenRouterReasoner({ apiKey, model: process.env.SPARTAN_MODEL || "anthropic/claude-opus-4.8" });
+    real = createOpenRouterReasoner({ apiKey, model: process.env.SPARTAN_MODEL || "anthropic/claude-opus-4.6" });
     return real;
   };
   return {

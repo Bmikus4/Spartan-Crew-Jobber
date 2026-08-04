@@ -14,7 +14,7 @@ import type { HydratedThread } from "../app/lib/engine/types";
 loadEnv();
 const MODELS = process.argv.slice(2).length
   ? process.argv.slice(2)
-  : [process.env.SPARTAN_MODEL || "anthropic/claude-opus-4.8", "anthropic/claude-sonnet-5", "anthropic/claude-haiku-4.5"];
+  : [process.env.SPARTAN_MODEL || "anthropic/claude-opus-4.6", "anthropic/claude-sonnet-5", "anthropic/claude-haiku-4.5"];
 
 // A real client enquiry, the shape most bookings arrive in.
 const thread: HydratedThread = {
