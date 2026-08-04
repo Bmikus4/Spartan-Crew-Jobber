@@ -58,7 +58,7 @@ const calc = (s) => `<div class="calc">${esc(s)}</div>`;
 // ---------------------------------------------------------------- derived figures
 const C = D.corpus, S = D.senders, CL = D.classification, CO = D.completeness;
 const DIS = D.disagreement, ET = D.endTimes, LT = D.leadTime, OS = D.onsinch, H = D.history;
-const TALK = D.talk, LAT = D.latency, SH = D.shapes;
+const TALK = D.talk, LAT = D.latency, SH = D.shapes, EC = D.economics;
 
 const sampled = DIS.labelled;
 const junkRate = pct(DIS.junk, sampled);
@@ -87,6 +87,7 @@ const out = `
 <li><strong>${composablePct}% of real jobs (${CO.full} of ${CO.job}) already carry everything needed to create an order</strong> ${M}: date, crew, company, venue. Of the ${CO.missing.venue} missing a venue, ${venueFillable}% are from senders who have written before, so the answer is in the mailbox already.</li>
 <li>The 18:00 default finish has been fixed: defaulted finishes fell from ${ET.before18} to ${ET.after18} of ${ET.n} ${M}. Two of the three criteria — crew size and slot-team count — <strong>cannot be measured at all</strong> while <code>GET /slot_teams</code> returns 405.</li>
 </ul>
+<p><strong>Coverage, stated plainly:</strong> ${EC.labelledThreads} of ${n(EC.corpusThreads)} threads carry a label — <strong>${EC.coveragePct}% of the corpus</strong>. The ${EC.labelRows} label rows are those same threads scored four times over as the engine changed, not four times the evidence. Everything below is a sample of that size; the sweep itself covers the full year.</p>
 <p><strong>The one change with the largest measured effect</strong> is not a model change: it is letting a thread's own history and the sender's prior threads reach the decision. That single structural gap accounts for the ${SCORE.junkBecameOrders} confirmed missed bookings in a ${sampled}-thread sample and for ${H.missing_venue_with_history} of ${H.missing_venue} missing venues.</p>
 </div>
 
@@ -200,6 +201,21 @@ ${bars([
 ${calc(`(${ET.before18} − ${ET.after18}) / ${ET.before18} = ${pct(ET.before18 - ET.after18, ET.before18)}% of defaulted finishes recovered`)}
 <p>The default itself was kept deliberately — an email that states nothing must still produce a block — but a defaulted start or finish now says so in the order's notes, so it can be counted rather than rediscovered.</p>
 
+<h2>8b · What a pass costs, and why</h2>
+<p>${M} Labelling costs <strong>$${EC.costPerThread} per thread</strong> (231 labels for $57.08). At that rate a single pass over the corpus is <strong>$${(EC.costPerThread * EC.corpusThreads).toFixed(0)}</strong>, which is why this study runs on ${EC.coveragePct}% of it rather than all of it.</p>
+<p>The cost is not the model's price, it is what gets sent. A thread averages <strong>${n(EC.meanChars)} characters</strong> of message text, and <code>threadText()</code> re-sends the entire history on <em>every</em> call — classify and extractFacts are uncapped, and only the cancellation probe truncates at 12k. So each thread's text goes over the wire roughly three times.</p>
+${bars([
+  { label: "today: 2 uncapped + 1 capped", value: EC.currentChars, tone: "bad", display: (EC.currentChars/1e6).toFixed(0) + "M chars" },
+  { label: "cap history at 12k", value: EC.cappedChars, tone: "warn", display: (EC.cappedChars/1e6).toFixed(0) + "M chars" },
+  { label: "cap + one combined call", value: EC.combinedChars, tone: "good", display: (EC.combinedChars/1e6).toFixed(0) + "M chars" },
+], { labelW: 250 })}
+<p class="sub">Input characters to label the whole corpus ${M}. ${n(EC.overCap)} of ${n(EC.corpusThreads)} threads exceed the 12k cap, so most threads are unaffected by capping — the saving comes from the long tail.</p>
+${calc(`current = Σ(2 × full + min(full, 12k)) = ${EC.currentChars.toLocaleString()} chars
+capped  = Σ(3 × min(full, 12k)) = ${EC.cappedChars.toLocaleString()} chars  → ${EC.cappedSavingPct}% less
+combined = Σ(min(full, 12k)) = ${EC.combinedChars.toLocaleString()} chars  → ${EC.combinedSavingPct}% less`)}
+<p>${E} Holding the reported rate constant, capping history takes a thread from $${EC.costPerThread} to about <strong>$${(EC.costPerThread * EC.cappedChars / EC.currentChars).toFixed(3)}</strong>, and capping plus a single combined call to about <strong>$${(EC.costPerThread * EC.combinedChars / EC.currentChars).toFixed(3)}</strong> — a full-corpus pass falling from $${(EC.costPerThread * EC.corpusThreads).toFixed(0)} to roughly <strong>$${(EC.costPerThread * EC.corpusThreads * EC.combinedChars / EC.currentChars).toFixed(0)}</strong>. ${A} This assumes cost scales with input length, which holds while output is a small fixed JSON object but understates the saving from dropping two round-trips.</p>
+<p>${M} Note the immediate blocker this measurement came out of: the OpenRouter key hit its own cap (limit 150, usage 150.31) with $16.17 of account credit left, so the remaining 179 threads of the classifier comparison could not run. A failed call returns an error, not an empty result — no result in this study is a silent failure.</p>
+
 <h2>9 · Redesign proposals, ordered by measured impact</h2>
 <ol class="props">
 
@@ -239,7 +255,13 @@ ${calc(`(${ET.before18} − ${ET.after18}) / ${ET.before18} = ${pct(ET.before18 
 <p><strong>Cost:</strong> a day, using the thread's own customer reference / PO number as the join key where present.</p>
 <p class="disproof"><strong>What would prove it wrong:</strong> if PO numbers appear in fewer than half of threads, this join is not available and the date+company pairing is as good as it gets.</p></li>
 
-<li><h3>7. Unblock slot-team reads (needs Ben, not code)</h3>
+<li><h3>7. Send the thread once, capped — not three times in full</h3>
+<p><strong>Failure removed:</strong> a pass costs $${(EC.costPerThread * EC.corpusThreads).toFixed(0)} and exhausts the budget before the corpus is covered, which is why coverage here is ${EC.coveragePct}%.</p>
+<p><strong>Expected effect:</strong> ${E} ${EC.combinedSavingPct}% fewer input characters — about $${(EC.costPerThread * EC.combinedChars / EC.currentChars).toFixed(3)} per thread against $${EC.costPerThread} today. It also removes two round-trips per thread, so latency falls with it.</p>
+<p><strong>Cost:</strong> one to two days. classify + extract + the cancellation question share one input already; merging them into a single tool call with one schema is mechanical, and the 12k cap already exists in the cancellation probe.</p>
+<p class="disproof"><strong>What would prove it wrong:</strong> if accuracy drops when the model answers three questions in one call, or if truncating at 12k loses requests that live early in long threads. Test both against the gold set — measure classification agreement before and after, and check how many of the ${n(EC.overCap)} over-cap threads carry their request in the first 12k.</p></li>
+
+<li><h3>8. Unblock slot-team reads (needs Ben, not code)</h3>
 <p><strong>Failure removed:</strong> two of the three accuracy criteria are currently unmeasurable.</p>
 <p><strong>Expected effect:</strong> ${A} none by itself — it makes crew and slot-team accuracy visible for the first time, and ${pct(SH.multi.multi_block, SH.multi.single_block + SH.multi.multi_block)}% of jobs have more than one block, so this is not a minor field.</p>
 <p><strong>Cost:</strong> a permission change in OnSinch.</p>

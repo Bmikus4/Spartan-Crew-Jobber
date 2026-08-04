@@ -333,4 +333,39 @@ const say = (...a) => { if (!AS_JSON) console.log(...a); };
   say(`labelled threads missing a venue ${hist.missing_venue} | of those, the sender has written before ${hist.missing_venue_with_history}`);
 }
 
+// ---------------------------------------------------------------- 13. coverage and economics
+{
+  const [cov] = await sql`SELECT COUNT(DISTINCT thread_id)::int threads, COUNT(*)::int labels
+    FROM sweep_labels WHERE error IS NULL`;
+  const [tot] = await sql`SELECT COUNT(*)::int n FROM sweep_threads`;
+  // What the reasoner actually sends is message text, not the stored JSON blob.
+  const rows = await sql`
+    SELECT t.thread_id,
+      SUM(length(COALESCE(m.v->>'body','')) + length(COALESCE(m.v->>'subject','')) + 120)::int chars
+    FROM sweep_threads t, jsonb_array_elements(t.payload->'messages') AS m(v)
+    GROUP BY 1`;
+  const CAP = 12000;
+  const chars = rows.map((r) => r.chars);
+  const sum = (a) => a.reduce((x, y) => x + y, 0);
+  // classify and extractFacts send the whole thread; only the cancellation probe caps.
+  const current = sum(chars.map((c) => 2 * c + Math.min(c, CAP)));
+  const capped = sum(chars.map((c) => 3 * Math.min(c, CAP)));
+  const combined = sum(chars.map((c) => Math.min(c, CAP)));
+  out.economics = {
+    labelledThreads: cov.threads, labelRows: cov.labels, corpusThreads: tot.n,
+    coveragePct: Math.round((cov.threads / tot.n) * 1000) / 10,
+    meanChars: Math.round(sum(chars) / chars.length),
+    overCap: chars.filter((c) => c > CAP).length,
+    currentChars: current, cappedChars: capped, combinedChars: combined,
+    cappedSavingPct: Math.round(100 - (capped / current) * 100),
+    combinedSavingPct: Math.round(100 - (combined / current) * 100),
+    costPerThread: 0.247,   // reported: 231 labels for $57.08
+  };
+  say(`
+=== 13. COVERAGE AND ECONOMICS ===`);
+  say(`labelled ${cov.threads} distinct threads (${out.economics.coveragePct}% of ${tot.n}) across ${cov.labels} label rows`);
+  say(`mean thread text ${out.economics.meanChars} chars | over the 12k cap: ${out.economics.overCap}`);
+  say(`input chars: current ${current} | capped ${capped} (-${out.economics.cappedSavingPct}%) | capped+combined ${combined} (-${out.economics.combinedSavingPct}%)`);
+}
+
 if (AS_JSON) console.log(JSON.stringify(out, null, 1));
