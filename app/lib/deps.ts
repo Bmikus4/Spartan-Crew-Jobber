@@ -12,6 +12,7 @@ import { OnsinchClient, httpTransport } from "./engine/onsinch";
 import { createOpenRouterReasoner, type Reasoner } from "./engine/reason";
 import { guardReasoner } from "./engine/spend";
 import { tieredReasoner } from "./engine/tiered";
+import { logKeyBalanceOnce } from "./engine/keyBalance";
 import { buildOrderBody } from "./engine/format";
 import { replaceProvisionalOrder } from "./engine/replaceOrder";
 import type { DesiredOrder } from "./engine/types";
@@ -52,6 +53,11 @@ function reasoner(): Reasoner {
     const apiKey = process.env.OPENROUTER_API_KEY;
     if (!apiKey) throw new Error("OPENROUTER_API_KEY not set");
     const model = process.env.SPARTAN_MODEL || "anthropic/claude-opus-4.6";
+    // What is left on the key, said out loud once per process. An exhausted key returns
+    // 403 on every call and looks identical to a quiet morning: 17 emails arrived on
+    // 2026-08-04 and none were classified, with nothing in the logs to say why. Not
+    // awaited — the balance is diagnostics, and no email should wait on it.
+    logKeyBalanceOnce(apiKey);
     // Tiering, only when a cheap model is named. The escalation rules live in
     // tiered.ts and are deterministic; what is unknown is how often they fire, and
     // that needs a paid run to establish. Until then this stays opt-in, because
