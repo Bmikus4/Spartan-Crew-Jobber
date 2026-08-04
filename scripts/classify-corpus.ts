@@ -33,7 +33,7 @@
 //   npx tsx scripts/classify-corpus.ts --tally              # what is labelled so far
 // ============================================================================
 import { loadEnv, requireEnv } from "./_env.mjs";
-import { createOpenRouterReasoner } from "../app/lib/engine/reason";
+import { createOpenRouterReasoner, ReasonerAuthError } from "../app/lib/engine/reason";
 import type { ThreadMessage } from "../app/lib/engine/types";
 import { unlabelledThreads, storeLabel, labelTally, type WorkBlock } from "../app/lib/sweepLabelsDb";
 
@@ -248,6 +248,19 @@ for (const t of threads) {
     );
     done++;
   } catch (e) {
+    // A dead key, an empty account or a capped key fails every remaining thread the
+    // same way. Carrying on wrote 179 error rows in three minutes, which then made
+    // those threads look "already labelled" to the retry. Stop, say why, and leave the
+    // corpus untouched so the retry picks up exactly here.
+    if (e instanceof ReasonerAuthError) {
+      console.error(`
+  STOPPING — ${e.message}`);
+      console.error(`  ${done} thread(s) labelled before this; nothing recorded for the rest.`);
+      console.error(`  No result here is an empty answer: the calls did not run.
+`);
+      process.exitCode = 2;
+      return;
+    }
     failed++;
     const msg = (e as Error).message.slice(0, 160);
     if (!DRY) await storeLabel({ thread_id: t.thread_id, model: MODEL, error: msg });

@@ -66,6 +66,27 @@ export interface Reasoner {
 // ARE the target schema, with tool_choice pinned to it, so the model must
 // return valid JSON. Requires OPENROUTER_API_KEY.
 // ---------------------------------------------------------------------------
+/**
+ * The key is dead, capped, or the account is out of credit — every subsequent call will
+ * fail the same way. Distinguished from an ordinary failure because the right response
+ * is to stop, not to retry the next thread: a revoked key returns 401 on all 5,835 of
+ * them, and a batch that "completes" with an error row per thread reads like data.
+ */
+export class ReasonerAuthError extends Error {
+  readonly status: number;
+  constructor(status: number, detail: string) {
+    super(
+      status === 402
+        ? `OpenRouter is out of credit (402). Nothing will run until the account is topped up. ${detail}`
+        : status === 403
+          ? `OpenRouter refused the key (403) — usually its own spend limit. ${detail}`
+          : `OpenRouter rejected the key (${status}) — revoked or wrong. ${detail}`
+    );
+    this.name = "ReasonerAuthError";
+    this.status = status;
+  }
+}
+
 export interface OpenRouterConfig {
   apiKey: string;
   model?: string;   // default anthropic/claude-opus-4.6
@@ -114,7 +135,15 @@ export function createOpenRouterReasoner(cfg: OpenRouterConfig): Reasoner {
       const timedOut = (err as Error)?.name === "TimeoutError" || (err as Error)?.name === "AbortError";
       throw new Error(timedOut ? `OpenRouter (${model}) timed out after ${TIMEOUT_MS}ms` : `OpenRouter (${model}) failed: ${(err as Error)?.message}`);
     }
-    if (!res.ok) throw new Error(`OpenRouter ${res.status}: ${(await res.text()).slice(0, 400)}`);
+    if (!res.ok) {
+      const detail = (await res.text()).slice(0, 300);
+      // 401 revoked/unknown key, 402 no credit, 403 key limit reached: all fatal for the
+      // whole run rather than for this one thread.
+      if (res.status === 401 || res.status === 402 || res.status === 403) {
+        throw new ReasonerAuthError(res.status, detail);
+      }
+      throw new Error(`OpenRouter ${res.status}: ${detail}`);
+    }
     const j = await res.json();
     const args = j.choices?.[0]?.message?.tool_calls?.[0]?.function?.arguments;
     if (!args) throw new Error("no tool_call in response: " + JSON.stringify(j).slice(0, 400));

@@ -15,7 +15,7 @@
     "test:link": "tsx test/orderLink.ts",
     "test:settings": "tsx test/settings.ts",
     "test:machine": "tsx test/machineMail.ts",
-    "test:all": "tsx test/run.ts && tsx test/seam.ts && tsx test/orderLink.ts && tsx test/settings.ts && tsx test/machineMail.ts && tsx test/classifierDefers.ts && tsx test/combinedCall.ts && tsx test/sweepGmail.ts && tsx test/sweepWorkflowNodes.ts && node scripts/test-engine-payload.mjs",
+    "test:all": "tsx test/run.ts && tsx test/seam.ts && tsx test/orderLink.ts && tsx test/settings.ts && tsx test/machineMail.ts && tsx test/classifierDefers.ts && tsx test/combinedCall.ts && tsx test/authFailsLoudly.ts && tsx test/sweepGmail.ts && tsx test/sweepWorkflowNodes.ts && node scripts/test-engine-payload.mjs",
     "test:jobname": "tsx test/jobName.ts",
     "test:patch": "tsx test/patchApply.ts",
     "test:queue": "tsx test/confirmQueue.ts",
@@ -32,7 +32,8 @@
     "test:sweepnodes": "tsx test/sweepWorkflowNodes.ts",
     "sweep:build": "node scripts/build-sweep-workflow.mjs",
     "test:defer": "tsx test/classifierDefers.ts",
-    "test:combined": "tsx test/combinedCall.ts"
+    "test:combined": "tsx test/combinedCall.ts",
+    "test:auth": "tsx test/authFailsLoudly.ts"
   },
   "dependencies": {
     "@neondatabase/serverless": "^0.10.4",
