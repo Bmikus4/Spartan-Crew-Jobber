@@ -152,10 +152,40 @@ function toIso(msg, headers) {
 const SPARTAN_DOMAINS = ['@spartancrew.co.uk'];
 const isSpartan = (from) => SPARTAN_DOMAINS.some((d) => String(from || '').toLowerCase().includes(d));
 
+// Headers the engine's triage actually reads, and nothing else.
+//
+// Bulk mail identifies ITSELF here: a newsletter carries List-Unsubscribe, a mailing
+// list carries List-Id, an autoresponder sets Auto-Submitted, and a filter that has
+// already judged it sets X-Spam-Flag. No human writing about crew sets any of them, so
+// this is the cheapest high-precision spam signal that exists — one dictionary lookup,
+// near-zero false positives, and nothing a content heuristic can match.
+//
+// It was measurable how much was being lost without them: body-visible bulk markers
+// appear on 0.6% of the 27,830-message corpus, which is what "guess from the copy"
+// buys you against a header that says so outright.
+//
+// A CURATED list rather than every header: a full set is kilobytes of Received: chains
+// per message, and the payload is stored verbatim in inbound_raw for every email.
+const TRIAGE_HEADERS = [
+  'list-unsubscribe', 'list-id', 'list-help', 'precedence', 'auto-submitted',
+  'x-spam-flag', 'x-spam-status', 'x-campaign-id', 'x-mailer',
+  'authentication-results', 'return-path', 'reply-to', 'in-reply-to', 'references',
+];
+
 /** One Gmail message resource -> one engine ThreadMessage. */
 function toThreadMessage(msg) {
   const h = headerMap(msg);
   const from = addrOf(msg.from || h.from);
+
+  // Only the ones present, so an absent header is absent rather than an empty string —
+  // triage treats "no headers at all" differently from "headers that say nothing", and
+  // conflating them would turn a missing signal into a false all-clear.
+  const headers = {};
+  for (const k of TRIAGE_HEADERS) {
+    const v = h[k];
+    if (v !== undefined && v !== null && String(v).trim() !== '') headers[k] = String(v);
+  }
+
   return {
     message_id: String(msg.id || h['message-id'] || ''),
     from,
@@ -164,6 +194,11 @@ function toThreadMessage(msg) {
     subject: String((msg.subject !== undefined ? msg.subject : h.subject) || ''),
     body: extractBody(msg),
     is_from_spartan: isSpartan(from),
+    // Omit the key entirely when nothing was found. NOTE: Gmail's "Get a thread"
+    // response carries no payload.headers array, so for thread HISTORY these will
+    // usually be empty; the newly-arrived message, fetched with a message get, does
+    // carry them. Triage only reads the latest message, which is the one that has them.
+    ...(Object.keys(headers).length ? { headers } : {}),
   };
 }
 

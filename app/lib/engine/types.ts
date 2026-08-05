@@ -17,6 +17,12 @@ export interface ThreadMessage {
   subject: string;
   body: string;          // cleaned plain text (quotes/signatures stripped)
   is_from_spartan: boolean;
+  /**
+   * RFC headers, when the transport forwards them. Optional because the n8n payload does
+   * not today — and that absence is why bulk mail has to be guessed from the body, which
+   * finds it on 0.6% of the corpus against a header that would find nearly all of it.
+   */
+  headers?: Record<string, string | undefined>;
 }
 
 /** A hydrated Gmail thread — the raw input to the compiler. */

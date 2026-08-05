@@ -15,7 +15,7 @@
     "test:link": "tsx test/orderLink.ts",
     "test:settings": "tsx test/settings.ts",
     "test:machine": "tsx test/machineMail.ts",
-    "test:all": "tsx test/run.ts && tsx test/seam.ts && tsx test/orderLink.ts && tsx test/settings.ts && tsx test/machineMail.ts && tsx test/classifierDefers.ts && tsx test/combinedCall.ts && tsx test/authFailsLoudly.ts && tsx test/sweepGmail.ts && tsx test/sweepWorkflowNodes.ts && tsx test/depsForwardsReasoner.ts && tsx test/spendCeiling.ts && tsx test/incrementalRead.ts && tsx test/parseWork.ts && tsx test/aliasLearning.ts && tsx test/tiering.ts && tsx test/replaceOrder.ts && tsx test/keyBalance.ts && node scripts/test-engine-payload.mjs",
+    "test:all": "tsx test/run.ts && tsx test/seam.ts && tsx test/orderLink.ts && tsx test/settings.ts && tsx test/machineMail.ts && tsx test/classifierDefers.ts && tsx test/combinedCall.ts && tsx test/authFailsLoudly.ts && tsx test/sweepGmail.ts && tsx test/sweepWorkflowNodes.ts && tsx test/depsForwardsReasoner.ts && tsx test/spendCeiling.ts && tsx test/incrementalRead.ts && tsx test/parseWork.ts && tsx test/aliasLearning.ts && tsx test/tiering.ts && tsx test/replaceOrder.ts && tsx test/keyBalance.ts && tsx test/triage.ts && node scripts/test-engine-payload.mjs",
     "test:jobname": "tsx test/jobName.ts",
     "test:patch": "tsx test/patchApply.ts",
     "test:queue": "tsx test/confirmQueue.ts",
@@ -41,7 +41,8 @@
     "test:alias": "tsx test/aliasLearning.ts",
     "test:tier": "tsx test/tiering.ts",
     "test:replace": "tsx test/replaceOrder.ts",
-    "test:balance": "tsx test/keyBalance.ts"
+    "test:balance": "tsx test/keyBalance.ts",
+    "test:triage": "tsx test/triage.ts"
   },
   "dependencies": {
     "@neondatabase/serverless": "^0.10.4",

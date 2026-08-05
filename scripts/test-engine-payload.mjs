@@ -232,5 +232,65 @@ console.log("9. the classifier verdict survives the node being renamed");
   ok(out[0].json.messages.length === 2, "and the contract itself is unaffected", String(out[0].json.messages.length));
 }
 
+// ---------------------------------------------------------------------------
+// 10. triage headers survive the node, and only the curated ones do
+// ---------------------------------------------------------------------------
+// The engine's spam filter reads List-Unsubscribe / Precedence / Auto-Submitted, which
+// bulk mail sets on itself. Before this the node built a header map and threw it away,
+// so the highest-precision signal never reached the filter. A FULL header set is not
+// forwarded on purpose: Received: chains are kilobytes per message and inbound_raw
+// stores every payload verbatim.
+console.log("10. triage headers reach the engine, curated");
+{
+  const b64 = (t) => Buffer.from(t).toString("base64");
+  const bulk = runNode({
+    nodes: {
+      "Get a thread2": { id: "t-hdr", messages: [{
+        id: "m-hdr",
+        payload: {
+          headers: [
+            { name: "From", value: "news@events-weekly.com" },
+            { name: "Subject", value: "August industry roundup" },
+            { name: "Date", value: "Tue, 4 Aug 2026 09:00:00 +0100" },
+            { name: "List-Unsubscribe", value: "<https://events-weekly.com/u/123>" },
+            { name: "Precedence", value: "bulk" },
+            { name: "Received", value: "from mx1.events-weekly.com by mx.google.com id abc123" },
+            { name: "X-Spam-Flag", value: "NO" },
+          ],
+          parts: [{ mimeType: "text/plain", body: { data: b64("Our roundup. Unsubscribe any time.") } }],
+        },
+      }] },
+    },
+  });
+  const m = bulk[0].json.messages[0];
+  ok(!!m.headers, "headers are forwarded at all", JSON.stringify(m.headers || null));
+  ok(m.headers["list-unsubscribe"] === "<https://events-weekly.com/u/123>", "List-Unsubscribe survives", String(m.headers["list-unsubscribe"]));
+  ok(m.headers["precedence"] === "bulk", "Precedence survives", String(m.headers["precedence"]));
+  ok(m.headers["x-spam-flag"] === "NO", "X-Spam-Flag value is preserved, not interpreted", String(m.headers["x-spam-flag"]));
+  ok(m.headers["received"] === undefined, "Received: is NOT forwarded", String(m.headers["received"]));
+  ok(m.from === "news@events-weekly.com", "and the ordinary fields still work", m.from);
+
+  // A plain client email has none of these, and the key must then be ABSENT rather than
+  // an empty object: triage treats "no headers" differently from "headers saying nothing".
+  const plain = runNode({
+    nodes: {
+      "Get a thread2": { id: "t-plain", messages: [{
+        id: "m-plain",
+        payload: {
+          headers: [
+            { name: "From", value: "kajaal@wearefamilylondon.com" },
+            { name: "Subject", value: "Crew request" },
+            { name: "Date", value: "Tue, 4 Aug 2026 09:00:00 +0100" },
+          ],
+          parts: [{ mimeType: "text/plain", body: { data: b64("Can you cover 6 crew on 12 September?") } }],
+        },
+      }] },
+    },
+  });
+  ok(plain[0].json.messages[0].headers === undefined,
+     "an ordinary email carries no headers key at all", JSON.stringify(plain[0].json.messages[0].headers));
+}
+
+
 console.log(fails ? `\n${fails} FAILED` : "\nall passed");
 process.exit(fails ? 1 : 0);

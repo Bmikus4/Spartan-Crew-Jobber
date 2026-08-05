@@ -36,6 +36,7 @@ import { NeonMetrics } from "./metricsDb";
 import { getSettings } from "./settingsDb";
 import { getRateCard } from "./rateCardsDb";
 import { lookupAlias, recordAlias } from "./aliasesDb";
+import { senderVerdict, recordSender } from "./senderLedgerDb";
 
 export const hashOrder = (o: unknown) => createHash("sha256").update(JSON.stringify(o)).digest("hex").slice(0, 16);
 
@@ -192,6 +193,8 @@ export async function buildDeps(): Promise<PipelineDeps> {
     repliesEnabled: settings.replies_enabled, // Tool 1: off by default
     seededRateCard: async (companyId: number) => (await getRateCard(companyId))?.card ?? null,
     aliases: { lookup: lookupAlias, record: recordAlias },
+    senderVerdict,
+    recordSender,
     executor: executor(client),
     now: () => Date.now(),
     hashOrder,

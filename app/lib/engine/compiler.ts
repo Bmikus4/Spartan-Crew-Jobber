@@ -18,6 +18,7 @@ import type {
 import { normalizeThread } from "./normalize";
 import { mergeFacts, describeMerge } from "./mergeFacts";
 import { reconcileRequests } from "./parseWork";
+import { triage } from "./triage";
 import { composeOrder } from "./compose";
 import { validateOrder } from "./format";
 import { matchCompany, matchContact, matchPlace, matchExistingOrder, normName, normAddr } from "./resolve";
@@ -34,6 +35,12 @@ export interface CompileDeps {
   // Seeded rate-card lookup (Phase B rate_cards). Injected so the engine stays
   // DB-agnostic; when absent, rates.ts falls back to a live history scan.
   seededRateCard?: (companyId: number) => Promise<number | null>;
+  /**
+   * What the sender ledger makes of an address, for triage. Injected for the same reason
+   * as the others: the engine must compile with no database, and every test here runs
+   * without one. Absent, triage simply skips its ledger tier.
+   */
+  senderVerdict?: (from: string) => Promise<"trusted" | "parked" | "unknown">;
   /**
    * Names this system has already resolved once, so it stops solving the same ones from
    * scratch. Injected rather than imported for the same reason as seededRateCard: the
@@ -210,6 +217,44 @@ export async function compile(
   const { reasoner, onsinch, now } = deps;
   const { latest, history, machine } = normalizeThread(thread);
   const notes: string[] = [];
+
+  // 0a. Triage, before any model call. The mailbox now delivers everything rather than
+  // what a Gmail label selected, so the filtering that used to happen upstream happens
+  // here — and every message this rejects is one nobody paid $0.019 to read. The tiers
+  // and the reasoning behind their order are in triage.ts; what matters here is that a
+  // skip is RECORDED with its reason rather than silently dropped, so a wrong rule is
+  // visible on the board instead of being an email that never existed.
+  //
+  // A thread already carrying an order is exempt: once we are on the hook for a booking,
+  // every later message in it must be read, whatever a cheap rule thinks of the sender.
+  if (!prior?.onsinch_order_id) {
+    const t = await triage(
+      { from: latest.from, subject: latest.subject, body: latest.body, is_from_spartan: latest.is_from_spartan, headers: latest.headers },
+      { senderVerdict: deps.senderVerdict }
+    );
+    if (t.verdict === "skip") {
+      return {
+        state: {
+          ...(prior ?? {}),
+          thread_id: thread.thread_id,
+          subject: latest.subject,
+          participants: [...new Set([latest.from, ...history.map((m) => m.from)])],
+          last_message_id: latest.message_id,
+          last_processed_epoch: now(),
+          classification: "not-a-job",
+          facts: prior?.facts ?? { requests: [] },
+          desired_order: null,
+          pending_order: prior?.pending_order,
+          priority: "low",
+          needs_human: false,
+          status: "ignored",
+          notes: [`filtered before the model [${t.tier}]: ${t.reason}` + (t.reviewable ? " — reviewable" : "")],
+          order_action_log: prior?.order_action_log ?? [],
+        },
+        actions: { none: true },
+      };
+    }
+  }
 
   // 0. machine mail — nothing here was written by a client, so there is nothing
   // to reply to and nothing to book. Decided before the model runs: OnSinch's

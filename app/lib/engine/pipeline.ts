@@ -49,6 +49,8 @@ export interface PipelineDeps extends CompileDeps {
   executor: Executor;
   settings: Settings;
   hashOrder: (o: unknown) => string;
+  /** Feeds the sender ledger that triage reads. Injected; absent in tests. */
+  recordSender?: (a: { addr: string; thread_id: string; wasJob: boolean; subject?: string }) => Promise<void>;
 }
 
 export async function handleThread(
@@ -114,6 +116,25 @@ export async function handleThread(
         kind: intended.kind,
         size: intended.desired.slot_teams.reduce((n, s) => n + s.size, 0),
       });
+    }
+  }
+
+  // Teach the sender ledger what this thread turned out to be. It is what lets triage
+  // decide by identity next time — 88.2% of thread-appearances come from a sender seen
+  // before — and it is recorded per THREAD, so a chatty enquiry counts once.
+  //
+  // After the classification and never before it: the ledger's whole value is knowing
+  // who produces bookings, and that is not known until the thread has been read.
+  if (deps.recordSender) {
+    const author = selectLatest(thread.messages)?.latest;
+    if (author && !author.is_from_spartan) {
+      const wasJob = next.classification === "new-job" || next.classification === "update";
+      try {
+        await deps.recordSender({ addr: author.from, thread_id: tid, wasJob, subject: next.subject });
+      } catch (err) {
+        // An optimisation that cannot be written must not fail the email it described.
+        console.error("[sender-ledger] record skipped", err);
+      }
     }
   }
 

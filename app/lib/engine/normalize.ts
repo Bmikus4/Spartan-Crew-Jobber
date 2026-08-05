@@ -91,7 +91,13 @@ export function isMachineMessage(m: ThreadMessage): boolean {
 export function selectLatest(messages: ThreadMessage[]): { latest: ThreadMessage; machine: boolean } | null {
   const sorted = [...messages].sort((a, b) => Date.parse(a.date_iso) - Date.parse(b.date_iso));
   if (!sorted.length) return null;
-  const client = sorted.filter((m) => !m.is_from_spartan);
+  // The flag is ADVISORY; the address is the fact. `is_from_spartan` is set upstream by
+  // the n8n payload builder and re-derived by coerceThread, but trusting it alone means a
+  // payload that sets it wrongly — or omits it, since `false` is the natural default —
+  // gets Spartan's own reply chosen as the client's latest message. The engine would then
+  // classify its own email and draft a reply to it, which is a loop. Checking the domain
+  // too costs nothing and cannot be got wrong by a caller.
+  const client = sorted.filter((m) => !m.is_from_spartan && !isFromSpartan(m.from));
   const human = client.filter((m) => !isMachineMessage(m));
   const latest = human[human.length - 1] ?? client[client.length - 1] ?? sorted[sorted.length - 1];
   return { latest, machine: isMachineMessage(latest) };
