@@ -18,7 +18,7 @@ import type {
 import { normalizeThread } from "./normalize";
 import { mergeFacts, describeMerge } from "./mergeFacts";
 import { reconcileRequests } from "./parseWork";
-import { triage } from "./triage";
+import { triage, decisionBinds, triageModeFromEnv, type TriageMode } from "./triage";
 import { composeOrder } from "./compose";
 import { validateOrder } from "./format";
 import { matchCompany, matchContact, matchPlace, matchExistingOrder, normName, normAddr } from "./resolve";
@@ -41,6 +41,12 @@ export interface CompileDeps {
    * without one. Absent, triage simply skips its ledger tier.
    */
   senderVerdict?: (from: string) => Promise<"trusted" | "parked" | "unknown">;
+  /**
+   * Whether triage may actually stop the model, or is only being scored. Defaults to
+   * shadow (see triage.ts) so an unproven filter cannot quietly decide which client
+   * emails go unread.
+   */
+  triageMode?: TriageMode;
   /**
    * Names this system has already resolved once, so it stops solving the same ones from
    * scratch. Injected rather than imported for the same reason as seededRateCard: the
@@ -232,7 +238,14 @@ export async function compile(
       { from: latest.from, subject: latest.subject, body: latest.body, is_from_spartan: latest.is_from_spartan, headers: latest.headers },
       { senderVerdict: deps.senderVerdict }
     );
-    if (t.verdict === "skip") {
+    const mode = deps.triageMode ?? triageModeFromEnv();
+    // In shadow mode a judgement skip is written down and then ignored, so the filter is
+    // scored against what the model actually concluded instead of being trusted on
+    // arithmetic about itself. The structural tiers still bind — see decisionBinds.
+    if (t.verdict === "skip" && !decisionBinds(t, mode)) {
+      notes.push(`triage WOULD have skipped this [${t.tier}]: ${t.reason} — shadow mode, read anyway`);
+    }
+    if (decisionBinds(t, mode)) {
       return {
         state: {
           ...(prior ?? {}),

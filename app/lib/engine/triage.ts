@@ -26,6 +26,42 @@ import { isMachineSender, isAutoReply, isFromSpartan } from "./normalize";
 
 export type TriageVerdict = "admit" | "skip";
 
+/**
+ * How much authority triage has.
+ *
+ *   enforce  a skip means the model is not called
+ *   shadow   a skip is RECORDED and then ignored — the model is called anyway
+ *
+ * Shadow exists because "the filter skips 55.9%" and "the filter is right" are different
+ * claims, and only the first was ever measured. In shadow the engine pays for every
+ * email exactly as if there were no filter, and every would-be skip is written down
+ * beside what the model actually concluded. After a week that produces the number this
+ * design should have been judged on all along: how many real jobs it would have binned.
+ *
+ * The two tiers where being wrong is structurally impossible — our own outbound and an
+ * address no human is behind — are enforced even in shadow. Sending Spartan's own reply
+ * to the classifier is not extra rigour, it is a reply loop, and OnSinch's notifier
+ * describes a real booking so convincingly that reading it re-books existing jobs.
+ */
+export type TriageMode = "enforce" | "shadow";
+
+/** Tiers that hold even in shadow mode, because they cannot be wrong. */
+const ALWAYS_ENFORCED = new Set(["own-mail", "machine-sender", "no-content"]);
+
+/** True when this decision should actually stop the model, given the mode. */
+export function decisionBinds(t: TriageResult, mode: TriageMode): boolean {
+  if (t.verdict !== "skip") return false;
+  return mode === "enforce" || ALWAYS_ENFORCED.has(t.tier);
+}
+
+export function triageModeFromEnv(): TriageMode {
+  // Shadow is the DEFAULT, deliberately. A filter that has never been scored against
+  // real outcomes should not be silently deciding which client emails get read; it
+  // should be earning the right to, in public, at the cost of the reads we were paying
+  // for anyway. Flip with SPARTAN_TRIAGE_MODE=enforce once the miss rate is known.
+  return process.env.SPARTAN_TRIAGE_MODE === "enforce" ? "enforce" : "shadow";
+}
+
 export interface TriageResult {
   verdict: TriageVerdict;
   /** Which rule decided, for the audit trail and for measuring each tier's yield. */

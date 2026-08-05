@@ -12,7 +12,7 @@
 // Subjects and senders below are taken from the real stream (inbound_raw, last 7 days)
 // and from the corpus. Fixtures only: no database, no model, no network.
 // ============================================================================
-import { triage, looksLikeRealRequest, bulkFromHeaders } from "../app/lib/engine/triage";
+import { triage, looksLikeRealRequest, bulkFromHeaders, decisionBinds, triageModeFromEnv } from "../app/lib/engine/triage";
 
 let pass = 0, fail = 0;
 const ok = (cond: boolean, name: string, detail = "") => {
@@ -160,6 +160,36 @@ async function main() {
     const r = await triage(msg({ subject: s, body: "Hi, we need crew for an event next week. Can you help?" }));
     ok(r.verdict === "admit", `real subject admitted: "${s}"`, r.tier);
   }
+}
+
+
+// ==================================================================
+// SHADOW MODE: an unproven filter must be scored, not trusted.
+// ==================================================================
+{
+  const skip = (tier: string) => ({ verdict: "skip" as const, tier, reason: "r", reviewable: true });
+
+  ok(decisionBinds(skip("own-mail"), "shadow") === true,
+     "own-mail binds even in shadow - reading our own reply is a loop, not rigour");
+  ok(decisionBinds(skip("machine-sender"), "shadow") === true,
+     "an unrepliable address binds even in shadow - the OnSinch notifier re-books real jobs");
+  ok(decisionBinds(skip("no-content"), "shadow") === true, "an empty body binds even in shadow");
+
+  ok(decisionBinds(skip("sender-parked"), "shadow") === false,
+     "a PARKED sender does NOT bind in shadow - that judgement has to earn its keep");
+  ok(decisionBinds(skip("bulk-body"), "shadow") === false, "a bulk guess does not bind in shadow");
+  ok(decisionBinds(skip("vendor-domain"), "shadow") === false, "a domain guess does not bind in shadow");
+
+  ok(decisionBinds(skip("sender-parked"), "enforce") === true, "in enforce, a parked sender does bind");
+  ok(decisionBinds({ verdict: "admit", tier: "admit", reason: "", reviewable: false }, "enforce") === false,
+     "an admit never binds - there is nothing to stop");
+
+  const before = process.env.SPARTAN_TRIAGE_MODE;
+  delete process.env.SPARTAN_TRIAGE_MODE;
+  ok(triageModeFromEnv() === "shadow", "SHADOW is the default - the filter starts on probation");
+  process.env.SPARTAN_TRIAGE_MODE = "enforce";
+  ok(triageModeFromEnv() === "enforce", "and enforce is opt-in");
+  if (before === undefined) delete process.env.SPARTAN_TRIAGE_MODE; else process.env.SPARTAN_TRIAGE_MODE = before;
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);
