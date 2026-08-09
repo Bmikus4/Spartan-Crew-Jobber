@@ -63,8 +63,20 @@ async function main() {
       { ...deps, reasoner: rejecting("N/A - notification") }
     );
     ok(state.classification === "not-a-job", "not-a-job");
-    ok(state.notes.some((n) => /machine mail/i.test(n)),
-      "machine-mail note wins — it names the sender", JSON.stringify(state.notes));
+    // The rule being tested is that the dismissal names WHO sent it, rather than
+    // falling back to the classifier's generic "N/A - notification". Which layer
+    // supplies that reason moved in da24c10: triage's machine-sender tier now
+    // catches an unrepliable address BEFORE the model is called, so the wording is
+    // "filtered before the model [machine-sender]: unrepliable address (…)" where
+    // it used to be "machine mail from …". Better, not different — the same
+    // dismissal for the same reason, without paying to read it. The assertion is
+    // on the behaviour so the next layer to take this over does not fail it.
+    ok(state.notes.some((n) => n.includes("no-reply@sinch.cz")),
+      "the dismissal names the sender", JSON.stringify(state.notes));
+    ok(state.notes.some((n) => /machine|unrepliable/i.test(n)),
+      "and says it is a machine, not a client", JSON.stringify(state.notes));
+    ok(!state.notes.some((n) => /^\s*notification\s*$/i.test(n)),
+      "the classifier's generic reason does not stand in for it");
   }
 
   console.log("\n[3] a real job is unaffected: the summary is still the spec, not a note");

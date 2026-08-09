@@ -30,27 +30,45 @@ export function normAddr(s?: string): string {
 export interface CompanyRec { id: number; name?: string; invoice_name?: string }
 export interface ClientRec { id: number; email?: string; name?: string; surname?: string }
 
+/** Fold a trailing plural, leaving "ss" alone ("press" is not "pres"). */
+const foldPlural = (w: string) =>
+  w.length >= 4 && w.endsWith("s") && !w.endsWith("ss") ? w.slice(0, -1) : w;
+
 /**
  * Tokens worth matching on: drops noise and single letters, and folds a trailing
- * plural so "Bigabox Productions" reaches "Bigabox Production Ltd". Words already
- * ending in "ss" are left alone ("press" is not "pres").
+ * plural so "Bigabox Productions" reaches "Bigabox Production Ltd".
  */
 const tokensOf = (s: string) =>
   s
     .split(" ")
     .filter((w) => w.length >= 3)
-    .map((w) => (w.length >= 4 && w.endsWith("s") && !w.endsWith("ss") ? w.slice(0, -1) : w));
+    .map(foldPlural);
 
 /**
  * Words that describe this industry rather than identify a business. A name whose
  * only substantive token is one of these cannot carry a match on its own.
+ *
+ * FOLDED THROUGH THE SAME PLURAL RULE THE TOKENS ARE. Membership is tested against
+ * a token that has already been singularised, so a word listed here only in its
+ * plural form is never actually consulted: "solutions" folds to "solution", which
+ * was not in the list, so a single "solution" token counted as identifying. Live,
+ * that resolved "Innovate Solutions Ltd" to company 355, "d&b solutions UK Ltd" —
+ * whose only substantive token is that same word. A wrong company is the worst
+ * answer this function can give, because it attaches a real booking to another
+ * client's account, and it is the one outcome the ambiguity guard exists to avoid.
+ *
+ * test/companyMatch.ts asserts that exact name resolves to null and passed
+ * throughout, because its 14-company fixture contained no other "solutions"
+ * business. A denylist can only be tested against a list that includes the rival.
  */
-const GENERIC = new Set([
-  "films", "film", "events", "event", "production", "productions", "media",
-  "group", "services", "service", "solutions", "design", "studio", "studios",
-  "crew", "staff", "staffing", "creative", "projects", "project", "live",
-  "london", "international", "global", "the", "and",
-]);
+const GENERIC = new Set(
+  [
+    "films", "film", "events", "event", "production", "productions", "media",
+    "group", "services", "service", "solutions", "design", "studio", "studios",
+    "crew", "staff", "staffing", "creative", "projects", "project", "live",
+    "london", "international", "global", "the", "and",
+  ].flatMap((w) => [w, foldPlural(w)])
+);
 
 /**
  * Company match: exact on name or invoice_name first, then a narrow token-subset
@@ -116,7 +134,25 @@ export function matchCompany(name: string | undefined, companies: CompanyRec[]):
   // "Acme". A genuine TIE is ambiguous and belongs to a human, never a coin flip.
   const top = Math.max(...scored.map((x) => x.n));
   const winners = scored.filter((x) => x.n === top);
-  return winners.length === 1 ? winners[0].c.id : null;
+  if (winners.length === 1) return winners[0].c.id;
+
+  /**
+   * Word ORDER breaks a tie that a bag of words cannot. Live: "Wall to Wall" tied
+   * against "Wall to Wall Media Limited" and "North Wall Production", because as an
+   * unordered set both merely contain "wall". Read as a phrase only one of them is
+   * this client, and it is not close.
+   *
+   * Deliberately weaker than everything above it and used ONLY to separate names
+   * already judged equally specific: it runs on the normalised string, so short
+   * connecting words the token filter drops ("to", "of", "&") are back in play and
+   * carry their share of the evidence. If more than one candidate still contains
+   * the phrase, that is a real ambiguity and it stays a human's.
+   */
+  const phrase = ` ${t} `;
+  const contiguous = winners.filter((x) =>
+    [normName(x.c.name), normName(x.c.invoice_name)].some((s) => s && ` ${s} `.includes(phrase))
+  );
+  return contiguous.length === 1 ? contiguous[0].c.id : null;
 }
 
 /**

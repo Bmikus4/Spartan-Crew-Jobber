@@ -72,6 +72,44 @@ console.log("\n[3] a genuinely new company is still new");
   ok(matchCompany("Totally Unrelated Events", LIVE) === null, "unrelated -> null");
 }
 
+console.log("\n[3b] an industry word cannot identify a client, in either number");
+{
+  // This assertion passed above for the wrong reason: the fixture held no other
+  // "solutions" business. Against the live 763 it resolved to 355, "d&b solutions
+  // UK Ltd", because tokensOf folds "solutions" to "solution" and the denylist
+  // only carried the plural. Every generic word needs its rival present to be
+  // tested at all.
+  const rivals: CompanyRec[] = [...LIVE, { id: 355, name: "d&b solutions UK Ltd" }];
+  ok(matchCompany("Innovate Solutions Ltd.", rivals) === null,
+    "Innovate Solutions does not become d&b solutions", String(matchCompany("Innovate Solutions Ltd.", rivals)));
+  // The same shape for a word whose singular WAS listed, so the two agree.
+  const svc: CompanyRec[] = [{ id: 401, name: "Northern Services Ltd" }];
+  ok(matchCompany("Apex Services", svc) === null, "Apex Services does not become Northern Services",
+    String(matchCompany("Apex Services", svc)));
+  // And the denylist must not swallow a name that genuinely IS the generic word.
+  const only: CompanyRec[] = [{ id: 402, name: "Solutions" }];
+  ok(matchCompany("Solutions", only) === 402, "an exact match is unaffected by the denylist");
+}
+
+console.log("\n[3c] word order breaks a tie a bag of words cannot");
+{
+  // Live: "Wall to Wall" tied 2-2 against both of these and went to needs-human,
+  // while a real order "Wall to Wall @ TBC" sat in OnSinch.
+  const walls: CompanyRec[] = [
+    { id: 360, name: "Wall to Wall Media Limited" },
+    { id: 236, name: "North Wall Production" },
+    { id: 496, name: "4 Wall Entertainment" },
+  ];
+  ok(matchCompany("Wall to Wall", walls) === 360, "Wall to Wall -> 360", String(matchCompany("Wall to Wall", walls)));
+  // Two candidates carrying the same phrase is a REAL ambiguity, still a human's.
+  const both: CompanyRec[] = [...walls, { id: 361, name: "Wall to Wall Events North" }];
+  ok(matchCompany("Wall to Wall", both) === null,
+    "two candidates carry the phrase -> null", String(matchCompany("Wall to Wall", both)));
+  // The tie-break must not rescue a name that only shares scattered words.
+  const tie: CompanyRec[] = [{ id: 21, name: "Northern Rigging" }, { id: 22, name: "Rigging Northern" }];
+  ok(matchCompany("Northern Rigging Services Ltd", tie) === null, "a scattered-word tie stays null");
+}
+
 console.log("\n[4] ambiguity goes to a human, it does not pick one");
 {
   // Two companies would qualify as a subset of this name.
