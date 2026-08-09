@@ -52,6 +52,10 @@ const LIMIT = Number(argv[argv.indexOf("--limit") + 1]) || 30;
 // Re-drive ONE thread. Re-driving thirty to correct one costs thirty model calls
 // and risks changing tickets nobody asked about, on a live client system.
 const ONLY = argv.includes("--thread") ? String(argv[argv.indexOf("--thread") + 1] || "").trim() : "";
+/** Read threads from inbound_raw rather than n8n's rolling execution window. */
+const FROM_RAW = argv.includes("--from-raw");
+/** Only re-drive threads currently flagged for a human - the board walk. */
+const STUCK_ONLY = argv.includes("--stuck");
 
 const src = readFileSync(join(ROOT_DIR, "n8n", "nodes", "build-engine-payload.js"), "utf8");
 
@@ -131,33 +135,94 @@ async function deps(): Promise<PipelineDeps> {
   } as PipelineDeps;
 }
 
+/**
+ * Threads from inbound_raw instead of from n8n.
+ *
+ * n8n keeps a rolling window of executions and it has now scrolled past every
+ * thread stuck on the board - `--limit 60` returned zero. inbound_raw does not
+ * scroll: /api/n8n-inbound persists each payload as its first act, precisely so
+ * an email survives whatever happens after it.
+ *
+ * The file header warns that inbound_raw rows carry the blank-header bug baked
+ * in. That was true of rows written before b50b1569 (2026-08-04), when the Gmail
+ * node's flattened headers were finally read. This filters on that date rather
+ * than trusting the caller to remember, because a payload with no sender makes
+ * every message look like a stranger's and the answer would be worse than the one
+ * being corrected.
+ */
+const RAW_TRUSTWORTHY_FROM = "2026-08-04";
+
+async function threadsFromRaw(): Promise<Map<string, any>> {
+  const { neon } = await import("@neondatabase/serverless");
+  const sql = neon(requireEnv("DATABASE_URL"));
+  const rows = (await sql`
+    SELECT thread_id, payload, received_at FROM inbound_raw
+    WHERE received_at >= ${RAW_TRUSTWORTHY_FROM} AND thread_id IS NOT NULL
+    ORDER BY received_at ASC`) as Array<{ thread_id: string; payload: any }>;
+
+  // Newest payload wins per thread: it carries the most complete message list.
+  const byThread = new Map<string, any>();
+  for (const r of rows) {
+    const payload = r.payload?.messages ? r.payload : r.payload?.body ?? r.payload;
+    if (!payload?.messages?.length) continue;
+    const prev = byThread.get(r.thread_id);
+    if (!prev || payload.messages.length > (prev.payload.messages?.length ?? 0)) {
+      byThread.set(r.thread_id, { id: `raw:${r.thread_id}`, payload });
+    }
+  }
+  return byThread;
+}
+
 async function main() {
   console.log(APPLY ? "\nAPPLY: conversation_state and tickets WILL be written.\n" : "\nDRY RUN: nothing will be written. Add --apply to commit.\n");
 
-  const list = await (await fetch(`${BASE}/executions?workflowId=${WF}&limit=${LIMIT}`, { headers: h })).json();
-  const ids: string[] = (list.data || []).filter((e: any) => e.status === "success").map((e: any) => String(e.id));
+  let byThread = new Map<string, any>();
 
-  // Newest execution wins per thread: it carries the most complete message list.
-  const byThread = new Map<string, any>();
-  for (const id of ids) {
-    const ex = await (await fetch(`${BASE}/executions/${id}?includeData=true`, { headers: h })).json();
-    const runData = ex?.data?.resultData?.runData || {};
-    if (!runData["Get a thread2"]) continue;
-    let payload: any;
-    try {
-      payload = buildPayload(runData, runData["Combine all Email Data"]?.[0]?.data?.main?.[0]?.[0]?.json || {});
-    } catch { continue; }
-    const prev = byThread.get(payload.thread_id);
-    if (!prev || (payload.messages?.length ?? 0) > (prev.payload.messages?.length ?? 0)) {
-      byThread.set(payload.thread_id, { id, payload });
+  if (FROM_RAW) {
+    byThread = await threadsFromRaw();
+    console.log(`source: inbound_raw (from ${RAW_TRUSTWORTHY_FROM})`);
+  } else {
+    const list = await (await fetch(`${BASE}/executions?workflowId=${WF}&limit=${LIMIT}`, { headers: h })).json();
+    const ids: string[] = (list.data || []).filter((e: any) => e.status === "success").map((e: any) => String(e.id));
+
+    // Newest execution wins per thread: it carries the most complete message list.
+    for (const id of ids) {
+      const ex = await (await fetch(`${BASE}/executions/${id}?includeData=true`, { headers: h })).json();
+      const runData = ex?.data?.resultData?.runData || {};
+      if (!runData["Get a thread2"]) continue;
+      let payload: any;
+      try {
+        payload = buildPayload(runData, runData["Combine all Email Data"]?.[0]?.data?.main?.[0]?.[0]?.json || {});
+      } catch { continue; }
+      const prev = byThread.get(payload.thread_id);
+      if (!prev || (payload.messages?.length ?? 0) > (prev.payload.messages?.length ?? 0)) {
+        byThread.set(payload.thread_id, { id, payload });
+      }
+    }
+    if (!byThread.size) {
+      console.log("no threads found in n8n's execution window - it scrolls. Try --from-raw.\n");
     }
   }
   if (ONLY) {
     for (const k of [...byThread.keys()]) if (k !== ONLY) byThread.delete(k);
     console.log(`--thread ${ONLY}: ${byThread.size} match(es)`);
-    if (!byThread.size) { console.log("that thread is not in the recent executions — raise --limit."); return; }
+    if (!byThread.size) { console.log("that thread is not in the recent executions — raise --limit, or try --from-raw."); return; }
   }
-  console.log(`${byThread.size} distinct thread(s) rebuilt from ${ids.length} execution(s)\n`);
+
+  // The board walk: re-drive only what a human is currently holding. Every other
+  // ticket is one somebody may have already acted on, and re-deciding it costs a
+  // model call to overwrite an answer nobody complained about.
+  if (STUCK_ONLY) {
+    const { neon } = await import("@neondatabase/serverless");
+    const sql = neon(requireEnv("DATABASE_URL"));
+    const stuck = new Set(
+      ((await sql`SELECT thread_id FROM tickets WHERE needs_human = true OR status IN ('needs-info','error')`) as Array<{ thread_id: string }>)
+        .map((r) => r.thread_id)
+    );
+    for (const k of [...byThread.keys()]) if (!stuck.has(k)) byThread.delete(k);
+    console.log(`--stuck: ${byThread.size} of ${stuck.size} flagged thread(s) are reachable`);
+  }
+  console.log(`${byThread.size} distinct thread(s) to re-drive\n`);
 
   const d = await deps();
   let processed = 0;
