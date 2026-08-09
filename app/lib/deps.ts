@@ -9,6 +9,7 @@
 
 import { createHash } from "node:crypto";
 import { OnsinchClient, httpTransport } from "./engine/onsinch";
+import { normName, normAddr } from "./engine/resolve";
 import { createOpenRouterReasoner, type Reasoner } from "./engine/reason";
 import { guardReasoner } from "./engine/spend";
 import { tieredReasoner } from "./engine/tiered";
@@ -19,16 +20,63 @@ import type { DesiredOrder } from "./engine/types";
 import type { Executor, PipelineDeps } from "./engine/pipeline";
 
 /**
- * Tool 2 write path: if the order carries a new-venue provision, create the
- * place first (reference data, no contact dependency), backfill its id onto
- * every slot team, then create the order. Exported so it's testable.
+ * Tool 2 write path: create the reference data the order needs but OnSinch does
+ * not yet have — the client company and the venue — then create the order.
+ *
+ * Both are created HERE and not in compile(), because compile is a pure read that
+ * re-runs on every message of a thread; creating there would mint a company per
+ * email. This runs once, at the moment the order is actually written.
+ *
+ * `remember` is how a created record is found next time. Ben, 2026-08-09: "You
+ * must make sure that in cases where a location must be created or a company must
+ * be created, that they will be found the NEXT time that name is used, to prove
+ * the consistency of our datalogging system."
+ *
+ * There are two halves to that and both are needed. The OnSinch client patches its
+ * warm list, which covers the next enquiry handled by this same lambda. `remember`
+ * writes the name to the alias store, which covers every other lambda and every
+ * time after — it is looked up before the whole-list pull, so a cold process
+ * resolves the name without paging 763 companies to find one it created itself.
+ *
+ * Recorded as source "exact" deliberately: an alias we created the entity FOR is
+ * not a fuzzy guess about which existing client was meant, it is the definition of
+ * that name. Exported so it is testable.
  */
-export async function createOrderWithPlace(client: OnsinchClient, order: DesiredOrder) {
+export async function createOrderWithPlace(
+  client: OnsinchClient,
+  order: DesiredOrder,
+  remember?: (a: { kind: "company" | "place"; alias_norm: string; entity_id: number; source: "exact"; raw_example?: string }) => Promise<void>
+) {
   const o = { ...order };
+
+  if (o.provision_company && !o.company_id) {
+    const company = await client.createCompany({ name: o.provision_company.name });
+    o.company_id = company.id;
+    await remember?.({
+      kind: "company",
+      alias_norm: normName(o.provision_company.name),
+      entity_id: company.id,
+      source: "exact",
+      raw_example: o.provision_company.name,
+    }).catch?.((err: unknown) => console.error("[aliases] company record failed", err));
+  }
+
   if (o.provision_place && o.slot_teams.some((s) => !s.place_id)) {
     const place = await client.createPlace({ ...o.provision_place });
     o.slot_teams = o.slot_teams.map((s) => ({ ...s, place_id: place.id }));
+    await remember?.({
+      kind: "place",
+      // Keyed on what the resolver will look up next time: the venue text from the
+      // email, normalised the same way. For the "No Location" placeholder that is the
+      // placeholder's own name, which is exactly right - the next enquiry with no
+      // venue asks the same question and gets the same answer.
+      alias_norm: normAddr(o.provision_place.address || o.provision_place.name),
+      entity_id: place.id,
+      source: "exact",
+      raw_example: o.provision_place.name,
+    }).catch?.((err: unknown) => console.error("[aliases] place record failed", err));
   }
+
   return client.createOrder(buildOrderBody(o));
 }
 import { NeonStateStore } from "./stateDb";
@@ -120,7 +168,10 @@ export function executor(client: OnsinchClient): Executor {
       }
     },
     async createOrder(order) {
-      return createOrderWithPlace(client, order);
+      // recordAlias is what makes a created company or venue findable from a cold
+      // lambda. Passed rather than imported inside createOrderWithPlace so the write
+      // path stays testable with no database.
+      return createOrderWithPlace(client, order, recordAlias);
     },
     /**
      * The crew/time change PATCH cannot carry. Gated by an env flag because it DELETES

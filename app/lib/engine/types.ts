@@ -83,6 +83,17 @@ export interface DesiredOrder {
    * every slot team. place_id is 0 on the slot teams until then.
    */
   provision_place?: { name: string; country: string; address?: string; city?: string; zip?: string };
+  /**
+   * The same, for a client who is not yet in OnSinch. Ben, 2026-08-09: "if company
+   * or venue location are not found in the system, always create new ones if they
+   * can be inferred."
+   *
+   * company_id is 0 until the write path creates it. It exists as an intent on the
+   * order rather than a create at compile time because compile() must stay a pure
+   * read — it is re-run on every message in a thread, and a create there would make
+   * a duplicate company per email.
+   */
+  provision_company?: { name: string };
 }
 
 /**

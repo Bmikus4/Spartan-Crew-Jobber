@@ -132,13 +132,52 @@ function firstDate(facts: ConversationFacts): string | undefined {
 // Tool 2 resolution — OnSinch search is limited/non-fuzzy, so we pull the WHOLE
 // list and match EXACTLY client-side (dedup: never create a duplicate).
 
-/** company: reuse prior; else exact-match all companies; else it's new (needs adding). */
+/**
+ * The stand-in contact for a client OnSinch has never met.
+ *
+ * OnSinch cannot create contacts — /users is GET-only and there is no /clients
+ * endpoint — so a company we have just created has nobody to attach an order to,
+ * and an order without a user_id cannot be posted at all. Ben, 2026-08-09:
+ * "might need a user, use my own (Ben Mikus)".
+ *
+ * 2257 is that account, verified live: ben@samuraisolutions.co.uk, the same user
+ * the API key belongs to. It is deliberately a real, identifiable person rather
+ * than a fabricated placeholder — whoever opens the order can see at a glance that
+ * the contact is a stand-in and who to ask, and the order carries a note saying so.
+ */
+const PLACEHOLDER_CONTACT_ID = 2257;
+
+/**
+ * The venue for a job whose venue nobody has said yet. Ben: "for venue, if it
+ * doesnt exist in onsinch, then you should also use a placeholder location
+ * ('No Location') which you will create."
+ *
+ * Created once, on the first enquiry that needs it, and found by name every time
+ * after — it is an ordinary place and goes through the ordinary match. Verified
+ * absent from the live tenant today, so the first use creates it.
+ */
+const PLACEHOLDER_PLACE_NAME = "No Location";
+
+/**
+ * company: reuse prior; else exact-match all companies; else CREATE it.
+ *
+ * Ben, 2026-08-09: "if company or venue location are not found in the system,
+ * always create new ones if they can be inferred. This is why the checking
+ * procedure was so important."
+ *
+ * That last sentence is the load-bearing one. Creating on a miss is only safe
+ * because matchCompany looks hard before giving up — exact on name and invoice
+ * name, then a bounded token-subset fallback, then a phrase tie-break — so a
+ * "miss" means the client really is absent rather than spelled differently. Six of
+ * the eight companies stuck on the live board were the second kind, and creating
+ * them would have made six duplicates of clients Spartan already had.
+ */
 async function resolveCompany(
   facts: ConversationFacts,
   prior: ConversationState | undefined,
   onsinch: OnsinchClient,
   aliases?: CompileDeps["aliases"]
-): Promise<{ id?: number; note?: string }> {
+): Promise<{ id?: number; provision?: DesiredOrder["provision_company"]; note?: string }> {
   if (prior?.company_id) return { id: prior.company_id };
   if (!facts.company_name) return { note: "no company name extracted" };
 
@@ -161,7 +200,10 @@ async function resolveCompany(
                                  source: wasExact ? "exact" : "fuzzy", raw_example: facts.company_name });
     return { id };
   }
-  return { note: `new company "${facts.company_name}" — add it in OnSinch (a contact is needed too)` };
+  return {
+    provision: { name: facts.company_name.slice(0, 120) },
+    note: `new company "${facts.company_name}" — will be created in OnSinch on confirm`,
+  };
 }
 
 /** contact: reuse prior; else exact-match the sender against the company's
@@ -174,13 +216,23 @@ async function resolveContact(
   onsinch: OnsinchClient
 ): Promise<{ id?: number; note?: string }> {
   if (prior?.user_id) return { id: prior.user_id };
-  if (!company_id) return { note: "no company resolved — contact pending" };
+  // A company being created has no contacts to look up yet, and the sender cannot be
+  // added as one, so the stand-in is the only way the order exists at all.
+  if (!company_id) {
+    return {
+      id: PLACEHOLDER_CONTACT_ID,
+      note: `no contact on file for ${facts.contact_email ?? "this sender"} — order raised against Ben Mikus as a stand-in; add the real contact in OnSinch`,
+    };
+  }
   const clients = await onsinch.companyClients(company_id);
   const exact = matchContact(facts.contact_email, clients);
   if (exact) return { id: exact };
   if (clients[0]?.id)
     return { id: clients[0].id, note: `unknown sender ${facts.contact_email ?? "?"} — used the company's existing contact` };
-  return { note: `new contact ${facts.contact_email ?? "?"} and the company has no contact on file — add one in OnSinch` };
+  return {
+    id: PLACEHOLDER_CONTACT_ID,
+    note: `new contact ${facts.contact_email ?? "?"} and the company has no contact on file — order raised against Ben Mikus as a stand-in; add the real contact in OnSinch`,
+  };
 }
 
 /** place: reuse prior; else exact-match all places; else provision a new one on write. */
@@ -191,14 +243,28 @@ async function resolvePlace(
   aliases?: CompileDeps["aliases"]
 ): Promise<{ id?: number; provision?: DesiredOrder["provision_place"]; note?: string }> {
   if (prior?.place_id) return { id: prior.place_id };
-  if (!facts.location_text) return { note: "no location extracted" };
 
-  const key = normAddr(facts.location_text);
+  // No venue named anywhere in the thread. Every slot team still needs a place_id, so
+  // the job gets the placeholder venue rather than not existing: "No Location" is
+  // matched by name like any other place, and created on the first enquiry that needs
+  // it. A job at a named venue is better than no job, and a job at "No Location" is
+  // better than an enquiry nobody sees.
+  const locationText = facts.location_text || PLACEHOLDER_PLACE_NAME;
+  const missingVenue = !facts.location_text;
+
+  const key = normAddr(locationText);
   const remembered = await aliasLookup(aliases, "place", key);
-  if (remembered) return { id: remembered, note: `venue from a name resolved before ("${facts.location_text}")` };
+  if (remembered) {
+    return {
+      id: remembered,
+      note: missingVenue
+        ? `no venue named — used the "${PLACEHOLDER_PLACE_NAME}" placeholder; set the real venue in OnSinch`
+        : `venue from a name resolved before ("${locationText}")`,
+    };
+  }
 
   const places = await onsinch.allPlaces();
-  const id = matchPlace(facts.location_text, places);
+  const id = matchPlace(locationText, places);
   if (id) {
     // matchPlace resolves on several rules, only one of which is equality; the others
     // are containment, which is a judgement. Only equality is cached as trusted.
@@ -206,12 +272,23 @@ async function resolvePlace(
       (p) => p.id === id && (normAddr(p.name) === key || normAddr(p.address) === key)
     );
     await aliasRecord(aliases, { kind: "place", alias_norm: key, entity_id: id,
-                                 source: wasExact ? "exact" : "fuzzy", raw_example: facts.location_text });
-    return { id };
+                                 source: wasExact ? "exact" : "fuzzy", raw_example: locationText });
+    return {
+      id,
+      note: missingVenue
+        ? `no venue named — used the "${PLACEHOLDER_PLACE_NAME}" placeholder; set the real venue in OnSinch`
+        : undefined,
+    };
   }
   return {
-    provision: { name: facts.location_text.slice(0, 120), country: "GB", address: facts.location_text },
-    note: `new venue "${facts.location_text}" — will be created in OnSinch on confirm`,
+    // The placeholder is a NAME, not an address: creating it with address "No Location"
+    // would put that string on a real job sheet as if it were somewhere to drive to.
+    provision: missingVenue
+      ? { name: PLACEHOLDER_PLACE_NAME, country: "GB" }
+      : { name: locationText.slice(0, 120), country: "GB", address: locationText },
+    note: missingVenue
+      ? `no venue named — creating and using the "${PLACEHOLDER_PLACE_NAME}" placeholder; set the real venue in OnSinch`
+      : `new venue "${locationText}" — will be created in OnSinch on confirm`,
   };
 }
 
@@ -385,12 +462,29 @@ export async function compile(
   const isJob = classification === "new-job" || classification === "update";
   let facts: ConversationFacts = prior?.facts ?? { requests: [] };
   let desired = null as ConversationState["desired_order"];
+  /**
+   * A human must LOOK at this before it is confirmed. Set by every stand-in the
+   * resolvers fall back to.
+   */
   let needs_human = false;
+  /**
+   * The order cannot go out as built, and is not staged at all. Reserved for a
+   * failed validateOrder — a body OnSinch would reject, or would accept and get
+   * wrong.
+   *
+   * These two used to be one flag, which is why a thread missing a venue produced
+   * nothing: any reason to involve a human was also a reason to withhold the order.
+   * Ben, 2026-08-09: "creating a job correctly with all of the info we DO have,
+   * consistently, is the goal." So a stand-in now flags the job; only a broken body
+   * withholds it.
+   */
+  let blocked = false;
   let company_id = prior?.company_id;
   let user_id = prior?.user_id;
   let place_id = prior?.place_id;
   let linkedOrderId = prior?.onsinch_order_id;
   let provisionPlace: DesiredOrder["provision_place"];
+  let provisionCompany: DesiredOrder["provision_company"];
 
   if (isJob) {
     // The probe above already extracted this thread's facts when the classifier was
@@ -417,6 +511,7 @@ export async function compile(
     // company first (contact resolution needs it)
     const co = await resolveCompany(facts, prior, onsinch, deps.aliases);
     company_id = co.id ?? company_id;
+    provisionCompany = co.provision;
     if (co.note) notes.push(co.note);
 
     const [pl, us] = await Promise.all([
@@ -439,18 +534,33 @@ export async function compile(
     }
 
     // Rate card (I1) — resolved before compose; no confident card => needs-human.
+    //
+    // This is the ONE thing still allowed to stop an order, and deliberately so. A
+    // company being created has no order history, so it has no card, and there is no
+    // safe stand-in: OnSinch silently assigns a default when the field is omitted,
+    // which is precisely the wrong-rate failure Tracy reported. Nor is there a house
+    // default to borrow — across the 100 most recent live orders the cards are 342
+    // (49%) and 315 (30%), so the "197 is standard" in the API reference is stale and
+    // a majority pick would be a coin-flip on what a client is charged.
+    //
+    // Everything else about the job is composed and staged; a human supplies this one
+    // number and confirms. Money is the one field worth blocking on.
     let pricelist_category_id = 0;
     if (company_id) {
       const rate = await resolveRateCard(company_id, { onsinch, seededRateCard: deps.seededRateCard });
       if (rate.card) pricelist_category_id = rate.card;
       else notes.push(`no confident rate card for company ${company_id} — needs a human (I1)`);
+    } else if (provisionCompany) {
+      notes.push(`"${provisionCompany.name}" is new, so it has no rate card yet — set one when confirming (I1)`);
     }
 
     const havePlace = !!place_id || !!provisionPlace;
-    if (company_id && user_id && havePlace && pricelist_category_id) {
+    const haveCompany = !!company_id || !!provisionCompany;
+    if (haveCompany && user_id && havePlace && pricelist_category_id) {
       const composed = composeOrder({
         facts,
-        company_id,
+        // 0 => created on write from provisionCompany, exactly as place_id already works.
+        company_id: company_id ?? 0,
         user_id,
         place_id: place_id ?? 0, // 0 => created on write from provisionPlace
         pricelist_category_id,
@@ -468,15 +578,25 @@ export async function compile(
       composed.warnings.forEach((w) => notes.push(w));
       desired = composed.order;
       if (desired && provisionPlace) desired.provision_place = provisionPlace;
+      if (desired && provisionCompany) desired.provision_company = provisionCompany;
       if (desired) {
         const errs = validateOrder(desired);
         if (errs.length) {
           needs_human = true;
+          blocked = true;
           notes.push(...errs);
         }
       }
+      // A staged order built on a stand-in still goes to a human, but it goes there as
+      // an ORDER rather than as an enquiry with nothing attached. needs_human means
+      // "check this before confirming", not "nothing was produced".
+      if (provisionCompany || provisionPlace || user_id === PLACEHOLDER_CONTACT_ID) needs_human = true;
     } else {
-      needs_human = true; // unknown company / no contact -> a human resolves it
+      // No rate card, or nothing dated to build a shift from. Nothing composed, so
+      // nothing to stage — the thread stands on the board with the notes above saying
+      // exactly which piece is missing.
+      needs_human = true;
+      blocked = true;
     }
   }
 
@@ -490,7 +610,10 @@ export async function compile(
     };
   }
   const desiredHash = desired ? hash(JSON.stringify(desired)) : undefined;
-  if (desired && !needs_human) {
+  // `blocked`, not `needs_human`: an order built on a stand-in venue or a company being
+  // created is still an order, and staging it is the whole point — a human confirms it
+  // in one click instead of typing it out from an email.
+  if (desired && !blocked) {
     if (linkedOrderId) {
       // an existing order (ours or matched in OnSinch) — patch only if it changed
       if (desiredHash !== prior?.last_ordered_hash) {

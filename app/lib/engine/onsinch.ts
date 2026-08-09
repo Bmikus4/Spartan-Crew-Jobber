@@ -74,6 +74,29 @@ async function listAllCached(key: string, fetchAll: () => Promise<any[]>): Promi
   return v;
 }
 
+/**
+ * Put a just-created record into the warm list, so the very next lookup in this
+ * process finds it instead of the stale pull it was created against.
+ *
+ * Ben, 2026-08-09, on creating companies and venues: "You must make sure that in
+ * cases where a location must be created or a company must be created, that they
+ * will be found the NEXT time that name is used."
+ *
+ * Without this the cache holds a 5-minute-old list that predates the create, so two
+ * enquiries from the same new client inside five minutes each miss, each create, and
+ * the tenant gains a duplicate company — the exact failure the whole-list exact-match
+ * dedup exists to prevent. This is the same-process half of that guarantee; the
+ * durable half is the alias store, which survives a cold lambda.
+ *
+ * A no-op when nothing has been pulled yet: with no cached list there is nothing
+ * stale to correct, and the next pull reads the record from OnSinch anyway.
+ */
+function cacheAppend(key: string, record: unknown): void {
+  const c = _listCache.get(key);
+  if (!c) return;
+  c.v = [...c.v, record];
+}
+
 function qs(filters: Record<string, string | number>): string {
   const parts = Object.entries(filters).map(
     ([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(String(v))}`
@@ -102,7 +125,10 @@ export class OnsinchClient {
   /** POST /places — must include country (only required field). */
   async createPlace(place: Partial<PlaceCandidate> & { country: string }) {
     const r = await this.t("POST", "/places", [place]);
-    return r.data?.data?.[0] as PlaceCandidate;
+    const created = r.data?.data?.[0] as PlaceCandidate;
+    // Findable immediately, not in five minutes when the cache expires.
+    if (created?.id) cacheAppend("places", { ...place, ...created });
+    return created;
   }
 
   async searchUsers(filters: Record<string, string | number>) {
@@ -243,6 +269,10 @@ export class OnsinchClient {
       throw new Error(
         `createCompany ${r.status}: ${JSON.stringify(r.data?.validationErrors ?? r.data)}`
       );
-    return r.data.data[0] as { id: number; name?: string };
+    const created = r.data.data[0] as { id: number; name?: string };
+    // Findable immediately: the list this company was judged absent from was pulled
+    // before it existed, and would otherwise say so for another five minutes.
+    if (created?.id) cacheAppend("companies", { ...company, ...created });
+    return created;
   }
 }
