@@ -7,6 +7,25 @@
 // ============================================================================
 import type { DesiredOrder } from "./types";
 
+/**
+ * The posture every order this engine creates is written in.
+ *
+ * Ben, 2026-08-09: "Jobs will be added to To Confirm instead of Price Quotes."
+ * `quote: true` is what filed them under Price Quotes, so it is now false and
+ * `provisional` alone carries the draft — the order lands in the queue Spartan
+ * actually works from, awaiting confirmation rather than sitting in a pricing
+ * list nobody actions.
+ *
+ * DEFINED ONCE BECAUSE TWO PLACES MUST AGREE. compose.ts writes it, and
+ * replaceOrder.ts used to read the same two booleans back to decide whether an
+ * order was still the engine's to delete. Those had to be edited together and
+ * nothing said so; a posture change alone would have made every replacement
+ * refuse. replaceOrder no longer identifies our orders by their flags at all
+ * (see the custody note there), which is the deeper fix — but the constant stays
+ * single-sourced so the write path cannot drift from what the rest assumes.
+ */
+export const DRAFT_POSTURE = { provisional: true, quote: false } as const;
+
 export interface OnsinchOrderBody {
   name: string;
   company_id: number;

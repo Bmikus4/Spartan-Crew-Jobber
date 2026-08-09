@@ -56,7 +56,9 @@ const NEW = { message_id: "m1", body: "Hi, can I book 4 crew on 9th March at Sav
   assert(s.onsinch_order_id === undefined, "NO order written to OnSinch yet");
   assert(s.pending_order?.desired.slot_teams[0].place_id === 88, "staged order has place_id 88");
   assert(s.pending_order?.desired.pricelist_category_id === 197, "rate card 197 resolved onto the order (I1)");
-  assert(s.pending_order?.desired.provisional === true && s.pending_order?.desired.quote === true, "draft posture: provisional + quote");
+  // To Confirm, not Price Quotes (Ben, 2026-08-09). test/draftPosture.ts owns the
+  // reasoning and the wire-level check; this asserts the end-to-end path carries it.
+  assert(s.pending_order?.desired.provisional === true && s.pending_order?.desired.quote === false, "draft posture: To Confirm (provisional, not quote)");
   assert(!!s.pending_order?.desired.slot_teams.some((t) => t.profession_id === 36), "crew-chief slot team added (4 crew -> +chief)");
   assert(!!s.pending_order?.desired.specification, "job summary emitted to specification");
   assert(s.pending_order?.desired.intern_name === "PO-44821", "customer ref emitted to intern_name");

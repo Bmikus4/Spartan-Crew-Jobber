@@ -67,10 +67,43 @@ export interface ReplaceHooks {
  */
 export async function replaceProvisionalOrder(
   client: OnsinchClient,
-  args: { order_id: number; desired: DesiredOrder; alreadyDeleted?: boolean },
+  args: { order_id: number; desired: DesiredOrder; alreadyDeleted?: boolean; weCreatedIt: boolean },
   hooks: ReplaceHooks
 ): Promise<ReplaceResult> {
   const { order_id, desired } = args;
+
+  /**
+   * CUSTODY, NOT FLAGS. This function may only destroy an order this engine
+   * created. `weCreatedIt` comes from the thread's own order_action_log — a
+   * recorded, successful create against this exact order id — and not from
+   * anything read back off OnSinch.
+   *
+   * The old test was `provisional && quote`, on the theory that those two flags
+   * were the engine's signature. They never were. Order dedup links a thread to
+   * any existing order for the same company and date, including one a human
+   * raised, so an ops-created draft carrying both flags could be deleted to
+   * apply an email — and 5 of the 100 most recent live orders carry exactly
+   * that pair. Ben's move to the To Confirm posture makes the point unarguable:
+   * provisional-without-quote is what ops themselves use most (27 of that 100),
+   * so no flag combination distinguishes our draft from theirs any more.
+   *
+   * An order we did not create is never ours to delete. The change goes to a
+   * human, which is what already happens for an approved order.
+   *
+   * REQUIRED and tested for `!== true`, so the failure mode is refusal. A caller
+   * that forgets to establish custody gets nothing deleted; had this been
+   * optional, forgetting would have meant deleting. deps.ts builds the executor
+   * by hand, method by method — that wrapper has already shipped one missing
+   * method to production — so the type must force the question to be answered.
+   */
+  if (args.weCreatedIt !== true) {
+    return {
+      deleted: false,
+      refused:
+        `order #${order_id} was not created by this engine — refusing to delete an order raised in OnSinch; ` +
+        `crew and times must be changed by hand`,
+    };
+  }
 
   // A replacement with no crew in it is not a correction, it is a deletion wearing one.
   const teams = desired.slot_teams ?? [];
@@ -95,14 +128,16 @@ export async function replaceProvisionalOrder(
     // replace, and creating silently could duplicate a job booked elsewhere.
     return { deleted: false, refused: `order #${order_id} no longer exists in OnSinch — not recreating it blindly` };
   }
-  // BOTH flags are the draft posture the engine writes. Either one missing means a human
-  // has taken the order on, and it stops being ours to delete.
-  if (live.provisional !== true || live.quote !== true) {
+  // Still a draft? `provisional` is the flag a human clears when they take the order on,
+  // so losing it means the booking has been confirmed and is no longer ours to replace.
+  // This is a check on the order's STATE; custody above is the check on whose it is, and
+  // both have to hold.
+  if (live.provisional !== true) {
     return {
       deleted: false,
       refused:
-        `order #${order_id} is no longer a draft (provisional=${String(live.provisional)}, quote=${String(live.quote)}) — ` +
-        `crew and times must be changed by hand`,
+        `order #${order_id} is no longer provisional (provisional=${String(live.provisional)}, quote=${String(live.quote)}) — ` +
+        `it has been confirmed; crew and times must be changed by hand`,
     };
   }
   if (desired.company_id && live.company_id && Number(live.company_id) !== Number(desired.company_id)) {

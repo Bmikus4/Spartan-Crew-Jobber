@@ -37,6 +37,12 @@ export interface Executor {
   replaceOrder?(p: {
     order_id: number;
     desired: DesiredOrder;
+    /**
+     * Whether this engine raised the order, established from the thread's own action
+     * log. REQUIRED: it is the only thing separating our draft from a client order ops
+     * raised by hand, now that no flag combination does. See replaceOrder.ts.
+     */
+    weCreatedIt: boolean;
     alreadyDeleted?: boolean;
     onIntent(snapshot: unknown): Promise<void>;
     onDeleted(): Promise<void>;
@@ -175,10 +181,22 @@ async function tryReplace(
   const teamsChanged = !!next.last_ordered_teams_hash && teamsHash !== next.last_ordered_teams_hash;
   if (!resuming && !teamsChanged) return false;
 
+  /**
+   * Did WE raise this order? The action log is the custody record: a successful create
+   * or replace against this id, written by this pipeline at the moment it happened.
+   * Anything else — most often an order matched out of OnSinch history by company and
+   * date, which is how a thread inherits an order ops raised — is somebody else's, and
+   * replaceOrder refuses to delete it. See the custody note in replaceOrder.ts.
+   */
+  const weCreatedIt = next.order_action_log.some(
+    (a) => a.ok && (a.kind === "create" || a.kind === "replace") && Number(a.order_id) === Number(order_id)
+  );
+
   try {
     const res = await executor.replaceOrder({
       order_id,
       desired: intended.desired,
+      weCreatedIt,
       alreadyDeleted: resuming ? next.order_replace?.deleted === true : false,
       async onIntent(snapshot) {
         next.order_replace = { order_id, deleted: false, snapshot, ts: now() };

@@ -137,13 +137,22 @@ export function executor(client: OnsinchClient): Executor {
           async replaceOrder(p: {
             order_id: number;
             desired: DesiredOrder;
+            weCreatedIt: boolean;
             alreadyDeleted?: boolean;
             onIntent(snapshot: unknown): Promise<void>;
             onDeleted(): Promise<void>;
           }) {
             return replaceProvisionalOrder(
               client,
-              { order_id: p.order_id, desired: p.desired, alreadyDeleted: p.alreadyDeleted },
+              {
+                order_id: p.order_id,
+                desired: p.desired,
+                // Forwarded, not defaulted. This wrapper is written out by hand and has
+                // dropped a method before; a custody flag it silently supplied itself
+                // would re-arm the deletion it exists to prevent.
+                weCreatedIt: p.weCreatedIt,
+                alreadyDeleted: p.alreadyDeleted,
+              },
               { onIntent: p.onIntent, onDeleted: p.onDeleted }
             );
           },

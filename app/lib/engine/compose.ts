@@ -11,6 +11,7 @@
 //     general crew and specific roles alike (Ben, 2026-08-03)
 // ============================================================================
 import { PROFESSION } from "./types";
+import { DRAFT_POSTURE } from "./format";
 import type { ConversationFacts, DesiredOrder, DesiredSlotTeam } from "./types";
 
 // ---------------------------------------------------------------- crew chief
@@ -160,8 +161,7 @@ export function composeOrder(inp: ComposeInput): ComposeResult {
     company_id: inp.company_id,
     user_id: inp.user_id,
     request_approval: true,
-    provisional: true, // draft posture
-    quote: true,       // draft posture
+    ...DRAFT_POSTURE, // To Confirm, not Price Quotes — see format.ts
     pricelist_category_id: inp.pricelist_category_id,
     job_name: inp.jobName,
     slot_teams,

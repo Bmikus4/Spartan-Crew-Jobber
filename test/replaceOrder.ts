@@ -94,39 +94,52 @@ async function main() {
 // ------------------------------------------------------------------ refusals
 {
   const { client, calls } = fakeOnsinch({ liveOrder: { id: 13632, provisional: false, quote: true, company_id: 501 } });
-  const r = await replaceProvisionalOrder(client, { order_id: 13632, desired: desired() }, recordingHooks(calls));
-  ok(!!r.refused && /no longer a draft/.test(r.refused), "an APPROVED order is refused, not deleted", r.refused);
+  const r = await replaceProvisionalOrder(client, { weCreatedIt: true, order_id: 13632, desired: desired() }, recordingHooks(calls));
+  ok(!!r.refused && /no longer provisional/.test(r.refused), "a CONFIRMED order is refused, not deleted", r.refused);
   ok(!calls.some((c) => c.startsWith("DELETE")), "and nothing was deleted", calls.join(" -> "));
 }
 {
+  // This is now the posture the engine WRITES (To Confirm: provisional, not quote), so
+  // it must be replaceable rather than refused. This assertion used to read the other
+  // way round - "quote=false alone is enough to refuse" - and having to invert it is
+  // exactly why the flag test could not survive the change: ops use
+  // provisional-without-quote heavily themselves, so the flags never distinguished our
+  // draft from theirs. Custody does that now.
   const { client, calls } = fakeOnsinch({ liveOrder: { id: 13632, provisional: true, quote: false, company_id: 501 } });
-  const r = await replaceProvisionalOrder(client, { order_id: 13632, desired: desired() }, recordingHooks(calls));
-  ok(!!r.refused, "quote=false alone is enough to refuse — both flags are the draft posture");
-  ok(!calls.some((c) => c.startsWith("DELETE")), "still nothing deleted");
+  const r = await replaceProvisionalOrder(client, { weCreatedIt: true, order_id: 13632, desired: desired(6) }, recordingHooks(calls));
+  ok(!r.refused && r.created?.id === 14001, "an order in the To Confirm posture is still ours to replace", r.refused ?? String(r.created?.id));
+}
+{
+  // Exists, provisional, right company - and ops raised it, not us.
+  const { client, calls } = fakeOnsinch({ liveOrder: { id: 13632, provisional: true, quote: false, company_id: 501 } });
+  const r = await replaceProvisionalOrder(client, { weCreatedIt: false, order_id: 13632, desired: desired(6) }, recordingHooks(calls));
+  ok(!!r.refused && /not created by this engine/.test(r.refused),
+    "an order we did not raise is refused however draft-like it looks", r.refused);
+  ok(calls.length === 0, "and it refuses before reading OnSinch at all", calls.join(" -> "));
 }
 {
   const { client, calls } = fakeOnsinch({ liveOrder: null });
-  const r = await replaceProvisionalOrder(client, { order_id: 13632, desired: desired() }, recordingHooks(calls));
+  const r = await replaceProvisionalOrder(client, { weCreatedIt: true, order_id: 13632, desired:desired() }, recordingHooks(calls));
   ok(!!r.refused && /no longer exists/.test(r.refused), "a vanished order is refused, not silently recreated", r.refused);
   ok(!calls.includes("POST"), "and no duplicate is posted", calls.join(" -> "));
 }
 {
   const { client, calls } = fakeOnsinch({ liveOrder: { id: 13632, provisional: true, quote: true, company_id: 777 } });
-  const r = await replaceProvisionalOrder(client, { order_id: 13632, desired: desired() }, recordingHooks(calls));
+  const r = await replaceProvisionalOrder(client, { weCreatedIt: true, order_id: 13632, desired:desired() }, recordingHooks(calls));
   ok(!!r.refused && /another client's order/.test(r.refused), "an order belonging to a different company is refused", r.refused);
   ok(!calls.some((c) => c.startsWith("DELETE")), "another client's order is never deleted");
 }
 {
   const { client, calls } = fakeOnsinch();
   const empty = { ...desired(), slot_teams: [] };
-  const r = await replaceProvisionalOrder(client, { order_id: 13632, desired: empty }, recordingHooks(calls));
+  const r = await replaceProvisionalOrder(client, { weCreatedIt: true, order_id: 13632, desired:empty }, recordingHooks(calls));
   ok(!!r.refused && /no slot teams/.test(r.refused), "a replacement with no crew is refused — that is a deletion in disguise");
   ok(calls.length === 0, "and it refuses before even reading OnSinch", calls.join(" -> "));
 }
 {
   const { client, calls } = fakeOnsinch();
   const tbc = { ...desired(), slot_teams: [{ name: "Crew (TBC)", profession_id: 1, beginning: "", end: "", size: 4, place_id: 304 }] };
-  const r = await replaceProvisionalOrder(client, { order_id: 13632, desired: tbc }, recordingHooks(calls));
+  const r = await replaceProvisionalOrder(client, { weCreatedIt: true, order_id: 13632, desired:tbc }, recordingHooks(calls));
   ok(!!r.refused && /no start or finish/.test(r.refused), "a TBC date is refused — never trade a real order for a dateless one");
   ok(calls.length === 0, "again without touching OnSinch");
 }
@@ -135,7 +148,7 @@ async function main() {
 {
   const { client, calls } = fakeOnsinch();
   const hooks = recordingHooks(calls);
-  const r = await replaceProvisionalOrder(client, { order_id: 13632, desired: desired(6) }, hooks);
+  const r = await replaceProvisionalOrder(client, { weCreatedIt: true, order_id: 13632, desired:desired(6) }, hooks);
   ok(r.created?.id === 14001, "the replacement is created and its id returned", String(r.created?.id));
   ok(r.deleted === true, "and the call reports that it deleted");
   const seq = calls.join(" -> ");
@@ -150,7 +163,7 @@ async function main() {
   const { client, calls } = fakeOnsinch({ failCreate: true });
   const hooks = recordingHooks(calls);
   let threw: Error | null = null;
-  try { await replaceProvisionalOrder(client, { order_id: 13632, desired: desired(6) }, hooks); }
+  try { await replaceProvisionalOrder(client, { weCreatedIt: true, order_id: 13632, desired:desired(6) }, hooks); }
   catch (e) { threw = e as Error; }
   ok(!!threw, "a failed create throws rather than returning quietly");
   ok(calls.includes("PERSIST deleted"), "and 'deleted' was persisted BEFORE the create was attempted", calls.join(" -> "));
@@ -160,7 +173,7 @@ async function main() {
 // ------------------------------------------------- resuming never deletes twice
 {
   const { client, calls } = fakeOnsinch();
-  const r = await replaceProvisionalOrder(client, { order_id: 13632, desired: desired(6), alreadyDeleted: true }, recordingHooks(calls));
+  const r = await replaceProvisionalOrder(client, { weCreatedIt: true, order_id: 13632, desired:desired(6), alreadyDeleted: true }, recordingHooks(calls));
   ok(r.created?.id === 14001, "a resumed replace posts the replacement");
   ok(!calls.some((c) => c.startsWith("DELETE")), "and does NOT delete again", calls.join(" -> "));
   ok(!calls.includes("GET"), "nor preflight a deleted order into a refusal", calls.join(" -> "));
@@ -205,7 +218,7 @@ async function main() {
   };
   await store.put(state as never);
   try {
-    await replaceProvisionalOrder(client, { order_id: 13632, desired: desired(6) }, {
+    await replaceProvisionalOrder(client, { weCreatedIt: true, order_id: 13632, desired:desired(6) }, {
       async onIntent(snapshot) {
         await store.put({ ...(await store.get("t-replace"))!, order_replace: { order_id: 13632, deleted: false, snapshot, ts: 1 } } as never);
       },
@@ -242,7 +255,11 @@ const staged = (over: Record<string, unknown> = {}) => ({
   last_ordered_teams_hash: hashOrder(desired(4).slot_teams),
   priority: "medium" as const, needs_human: false,
   pending_order: { kind: "patch" as const, desired: desired(6), order_id: 13632 },
-  status: "proposed" as const, notes: [], order_action_log: [],
+  status: "proposed" as const, notes: [],
+  // CUSTODY. This engine raised 13632, and the log is where that is written down.
+  // Without this entry the replace is refused - which is the correct answer for a
+  // thread that merely inherited an order from OnSinch, and is asserted below.
+  order_action_log: [{ ts: 1, kind: "create" as const, order_id: 13632, ok: true }],
   ...over,
 });
 
@@ -264,8 +281,14 @@ async function runConfirm(opts: {
   };
   if (opts.withReplace !== false) {
     exec.replaceOrder = (p: Parameters<NonNullable<Executor["replaceOrder"]>>[0]) =>
-      replaceProvisionalOrder(client, { order_id: p.order_id, desired: p.desired, alreadyDeleted: p.alreadyDeleted },
-        { onIntent: p.onIntent, onDeleted: p.onDeleted });
+      replaceProvisionalOrder(
+        client,
+        // Forwarded from the pipeline, exactly as deps.ts does it. A double that
+        // supplied its own `true` here would be testing a custody check that is not
+        // actually wired to anything.
+        { order_id: p.order_id, desired: p.desired, weCreatedIt: p.weCreatedIt, alreadyDeleted: p.alreadyDeleted },
+        { onIntent: p.onIntent, onDeleted: p.onDeleted }
+      );
   }
 
   const deps = {
@@ -300,6 +323,22 @@ async function runConfirm(opts: {
   ok(!calls.some((c) => c.startsWith("DELETE")), "a follow-up that changes no crew deletes nothing", calls.join(" -> "));
   ok(patched.length === 1, "it patches instead, exactly as before", JSON.stringify(patched));
   ok(out?.onsinch_order_id === 13632, "and the thread still points at the original order");
+}
+
+{
+  // THE INHERITED ORDER. Order dedup links a thread to any existing order for the same
+  // company and date, so a thread routinely ends up pointing at one ops raised by hand.
+  // Everything else about this case is identical to the happy path above - same crew
+  // change, same provisional order, same company - and the only difference is that the
+  // action log holds no create for 13632. That must be enough to stop a deletion.
+  const inherited = staged({ order_action_log: [] });
+  const { out, calls, patched } = await runConfirm({ state: inherited });
+  ok(!calls.some((c) => c.startsWith("DELETE")), "an order the engine did not raise is never deleted", calls.join(" -> "));
+  ok(out?.onsinch_order_id === 13632, "the thread still points at the original order", String(out?.onsinch_order_id));
+  ok(out?.status === "needs-info", "the crew change goes to a human instead", String(out?.status));
+  ok((out?.notes ?? []).some((n) => /not created by this engine/.test(n)),
+     "and says why, in those words", JSON.stringify(out?.notes));
+  ok(!patched.length || patched.length === 1, "nothing destructive happened either way", JSON.stringify(patched));
 }
 
 {
