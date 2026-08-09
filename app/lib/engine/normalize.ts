@@ -150,6 +150,30 @@ export function isFromSpartan(from: string): boolean {
 const QUOTE_ATTRIBUTION = /^\s*On\s+.{0,80}?(?:<([^>\s]+@[^>\s]+)>|\b([\w.+-]+@[\w.-]+\.\w+)\b)\s*wrote:\s*$/im;
 
 /**
+ * Gmail's OTHER machine-written quote header — the one it uses for a forward:
+ *
+ *   ---------- Forwarded message ---------
+ *   From: Chanelle Self <chanelles@blackout.co.uk>
+ *   Date: Wed, 3 Jun 2026 at 15:41
+ *   Subject: Increased hours - 06/06/26 - 13:00 Excel.
+ *   To: tracy@spartancrew.co.uk
+ *
+ * Two things make this a separate case from the reply attribution above, not a
+ * looser regex over the same one. The sender is on its own `From:` line rather
+ * than inline, and the forwarded body is NOT ">"-quoted — Gmail indents a reply
+ * and leaves a forward flush, so the text extraction differs completely.
+ *
+ * Measured over the 5,835-thread corpus: 740 threads carry no client message at
+ * all, 51 of those are recoverable from a reply attribution, and 44 more from a
+ * forward — which nothing read until now. Spartan is a Gmail-only shop, so this
+ * is not a foreign mail client's format; it is the same client's second one.
+ */
+const FORWARD_MARKER = /^\s*-{2,}\s*Forwarded message\s*-{2,}\s*$/im;
+const FORWARD_FROM = /^\s*From:\s*.*?(?:<([^>\s]+@[^>\s]+)>|\b([\w.+-]+@[\w.-]+\.\w+)\b)/im;
+/** Lines Gmail writes into the forwarded header block, which are not the message. */
+const FORWARD_HEADER_LINE = /^\s*(from|date|sent|subject|to|cc|bcc|reply-to)\s*:/i;
+
+/**
  * Recover a client enquiry that only exists as quoted text inside a colleague's
  * forward.
  *
@@ -165,33 +189,75 @@ const QUOTE_ATTRIBUTION = /^\s*On\s+.{0,80}?(?:<([^>\s]+@[^>\s]+)>|\b([\w.+-]+@[
  * Returns null unless it can name the sender: an unattributable quote is left
  * alone rather than guessed at.
  */
+function recoverFromReplyQuote(raw: string): { from: string; body: string } | null {
+  const attribution = QUOTE_ATTRIBUTION.exec(raw);
+  if (!attribution) return null;
+  const from = (attribution[1] || attribution[2] || "").toLowerCase();
+  if (!from || isFromSpartan(from)) return null; // quoting ourselves is not an enquiry
+
+  // The quoted block is everything after the attribution line, de-quoted.
+  const body = raw
+    .slice(attribution.index + attribution[0].length)
+    .split("\n")
+    .filter((l) => l.trim().startsWith(">"))
+    .map((l) => l.replace(/^\s*>+\s?/, ""))
+    .join("\n")
+    .trim();
+  return body.length >= 10 ? { from, body } : null;
+}
+
+/**
+ * The forward form. Tracy forwarding Chanelle's request into bookings@ is a real
+ * client enquiry that arrives under a Spartan address, and it reads as our own
+ * mail to everything downstream.
+ */
+function recoverFromForward(raw: string): { from: string; body: string } | null {
+  const marker = FORWARD_MARKER.exec(raw);
+  if (!marker) return null;
+
+  const after = raw.slice(marker.index + marker[0].length);
+  const sender = FORWARD_FROM.exec(after);
+  if (!sender) return null;
+  const from = (sender[1] || sender[2] || "").toLowerCase();
+  // Forwarding our own mail on is not a client enquiry, and neither is a forward
+  // whose sender cannot be named — an unattributable quote is left alone rather
+  // than guessed at, exactly as in the reply case.
+  if (!from || isFromSpartan(from)) return null;
+
+  // Gmail leaves a forwarded body flush rather than ">"-quoting it, so the message
+  // is everything after the header block. Drop leading header lines and blanks; stop
+  // at a nested forward, whose content belongs to an older conversation.
+  const lines = after.split("\n");
+  const body: string[] = [];
+  let started = false;
+  for (const line of lines) {
+    if (!started) {
+      if (!line.trim() || FORWARD_HEADER_LINE.test(line)) continue;
+      started = true;
+    }
+    if (/^\s*-{2,}\s*Forwarded message/i.test(line)) break;
+    body.push(line);
+  }
+  const text = body.join("\n").trim();
+  return text.length >= 10 ? { from, body: text } : null;
+}
+
 function recoverForwardedEnquiry(messages: ThreadMessage[]): ThreadMessage | null {
   // newest first — the most recent forward carries the freshest request
   for (const m of [...messages].sort((a, b) => Date.parse(b.date_iso) - Date.parse(a.date_iso))) {
     const raw = m.body || "";
-    const attribution = QUOTE_ATTRIBUTION.exec(raw);
-    if (!attribution) continue;
-    const from = (attribution[1] || attribution[2] || "").toLowerCase();
-    // Quoting ourselves is not a client enquiry.
-    if (!from || isFromSpartan(from)) continue;
-
-    // The quoted block is everything after the attribution line, de-quoted.
-    const after = raw.slice(attribution.index + attribution[0].length);
-    const quoted = after
-      .split("\n")
-      .filter((l) => l.trim().startsWith(">"))
-      .map((l) => l.replace(/^\s*>+\s?/, ""))
-      .join("\n")
-      .trim();
-    if (quoted.length < 10) continue;
+    // Reply-quote first: where a message somehow carries both, the ">" block is the
+    // one the colleague was responding to, so it is the more recent request.
+    const found = recoverFromReplyQuote(raw) ?? recoverFromForward(raw);
+    if (!found) continue;
 
     return {
       message_id: `${m.message_id}:quoted`,
-      from,
+      from: found.from,
       to: [m.from],
       date_iso: m.date_iso,
       subject: m.subject,
-      body: quoted,
+      body: found.body,
       is_from_spartan: false,
     };
   }
