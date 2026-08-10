@@ -453,10 +453,27 @@ function Detail({ threadId, onBack, onChanged }: { threadId: string; onBack: () 
   );
 }
 
+/** A row-shaped skeleton, so the list does not appear from nowhere and shove the
+ *  filter bar down the page. Same geometry as JobRow. */
+function RowSkeleton({ i }: { i: number }) {
+  return (
+    <div style={{ background: "var(--surface)", border: `1px solid ${BORDER}`, borderRadius: "var(--radius)", padding: "14px 16px", display: "flex", alignItems: "center", gap: 14, opacity: 1 - i * 0.13 }}>
+      <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 6 }}>
+        <span className="skel" style={{ height: 13, width: 150 }} />
+        <span className="skel" style={{ height: 11, width: "42%" }} />
+        <span className="skel" style={{ height: 10, width: "28%" }} />
+      </div>
+      <span className="skel" style={{ height: 12, width: 54 }} />
+      <span className="skel" style={{ height: 20, width: 104, borderRadius: 4 }} />
+    </div>
+  );
+}
+
 export default function JobsScreen({ isActive }: Props) {
   const [jobs, setJobs] = useState<Job[] | null>(null);
   const [error, setError] = useState(false);
   const [filter, setFilter] = useState<Filter>("all");
+  const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<string | null>(null);
   const loaded = useRef(false);
 
@@ -485,16 +502,48 @@ export default function JobsScreen({ isActive }: Props) {
   const shown = useMemo(() => {
     const j = jobs ?? [];
     const live = j.filter((x) => !isDismissed(x));
-    if (filter === "dismissed") return j.filter(isDismissed);
-    if (filter === "all") return live;
-    if (filter === "proposed") return live.filter((x) => x.status === "proposed" && !x.needs_human);
-    if (filter === "needs_human") return live.filter((x) => (x.needs_human || x.status === "needs-info") && x.status !== "error");
-    if (filter === "failed") return live.filter((x) => x.status === "error");
-    return live.filter((x) => x.order_id != null);
-  }, [jobs, filter]);
+    const lane =
+      filter === "dismissed" ? j.filter(isDismissed)
+      : filter === "all" ? live
+      : filter === "proposed" ? live.filter((x) => x.status === "proposed" && !x.needs_human)
+      : filter === "needs_human" ? live.filter((x) => (x.needs_human || x.status === "needs-info") && x.status !== "error")
+      : filter === "failed" ? live.filter((x) => x.status === "error")
+      : live.filter((x) => x.order_id != null);
 
-  const wrap: React.CSSProperties = { height: "100%", overflowY: "auto", padding: "24px clamp(16px, 4vw, 40px) 56px" };
-  if (!jobs) return <div style={{ ...wrap, display: "grid", placeItems: "center" }}><span className="crm-shimmer" style={{ color: MUT }}>Loading jobs…</span></div>;
+    // Search across everything a person would actually have in hand: the client, the
+    // subject line, the venue, and — the reason this exists — the J or R number off a
+    // PDF or a forwarded email. Type "J13905" and land on the thread.
+    const q = query.trim().toLowerCase();
+    if (!q) return lane;
+    return lane.filter((x) => {
+      const hay = [
+        x.contact, x.subject, x.location,
+        x.job_id ? `j${x.job_id}` : "",
+        x.order_number ? `r${x.order_number}` : "",
+        x.order_id ? String(x.order_id) : "",
+        x.dates.join(" "),
+      ].join(" ").toLowerCase();
+      return q.split(/\s+/).every((t) => hay.includes(t));
+    });
+  }, [jobs, filter, query]);
+
+  const wrap: React.CSSProperties = { height: "100%", overflowY: "auto", padding: "20px var(--panel-pad-x) 44px" };
+  // Loads by drawing itself: the filter bar is real from the first frame (its counts
+  // are the only thing waiting on data) and the rows arrive into their own shape.
+  if (!jobs) return (
+    <div style={wrap}>
+      <div style={{ width: "100%", display: "flex", flexDirection: "column", gap: 16 }}>
+        <header>
+          <span className="skel" style={{ height: 24, width: 168 }} />
+          <div style={{ marginTop: 8 }}><span className="skel" style={{ height: 12, width: 380 }} /></div>
+        </header>
+        <span className="skel" style={{ height: 35, width: 420, borderRadius: 10 }} />
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          {[0, 1, 2, 3, 4].map((i) => <RowSkeleton key={i} i={i} />)}
+        </div>
+      </div>
+    </div>
+  );
   // onChanged refreshes the list so a confirmed order moves out of the
   // "Awaiting confirm" lane rather than sitting there until a manual reload.
   if (selected) return <Detail threadId={selected} onBack={() => setSelected(null)} onChanged={() => void load()} />;
@@ -506,7 +555,13 @@ export default function JobsScreen({ isActive }: Props) {
     // Only shown when something has actually failed — an empty lane would just
     // be noise, but a non-empty one must be impossible to miss.
     ...(counts.failed ? [{ id: "failed" as Filter, label: `Failed ${counts.failed}` }] : []),
-    { id: "booked", label: `Booked ${counts.booked}` },
+    // "With an order", not "Booked". This lane selects threads that HAVE an OnSinch
+    // order; the tag on a row says what the THREAD's own state is. Both are right and
+    // the shared word was not: the lane held 30 rows of which none said "Booked",
+    // because most were awaiting a confirm or already replied to. Naming the lane
+    // after what it actually filters on removes the contradiction without moving a
+    // single row between lanes.
+    { id: "booked", label: `With an order ${counts.booked}` },
     { id: "dismissed", label: `Dismissed ${counts.dismissed}` },
   ];
 
@@ -514,28 +569,47 @@ export default function JobsScreen({ isActive }: Props) {
     <div style={wrap}>
       <div style={{ width: "100%", display: "flex", flexDirection: "column", gap: 16 }}>
         <header>
-          <span className="eyebrow"><span className="slash">/</span>JOBS BOARD</span>
-          <h1 style={{ fontSize: 26, fontWeight: 700, color: INK, margin: "4px 0 2px" }}>Jobs Board</h1>
-          <p style={{ fontSize: 13, color: MUT, margin: 0 }}>Every conversation linked to an OnSinch order. A green check means the engine drafted the reply.</p>
+          {/* No eyebrow: the window's title bar carries it. */}
+          <h1 style={{ fontSize: 22, fontWeight: 700, color: INK, margin: "0 0 2px" }}>Jobs Board</h1>
+          <p style={{ fontSize: 13, color: MUT, margin: 0 }}>Every conversation the engine has read. A green check means it drafted the reply.</p>
         </header>
 
-        <div style={{ display: "inline-flex", background: "var(--surface-2)", border: `1px solid ${BORDER}`, borderRadius: 10, padding: 3, gap: 3, alignSelf: "flex-start", flexWrap: "wrap" }}>
-          {tabs.map((t) => {
-            const active = filter === t.id;
-            return (
-              <button key={t.id} onClick={() => setFilter(t.id)}
-                style={{ padding: "7px 13px", borderRadius: 8, border: `1px solid ${active ? "var(--accent-border)" : "transparent"}`, background: active ? "var(--accent-subtle)" : "transparent", color: active ? A : SUB, fontWeight: 600, fontSize: 12.5, cursor: "pointer", transition: "all 200ms" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+          <div className="seg" role="tablist" aria-label="Filter by lane">
+            {tabs.map((t) => (
+              <button key={t.id} className="seg__btn" role="tab" aria-pressed={filter === t.id} aria-selected={filter === t.id}
+                onClick={() => setFilter(t.id)} style={{ padding: "7px 13px", fontSize: 12.5 }}>
                 {t.label}
               </button>
-            );
-          })}
+            ))}
+          </div>
+
+          {/* Search by the identifier a person is holding — a J number off a PDF, a
+              client name off a phone call. 52 rows is already past what an eye scans. */}
+          <div style={{ position: "relative", flex: "1 1 210px", minWidth: 180, maxWidth: 320 }}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden
+              style={{ position: "absolute", left: 11, top: "50%", transform: "translateY(-50%)", color: MUT, pointerEvents: "none" }}>
+              <circle cx="11" cy="11" r="7" /><line x1="16.5" y1="16.5" x2="21" y2="21" />
+            </svg>
+            <input
+              value={query} onChange={(e) => setQuery(e.target.value)}
+              placeholder="Client, subject, venue, J number…" aria-label="Search jobs"
+              style={{ width: "100%", padding: "8px 30px 8px 32px", borderRadius: 9, border: `1px solid ${BORDER}`, background: "var(--surface-2)", color: INK, fontSize: 12.5, fontFamily: "inherit" }}
+            />
+            {query && (
+              <button onClick={() => setQuery("")} aria-label="Clear search"
+                style={{ position: "absolute", right: 6, top: "50%", transform: "translateY(-50%)", width: 20, height: 20, borderRadius: 5, border: "none", background: "transparent", color: MUT, cursor: "pointer", fontSize: 14, lineHeight: 1 }}>×</button>
+            )}
+          </div>
         </div>
 
         {error && <div style={{ fontSize: 12.5, color: MUT }}>Couldn&apos;t load jobs. <button onClick={() => void load()} style={{ color: A, background: "none", border: "none", cursor: "pointer", fontWeight: 700 }}>Retry</button></div>}
 
         {shown.length === 0 ? (
           <div style={{ background: "var(--surface)", border: `1px dashed ${BORDER}`, borderRadius: "var(--radius-lg)", padding: "40px 24px", textAlign: "center", color: MUT, fontSize: 13 }}>
-            No jobs yet in this view. They appear as booking emails flow through the engine.
+            {query
+              ? <>Nothing matches <b style={{ color: SUB }}>{query}</b> in this lane. <button onClick={() => setQuery("")} style={{ color: A, background: "none", border: "none", cursor: "pointer", fontWeight: 700, font: "inherit" }}>Clear the search</button></>
+              : <>No jobs yet in this view. They appear as booking emails flow through the engine.</>}
           </div>
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>

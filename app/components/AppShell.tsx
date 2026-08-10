@@ -93,10 +93,12 @@ export default function AppShell() {
       <Sidebar activeTool={tool} onSelectTool={(id) => setTool(id as Tool)} onSettings={() => setTool("settings")} />
 
       <main style={{ flex: 1, minWidth: 0, height: "calc(100% - var(--shell-double-pad))", margin: "var(--shell-pad)", display: "flex", flexDirection: "column" }} className="frosted-glass">
+        {/* THE window's one title bar. It used to hold a plain 13px title while each
+            screen drew a second bar beneath it with the same word as an eyebrow — 96px
+            of chrome to say "Dashboard" twice. The eyebrow moved up here, so a screen
+            owns only its content. */}
         <header style={{ height: "var(--panel-header-height)", display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 var(--panel-pad-x)", borderBottom: "1px solid var(--border)", flexShrink: 0 }}>
-          <span style={{ fontSize: 13, fontWeight: 600, color: "var(--text-secondary)", letterSpacing: "0.02em" }}>
-            {TITLES[tool]}
-          </span>
+          <span className="eyebrow"><span className="slash">/</span>{TITLES[tool].toUpperCase()}</span>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             {auth.authenticated && <AccountButton email={auth.email} />}
             <ThemeToggle />

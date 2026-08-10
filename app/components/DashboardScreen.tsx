@@ -164,16 +164,27 @@ const FLOW: Record<FlowKey, { label: string; total: (m: Metrics) => number; sub:
   },
 };
 
-/** Period-over-period, suppressed where it would be noise rather than signal. */
+/**
+ * Period-over-period, suppressed wherever it would be decoration rather than
+ * measurement.
+ *
+ * The guard is deliberately strict, because the first version was not and it
+ * published "▲254%" against emails intook. That number was real arithmetic and
+ * still meaningless: the two halves being compared were the week the engine was
+ * being switched on and the week after, so it measured the rollout. A trend needs
+ * both a big enough base AND enough days on each side of the split to be a trend
+ * and not the shape of the launch.
+ */
+const DELTA_MIN_DAYS = 7;   // per half
+const DELTA_MIN_BASE = 10;  // events in the earlier half
+
 function delta(values: number[]): { pct: number; dir: "up" | "down" | "flat" } | null {
   const n = values.length;
-  if (n < 4) return null;
+  if (n < DELTA_MIN_DAYS * 2) return null;
   const half = Math.floor(n / 2);
   const prior = values.slice(0, half).reduce((a, b) => a + b, 0);
   const recent = values.slice(half).reduce((a, b) => a + b, 0);
-  // Below five in the prior half a single event reads as +100%, which is a
-  // decoration rather than a measurement.
-  if (prior < 5) return null;
+  if (prior < DELTA_MIN_BASE) return null;
   const pct = Math.round(((recent - prior) / prior) * 100);
   return { pct, dir: pct > 2 ? "up" : pct < -2 ? "down" : "flat" };
 }
@@ -243,7 +254,11 @@ function FlowExplorer({ m, plotted }: { m: Metrics; plotted: Metrics["series"] }
           {({ w, glowId }) => {
             const x = (i: number) => (n <= 1 ? (L + w - PAD) / 2 : L + (i * (w - L - PAD)) / (n - 1));
             const y = (v: number) => base - (v / max) * (base - 16);
-            const bw = Math.max(2, (w - L - PAD) / Math.max(1, n) - 2);
+            // CAPPED. Dividing the width by the number of days is right for 90 days
+            // and absurd for 15: on a 1700px panel it gave 110px-wide bars, so a
+            // daily series read as five grey slabs and the line looked like it was
+            // tracing their tops rather than carrying the trend.
+            const bw = Math.min(22, Math.max(2, (w - L - PAD) / Math.max(1, n) - 2));
             const line = values.map((v, i) => `${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(" L");
             // Bars for the day, a line for the shape. The bars carry the reading a
             // single day needs and the line carries the trend; the old chart had
@@ -515,20 +530,11 @@ export default function DashboardScreen({ isActive, onOpenBoard }: Props & { onO
 
   const wrap: React.CSSProperties = { flex: 1, minHeight: 0, overflowY: "auto", padding: "20px var(--panel-pad-x) 44px" };
 
-  // The header is real from the first frame — it needs no data — and sits OUTSIDE
-  // the scroll area, so the title of the screen cannot slide away under the wheel.
+  // No header bar of its own. The shell already draws one, holding the eyebrow and
+  // the window's controls — a second bar underneath it spent 48px repeating the word
+  // "Dashboard" one line below where the shell had just said it.
   const shell = (body: React.ReactNode) => (
-    <div style={{ display: "flex", flexDirection: "column", height: "100%", minHeight: 0 }}>
-      <div style={{ height: "var(--panel-header-height)", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 var(--panel-pad-x)", borderBottom: `1px solid ${BORDER}` }}>
-        <span className="eyebrow"><span className="slash">/</span>DASHBOARD</span>
-        {data && (
-          <span style={{ fontSize: 10.5, color: FAINT }}>
-            {plotted.length} day{plotted.length === 1 ? "" : "s"} measured
-          </span>
-        )}
-      </div>
-      {body}
-    </div>
+    <div style={{ display: "flex", flexDirection: "column", height: "100%", minHeight: 0 }}>{body}</div>
   );
 
   if (loading && !data) return shell(<div style={wrap}><Skeleton /></div>);
@@ -549,11 +555,16 @@ export default function DashboardScreen({ isActive, onOpenBoard }: Props & { onO
   return shell(
     <div style={wrap}>
       <div style={{ width: "100%", display: "flex", flexDirection: "column", gap: 16 }}>
-        <header>
-          <h1 style={{ fontSize: 22, fontWeight: 700, color: INK, margin: "0 0 2px" }}>Engine impact</h1>
-          <p style={{ fontSize: 13, color: MUT, margin: 0 }}>
-            What is waiting on a person right now, and what the engine has handled since {String(from).slice(0, 10) || "it started"}.
-          </p>
+        <header style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
+          <div>
+            <h1 style={{ fontSize: 22, fontWeight: 700, color: INK, margin: "0 0 2px" }}>Engine impact</h1>
+            <p style={{ fontSize: 13, color: MUT, margin: 0 }}>
+              What is waiting on a person right now, and what the engine has handled since {String(from).slice(0, 10) || "it started"}.
+            </p>
+          </div>
+          <span style={{ fontSize: 10.5, color: FAINT, whiteSpace: "nowrap" }}>
+            {plotted.length} day{plotted.length === 1 ? "" : "s"} measured
+          </span>
         </header>
 
         <QueueStrip now={data.now} onOpenBoard={onOpenBoard} />
