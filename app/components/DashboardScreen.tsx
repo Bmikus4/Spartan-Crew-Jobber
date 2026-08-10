@@ -175,7 +175,12 @@ const FLOW: Record<FlowKey, { label: string; total: (m: Metrics) => number; sub:
  * both a big enough base AND enough days on each side of the split to be a trend
  * and not the shape of the launch.
  */
-const DELTA_MIN_DAYS = 7;   // per half
+// Two weeks per half. Seven was not enough: with 15 days of history the earlier half
+// IS the week the engine was switched on, so it cleared a base of 10 easily and
+// published "▲256%" — a measurement of the rollout wearing the clothes of a trend.
+// Any split of a fortnight's data has the same defect, so the honest answer until
+// there are four weeks is to say nothing.
+const DELTA_MIN_DAYS = 14;  // per half
 const DELTA_MIN_BASE = 10;  // events in the earlier half
 
 function delta(values: number[]): { pct: number; dir: "up" | "down" | "flat" } | null {

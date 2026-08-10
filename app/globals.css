@@ -293,20 +293,31 @@ input::placeholder, textarea::placeholder { color: var(--text-faint); }
 /* ── The KPI strip ───────────────────────────────────────────────────────────
  * Cells divided by rules rather than gaps, so the row reads as one instrument
  * with four readings instead of four cards that happen to be adjacent. */
-.metric-strip { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); }
+/* The dividers are the grid's own 1px gaps showing the strip's background through,
+   NOT a border on each cell. A per-cell border-inline-start is only correct at one
+   column count: stacked on a phone it drew a stray vertical rule down the left of
+   every cell and no rule at all between the rows. This way four, two and one column
+   all divide correctly with one declaration and no :nth-child arithmetic. */
+.metric-strip {
+  display: grid; grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 1px; background: var(--border);
+}
 .metric-strip__cell {
   padding: 14px 16px 13px;
-  border-inline-start: 1px solid var(--border);
-  background: transparent; text-align: left; cursor: pointer;
+  background: var(--surface); text-align: left; cursor: pointer;
   transition: background-color 200ms ease;
 }
-.metric-strip__cell:first-child { border-inline-start: none; }
 .metric-strip__cell:hover { background: var(--surface-hover); }
 .metric-strip__cell:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 .metric-strip__cell--flat { cursor: default; }
-.metric-strip__cell--flat:hover { background: transparent; }
+.metric-strip__cell--flat:hover { background: var(--surface); }
+/* Two up on a phone, never one. Stacked, four readings ran to ~680px and the chart
+   they sit above was two screens down. */
 @media (max-width: 1080px) { .metric-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-@media (max-width: 560px)  { .metric-strip { grid-template-columns: 1fr; } }
+@media (max-width: 560px) {
+  .metric-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .metric-strip__cell { padding: 11px 12px 10px; }
+}
 
 /* The row of cards under the hero: two time series and a dial, same row, same
    height. The dial stays square, so its width follows that shared height. */
@@ -337,7 +348,18 @@ input::placeholder, textarea::placeholder { color: var(--text-faint); }
   transition: background-color 200ms, color 200ms, border-color 200ms;
 }
 .seg__btn:hover { color: var(--text-primary); }
-.seg__btn[aria-pressed="true"] { background: var(--accent-subtle); border-color: var(--accent-border); color: var(--accent); }
+/* A SOLID fill for the chosen option, not the accent-subtle tint the quote tool
+   uses. That tint works there because its accent is burnt orange; Spartan's accent
+   is a near-white steel, so accent-subtle is rgba(200,208,220,0.10) — a selected
+   segment was a barely-lighter grey against an unselected one, on a control whose
+   entire job is to say which of two modes the engine is in. Reversing the contrast
+   states it once and unmistakably. */
+.seg__btn[aria-pressed="true"], .seg__btn[aria-selected="true"] {
+  background: var(--accent); border-color: var(--accent);
+  color: var(--accent-contrast); font-weight: 700;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+}
+.seg__btn[aria-pressed="true"]:hover, .seg__btn[aria-selected="true"]:hover { color: var(--accent-contrast); background: var(--accent-hover); }
 .seg__btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 
 @media (max-width: 768px) {
