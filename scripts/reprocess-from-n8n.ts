@@ -129,6 +129,13 @@ async function deps(): Promise<PipelineDeps> {
     settings,
     repliesEnabled: false,
     seededRateCard: async (companyId: number) => (await getRateCard(companyId))?.card ?? null,
+    // From the STORED settings, like every other engine behaviour here. This is
+    // hand-built PipelineDeps, and a field it forgets is a field the re-drive
+    // silently decides differently from production - the default rate card was
+    // missed exactly this way and a re-driven ticket still read "no confident
+    // rate card" while the live engine would have priced it.
+    replyScope: settings.reply_scope,
+    defaultRateCard: settings.default_rate_card,
     executor: noWrites,
     now: () => Date.now(),
     hashOrder: (o: unknown) => createHash("sha256").update(JSON.stringify(o)).digest("hex").slice(0, 16),
