@@ -47,6 +47,15 @@ export interface Executor {
     onIntent(snapshot: unknown): Promise<void>;
     onDeleted(): Promise<void>;
   }): Promise<{ created?: { id: number; number: string }; refused?: string; deleted: boolean }>;
+  /**
+   * The `J` number of the job inside an order — `Job[0].id`, read back because
+   * POST /orders returns the order id alone and never the nested job's.
+   *
+   * Optional, and a failure to read it is never a failure of the write: the order
+   * exists either way, and an identifier missing from the board is a worse outcome
+   * only than an order that was created twice.
+   */
+  jobIdForOrder?(order_id: number): Promise<number | undefined>;
 }
 
 export interface PipelineDeps extends CompileDeps {
@@ -169,6 +178,22 @@ export async function handleThread(
 }
 
 /**
+ * The J number for an order we just wrote, or undefined.
+ *
+ * Swallows its own failure on purpose. This runs immediately after a successful
+ * POST /orders, so a throw here would land in the caller's catch and report an
+ * order that exists as an order that errored — and the next run would try to
+ * create it again.
+ */
+async function readJobId(order_id: number, deps: PipelineDeps): Promise<number | undefined> {
+  try {
+    return await deps.executor.jobIdForOrder?.(order_id);
+  } catch {
+    return undefined;
+  }
+}
+
+/**
  * Delete-and-repost, when a crew or time change needs to reach a draft order.
  *
  * Returns false when it does not apply, and the caller then patches as before. That
@@ -243,6 +268,7 @@ async function tryReplace(
       const old = order_id;
       next.onsinch_order_id = res.created.id;
       next.onsinch_order_number = res.created.number;
+      next.onsinch_job_id = await readJobId(res.created.id, deps);
       next.last_ordered_hash = hashOrder(intended.desired);
       next.last_ordered_teams_hash = teamsHash;
       next.status = "ordered";
@@ -314,6 +340,7 @@ async function executeOrder(
       const created = await executor.createOrder(intended.desired);
       next.onsinch_order_id = created.id;
       next.onsinch_order_number = created.number;
+      next.onsinch_job_id = await readJobId(created.id, deps);
       next.last_ordered_hash = hashOrder(intended.desired);
       next.last_ordered_teams_hash = hashOrder(intended.desired.slot_teams);
       next.status = "ordered";

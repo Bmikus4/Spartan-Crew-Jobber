@@ -36,6 +36,7 @@ async function ensure(sql: NeonQueryFunction<false, false>): Promise<void> {
       place_id             INT,
       onsinch_order_id     BIGINT,
       onsinch_order_number TEXT,
+      onsinch_job_id       BIGINT,
       classification       TEXT,
       status               TEXT,
       is_client_inquiry    BOOLEAN,
@@ -68,6 +69,9 @@ async function ensure(sql: NeonQueryFunction<false, false>): Promise<void> {
   //
   // The invariant that DOES matter — never create a duplicate order for one job —
   // lives in resolve.matchExistingOrder and is untouched.
+  // The CREATE above only runs on an empty database, so a column added later has
+  // to be added here too or it exists in dev and nowhere else.
+  await sql`ALTER TABLE tickets ADD COLUMN IF NOT EXISTS onsinch_job_id BIGINT`;
   await sql`DROP INDEX IF EXISTS tickets_order_uniq`;
   await sql`CREATE INDEX IF NOT EXISTS tickets_order ON tickets (onsinch_order_id) WHERE onsinch_order_id IS NOT NULL`;
   await sql`CREATE INDEX IF NOT EXISTS tickets_updated ON tickets (updated_at DESC)`;
@@ -99,6 +103,7 @@ function project(s: ConversationState) {
     place_id: s.place_id ?? null,
     onsinch_order_id: s.onsinch_order_id ?? null,
     onsinch_order_number: s.onsinch_order_number ?? null,
+    onsinch_job_id: s.onsinch_job_id ?? null,
     classification: s.classification,
     status: s.status,
     is_client_inquiry: s.classification !== "not-a-job",
@@ -133,12 +138,12 @@ export async function upsertTicketFromState(s: ConversationState): Promise<void>
     await sql`
       INSERT INTO tickets (
         thread_id, subject, contact, company_id, user_id, place_id,
-        onsinch_order_id, onsinch_order_number, classification, status,
+        onsinch_order_id, onsinch_order_number, onsinch_job_id, classification, status,
         is_client_inquiry, gate_reason, priority, crew_size, dates, location,
         reply_state, reply_draft_id, ai_replied, needs_human, extracted, notes, updated_at)
       VALUES (
         ${s.thread_id}, ${p.subject}, ${p.contact}, ${p.company_id}, ${p.user_id}, ${p.place_id},
-        ${p.onsinch_order_id}, ${p.onsinch_order_number}, ${p.classification}, ${p.status},
+        ${p.onsinch_order_id}, ${p.onsinch_order_number}, ${p.onsinch_job_id}, ${p.classification}, ${p.status},
         ${p.is_client_inquiry}, ${p.gate_reason}, ${p.priority}, ${p.crew_size},
         ${JSON.stringify(p.dates)}, ${p.location},
         ${p.reply_state}, ${p.reply_draft_id}, ${p.ai_replied}, ${p.needs_human},
@@ -151,6 +156,7 @@ export async function upsertTicketFromState(s: ConversationState): Promise<void>
         place_id             = COALESCE(EXCLUDED.place_id, tickets.place_id),
         onsinch_order_id     = COALESCE(EXCLUDED.onsinch_order_id, tickets.onsinch_order_id),
         onsinch_order_number = COALESCE(EXCLUDED.onsinch_order_number, tickets.onsinch_order_number),
+        onsinch_job_id       = COALESCE(EXCLUDED.onsinch_job_id, tickets.onsinch_job_id),
         classification       = EXCLUDED.classification,
         status               = EXCLUDED.status,
         is_client_inquiry    = EXCLUDED.is_client_inquiry,
@@ -205,6 +211,7 @@ export async function getTicketDetail(thread_id: string): Promise<TicketDetail |
       place_id: r.place_id ?? null,
       order_id: r.onsinch_order_id ?? null,
       order_number: r.onsinch_order_number ?? null,
+      job_id: r.onsinch_job_id != null ? Number(r.onsinch_job_id) : null,
       classification: r.classification,
       status: r.status,
       priority: r.priority,
@@ -234,7 +241,7 @@ export async function listTickets(limit = 300): Promise<Job[]> {
   try {
     await ensure(sql);
     const rows = (await sql`
-      SELECT thread_id, subject, contact, company_id, onsinch_order_id, onsinch_order_number,
+      SELECT thread_id, subject, contact, company_id, onsinch_order_id, onsinch_order_number, onsinch_job_id,
              classification, status, priority, needs_human, ai_replied, crew_size, dates, location,
              is_client_inquiry, gate_reason,
              extract(epoch from updated_at) * 1000 AS ts
@@ -254,6 +261,7 @@ export async function listTickets(limit = 300): Promise<Job[]> {
       company_id: r.company_id ?? null,
       order_id: r.onsinch_order_id ?? null,
       order_number: r.onsinch_order_number ?? null,
+      job_id: r.onsinch_job_id != null ? Number(r.onsinch_job_id) : null,
       classification: r.classification,
       status: r.status,
       priority: r.priority,

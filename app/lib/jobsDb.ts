@@ -29,7 +29,10 @@ export interface Job {
   contact: string;
   company_id: number | null;
   order_id: number | null;
+  /** The R number a human searches on — `order.number`, not the api order id. */
   order_number: string | null;
+  /** The J number — `Job[0].id` of the order. See ConversationState. */
+  job_id?: number | null;
   classification: string;
   status: string;
   priority: string;
@@ -63,6 +66,7 @@ function toJob(s: ConversationState, updated_at: string): Job {
     company_id: s.company_id ?? null,
     order_id: s.onsinch_order_id ?? null,
     order_number: s.onsinch_order_number ?? null,
+    job_id: s.onsinch_job_id ?? null,
     classification: s.classification,
     status: s.status,
     priority: s.priority,

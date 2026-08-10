@@ -277,10 +277,10 @@ export function matchContact(email: string | undefined, clients: ClientRec[]): n
   return hit?.id ?? null;
 }
 
-export interface OrderRec { id: number; happening?: string; name?: string; Job?: { id: number }[] }
+export interface OrderRec { id: number; number?: string; happening?: string; name?: string; Job?: { id: number }[] }
 
 export type OrderMatch =
-  | { order_id: number; job_id?: number; by: "date" | "date+venue" }
+  | { order_id: number; order_number?: string; job_id?: number; by: "date" | "date+venue" }
   /** Several orders fit and nothing separates them. Never guessed at. */
   | { ambiguous: number; day: string };
 
@@ -325,7 +325,7 @@ export function matchExistingOrder(
   const sameDay = orders.filter((o) => (o.happening || "").slice(0, 10) === day);
   if (!sameDay.length) return null;
   if (sameDay.length === 1) {
-    return { order_id: sameDay[0].id, job_id: sameDay[0].Job?.[0]?.id, by: "date" };
+    return { order_id: sameDay[0].id, order_number: sameDay[0].number, job_id: sameDay[0].Job?.[0]?.id, by: "date" };
   }
 
   // More than one. Only the venue can separate them, and only if the thread names one.
@@ -339,7 +339,7 @@ export function matchExistingOrder(
       return venue === want || (venue.length >= 5 && want.includes(venue)) || (want.length >= 5 && venue.includes(want));
     });
     if (hits.length === 1) {
-      return { order_id: hits[0].id, job_id: hits[0].Job?.[0]?.id, by: "date+venue" };
+      return { order_id: hits[0].id, order_number: hits[0].number, job_id: hits[0].Job?.[0]?.id, by: "date+venue" };
     }
   }
   return { ambiguous: sameDay.length, day };

@@ -17,6 +17,7 @@ interface Props { isActive: boolean }
 interface Job {
   thread_id: string; subject: string; contact: string;
   company_id: number | null; order_id: number | null; order_number: string | null;
+  job_id?: number | null;
   classification: string; status: string; priority: string;
   needs_human: boolean; ai_replied: boolean; crew_size: number | null;
   is_client_inquiry?: boolean; gate_reason?: string | null;
@@ -32,6 +33,16 @@ const OK = "var(--ok)";
 const BORDER = "var(--border)";
 
 type Filter = "all" | "proposed" | "needs_human" | "failed" | "booked" | "dismissed";
+
+/**
+ * How to name an order in prose: the J number if we have it, else R, else the api id.
+ *
+ * `#{order_number ?? order_id}` was wrong in a way nobody could see — the same `#`
+ * printed a number from either space, so "order #10591" and "order #13682" could be
+ * the same order and a human had no way to tell which one to search for.
+ */
+const idLabel = (j: { job_id?: number | null; order_number?: string | null; order_id?: number | null }) =>
+  j.job_id ? `J${j.job_id}` : j.order_number ? `R${j.order_number}` : `api id ${j.order_id}`;
 
 /**
  * A thread the engine judged not to be a client enquiry. These were filtered out
@@ -95,7 +106,10 @@ function JobRow({ j, onSelect }: { j: Job; onSelect: (id: string) => void }) {
       <div style={{ display: "flex", alignItems: "center", gap: 12, flexShrink: 0 }}>
         {j.ai_replied && <CheckMark />}
         <span className="mono" style={{ fontSize: 12, color: j.order_number ? SUB : FAINT, width: 74, textAlign: "right" }}>
-          {j.order_number ? `#${j.order_number}` : j.status === "proposed" ? "staged" : "—"}
+          {/* Prefixed, and the J number preferred: this was a bare "#10591", which reads
+              as an id, is not one, and cannot be searched without knowing which of the
+              three number spaces it belongs to. */}
+          {j.job_id ? `J${j.job_id}` : j.order_number ? `R${j.order_number}` : j.status === "proposed" ? "staged" : "—"}
         </span>
         <span style={{ fontSize: 11, fontWeight: 700, color: b.color, background: b.bg, border: `1px solid ${b.bd}`, borderRadius: 999, padding: "4px 10px", whiteSpace: "nowrap", width: 118, textAlign: "center" }}>{b.label}</span>
       </div>
@@ -107,6 +121,42 @@ const PROFESSION_LABEL: Record<number, string> = {
   1: "Crew", 3: "Carpenter", 4: "Telehandler", 9: "Driver", 11: "Forklift",
   16: "AV Tech", 17: "Rough Terrain", 32: "CSCS", 36: "Crew Chief",
 };
+
+/**
+ * The identifiers a human types into OnSinch's search box: `J<Job.id>` for the job,
+ * `R<order.number>` for the order. Neither is the api order id, which is what this
+ * screen used to show — pasting 13645 into OnSinch finds nothing, while R10560 and
+ * J13925 both find that one job. Verified against a price quote OnSinch generated
+ * itself, and clients quote the J number back at us ("PO for Job J13918").
+ *
+ * Click to copy, because the point of the number is to leave with it.
+ */
+function IdChip({ prefix, value, title }: { prefix: "J" | "R"; value: string | number; title: string }) {
+  const [copied, setCopied] = useState(false);
+  const text = `${prefix}${value}`;
+  return (
+    <button
+      title={`${title} — click to copy`}
+      onClick={(e) => {
+        e.stopPropagation();
+        void navigator.clipboard?.writeText(text).then(
+          () => { setCopied(true); setTimeout(() => setCopied(false), 1200); },
+          () => {}
+        );
+      }}
+      className="mono"
+      style={{
+        fontSize: 12.5, fontWeight: 700, letterSpacing: "0.02em", cursor: "pointer",
+        color: copied ? OK : prefix === "J" ? INK : SUB,
+        background: prefix === "J" ? "var(--surface-2)" : "transparent",
+        border: `1px solid ${copied ? "rgba(52,211,153,0.5)" : BORDER}`,
+        borderRadius: 7, padding: "3px 9px", transition: "all 160ms",
+      }}
+    >
+      {copied ? "copied" : text}
+    </button>
+  );
+}
 
 function Panel({ title, children }: { title: string; children: React.ReactNode }) {
   return (
@@ -189,6 +239,15 @@ function Detail({ threadId, onBack, onChanged }: { threadId: string; onBack: () 
             {d.ai_replied && <CheckMark />}
           </div>
           <p style={{ fontSize: 13, color: MUT, margin: "4px 0 0" }}>{d.subject}</p>
+          {/* Sits in the header, not buried in Details, because "which job is this
+              in OnSinch" is the first question asked of an open ticket. */}
+          {(d.job_id || d.order_number) && (
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 10, flexWrap: "wrap" }}>
+              {d.job_id ? <IdChip prefix="J" value={d.job_id} title="OnSinch job number" /> : null}
+              {d.order_number ? <IdChip prefix="R" value={d.order_number} title="OnSinch order number" /> : null}
+              <span style={{ fontSize: 11.5, color: FAINT }}>search this in OnSinch</span>
+            </div>
+          )}
         </header>
 
         <Panel title="AI decision">
@@ -252,7 +311,7 @@ function Detail({ threadId, onBack, onChanged }: { threadId: string; onBack: () 
                           {confirming
                             ? "Sending to OnSinch…"
                             : isEdit
-                            ? `Update order #${d.order_number ?? d.order_id}`
+                            ? `Update order ${idLabel(d)}`
                             : "Create draft order"}
                         </button>
                         <span style={{ fontSize: 12, color: MUT }}>
@@ -265,7 +324,7 @@ function Detail({ threadId, onBack, onChanged }: { threadId: string; onBack: () 
                         <div style={{ background: "rgba(245,158,11,0.1)", border: "1px solid rgba(245,158,11,0.3)", borderRadius: 8, padding: "9px 12px", fontSize: 12, color: SUB }}>
                           Crew numbers and times are <b>not</b> applied automatically on an existing
                           order — OnSinch gives no way to edit its shift blocks. Enter those by hand on
-                          order <b>#{d.order_number ?? d.order_id}</b>; the slot teams listed above are what
+                          order <b>{idLabel(d)}</b>; the slot teams listed above are what
                           this thread asks for.
                         </div>
                       )}
@@ -286,8 +345,8 @@ function Detail({ threadId, onBack, onChanged }: { threadId: string; onBack: () 
                 // the summary went, and the notes say what is still by hand.
                 <div style={{ borderTop: `1px solid ${BORDER}`, marginTop: 4, paddingTop: 12, fontSize: 12.5, color: MUT }}>
                   {d.needs_human
-                    ? <>Partly applied to OnSinch order <b style={{ color: SUB }}>#{d.order_number ?? d.order_id}</b> — the notes above say what is left to do by hand.</>
-                    : <>Written to OnSinch{d.order_number ? <> as <b style={{ color: SUB }}>#{d.order_number}</b></> : null}.</>}
+                    ? <>Partly applied to OnSinch order <b style={{ color: SUB }}>{idLabel(d)}</b> — the notes above say what is left to do by hand.</>
+                    : <>Written to OnSinch{d.order_number || d.job_id ? <> as <b style={{ color: SUB }}>{idLabel(d)}</b></> : null}.</>}
                 </div>
               ) : null}
             </div>
@@ -306,7 +365,13 @@ function Detail({ threadId, onBack, onChanged }: { threadId: string; onBack: () 
           <Row k="Company id" v={d.company_id} />
           <Row k="Contact id" v={d.user_id} />
           <Row k="Place id" v={d.place_id} />
-          <Row k="OnSinch order" v={d.order_number ? `#${d.order_number}` : d.order_id} />
+          {/* All three, labelled for what they are. The api id is the one the engine
+              writes with and the one OnSinch's UI never shows, so it is listed last
+              and never on its own — it was previously the only id here, under a
+              label ("OnSinch order") that implied it was searchable. */}
+          <Row k="Job number" v={d.job_id ? `J${d.job_id}` : null} />
+          <Row k="Order number" v={d.order_number ? `R${d.order_number}` : null} />
+          <Row k="Order api id" v={d.order_id} />
           <Row k="Dates" v={d.dates?.join(", ")} />
           <Row k="Location" v={d.location} />
           <Row k="Reply" v={d.reply_state} />

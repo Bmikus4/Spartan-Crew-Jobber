@@ -158,7 +158,11 @@ for (const { order, decision } of buckets.linked) {
   try {
     await sql`
       UPDATE tickets SET onsinch_order_id = ${order.id},
-                         onsinch_order_number = COALESCE(onsinch_order_number, ${String(order.id)}),
+                         -- order.number, NOT order.id. This wrote the api id into the
+                         -- order-NUMBER column, so a ticket linked by this script claimed
+                         -- an R number that does not exist (api 13645 is order R10560).
+                         onsinch_order_number = COALESCE(onsinch_order_number, ${order.number != null ? String(order.number) : null}),
+                         onsinch_job_id = COALESCE(onsinch_job_id, ${firstJob(order).id ?? null}),
                          updated_at = now()
       WHERE thread_id = ${decision.thread_id} AND onsinch_order_id IS NULL`;
     await sql`INSERT INTO ticket_events (thread_id, kind, meta)

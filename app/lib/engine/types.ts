@@ -158,7 +158,19 @@ export interface ConversationState {
 
   // the order this thread maps to (dedup: thread -> order)
   onsinch_order_id?: number;
+  /**
+   * The identifiers a human types into OnSinch, which are NOT the api ids:
+   * the order is `R<order.number>` and the job inside it is `J<Job.id>`.
+   * Verified against the tenant — a price-quote attachment OnSinch generated
+   * itself reads "R10560 … J13925", and `GET /orders?number=10560&with=Job`
+   * returns api id 13645 with `Job[0].id` 13925. So the api order id (13645)
+   * appears in neither, and pasting it into the search box finds nothing.
+   *
+   * Clients quote the J number back at us unprompted ("PO for Job J13918"), so
+   * it is the one identifier both sides of the conversation share.
+   */
   onsinch_order_number?: string;
+  onsinch_job_id?: number;
 
   desired_order: DesiredOrder | null; // null => info-only / not a job
   last_ordered_hash?: string;         // hash of the last order we actually sent

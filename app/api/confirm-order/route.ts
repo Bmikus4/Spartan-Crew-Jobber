@@ -29,6 +29,8 @@ export async function POST(request: Request): Promise<Response> {
     return Response.json({
       ok: true, thread_id, status: state.status,
       onsinch_order_id: state.onsinch_order_id ?? null,
+      onsinch_order_number: state.onsinch_order_number ?? null,
+      onsinch_job_id: state.onsinch_job_id ?? null, // the J number, what a human searches on
       confirmed_by: caller.actor, // who approved it, for the audit trail
       notes: state.notes,
     });

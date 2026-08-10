@@ -526,6 +526,10 @@ export async function compile(
   let user_id = prior?.user_id;
   let place_id = prior?.place_id;
   let linkedOrderId = prior?.onsinch_order_id;
+  // Carried alongside the api id because they are what a human searches on. Both
+  // come free with the dedup lookup, which already pulls `with=Job`.
+  let linkedOrderNumber = prior?.onsinch_order_number;
+  let linkedJobId = prior?.onsinch_job_id;
   let provisionPlace: DesiredOrder["provision_place"];
   let provisionCompany: DesiredOrder["provision_company"];
   /** Things only the client can tell us, without which no order can be built. */
@@ -581,8 +585,10 @@ export async function compile(
       );
       if (existing && "order_id" in existing) {
         linkedOrderId = existing.order_id;
+        linkedOrderNumber = existing.order_number ?? linkedOrderNumber;
+        linkedJobId = existing.job_id ?? linkedJobId;
         notes.push(
-          `matched existing OnSinch order #${existing.order_id} (${existing.by === "date+venue" ? "same date and venue" : "same date"}) — will update, not create`
+          `matched existing OnSinch order #${existing.order_id}${existing.job_id ? ` (job J${existing.job_id})` : ""} (${existing.by === "date+venue" ? "same date and venue" : "same date"}) — will update, not create`
         );
       } else if (existing) {
         // Deliberately does NOT fall through to creating a new order: on an update
@@ -838,7 +844,8 @@ export async function compile(
     user_id,
     place_id,
     onsinch_order_id: linkedOrderId,
-    onsinch_order_number: prior?.onsinch_order_number,
+    onsinch_order_number: linkedOrderNumber,
+    onsinch_job_id: linkedJobId,
     desired_order: desired,
     last_ordered_hash: prior?.last_ordered_hash,
     priority: cls.priority,

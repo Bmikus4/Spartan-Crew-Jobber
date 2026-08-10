@@ -264,6 +264,16 @@ export function executor(client: OnsinchClient): Executor {
       await client.patchOrder([body as { id: number }]);
       return applied;
     },
+    /**
+     * `J<id>` — the identifier ops and clients both search on. Only obtainable by
+     * reading the order back: POST /orders returns the order id alone, and there is
+     * no GET /jobs at all (see the API reference).
+     */
+    async jobIdForOrder(order_id: number) {
+      const live = (await client.orderById(order_id)) as { Job?: { id: number }[] } | null;
+      const job = Array.isArray(live?.Job) ? live?.Job?.[0] : (live?.Job as { id: number } | undefined);
+      return job?.id != null ? Number(job.id) : undefined;
+    },
   };
 }
 
