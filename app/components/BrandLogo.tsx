@@ -1,23 +1,49 @@
-// Spartan Crew logo (from the supplied wordmark SVG). The letterforms use
-// currentColor so they read white on the dark theme and near-black on light;
-// the arrow mark keeps its brand red/grey. Expanded shows the full wordmark;
-// condensed crops the viewBox to just the arrow mark for the collapsed rail.
+// The Spartan Crew mark, in two pieces that are never resized.
+//
+// It used to be ONE svg that swapped its viewBox and its width between the rail's
+// two states — cropped to the arrow when condensed, the full wordmark when open. A
+// viewBox swap is not an animation: the geometry jumps, and because the width jumped
+// with it the whole logo band snapped. That is the "tweaking" on expand.
+//
+// So the arrow and the letters are separate elements at FIXED size. The arrow lives
+// in the rail's 40px icon column and never moves; the wordmark sits beside it and
+// fades in on the same clock as every other label. Nothing interpolates a shape.
+//
+// The letterforms use currentColor so they read white on the dark theme and near-black
+// on the tan one; the arrow keeps its brand red and grey.
 
 const WORDMARK = "currentColor";
 
-export default function BrandLogo({ condensed = false }: { condensed?: boolean }) {
-  const h = condensed ? 26 : 30;
-  const viewBox = condensed ? "645 0 152 195" : "0 0 793.701 194.42";
-  const width = condensed ? h * (152 / 195) : h * (793.701 / 194.42);
+/** The arrow alone — the rail's permanent mark. */
+export function BrandMark({ height = 26 }: { height?: number }) {
   return (
     <svg
-      height={h}
-      width={width}
-      viewBox={viewBox}
+      height={height}
+      width={height * (152 / 195)}
+      viewBox="645 0 152 195"
       xmlns="http://www.w3.org/2000/svg"
       role="img"
       aria-label="Spartan Crew"
-      style={{ display: "block", color: "var(--text-primary)" }}
+      style={{ display: "block", flexShrink: 0 }}
+    >
+      <polygon fill="#C72218" points="756.59,48.431 647.574,193.112 721.796,193.112 793.701,97.685" />
+      <polygon fill="#878787" points="751.377,41.73 721.796,2.254 647.574,2.254 714.267,90.985" />
+    </svg>
+  );
+}
+
+/** The letters alone — "SPARTAN Crew", no arrow. Cropped to the type so it can sit
+ *  beside the mark rather than carrying its own copy of it. */
+export function BrandWordmark({ height = 22 }: { height?: number }) {
+  const vbW = 640, vbH = 195;
+  return (
+    <svg
+      height={height}
+      width={height * (vbW / vbH)}
+      viewBox={`0 0 ${vbW} ${vbH}`}
+      xmlns="http://www.w3.org/2000/svg"
+      aria-hidden
+      style={{ display: "block", flexShrink: 0, color: "var(--text-primary)" }}
     >
       <g>
         <path fill={WORDMARK} d="M410.633,174.124c-6.455,13.003-18.519,20.297-33.203,20.297c-8.138,0-15.06-2.243-20.485-6.64c-7.294-5.894-11.317-14.497-11.317-23.945c0-10.382,3.929-20.202,11.129-27.685c6.643-6.92,15.901-10.852,26.096-10.852c15.527,0,27.592,8.698,31.427,23.104h-10.85c-3.553-9.072-11.13-14.028-20.952-14.028c-6.921,0-13.281,2.712-18.333,7.947c-4.958,5.241-8.043,12.817-8.043,20.389c0,13.47,9.073,22.542,21.138,22.542c8.887,0,16.931-4.113,21.515-11.129H410.633z" />
@@ -31,9 +57,20 @@ export default function BrandLogo({ condensed = false }: { condensed?: boolean }
         <path fill={WORDMARK} d="M360.109,37.029c0-22.217-14.813-34.776-42.503-34.776h-35.259l-15.896,80.16l5.943,33.528l0.138,0.782h15.129l8.372-41.214l21.412,41.214h31.717L325.978,75.67C347.874,70.679,360.109,56.189,360.109,37.029z M309.879,55.866h-10.628l5.798-29.301c1.609,0,3.22-0.162,4.67-0.162c13.843,0,19.641,3.704,19.641,14.651C329.36,51.84,322.921,55.866,309.879,55.866z" />
         <path fill={WORDMARK} d="M467.533,2.253h28.497l20.285,114.47h-29.302l-2.738-16.584H444.51l-7.891,16.584h-32.84L467.533,2.253z M475.262,35.259l-18.516,39.765h23.986L475.262,35.259z" />
         <polygon fill={WORDMARK} points="594.607,2.253 581.725,74.221 557.415,2.253 528.115,2.253 514.885,70.413 522.953,115.941 523.093,116.723 533.267,116.723 546.309,46.206 572.874,116.723 600.243,116.723 622.458,2.253" />
-        <polygon fill="#C72218" points="756.59,48.431 647.574,193.112 721.796,193.112 793.701,97.685" />
-        <polygon fill="#878787" points="751.377,41.73 721.796,2.254 647.574,2.254 714.267,90.985" />
       </g>
     </svg>
+  );
+}
+
+/**
+ * The whole lockup, for anywhere that is not the rail (the login window).
+ * Kept as the default export so existing call sites are unaffected.
+ */
+export default function BrandLogo({ height = 30 }: { height?: number; condensed?: boolean }) {
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: height * 0.3 }}>
+      <BrandWordmark height={height * 0.72} />
+      <BrandMark height={height * 0.86} />
+    </div>
   );
 }

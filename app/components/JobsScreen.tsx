@@ -66,13 +66,20 @@ const isDismissed = (j: Job) =>
  * TOKEN rather than a hex literal — a literal freezes the dark value, and then the
  * light theme cannot darken it (see --warn, which was exactly that).
  */
-type TagTone = "neutral" | "accent" | "green" | "amber" | "red";
+type TagTone = "neutral" | "accent" | "green" | "amber" | "red" | "blue" | "teal" | "violet";
 const TAG_TONES: Record<TagTone, string> = {
   neutral: MUT,
   accent: A,
   green: "var(--ok)",
   amber: "var(--warn)",
   red: "var(--danger)",
+  // The identity hues. A J number and an R number are different KINDS of thing, and
+  // "new job" and "a change to one" are the distinction an operator scans for first —
+  // so each gets a colour that cannot be confused with a status (Ben, 2026-08-10:
+  // "all of their tags including all of their numbers, J, R etc. all color coded").
+  blue: "var(--viz-blue)",
+  teal: "var(--viz-teal)",
+  violet: "var(--viz-violet)",
 };
 
 function badge(j: Job): { label: string; tone: TagTone; title: string } {
@@ -117,7 +124,7 @@ function Tag({ label, tone, title, mono = false }: { label: string; tone: TagTon
       className={mono ? "mono" : undefined}
       style={{
         display: "inline-flex", alignItems: "center", gap: 5,
-        padding: "2px 7px", borderRadius: 4, fontSize: 11, fontWeight: 500,
+        padding: "3px 8px", borderRadius: 4, fontSize: 11.5, fontWeight: 500,
         letterSpacing: 0, textTransform: "none", whiteSpace: "nowrap", lineHeight: 1.5,
         background: "transparent", color: SUB, border: `1px solid ${BORDER_STRONG}`,
       }}
@@ -128,6 +135,42 @@ function Tag({ label, tone, title, mono = false }: { label: string; tone: TagTon
   );
 }
 
+/**
+ * Every tag a row carries, in one order that never changes: what KIND of thread it
+ * is, what STATE it is in, then the identifiers a person searches OnSinch with.
+ *
+ * A fixed order is the point. Scanning a list works when the same question is
+ * answered in the same position on every row — so "New" and "Update" occupy one slot
+ * whichever it is, and the J number is always the last thing before the reply mark.
+ */
+function rowTags(j: Job): { label: string; tone: TagTone; title: string; mono?: boolean }[] {
+  const tags: { label: string; tone: TagTone; title: string; mono?: boolean }[] = [];
+
+  // KIND. This was shown for an update only, as small grey uppercase text beside the
+  // client name — so a new enquiry was identified by the ABSENCE of a marker, which
+  // is not something you can scan for.
+  if (!isDismissed(j)) {
+    tags.push(j.classification === "update"
+      ? { label: "Update", tone: "violet", title: "A change to a job that already exists" }
+      : { label: "New job", tone: "teal", title: "A first request for crew on this thread" });
+  }
+
+  // STATE.
+  const b = badge(j);
+  tags.push({ label: b.label, tone: b.tone, title: b.title });
+
+  // IDENTITY. Both numbers, both prefixed, both coloured — the J number is what a
+  // client quotes back at us and the R number is what the order is called in OnSinch.
+  if (j.job_id) tags.push({ label: `J${j.job_id}`, tone: "blue", title: "OnSinch job number — search this", mono: true });
+  if (j.order_number) tags.push({ label: `R${j.order_number}`, tone: "amber", title: "OnSinch order number", mono: true });
+  // A staged order has no number yet, and saying so is worth a slot: it is the
+  // difference between "not booked" and "booked, number pending".
+  if (!j.job_id && !j.order_number && j.status === "proposed") {
+    tags.push({ label: "No number yet", tone: "neutral", title: "Staged — OnSinch assigns the number when the order is written" });
+  }
+  return tags;
+}
+
 function CheckMark() {
   return (
     <span title="AI reply drafted" style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 20, height: 20, borderRadius: 9999, background: "rgba(52,211,153,0.14)", border: "1px solid rgba(52,211,153,0.4)" }}>
@@ -136,8 +179,16 @@ function CheckMark() {
   );
 }
 
+/**
+ * One thread, as a card.
+ *
+ * It was a single squeezed line — client, subject, meta on the left and two items in a
+ * fixed right-hand column — which left room for exactly ONE tag and one identifier, so
+ * everything else about the thread was invisible until you opened it. It is a card
+ * with a full tag line now: kind, state, and both OnSinch numbers, every one coloured
+ * (Ben, 2026-08-10).
+ */
 function JobRow({ j, onSelect }: { j: Job; onSelect: (id: string) => void }) {
-  const b = badge(j);
   const dismissed = isDismissed(j);
   // For a dismissed thread the reason IS the information — "not a job" on its own
   // tells you nothing about whether the engine was right to drop it.
@@ -149,32 +200,22 @@ function JobRow({ j, onSelect }: { j: Job; onSelect: (id: string) => void }) {
         j.location,
       ].filter(Boolean).join("  ·  ");
   return (
-    <div onClick={() => onSelect(j.thread_id)} style={{ background: "var(--surface)", border: `1px solid ${BORDER}`, borderRadius: "var(--radius)", padding: "14px 16px", display: "flex", alignItems: "center", gap: 14, cursor: "pointer" }}>
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 3 }}>
-          <span style={{ fontSize: 14, fontWeight: 700, color: INK, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{j.contact}</span>
-          {j.classification === "update" && <Tag label="Update" tone="neutral" title="A change to a job that already exists" />}
-        </div>
-        <div style={{ fontSize: 12.5, color: SUB, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{j.subject}</div>
-        {meta && <div style={{ fontSize: 11.5, color: MUT, marginTop: 3, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{meta}</div>}
+    <div
+      onClick={() => onSelect(j.thread_id)}
+      role="button" tabIndex={0}
+      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onSelect(j.thread_id); } }}
+      style={{ background: "var(--surface)", border: `1px solid ${BORDER}`, borderRadius: "var(--radius)", padding: "16px 18px", display: "flex", flexDirection: "column", gap: 9, cursor: "pointer" }}
+    >
+      <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12 }}>
+        <span style={{ fontSize: 15.5, fontWeight: 700, color: INK, letterSpacing: "-0.01em", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{j.contact}</span>
+        {/* The reply mark stays right-aligned on its own axis: it is the one thing on
+            the card that is about the ENGINE rather than the job. */}
+        {j.ai_replied && <span style={{ flexShrink: 0 }}><CheckMark /></span>}
       </div>
-
-      {/* The status keeps its own right-hand column so it stays scannable down a long
-          list — the tag inside it is now natural-width, where the pill was pinned to
-          118px and centred, which is what made it read as a button. */}
-      <div style={{ display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
-        {j.ai_replied && <CheckMark />}
-        {/* The identifier is a tag too, in mono and toneless: it names the job rather
-            than classifying it, so a coloured dot would imply a status it does not have.
-            Prefixed, and the J number preferred — this was a bare "#10591", which reads
-            as an id, is not one, and cannot be searched without knowing which of the
-            three number spaces it belongs to. */}
-        <span className="mono" style={{ fontSize: 11, color: j.job_id || j.order_number ? SUB : FAINT, minWidth: 62, textAlign: "right" }}>
-          {j.job_id ? `J${j.job_id}` : j.order_number ? `R${j.order_number}` : j.status === "proposed" ? "staged" : "—"}
-        </span>
-        <span style={{ display: "flex", justifyContent: "flex-end", minWidth: 116 }}>
-          <Tag label={b.label} tone={b.tone} title={b.title} />
-        </span>
+      <div style={{ fontSize: 13.5, color: SUB, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{j.subject}</div>
+      {meta && <div style={{ fontSize: 12, color: MUT, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{meta}</div>}
+      <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", marginTop: 1 }}>
+        {rowTags(j).map((t) => <Tag key={t.label} label={t.label} tone={t.tone} title={t.title} mono={t.mono} />)}
       </div>
     </div>
   );
@@ -192,14 +233,14 @@ const PROFESSION_LABEL: Record<number, string> = {
  * J13925 both find that one job. Verified against a price quote OnSinch generated
  * itself, and clients quote the J number back at us ("PO for Job J13918").
  *
- * Click to copy, because the point of the number is to leave with it. Wears the
- * tag shape with no swatch — it names the job rather than classifying it, and a
- * coloured dot would imply a status it does not carry. The tick on copy is the one
- * moment colour belongs on it.
+ * Click to copy, because the point of the number is to leave with it. It carries the
+ * SAME swatch colour the board's rows give it — blue for a J number, amber for an R —
+ * so the thing you searched by on the list is the same colour on the ticket.
  */
 function IdChip({ prefix, value, title }: { prefix: "J" | "R"; value: string | number; title: string }) {
   const [copied, setCopied] = useState(false);
   const text = `${prefix}${value}`;
+  const tone: TagTone = prefix === "J" ? "blue" : "amber";
   return (
     <button
       title={`${title} — click to copy`}
@@ -213,15 +254,16 @@ function IdChip({ prefix, value, title }: { prefix: "J" | "R"; value: string | n
       className="mono"
       style={{
         display: "inline-flex", alignItems: "center", gap: 5, cursor: "pointer",
-        padding: "2px 7px", borderRadius: 4, fontSize: 11.5, fontWeight: 500,
+        padding: "3px 8px", borderRadius: 4, fontSize: 12, fontWeight: 500,
         // No fontFamily here: an inline value would beat the .mono class it needs.
         lineHeight: 1.5, whiteSpace: "nowrap",
         background: "transparent",
-        color: copied ? "var(--ok)" : prefix === "J" ? INK : SUB,
+        color: copied ? "var(--ok)" : INK,
         border: `1px solid ${copied ? "var(--ok)" : BORDER_STRONG}`,
         transition: "color 160ms, border-color 160ms",
       }}
     >
+      <Swatch color={copied ? "var(--ok)" : TAG_TONES[tone]} />
       {copied ? "Copied" : text}
     </button>
   );
@@ -304,6 +346,11 @@ function Detail({ threadId, onBack, onChanged }: { threadId: string; onBack: () 
         <header>
           <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
             <h1 style={{ fontSize: 24, fontWeight: 700, color: INK, margin: 0 }}>{d.contact}</h1>
+            {/* Same two tags in the same order as the row you clicked, so the ticket
+                confirms what the list told you rather than restating it differently. */}
+            {!isDismissed(d) && (d.classification === "update"
+              ? <Tag label="Update" tone="violet" title="A change to a job that already exists" />
+              : <Tag label="New job" tone="teal" title="A first request for crew on this thread" />)}
             <Tag label={b.label} tone={b.tone} title={b.title} />
             {d.ai_replied && <CheckMark />}
           </div>

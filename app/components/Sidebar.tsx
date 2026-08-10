@@ -2,20 +2,25 @@
 
 // The left navigation rail.
 //
-// Condensed to an icon strip, EXPANDING ON HOVER — the same rebuild the quote tool
-// took. There is no toggle to find and no collapse state to persist, because the
-// pointer is the control. What it replaced was a click-toggle with its state in
-// localStorage and a 20px chevron floating halfway down the rail's right edge: an
-// affordance you had to discover, remembering a decision you made once, for three
-// items. Keyboard users get the same thing through :focus-within.
+// It is NOT a panel. Transparent, no border, no radius, no shadow, flush to the
+// window edge — so the content panel is the only framed thing on screen and the
+// navigation reads as part of the ground it sits on. It used to wear .frosted-glass
+// with a margin, which made it a second floating card competing with the one that
+// holds the work.
 //
-// Mobile is a bottom bar rather than a drawer, and it now carries LABELS. Icon-only
-// it could not say which surface you were on: the active colour was --accent, and
-// Spartan's accent is a near-white steel that is indistinguishable from the
-// --text-primary the inactive icons already wore.
+// Condensed to an icon strip, expanding on hover. Two details that are the whole
+// difference between smooth and jittery, both learned from the quote tool's rail:
+//
+//   1. ONLY THE ROWS OPEN IT. A hover handler on the container throws the whole nav
+//      open when the pointer merely crosses the left edge of the screen on its way
+//      somewhere else. Leaving is handled at the container, because the pointer can
+//      exit from anywhere.
+//   2. NOTHING MOVES HORIZONTALLY. Row padding is constant and the icon sits in a
+//      fixed 40px column, so expanding only fades the labels in. The old rail changed
+//      its padding between states, which slid every icon sideways mid-slide.
 
 import { useEffect, useState } from "react";
-import BrandLogo from "./BrandLogo";
+import { BrandMark, BrandWordmark } from "./BrandLogo";
 
 interface NavItemConfig {
   id: string;
@@ -58,9 +63,7 @@ function IconJobs() {
 }
 
 // Settings is an ordinary row at the END of the list, not a pinned footer bay with
-// its own divider — the same call the quote tool made (Ben, 2026-08-09). It opens a
-// screen exactly like the other rows do, so a separate bay was drawing a
-// distinction that is not there.
+// its own divider — the same call the quote tool made (Ben, 2026-08-09).
 const NAV_ITEMS: NavItemConfig[] = [
   { id: "dashboard", label: "Dashboard", icon: <IconDashboard /> },
   { id: "jobs", label: "Jobs Board", icon: <IconJobs /> },
@@ -78,10 +81,7 @@ function MobileBottomBar({ activeTool, onSelectTool, onSettings }: SidebarProps)
             aria-current={active ? "page" : undefined}
             style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 3, background: "none", border: "none", cursor: "pointer", color: active ? "var(--text-primary)" : "var(--text-muted)", padding: 0, minWidth: 44 }}>
             <span style={{ display: "flex", transform: "scale(0.72)" }}>{item.icon}</span>
-            {/* The label is what actually says where you are on a phone. */}
             <span style={{ fontSize: 10, fontWeight: active ? 700 : 500, letterSpacing: "0.01em", lineHeight: 1 }}>{item.label}</span>
-            {/* And an underline, because on a near-monochrome palette weight alone
-                is too quiet to mark the current tab. */}
             <span aria-hidden style={{ width: 16, height: 2, borderRadius: 2, background: active ? "var(--accent)" : "transparent" }} />
           </button>
         );
@@ -106,6 +106,13 @@ export default function Sidebar({ activeTool, onSelectTool, onSettings }: Sideba
 
   const isCondensed = !expanded;
   const width = expanded ? "var(--nav-w-expanded)" : "var(--nav-w-condensed)";
+  // One clock for everything that fades as the rail opens: the labels and the
+  // wordmark. Declared once so they cannot drift apart.
+  const fade: React.CSSProperties = {
+    opacity: isCondensed ? 0 : 1,
+    visibility: isCondensed ? "hidden" : "visible",
+    transition: "opacity var(--nav-dur) var(--nav-ease), visibility var(--nav-dur)",
+  };
 
   function renderButton(item: NavItemConfig, opts: { active: boolean; onClick: () => void }) {
     const isHovered = hoveredItem === item.id;
@@ -119,27 +126,29 @@ export default function Sidebar({ activeTool, onSelectTool, onSettings }: Sideba
       <button
         onClick={opts.onClick}
         aria-current={active ? "page" : undefined}
-        onMouseEnter={() => setHoveredItem(item.id)}
+        // The ROW opens the rail — see the note at the top of this file.
+        onMouseEnter={() => { setHoveredItem(item.id); setExpanded(true); }}
         onMouseLeave={() => setHoveredItem(null)}
+        onFocus={() => { setHoveredItem(item.id); setExpanded(true); }}
+        onBlur={() => setHoveredItem(null)}
         title={isCondensed ? item.label : undefined}
         style={{
-          width: "100%", display: "flex", alignItems: "center", justifyContent: "flex-start", gap: 0,
-          padding: isCondensed ? "3px 2px" : "3px 11px",
+          width: "100%", display: "flex", alignItems: "center", gap: 12,
+          // CONSTANT. Padding that changed with the state slid every icon sideways
+          // while the rail was still sliding.
+          padding: "3px 6px",
           backgroundColor: isCondensed ? "transparent" : fill,
           border: `1px solid ${!isCondensed && active ? "var(--accent-border)" : "transparent"}`,
           borderRadius: "var(--nav-item-radius)",
           boxShadow: !isCondensed && active ? NAV_BEVEL_SHADOW : "none",
-          cursor: "pointer", color: iconColor, position: "relative",
-          transition: "background-color 250ms, color 250ms, box-shadow 250ms, border-color 250ms, padding var(--nav-dur) var(--nav-ease)",
+          cursor: "pointer", color: iconColor, position: "relative", textAlign: "left",
+          transition: "background-color 250ms, color 250ms, box-shadow 250ms, border-color 250ms",
         }}
       >
         <span style={{ flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", color: iconColor, width: "var(--nav-icon-box)", height: "var(--nav-icon-box)", borderRadius: "var(--nav-item-radius)", backgroundColor: isCondensed ? fill : "transparent", border: `1px solid ${isCondensed && active ? "var(--accent-border)" : "transparent"}`, boxShadow: isCondensed && active ? NAV_BEVEL_SHADOW : "none", transition: "background-color 250ms, color 250ms" }}>
           {item.icon}
         </span>
-        {/* aria-hidden while condensed: the label is still in the DOM (it has to be,
-            or expanding would reflow the row), but it is 0-opacity decoration then,
-            and the accessible name comes from the title. */}
-        <span aria-hidden={isCondensed} style={{ flex: 1, minWidth: 0, textAlign: "left", fontSize: 14, fontWeight: 500, color: labelColor, whiteSpace: "nowrap", overflow: "hidden", marginLeft: isCondensed ? 0 : 12, opacity: isCondensed ? 0 : 1, transition: "color 250ms, opacity 250ms, margin-left var(--nav-dur) var(--nav-ease)" }}>
+        <span aria-hidden={isCondensed} style={{ ...fade, fontSize: 14, fontWeight: 500, color: labelColor, whiteSpace: "pre", transition: `${fade.transition}, color 250ms` }}>
           {item.label}
         </span>
       </button>
@@ -148,19 +157,31 @@ export default function Sidebar({ activeTool, onSelectTool, onSettings }: Sideba
 
   return (
     <nav
-      role="navigation" aria-label="Main sidebar navigation" className="frosted-glass nav-rail"
-      // Hover OR keyboard focus opens it. focus-within is what keeps the rail
-      // reachable without a pointer, since there is no longer a toggle to tab to.
-      onMouseEnter={() => setExpanded(true)}
+      role="navigation" aria-label="Main sidebar navigation" className="nav-rail"
+      // Collapsing lives here, because the pointer can leave from anywhere.
       onMouseLeave={() => setExpanded(false)}
-      onFocus={() => setExpanded(true)}
       onBlur={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setExpanded(false); }}
-      style={{ width, minWidth: width, height: "calc(100% - var(--shell-double-pad))", margin: "var(--shell-pad) 0 var(--shell-pad) var(--shell-pad)", display: "flex", flexDirection: "column", transition: "width var(--nav-dur) var(--nav-ease), min-width var(--nav-dur) var(--nav-ease)", position: "relative", zIndex: 100, overflowY: "auto", overflowX: "hidden", borderRadius: "var(--radius-lg)" }}
+      style={{
+        width, minWidth: width, height: "100%",
+        background: "transparent", border: "none", borderRadius: 0, boxShadow: "none",
+        // The rail's own top padding IS the shell inset, now that it runs edge to
+        // edge — without it the logo band starts at y=0 while the content panel
+        // starts at --shell-pad, and the mark loses the header line it aligns to.
+        paddingTop: "var(--shell-pad)",
+        display: "flex", flexDirection: "column",
+        transition: "width var(--nav-dur) var(--nav-ease), min-width var(--nav-dur) var(--nav-ease)",
+        position: "relative", zIndex: 100, overflowY: "auto", overflowX: "hidden",
+      }}
     >
-      <div style={{ padding: "16px 10px 19px", display: "flex", justifyContent: "center" }}>
-        <div style={{ height: 42, display: "flex", alignItems: "center", justifyContent: "center" }}>
-          <BrandLogo condensed={isCondensed} />
-        </div>
+      {/* The logo band is exactly as tall as the content window's header bar, so the
+          mark sits on the same line as the "/ DASHBOARD" eyebrow beside it rather
+          than riding above it. Its left padding matches the rows', so the arrow and
+          every icon below share one 40px column. */}
+      <div style={{ display: "flex", alignItems: "center", gap: 12, height: "var(--panel-header-height)", padding: "0 6px", marginBottom: 10, flexShrink: 0 }}>
+        <span style={{ width: "var(--nav-icon-box)", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <BrandMark height={26} />
+        </span>
+        <span style={fade}><BrandWordmark height={19} /></span>
       </div>
 
       <div style={{ display: "flex", flexDirection: "column", gap: 2, padding: "0 8px" }}>

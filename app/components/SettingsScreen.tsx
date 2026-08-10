@@ -57,6 +57,36 @@ function Panel({ title, blurb, children }: { title: string; blurb?: React.ReactN
   );
 }
 
+/**
+ * Both icons ship and `data-theme` decides which shows (.theme-toggle in
+ * globals.css). There is no theme state in React: the attribute IS the state, set
+ * before React exists by the boot script in layout.tsx, so a second copy here could
+ * only ever disagree with it.
+ *
+ * It lives in the footer of THIS screen, where the quote tool keeps it (Ben,
+ * 2026-08-10). It was in the header of every screen — chrome spent on a control
+ * touched twice a year.
+ */
+function ThemeToggle() {
+  function toggle() {
+    const root = document.documentElement;
+    const next = root.getAttribute("data-theme") === "light" ? "dark" : "light";
+    // One beat of .theme-anim crossfades the whole UI on one clock instead of each
+    // component running its own inline transition, or none.
+    root.classList.add("theme-anim");
+    window.setTimeout(() => root.classList.remove("theme-anim"), 300);
+    root.setAttribute("data-theme", next);
+    document.querySelector('meta[name="theme-color"]')?.setAttribute("content", next === "light" ? "#efe8da" : "#0e0e0e");
+    try { localStorage.setItem("theme", next); } catch {}
+  }
+  return (
+    <button onClick={toggle} className="theme-toggle" aria-label="Toggle light or dark theme" title="Toggle light or dark theme">
+      <svg className="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" /></svg>
+      <svg className="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden><circle cx="12" cy="12" r="5" /><line x1="12" y1="1" x2="12" y2="3" /><line x1="12" y1="21" x2="12" y2="23" /><line x1="4.2" y1="4.2" x2="5.6" y2="5.6" /><line x1="18.4" y1="18.4" x2="19.8" y2="19.8" /><line x1="1" y1="12" x2="3" y2="12" /><line x1="21" y1="12" x2="23" y2="12" /><line x1="4.2" y1="19.8" x2="5.6" y2="18.4" /><line x1="18.4" y1="5.6" x2="19.8" y2="4.2" /></svg>
+    </button>
+  );
+}
+
 /** A consequence worth reading before the switch is flipped. Tokens, not literal
  *  rgba of the dark-theme red — the callouts were hardcoded and stayed dark-red on
  *  the tan ground. */
@@ -70,7 +100,7 @@ function Warn({ children, tone = "danger" }: { children: React.ReactNode; tone?:
   );
 }
 
-export default function SettingsScreen() {
+export default function SettingsScreen({ signedInAs }: { signedInAs?: string }) {
   const [settings, setSettings] = useState<Settings | null>(null);
   const [saving, setSaving] = useState(false);
   const [savedAt, setSavedAt] = useState<number | null>(null);
@@ -98,8 +128,16 @@ export default function SettingsScreen() {
     finally { setSaving(false); }
   }, []);
 
-  const wrap: React.CSSProperties = { height: "100%", overflowY: "auto", padding: "20px var(--panel-pad-x) 44px" };
-  if (!settings) return (
+  // A column: the panels scroll, the footer bar does not.
+  const wrap: React.CSSProperties = { flex: 1, minHeight: 0, overflowY: "auto", padding: "20px var(--panel-pad-x) 44px" };
+  const shell = (body: React.ReactNode) => (
+    <div style={{ display: "flex", flexDirection: "column", height: "100%", minHeight: 0 }}>
+      {body}
+      <SettingsFooter />
+    </div>
+  );
+
+  if (!settings) return shell(
     <div style={wrap}>
       <div style={{ maxWidth: 720, margin: "0 auto", display: "flex", flexDirection: "column", gap: 16 }}>
         <header>
@@ -118,7 +156,7 @@ export default function SettingsScreen() {
   );
 
   const s = settings;
-  return (
+  return shell(
     <div style={wrap}>
       <div style={{ maxWidth: 720, margin: "0 auto", display: "flex", flexDirection: "column", gap: 16 }}>
         <header style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
@@ -181,23 +219,13 @@ export default function SettingsScreen() {
           )}
         </Panel>
 
-        <Panel
-          title="Rate card for new clients"
-          blurb={<>A client with no pricing history has no rate card to derive, so their first job could never be raised. This is the card used instead. Across the 498 most recent priced orders <b style={{ color: SUB }}>315</b> is the house standard — 70% of all orders and 75% of clients&apos; first orders. Set <b style={{ color: SUB }}>0</b> to switch this off and hold those threads for a person instead.</>}
-        >
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <input
-              type="number" min={0} step={1} aria-label="Default rate card"
-              value={s.default_rate_card}
-              onChange={(e) => save({ ...s, default_rate_card: Math.max(0, Math.floor(Number(e.target.value) || 0)) })}
-              style={{ width: 116, padding: "8px 12px", borderRadius: 8, border: `1px solid ${BORDER}`, background: "var(--surface-2)", color: INK, fontWeight: 600, fontSize: 14, fontFamily: "inherit" }}
-            />
-            {s.default_rate_card === 0 && <span style={{ fontSize: 12, color: "var(--warn)" }}>off — first jobs for a new client will wait for a person</span>}
-          </div>
-          <Warn tone="accent">
-            An order priced this way is <b>never</b> written to OnSinch hands-free, even in Auto mode. It is always staged for someone to check the price, and the ticket records that the card was assumed.
-          </Warn>
-        </Panel>
+        {/* The rate-card control is GONE from this screen (Ben, 2026-08-10). It asked
+            an operator to hold a pricing decision in their head on a screen about
+            switches — the number that gets charged is not a preference. The setting
+            itself is untouched in the database and the engine still uses it exactly as
+            before, including the rule that an order priced from it is never written
+            hands-free. Nothing about pricing behaviour changed; the knob is not on the
+            wall any more. */}
 
         <Panel title="Install app" blurb="Add Spartan Crew to a phone or desktop home screen for full-screen, one-tap access.">
           <InstallButton />
@@ -207,7 +235,35 @@ export default function SettingsScreen() {
           title="Trigger"
           blurb={<>The mailbox trigger lives in n8n. It POSTs each hydrated thread to <span className="mono" style={{ color: SUB }}>/api/n8n-inbound</span>; the engine runs here on Vercel. <span className="mono" style={{ color: SUB }}>N8N_WEBHOOK_SECRET</span> locks the endpoint.</>}
         />
+
+        {signedInAs && (
+          <Panel title="Account" blurb={<>Signed in as <b style={{ color: SUB }}>{signedInAs}</b>.</>}>
+            <button
+              onClick={async () => { try { await fetch("/api/auth", { method: "DELETE" }); } catch {} window.location.href = "/"; }}
+              style={{ alignSelf: "flex-start", padding: "11px 22px", borderRadius: "var(--radius)", border: "1px solid var(--danger-border)", background: "var(--danger-subtle)", color: "var(--danger)", fontSize: 14, fontWeight: 600, fontFamily: "inherit", cursor: "pointer" }}
+            >
+              Sign out
+            </button>
+          </Panel>
+        )}
       </div>
+    </div>
+  );
+}
+
+/**
+ * Settings owns a real footer bar, the same one the quote tool has: the agency link
+ * on the left, the sun/moon on the right, at --footer-bar-height with a top rule. It
+ * does not scroll with the panels above it.
+ */
+function SettingsFooter() {
+  return (
+    <div style={{ height: "var(--footer-bar-height)", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 var(--panel-pad-x)", borderTop: `1px solid ${BORDER}` }}>
+      <a href="https://www.samuraisolutions.co.uk/" target="_blank" rel="noopener noreferrer"
+        style={{ color: FAINT, fontSize: 11, letterSpacing: "0.06em", textDecoration: "none" }}>
+        samuraisolutions.co.uk
+      </a>
+      <ThemeToggle />
     </div>
   );
 }

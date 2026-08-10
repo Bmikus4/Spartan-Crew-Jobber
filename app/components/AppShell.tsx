@@ -18,51 +18,6 @@ const TITLES: Record<Tool, string> = { dashboard: "Dashboard", jobs: "Jobs Board
 
 interface Auth { loading: boolean; authenticated: boolean; authRequired: boolean; name?: string; email?: string }
 
-function AccountButton({ email }: { email?: string }) {
-  const [busy, setBusy] = useState(false);
-  async function logout() {
-    setBusy(true);
-    try { await fetch("/api/auth", { method: "DELETE" }); } catch {}
-    window.location.href = "/";
-  }
-  return (
-    <button onClick={logout} disabled={busy} title={email ? `Sign out (${email})` : "Sign out"} aria-label="Sign out"
-      style={{ width: 36, height: 36, borderRadius: 9999, display: "grid", placeItems: "center", color: "var(--text-muted)", background: "transparent", border: "1px solid var(--border)", cursor: "pointer" }}>
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /><polyline points="16 17 21 12 16 7" /><line x1="21" y1="12" x2="9" y2="12" /></svg>
-    </button>
-  );
-}
-
-/**
- * Both icons are always in the DOM and `data-theme` decides which one shows (see
- * .theme-toggle in globals.css). That CSS existed already and was dead: this
- * button branched in JSX on its own copy of the theme instead, which meant the
- * icon could only be right if React's state agreed with the attribute on <html> —
- * and the attribute is now set before React exists.
- *
- * So there is no theme state here at all. The attribute IS the state; the button
- * reads it, flips it, and stores it.
- */
-function ThemeToggle() {
-  function toggle() {
-    const root = document.documentElement;
-    const next = root.getAttribute("data-theme") === "light" ? "dark" : "light";
-    // One beat of .theme-anim makes the whole UI crossfade on one clock instead of
-    // each component running its own inline transition (or none).
-    root.classList.add("theme-anim");
-    window.setTimeout(() => root.classList.remove("theme-anim"), 300);
-    root.setAttribute("data-theme", next);
-    document.querySelector('meta[name="theme-color"]')?.setAttribute("content", next === "light" ? "#efe8da" : "#0e0e0e");
-    try { localStorage.setItem("theme", next); } catch {}
-  }
-  return (
-    <button onClick={toggle} className="theme-toggle" aria-label="Toggle light or dark theme" title="Toggle theme">
-      <svg className="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" /></svg>
-      <svg className="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden><circle cx="12" cy="12" r="5" /><line x1="12" y1="1" x2="12" y2="3" /><line x1="12" y1="21" x2="12" y2="23" /><line x1="4.2" y1="4.2" x2="5.6" y2="5.6" /><line x1="18.4" y1="18.4" x2="19.8" y2="19.8" /><line x1="1" y1="12" x2="3" y2="12" /><line x1="21" y1="12" x2="23" y2="12" /><line x1="4.2" y1="19.8" x2="5.6" y2="18.4" /><line x1="18.4" y1="5.6" x2="19.8" y2="4.2" /></svg>
-    </button>
-  );
-}
-
 export default function AppShell() {
   const [tool, setTool] = useState<Tool>("dashboard");
   const [auth, setAuth] = useState<Auth>({ loading: true, authenticated: false, authRequired: false });
@@ -90,24 +45,30 @@ export default function AppShell() {
 
   return (
     <div style={{ display: "flex", height: "100%", width: "100%", background: "var(--bg)" }}>
+      {/* The rail is flush and unframed; the content window is the only framed thing
+          on screen. It used to be a second floating card with its own border, radius
+          and inset highlight, competing with the panel that holds the work. */}
       <Sidebar activeTool={tool} onSelectTool={(id) => setTool(id as Tool)} onSettings={() => setTool("settings")} />
 
-      <main style={{ flex: 1, minWidth: 0, height: "calc(100% - var(--shell-double-pad))", margin: "var(--shell-pad)", display: "flex", flexDirection: "column" }} className="frosted-glass">
+      <main style={{ flex: 1, minWidth: 0, height: "calc(100% - var(--shell-double-pad))", margin: "var(--shell-pad) var(--shell-pad) var(--shell-pad) 0", display: "flex", flexDirection: "column" }} className="frosted-glass">
         {/* THE window's one title bar. It used to hold a plain 13px title while each
             screen drew a second bar beneath it with the same word as an eyebrow — 96px
             of chrome to say "Dashboard" twice. The eyebrow moved up here, so a screen
             owns only its content. */}
         <header style={{ height: "var(--panel-header-height)", display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 var(--panel-pad-x)", borderBottom: "1px solid var(--border)", flexShrink: 0 }}>
+          {/* Nothing but the eyebrow. The theme toggle and sign-out moved to the
+              footer of Settings, where the quote tool keeps them (Ben, 2026-08-10) —
+              a control you touch twice a year does not belong in the chrome of every
+              screen. */}
           <span className="eyebrow"><span className="slash">/</span>{TITLES[tool].toUpperCase()}</span>
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            {auth.authenticated && <AccountButton email={auth.email} />}
-            <ThemeToggle />
-          </div>
         </header>
         <div style={{ flex: 1, minHeight: 0, overflow: "hidden" }}>
           {/* The dashboard's queue strip names lanes of the board, so it can send you
               there — a number you cannot act on is only half a dashboard. */}
-          {tool === "settings" ? <SettingsScreen /> : tool === "jobs" ? <JobsScreen isActive /> : <DashboardScreen isActive onOpenBoard={() => setTool("jobs")} />}
+          {tool === "settings"
+            ? <SettingsScreen signedInAs={auth.authenticated ? auth.email : undefined} />
+            : tool === "jobs" ? <JobsScreen isActive />
+            : <DashboardScreen isActive onOpenBoard={() => setTool("jobs")} />}
         </div>
       </main>
     </div>
