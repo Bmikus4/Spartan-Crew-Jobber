@@ -34,6 +34,9 @@
   --danger: #ef4444;
   --danger-subtle: rgba(239, 68, 68, 0.14);
   --ok: #34d399;
+  /* Was only ever an inline fallback — var(--warn, #f59e0b) — so "needs human"
+     wore a hardcoded dark-theme amber that the light theme could not override. */
+  --warn: #f59e0b;
 
   --radius-sm: 6px;
   --radius: 10px;
@@ -86,6 +89,13 @@
   --accent-contrast: #ffffff;
   --accent-subtle: rgba(58, 63, 71, 0.10);
   --accent-border: rgba(58, 63, 71, 0.35);
+
+  /* The status hues, darkened for the tan ground: the dark-theme emerald and amber
+     are near-invisible on #efe8da at tag weight. */
+  --ok: #0f7a52;
+  --warn: #a86a00;
+  --danger: #c0342b;
+  --danger-subtle: rgba(192, 52, 43, 0.12);
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }

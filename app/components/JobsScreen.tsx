@@ -31,6 +31,7 @@ const FAINT = "var(--text-faint)";
 const A = "var(--accent)";
 const OK = "var(--ok)";
 const BORDER = "var(--border)";
+const BORDER_STRONG = "var(--border-strong)";
 
 type Filter = "all" | "proposed" | "needs_human" | "failed" | "booked" | "dismissed";
 
@@ -54,22 +55,77 @@ const idLabel = (j: { job_id?: number | null; order_number?: string | null; orde
 const isDismissed = (j: Job) =>
   j.classification === "not-a-job" || j.status === "ignored" || j.is_client_inquiry === false;
 
-function badge(j: Job): { label: string; color: string; bg: string; bd: string } {
+/**
+ * Tag tones, ported from the quote tool's Opportunities screen so the two tools
+ * speak one visual language — Ben, 2026-08-10: "look at the house of HUD quote
+ * tool's opportunity menu tags, those are how your tags should look".
+ *
+ * Tints are mixed FROM the token rather than written as rgba literals of the dark
+ * hex, which is what kept the quote tool's light theme honest: a literal freezes
+ * the dark value, so a tag's fill and its text end up from two different palettes.
+ */
+type TagTone = "neutral" | "accent" | "green" | "amber" | "red";
+const tint = (token: string, pct: number) => `color-mix(in srgb, ${token} ${pct}%, transparent)`;
+const TAG_TONES: Record<TagTone, { fg: string; bg: string }> = {
+  neutral: { fg: MUT,              bg: "transparent" },
+  accent:  { fg: A,                bg: "var(--accent-subtle)" },
+  green:   { fg: "var(--ok)",      bg: tint("var(--ok)", 14) },
+  amber:   { fg: "var(--warn)",    bg: tint("var(--warn)", 14) },
+  red:     { fg: "var(--danger)",  bg: tint("var(--danger)", 14) },
+};
+
+function badge(j: Job): { label: string; tone: TagTone; title: string } {
   // A real failure is called out separately from a routine needs-a-human. Both
   // used to read "Needs human", so an OnSinch write that actually threw looked
   // identical to "we could not find the company name".
   if (j.status === "error")
-    return { label: "Failed", color: "var(--danger)", bg: "var(--danger-subtle)", bd: "rgba(239,68,68,0.55)" };
+    return { label: "Failed", tone: "red", title: "An OnSinch write failed — read the notes" };
   if (j.needs_human || j.status === "needs-info")
-    return { label: "Needs human", color: "var(--warn, #f59e0b)", bg: "rgba(245,158,11,0.12)", bd: "rgba(245,158,11,0.32)" };
+    return { label: "Needs human", tone: "amber", title: "The engine needs something only a person can supply" };
   if (j.status === "proposed")
-    return { label: "Awaiting confirm", color: A, bg: "var(--accent-subtle)", bd: "var(--accent-border)" };
+    return { label: "Awaiting confirm", tone: "accent", title: "An order is staged, waiting for a human to approve it" };
   if (j.status === "ordered")
-    return { label: "Booked", color: OK, bg: "rgba(52,211,153,0.12)", bd: "rgba(52,211,153,0.32)" };
+    return { label: "Booked", tone: "green", title: "Written to OnSinch" };
   // Dismissed reads as its own quiet state rather than "Replied", which it never was.
   if (isDismissed(j))
-    return { label: "Dismissed", color: FAINT, bg: "transparent", bd: BORDER };
-  return { label: "Replied", color: SUB, bg: "var(--surface-2)", bd: BORDER };
+    return { label: "Dismissed", tone: "neutral", title: "Judged not to be a client enquiry" };
+  return { label: "Replied", tone: "neutral", title: "A reply went out; no order on this thread" };
+}
+
+/**
+ * The swatch every tag wears: a small rounded SQUARE, not a circle. Same shape as
+ * the quote tool's, so "this is the colour of the thing named next to it" reads as
+ * one idea across both tools rather than two conventions that happen to be coloured.
+ */
+function Swatch({ color }: { color: string }) {
+  return <span aria-hidden style={{ width: 7, height: 7, borderRadius: 2, background: color, flexShrink: 0 }} />;
+}
+
+/**
+ * A small rectangle with a coloured dot, sentence case, quiet text.
+ *
+ * These were full pills in bold uppercase with a coloured fill, a coloured border
+ * AND coloured text, at a fixed 118px — so every status shouted at the same volume
+ * as the client name above it. The DOT carries the hue and the text stays in
+ * ordinary ink: colour where it is read, not everywhere.
+ */
+function Tag({ label, tone, title, mono = false }: { label: string; tone: TagTone; title?: string; mono?: boolean }) {
+  const t = TAG_TONES[tone];
+  return (
+    <span
+      title={title}
+      className={mono ? "mono" : undefined}
+      style={{
+        display: "inline-flex", alignItems: "center", gap: 5,
+        padding: "2px 7px", borderRadius: 4, fontSize: 11, fontWeight: 500,
+        letterSpacing: 0, textTransform: "none", whiteSpace: "nowrap", lineHeight: 1.5,
+        background: "transparent", color: SUB, border: `1px solid ${BORDER_STRONG}`,
+      }}
+    >
+      <Swatch color={t.fg} />
+      {label}
+    </span>
+  );
 }
 
 function CheckMark() {
@@ -97,21 +153,28 @@ function JobRow({ j, onSelect }: { j: Job; onSelect: (id: string) => void }) {
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 3 }}>
           <span style={{ fontSize: 14, fontWeight: 700, color: INK, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{j.contact}</span>
-          {j.classification === "update" && <span style={{ fontSize: 10, fontWeight: 700, color: MUT, textTransform: "uppercase", letterSpacing: "0.06em" }}>update</span>}
+          {j.classification === "update" && <Tag label="Update" tone="neutral" title="A change to a job that already exists" />}
         </div>
         <div style={{ fontSize: 12.5, color: SUB, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{j.subject}</div>
         {meta && <div style={{ fontSize: 11.5, color: MUT, marginTop: 3, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{meta}</div>}
       </div>
 
-      <div style={{ display: "flex", alignItems: "center", gap: 12, flexShrink: 0 }}>
+      {/* The status keeps its own right-hand column so it stays scannable down a long
+          list — the tag inside it is now natural-width, where the pill was pinned to
+          118px and centred, which is what made it read as a button. */}
+      <div style={{ display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
         {j.ai_replied && <CheckMark />}
-        <span className="mono" style={{ fontSize: 12, color: j.order_number ? SUB : FAINT, width: 74, textAlign: "right" }}>
-          {/* Prefixed, and the J number preferred: this was a bare "#10591", which reads
-              as an id, is not one, and cannot be searched without knowing which of the
-              three number spaces it belongs to. */}
+        {/* The identifier is a tag too, in mono and toneless: it names the job rather
+            than classifying it, so a coloured dot would imply a status it does not have.
+            Prefixed, and the J number preferred — this was a bare "#10591", which reads
+            as an id, is not one, and cannot be searched without knowing which of the
+            three number spaces it belongs to. */}
+        <span className="mono" style={{ fontSize: 11, color: j.job_id || j.order_number ? SUB : FAINT, minWidth: 62, textAlign: "right" }}>
           {j.job_id ? `J${j.job_id}` : j.order_number ? `R${j.order_number}` : j.status === "proposed" ? "staged" : "—"}
         </span>
-        <span style={{ fontSize: 11, fontWeight: 700, color: b.color, background: b.bg, border: `1px solid ${b.bd}`, borderRadius: 999, padding: "4px 10px", whiteSpace: "nowrap", width: 118, textAlign: "center" }}>{b.label}</span>
+        <span style={{ display: "flex", justifyContent: "flex-end", minWidth: 116 }}>
+          <Tag label={b.label} tone={b.tone} title={b.title} />
+        </span>
       </div>
     </div>
   );
@@ -129,7 +192,10 @@ const PROFESSION_LABEL: Record<number, string> = {
  * J13925 both find that one job. Verified against a price quote OnSinch generated
  * itself, and clients quote the J number back at us ("PO for Job J13918").
  *
- * Click to copy, because the point of the number is to leave with it.
+ * Click to copy, because the point of the number is to leave with it. Wears the
+ * tag shape with no swatch — it names the job rather than classifying it, and a
+ * coloured dot would imply a status it does not carry. The tick on copy is the one
+ * moment colour belongs on it.
  */
 function IdChip({ prefix, value, title }: { prefix: "J" | "R"; value: string | number; title: string }) {
   const [copied, setCopied] = useState(false);
@@ -146,14 +212,17 @@ function IdChip({ prefix, value, title }: { prefix: "J" | "R"; value: string | n
       }}
       className="mono"
       style={{
-        fontSize: 12.5, fontWeight: 700, letterSpacing: "0.02em", cursor: "pointer",
-        color: copied ? OK : prefix === "J" ? INK : SUB,
-        background: prefix === "J" ? "var(--surface-2)" : "transparent",
-        border: `1px solid ${copied ? "rgba(52,211,153,0.5)" : BORDER}`,
-        borderRadius: 7, padding: "3px 9px", transition: "all 160ms",
+        display: "inline-flex", alignItems: "center", gap: 5, cursor: "pointer",
+        padding: "2px 7px", borderRadius: 4, fontSize: 11.5, fontWeight: 500,
+        // No fontFamily here: an inline value would beat the .mono class it needs.
+        lineHeight: 1.5, whiteSpace: "nowrap",
+        background: "transparent",
+        color: copied ? "var(--ok)" : prefix === "J" ? INK : SUB,
+        border: `1px solid ${copied ? "var(--ok)" : BORDER_STRONG}`,
+        transition: "color 160ms, border-color 160ms",
       }}
     >
-      {copied ? "copied" : text}
+      {copied ? "Copied" : text}
     </button>
   );
 }
@@ -235,7 +304,7 @@ function Detail({ threadId, onBack, onChanged }: { threadId: string; onBack: () 
         <header>
           <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
             <h1 style={{ fontSize: 24, fontWeight: 700, color: INK, margin: 0 }}>{d.contact}</h1>
-            <span style={{ fontSize: 11, fontWeight: 700, color: b.color, background: b.bg, border: `1px solid ${b.bd}`, borderRadius: 999, padding: "4px 10px" }}>{b.label}</span>
+            <Tag label={b.label} tone={b.tone} title={b.title} />
             {d.ai_replied && <CheckMark />}
           </div>
           <p style={{ fontSize: 13, color: MUT, margin: "4px 0 0" }}>{d.subject}</p>
@@ -269,8 +338,11 @@ function Detail({ threadId, onBack, onChanged }: { threadId: string; onBack: () 
           {order ? (
             <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                {order.provisional && <span style={{ fontSize: 10.5, fontWeight: 700, color: A, background: "var(--accent-subtle)", border: "1px solid var(--accent-border)", borderRadius: 999, padding: "3px 9px" }}>PROVISIONAL</span>}
-                {order.quote && <span style={{ fontSize: 10.5, fontWeight: 700, color: SUB, background: "var(--surface-2)", border: `1px solid ${BORDER}`, borderRadius: 999, padding: "3px 9px" }}>QUOTE</span>}
+                {/* Sentence case, not PROVISIONAL/QUOTE: uppercase at bold weight made
+                    the posture flags shout louder than the job name. These are the same
+                    two OnSinch checkboxes either way. */}
+                {order.provisional && <Tag label="Provisional" tone="accent" title="Raised as a draft, not a live booking" />}
+                {order.quote && <Tag label="Quote" tone="neutral" title="Sits in Price Quotes rather than To Confirm" />}
                 <span className="mono" style={{ fontSize: 11.5, color: MUT }}>rate card #{order.pricelist_category_id}</span>
               </div>
               <Row k="Job" v={order.job_name} />
