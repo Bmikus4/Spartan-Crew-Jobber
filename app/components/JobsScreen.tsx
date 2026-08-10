@@ -60,18 +60,19 @@ const isDismissed = (j: Job) =>
  * speak one visual language — Ben, 2026-08-10: "look at the house of HUD quote
  * tool's opportunity menu tags, those are how your tags should look".
  *
- * Tints are mixed FROM the token rather than written as rgba literals of the dark
- * hex, which is what kept the quote tool's light theme honest: a literal freezes
- * the dark value, so a tag's fill and its text end up from two different palettes.
+ * A hue and nothing else. The quote tool pairs each tone with a fill it uses for
+ * the SELECTED state, because its tags are filter buttons; these are not clickable,
+ * so a fill here would be a colour with no state to mean. Every tone is a palette
+ * TOKEN rather than a hex literal — a literal freezes the dark value, and then the
+ * light theme cannot darken it (see --warn, which was exactly that).
  */
 type TagTone = "neutral" | "accent" | "green" | "amber" | "red";
-const tint = (token: string, pct: number) => `color-mix(in srgb, ${token} ${pct}%, transparent)`;
-const TAG_TONES: Record<TagTone, { fg: string; bg: string }> = {
-  neutral: { fg: MUT,              bg: "transparent" },
-  accent:  { fg: A,                bg: "var(--accent-subtle)" },
-  green:   { fg: "var(--ok)",      bg: tint("var(--ok)", 14) },
-  amber:   { fg: "var(--warn)",    bg: tint("var(--warn)", 14) },
-  red:     { fg: "var(--danger)",  bg: tint("var(--danger)", 14) },
+const TAG_TONES: Record<TagTone, string> = {
+  neutral: MUT,
+  accent: A,
+  green: "var(--ok)",
+  amber: "var(--warn)",
+  red: "var(--danger)",
 };
 
 function badge(j: Job): { label: string; tone: TagTone; title: string } {
@@ -110,7 +111,6 @@ function Swatch({ color }: { color: string }) {
  * ordinary ink: colour where it is read, not everywhere.
  */
 function Tag({ label, tone, title, mono = false }: { label: string; tone: TagTone; title?: string; mono?: boolean }) {
-  const t = TAG_TONES[tone];
   return (
     <span
       title={title}
@@ -122,7 +122,7 @@ function Tag({ label, tone, title, mono = false }: { label: string; tone: TagTon
         background: "transparent", color: SUB, border: `1px solid ${BORDER_STRONG}`,
       }}
     >
-      <Swatch color={t.fg} />
+      <Swatch color={TAG_TONES[tone]} />
       {label}
     </span>
   );
