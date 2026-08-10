@@ -51,8 +51,11 @@ console.log("\n[2] every setting survives the round trip (the bug)");
 
 console.log("\n[3] junk is rejected without disturbing what is stored");
 {
-  const stored: Settings = { order_mode: "auto", replies_enabled: true, reply_delivery: "send", reply_scope: "enquiries" };
-  const saved = merge(stored, { order_mode: "yolo", replies_enabled: "yes", reply_delivery: "post", reply_scope: "some" });
+  const stored: Settings = { order_mode: "auto", replies_enabled: true, reply_delivery: "send", reply_scope: "enquiries", default_rate_card: 315 };
+  const saved = merge(stored, { order_mode: "yolo", replies_enabled: "yes", reply_delivery: "post", reply_scope: "some", default_rate_card: "cheap" });
+  ok(saved.default_rate_card === 315, "non-numeric default_rate_card ignored", String(saved.default_rate_card));
+  ok(merge(stored, { default_rate_card: -1 }).default_rate_card === 315, "a negative card id is refused");
+  ok(merge(stored, { default_rate_card: 0 }).default_rate_card === 0, "0 IS a real value - it means hold the thread instead");
   ok(saved.order_mode === "auto", "bad order_mode ignored", saved.order_mode);
   ok(saved.replies_enabled === true, "non-boolean replies_enabled ignored");
   ok(saved.reply_delivery === "send", "bad reply_delivery ignored", saved.reply_delivery);

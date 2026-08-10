@@ -39,6 +39,10 @@ export function coerceSettings(body: unknown): Partial<Settings> {
   if (typeof b.replies_enabled === "boolean") next.replies_enabled = b.replies_enabled;
   if (b.reply_delivery === "draft" || b.reply_delivery === "send") next.reply_delivery = b.reply_delivery;
   if (b.reply_scope === "all" || b.reply_scope === "enquiries") next.reply_scope = b.reply_scope;
+  // 0 is a real value here - it means "no fallback, hold the thread" - so this
+  // accepts any non-negative integer rather than treating 0 as absent.
+  if (typeof b.default_rate_card === "number" && Number.isInteger(b.default_rate_card) && b.default_rate_card >= 0)
+    next.default_rate_card = b.default_rate_card;
   return next;
 }
 

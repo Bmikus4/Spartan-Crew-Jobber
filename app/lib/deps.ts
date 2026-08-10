@@ -281,6 +281,9 @@ export async function buildDeps(): Promise<PipelineDeps> {
     // and has dropped a field before, and a scope that silently defaulted would
     // reply to everything while the dashboard said otherwise.
     replyScope: settings.reply_scope,
+    // The house standard for a client with no history. Forwarded explicitly for
+    // the same reason as everything else here: this wrapper is hand-written.
+    defaultRateCard: settings.default_rate_card,
     seededRateCard: async (companyId: number) => (await getRateCard(companyId))?.card ?? null,
     aliases: { lookup: lookupAlias, record: recordAlias },
     senderVerdict,

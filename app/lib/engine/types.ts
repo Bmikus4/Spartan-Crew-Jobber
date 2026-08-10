@@ -94,6 +94,12 @@ export interface DesiredOrder {
    * a duplicate company per email.
    */
   provision_company?: { name: string };
+  /**
+   * Where pricelist_category_id came from. "default" means the house standard
+   * was applied to a client with no pricing history, and such an order is never
+   * written hands-free - see pipeline.ts.
+   */
+  rate_card_source?: "seeded" | "history" | "default";
 }
 
 /**
@@ -255,6 +261,30 @@ export interface Settings {
    * left waiting. Ben chose "all" as the default (2026-08-09).
    */
   reply_scope: "all" | "enquiries";
+  /**
+   * The rate card for a client with no pricing history — a brand-new company, or
+   * one whose recent orders are genuinely mixed. 0 means no fallback: the thread
+   * holds for a human, which is what happened before this existed.
+   *
+   * I1 says an order never goes out without an explicit pricelist_category_id,
+   * because OnSinch silently assigns its own otherwise — card 245, which is
+   * Tracy's original wrong-rate failure and still shows up on 7 first orders in
+   * the recent window, almost certainly where nobody set one.
+   *
+   * But I1 was also blocking every new client outright, since a company with no
+   * orders has no history to derive a card from. 315 is the house standard by a
+   * wide margin, measured over the 498 recent orders that carry a card:
+   *
+   *     card 315   70.3% of all orders   75.0% of companies' FIRST orders
+   *     card 342    9.8%                  7.1%
+   *     card 245    2.0%                  5.0%   <- the silent default, not a choice
+   *
+   * So three new clients in four are priced correctly by this, and the fourth is
+   * caught because an order priced this way is NEVER written hands-free: it is
+   * staged for a human whatever order_mode says (pipeline.ts), and the ticket says
+   * the card was assumed. Money is the one thing worth a click.
+   */
+  default_rate_card: number;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -262,6 +292,7 @@ export const DEFAULT_SETTINGS: Settings = {
   replies_enabled: false,
   reply_delivery: "draft",
   reply_scope: "all",
+  default_rate_card: 315,
 };
 
 /** The actions the executor should perform after a compile. */

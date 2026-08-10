@@ -111,10 +111,30 @@ export async function handleThread(
     : null;
 
   if (intended) {
-    if (settings.order_mode === "auto") {
+    /**
+     * An ASSUMED rate is never written hands-free.
+     *
+     * default_rate_card lets a brand-new client get an order at all, instead of
+     * holding on a number they have no history for. Three in four are priced
+     * right by it. The fourth is why this exists: auto mode would put a guessed
+     * price on a real booking and bill it, which is the exact failure — OnSinch's
+     * silent card 245 — that I1 was written to stop. Staging costs one click.
+     *
+     * Deliberately checked on the order being written rather than on settings, so
+     * it holds for a patch as well as a create, and cannot be switched off from
+     * the dashboard.
+     */
+    const assumedRate = intended.desired.rate_card_source === "default";
+    if (settings.order_mode === "auto" && !assumedRate) {
       // hands-free: write straight to OnSinch
       await executeOrder(next, intended, deps, emit);
     } else {
+      if (assumedRate && settings.order_mode === "auto") {
+        next.notes = [
+          ...next.notes,
+          `held for confirmation despite auto mode: the rate card was assumed, not derived from this client's history`,
+        ];
+      }
       // draft-only (launch default): stage for one-click human confirm
       next.pending_order = intended;
       next.status = "proposed";

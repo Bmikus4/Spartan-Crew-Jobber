@@ -38,6 +38,11 @@ export interface CompileDeps {
    * change to one. See Settings.reply_scope.
    */
   replyScope?: "all" | "enquiries";
+  /**
+   * Rate card for a client with no pricing history. See Settings.default_rate_card.
+   * Absent, a company without derivable pricing holds for a human as before.
+   */
+  defaultRateCard?: number | null;
   // Seeded rate-card lookup (Phase B rate_cards). Injected so the engine stays
   // DB-agnostic; when absent, rates.ts falls back to a live history scan.
   seededRateCard?: (companyId: number) => Promise<number | null>;
@@ -604,12 +609,38 @@ export async function compile(
     // Everything else about the job is composed and staged; a human supplies this one
     // number and confirms. Money is the one field worth blocking on.
     let pricelist_category_id = 0;
+    let rateSource: DesiredOrder["rate_card_source"];
     if (company_id) {
-      const rate = await resolveRateCard(company_id, { onsinch, seededRateCard: deps.seededRateCard });
-      if (rate.card) pricelist_category_id = rate.card;
-      else notes.push(`no confident rate card for company ${company_id} — needs a human (I1)`);
+      const rate = await resolveRateCard(company_id, {
+        onsinch,
+        seededRateCard: deps.seededRateCard,
+        defaultCard: deps.defaultRateCard,
+      });
+      if (rate.card) {
+        pricelist_category_id = rate.card;
+        rateSource = rate.source === "none" ? undefined : rate.source;
+        if (rate.source === "default") {
+          notes.push(
+            `no pricing history for company ${company_id} — using the standard rate card ${rate.card}; ` +
+              `CHECK IT BEFORE CONFIRMING (I1)`
+          );
+        }
+      } else notes.push(`no confident rate card for company ${company_id} — needs a human (I1)`);
     } else if (provisionCompany) {
-      notes.push(`"${provisionCompany.name}" is new, so it has no rate card yet — set one when confirming (I1)`);
+      // A company being created has no history by definition, so the standard card
+      // is the only thing that lets its first job exist at all. It is staged, never
+      // written hands-free, and the note says the number was assumed.
+      const fallback = deps.defaultRateCard;
+      if (Number.isInteger(fallback as number) && (fallback as number) > 0) {
+        pricelist_category_id = fallback as number;
+        rateSource = "default";
+        notes.push(
+          `"${provisionCompany.name}" is a new client — using the standard rate card ${fallback}; ` +
+            `CHECK IT BEFORE CONFIRMING (I1)`
+        );
+      } else {
+        notes.push(`"${provisionCompany.name}" is new, so it has no rate card yet — set one when confirming (I1)`);
+      }
     }
 
     /**
@@ -672,6 +703,9 @@ export async function compile(
       desired = composed.order;
       if (desired && provisionPlace) desired.provision_place = provisionPlace;
       if (desired && provisionCompany) desired.provision_company = provisionCompany;
+      // Carried on the order itself so the write path can refuse to auto-send an
+      // assumed price, whatever the dashboard's order_mode says.
+      if (desired && rateSource) desired.rate_card_source = rateSource;
       if (desired) {
         const errs = validateOrder(desired);
         if (errs.length) {
@@ -683,7 +717,13 @@ export async function compile(
       // A staged order built on a stand-in still goes to a human, but it goes there as
       // an ORDER rather than as an enquiry with nothing attached. needs_human means
       // "check this before confirming", not "nothing was produced".
-      if (provisionCompany || provisionPlace || user_id === PLACEHOLDER_CONTACT_ID) needs_human = true;
+      // Every stand-in the resolvers fell back to calls a human — including an
+      // assumed rate card. The pipeline already refuses to auto-write that order,
+      // but a price nobody chose must also SHOW on the board, or the click it is
+      // waiting for never comes.
+      if (provisionCompany || provisionPlace || user_id === PLACEHOLDER_CONTACT_ID || rateSource === "default") {
+        needs_human = true;
+      }
 
       /**
        * composeOrder can decline: every request block lacked a crew size, or a date,

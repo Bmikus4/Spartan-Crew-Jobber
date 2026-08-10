@@ -10,9 +10,9 @@ import InstallButton from "./InstallButton";
 type OrderMode = "draft-only" | "auto";
 type ReplyDelivery = "draft" | "send";
 type ReplyScope = "all" | "enquiries";
-interface Settings { order_mode: OrderMode; replies_enabled: boolean; reply_delivery: ReplyDelivery; reply_scope: ReplyScope }
+interface Settings { order_mode: OrderMode; replies_enabled: boolean; reply_delivery: ReplyDelivery; reply_scope: ReplyScope; default_rate_card: number }
 
-const SETTINGS_FALLBACK: Settings = { order_mode: "draft-only", replies_enabled: false, reply_delivery: "draft", reply_scope: "all" };
+const SETTINGS_FALLBACK: Settings = { order_mode: "draft-only", replies_enabled: false, reply_delivery: "draft", reply_scope: "all", default_rate_card: 315 };
 
 const INK = "var(--text-primary)";
 const SUB = "var(--text-secondary)";
@@ -169,6 +169,27 @@ export default function SettingsScreen() {
               </div>
             </div>
           )}
+          <div style={{ fontSize: 11, color: "var(--text-faint)" }}>
+            {saving ? "Saving…" : savedAt ? "Saved." : "Changes save automatically."}
+          </div>
+        </div>
+
+        <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--radius-lg)", padding: "20px 22px", display: "flex", flexDirection: "column", gap: 14 }}>
+          <div>
+            <div style={{ fontSize: 14, fontWeight: 700, color: INK }}>Rate card for new clients</div>
+            <p style={{ fontSize: 12.5, color: MUT, margin: "4px 0 0", lineHeight: 1.5 }}>
+              A client with no pricing history has no rate card to derive, so their first job could never be raised. This is the card used instead. Measured over the 498 most recent priced orders, <b style={{ color: SUB }}>315</b> is the house standard — 70% of all orders and 75% of clients&apos; first orders. Set <b style={{ color: SUB }}>0</b> to turn this off and hold those threads for a human instead.
+            </p>
+          </div>
+          <input
+            type="number" min={0} step={1}
+            value={settings.default_rate_card}
+            onChange={(e) => save({ ...settings, default_rate_card: Math.max(0, Math.floor(Number(e.target.value) || 0)) })}
+            style={{ width: 120, padding: "8px 12px", borderRadius: 8, border: "1px solid var(--border)", background: "var(--surface-2)", color: INK, fontWeight: 600, fontSize: 14 }}
+          />
+          <div style={{ background: "var(--accent-subtle)", border: "1px solid var(--accent-border)", borderRadius: 8, padding: "10px 14px", fontSize: 12, color: SUB }}>
+            An order priced this way is <b>never</b> written to OnSinch hands-free, even in Auto mode — it is always staged for someone to check the price first, and the ticket says the card was assumed.
+          </div>
           <div style={{ fontSize: 11, color: "var(--text-faint)" }}>
             {saving ? "Saving…" : savedAt ? "Saved." : "Changes save automatically."}
           </div>
