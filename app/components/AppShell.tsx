@@ -33,27 +33,32 @@ function AccountButton({ email }: { email?: string }) {
   );
 }
 
+/**
+ * Both icons are always in the DOM and `data-theme` decides which one shows (see
+ * .theme-toggle in globals.css). That CSS existed already and was dead: this
+ * button branched in JSX on its own copy of the theme instead, which meant the
+ * icon could only be right if React's state agreed with the attribute on <html> —
+ * and the attribute is now set before React exists.
+ *
+ * So there is no theme state here at all. The attribute IS the state; the button
+ * reads it, flips it, and stores it.
+ */
 function ThemeToggle() {
-  const [theme, setTheme] = useState<"dark" | "light">("dark");
-  useEffect(() => {
-    const stored = (localStorage.getItem("theme") as "dark" | "light" | null) ?? "dark";
-    setTheme(stored);
-    document.documentElement.setAttribute("data-theme", stored);
-  }, []);
   function toggle() {
-    const next = theme === "dark" ? "light" : "dark";
-    setTheme(next);
-    localStorage.setItem("theme", next);
-    document.documentElement.setAttribute("data-theme", next);
+    const root = document.documentElement;
+    const next = root.getAttribute("data-theme") === "light" ? "dark" : "light";
+    // One beat of .theme-anim makes the whole UI crossfade on one clock instead of
+    // each component running its own inline transition (or none).
+    root.classList.add("theme-anim");
+    window.setTimeout(() => root.classList.remove("theme-anim"), 300);
+    root.setAttribute("data-theme", next);
+    document.querySelector('meta[name="theme-color"]')?.setAttribute("content", next === "light" ? "#efe8da" : "#0e0e0e");
+    try { localStorage.setItem("theme", next); } catch {}
   }
   return (
-    <button onClick={toggle} className="theme-toggle" aria-label="Toggle theme"
-      style={{ width: 36, height: 36, borderRadius: 9999, display: "grid", placeItems: "center", color: "var(--text-muted)", background: "transparent", border: "1px solid var(--border)", cursor: "pointer" }}>
-      {theme === "dark" ? (
-        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" /></svg>
-      ) : (
-        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="5" /><line x1="12" y1="1" x2="12" y2="3" /><line x1="12" y1="21" x2="12" y2="23" /><line x1="4.2" y1="4.2" x2="5.6" y2="5.6" /><line x1="18.4" y1="18.4" x2="19.8" y2="19.8" /><line x1="1" y1="12" x2="3" y2="12" /><line x1="21" y1="12" x2="23" y2="12" /><line x1="4.2" y1="19.8" x2="5.6" y2="18.4" /><line x1="18.4" y1="5.6" x2="19.8" y2="4.2" /></svg>
-      )}
+    <button onClick={toggle} className="theme-toggle" aria-label="Toggle light or dark theme" title="Toggle theme">
+      <svg className="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" /></svg>
+      <svg className="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden><circle cx="12" cy="12" r="5" /><line x1="12" y1="1" x2="12" y2="3" /><line x1="12" y1="21" x2="12" y2="23" /><line x1="4.2" y1="4.2" x2="5.6" y2="5.6" /><line x1="18.4" y1="18.4" x2="19.8" y2="19.8" /><line x1="1" y1="12" x2="3" y2="12" /><line x1="21" y1="12" x2="23" y2="12" /><line x1="4.2" y1="19.8" x2="5.6" y2="18.4" /><line x1="18.4" y1="5.6" x2="19.8" y2="4.2" /></svg>
     </button>
   );
 }
@@ -98,7 +103,9 @@ export default function AppShell() {
           </div>
         </header>
         <div style={{ flex: 1, minHeight: 0, overflow: "hidden" }}>
-          {tool === "settings" ? <SettingsScreen /> : tool === "jobs" ? <JobsScreen isActive /> : <DashboardScreen isActive />}
+          {/* The dashboard's queue strip names lanes of the board, so it can send you
+              there — a number you cannot act on is only half a dashboard. */}
+          {tool === "settings" ? <SettingsScreen /> : tool === "jobs" ? <JobsScreen isActive /> : <DashboardScreen isActive onOpenBoard={() => setTool("jobs")} />}
         </div>
       </main>
     </div>

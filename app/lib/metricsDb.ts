@@ -7,6 +7,7 @@
 import { neon, type NeonQueryFunction } from "@neondatabase/serverless";
 import type { MetricEvent, MetricSink, MetricType } from "./engine/metrics";
 import { aggregate, type DashboardStats } from "./engine/metrics";
+import { ticketStateCounts, type TicketStateCounts } from "./ticketsDb";
 
 let _sql: NeonQueryFunction<false, false> | null = null;
 let _ready = false;
@@ -74,9 +75,14 @@ export class NeonMetrics implements MetricSink {
   }
 }
 
+// Every kind gets a daily column, not just the six that happened to be plotted.
+// The dashboard had a tile for "Order errors" whose sparkline was hardcoded
+// `[0, 0]` — a flat line drawn as if it were data — for the simple reason that
+// `order_error` was missing here and there was nothing to plot.
 const FUNNEL_KINDS: MetricType[] = [
-  "email_received", "job_detected", "reply_drafted",
-  "order_proposed", "order_created", "order_updated",
+  "email_received", "thread_processed", "filtered_out", "job_detected", "reply_drafted",
+  "order_proposed", "order_confirmed", "order_created", "order_updated",
+  "needs_human", "order_error",
 ];
 
 export interface MetricsSummary extends DashboardStats {
@@ -86,6 +92,16 @@ export interface MetricsSummary extends DashboardStats {
   series: { date: string; [k: string]: number | string }[];
   firstEventAt: string | null;
   lastEventAt: string | null;
+  /**
+   * What is true right now, in THREADS, read from the tickets table — as opposed to
+   * every other figure here, which counts EVENTS over the window. See
+   * ticketStateCounts: the two answer different questions and the dashboard was
+   * printing one under the other's name. null when the table is unreachable, which
+   * the screen renders as "unknown" rather than as zero.
+   */
+  now: TicketStateCounts | null;
+  /** Minutes-per-email behind hours_saved, so the screen can state its own model. */
+  minutes_per_email: number;
 }
 
 const MINUTES_SAVED_PER_EMAIL = 6; // conservative; surfaced on the dashboard
@@ -100,6 +116,8 @@ export async function metricsSummary(days = 90): Promise<MetricsSummary> {
     series: [],
     firstEventAt: null,
     lastEventAt: null,
+    now: null,
+    minutes_per_email: MINUTES_SAVED_PER_EMAIL,
   };
   const sql = db();
   if (!sql) return base;
@@ -114,6 +132,11 @@ export async function metricsSummary(days = 90): Promise<MetricsSummary> {
 
     const stats = aggregate(events);
     const bounds = (await sql`SELECT min(ts) AS first, max(ts) AS last FROM metric_events`) as { first: string | null; last: string | null }[];
+    // Current state, from the tickets table. Deliberately NOT fatal: a failure here
+    // leaves `now` null and the screen says the queue is unknown, which is true —
+    // far better than falling back to the event tally that reads plausible and is
+    // three times the real number.
+    const now = await ticketStateCounts().catch(() => null);
 
     // zero-filled daily series for the funnel kinds
     const byDay = new Map<string, Record<string, number>>();
@@ -138,10 +161,17 @@ export async function metricsSummary(days = 90): Promise<MetricsSummary> {
       ...stats,
       enabled: true,
       days,
+      // One decimal. aggregate() computes this too, in whole hours, and is
+      // overwritten here — two definitions of one number, which is the duplication
+      // this codebase has been bitten by before. aggregate() keeps its version
+      // because the offline test harness reads it; this is the one the screen shows,
+      // and both now derive from the same MINUTES_SAVED_PER_EMAIL.
       hours_saved: Math.round((stats.emails_received * MINUTES_SAVED_PER_EMAIL) / 6) / 10,
+      minutes_per_email: MINUTES_SAVED_PER_EMAIL,
       series,
       firstEventAt: bounds[0]?.first ?? null,
       lastEventAt: bounds[0]?.last ?? null,
+      now,
     };
   } catch (err) {
     console.error("[metrics] summary failed", err);

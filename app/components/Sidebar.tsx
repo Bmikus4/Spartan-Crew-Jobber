@@ -1,10 +1,20 @@
 "use client";
 
-// Nav rail — same architecture as the House of Hud tool (collapsible rail on
-// desktop, bottom bar on mobile, Settings pinned to the bottom). Trimmed to a
-// single tool: the Dashboard. Settings opens an overlay screen.
+// The left navigation rail.
+//
+// Condensed to an icon strip, EXPANDING ON HOVER — the same rebuild the quote tool
+// took. There is no toggle to find and no collapse state to persist, because the
+// pointer is the control. What it replaced was a click-toggle with its state in
+// localStorage and a 20px chevron floating halfway down the rail's right edge: an
+// affordance you had to discover, remembering a decision you made once, for three
+// items. Keyboard users get the same thing through :focus-within.
+//
+// Mobile is a bottom bar rather than a drawer, and it now carries LABELS. Icon-only
+// it could not say which surface you were on: the active colour was --accent, and
+// Spartan's accent is a near-white steel that is indistinguishable from the
+// --text-primary the inactive icons already wore.
 
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 import BrandLogo from "./BrandLogo";
 
 interface NavItemConfig {
@@ -37,15 +47,6 @@ function IconSettings() {
     </svg>
   );
 }
-function ToggleArrow({ expanded }: { expanded: boolean }) {
-  return (
-    <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"
-      style={{ transition: "transform 350ms cubic-bezier(0.4,0,0.2,1)", transform: expanded ? "rotate(0deg)" : "rotate(180deg)" }}>
-      <polyline points="8 2 4 6 8 10" />
-    </svg>
-  );
-}
-
 function IconJobs() {
   return (
     <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
@@ -56,31 +57,32 @@ function IconJobs() {
   );
 }
 
+// Settings is an ordinary row at the END of the list, not a pinned footer bay with
+// its own divider — the same call the quote tool made (Ben, 2026-08-09). It opens a
+// screen exactly like the other rows do, so a separate bay was drawing a
+// distinction that is not there.
 const NAV_ITEMS: NavItemConfig[] = [
   { id: "dashboard", label: "Dashboard", icon: <IconDashboard /> },
   { id: "jobs", label: "Jobs Board", icon: <IconJobs /> },
+  { id: "settings", label: "Settings", icon: <IconSettings /> },
 ];
-const SETTINGS_ITEM: NavItemConfig = { id: "settings", label: "Settings", icon: <IconSettings /> };
 const NAV_BEVEL_SHADOW = "inset 0 1px 0 rgba(255,255,255,0.08), 0 1px 2px rgba(0,0,0,0.25)";
 
-function Logo({ condensed }: { condensed: boolean }) {
-  return (
-    <div style={{ height: 42, display: "flex", alignItems: "center", justifyContent: "center" }}>
-      <BrandLogo condensed={condensed} />
-    </div>
-  );
-}
-
 function MobileBottomBar({ activeTool, onSelectTool, onSettings }: SidebarProps) {
-  const items = [...NAV_ITEMS, SETTINGS_ITEM];
   return (
-    <nav style={{ position: "fixed", bottom: 0, left: 0, right: 0, zIndex: 200, display: "flex", justifyContent: "space-around", alignItems: "center", height: "calc(var(--mobile-nav-h) + var(--mobile-nav-safe) + 20px)", paddingTop: 10, paddingBottom: "calc(var(--mobile-nav-safe) + 10px)", background: "var(--surface)", borderTop: "1px solid var(--border)" }}>
-      {items.map((item) => {
+    <nav aria-label="Main navigation" style={{ position: "fixed", bottom: 0, left: 0, right: 0, zIndex: 200, display: "flex", justifyContent: "space-around", alignItems: "stretch", height: "calc(var(--mobile-nav-h) + var(--mobile-nav-safe) + 20px)", paddingTop: 6, paddingBottom: "calc(var(--mobile-nav-safe) + 6px)", background: "var(--surface)", borderTop: "1px solid var(--border)" }}>
+      {NAV_ITEMS.map((item) => {
         const active = activeTool === item.id;
         return (
           <button key={item.id} onClick={() => (item.id === "settings" ? onSettings() : onSelectTool(item.id))}
-            style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4, background: "none", border: "none", cursor: "pointer", color: active ? "var(--accent)" : "var(--text-primary)", padding: "0 16px", minWidth: 44, height: "100%", justifyContent: "center" }}>
-            <span style={{ display: "flex", transform: "scale(0.75)" }}>{item.icon}</span>
+            aria-current={active ? "page" : undefined}
+            style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 3, background: "none", border: "none", cursor: "pointer", color: active ? "var(--text-primary)" : "var(--text-muted)", padding: 0, minWidth: 44 }}>
+            <span style={{ display: "flex", transform: "scale(0.72)" }}>{item.icon}</span>
+            {/* The label is what actually says where you are on a phone. */}
+            <span style={{ fontSize: 10, fontWeight: active ? 700 : 500, letterSpacing: "0.01em", lineHeight: 1 }}>{item.label}</span>
+            {/* And an underline, because on a near-monochrome palette weight alone
+                is too quiet to mark the current tab. */}
+            <span aria-hidden style={{ width: 16, height: 2, borderRadius: 2, background: active ? "var(--accent)" : "transparent" }} />
           </button>
         );
       })}
@@ -89,24 +91,19 @@ function MobileBottomBar({ activeTool, onSelectTool, onSettings }: SidebarProps)
 }
 
 export default function Sidebar({ activeTool, onSelectTool, onSettings }: SidebarProps) {
-  const [expanded, setExpanded] = useState(true);
+  const [expanded, setExpanded] = useState(false);
   const [hoveredItem, setHoveredItem] = useState<string | null>(null);
   const [isMobile, setIsMobile] = useState(false);
 
   useEffect(() => {
-    const stored = localStorage.getItem("sidebar-expanded");
-    if (stored !== null) setExpanded(JSON.parse(stored));
-  }, []);
-  useEffect(() => {
-    function check() { const m = window.innerWidth < 768; setIsMobile(m); if (m) setExpanded(false); }
-    check(); window.addEventListener("resize", check); return () => window.removeEventListener("resize", check);
+    function check() { setIsMobile(window.innerWidth < 768); }
+    check();
+    window.addEventListener("resize", check);
+    return () => window.removeEventListener("resize", check);
   }, []);
 
   if (isMobile) return <MobileBottomBar activeTool={activeTool} onSelectTool={onSelectTool} onSettings={onSettings} />;
 
-  function toggleExpanded() {
-    const next = !expanded; setExpanded(next); localStorage.setItem("sidebar-expanded", JSON.stringify(next));
-  }
   const isCondensed = !expanded;
   const width = expanded ? "var(--nav-w-expanded)" : "var(--nav-w-condensed)";
 
@@ -121,8 +118,10 @@ export default function Sidebar({ activeTool, onSelectTool, onSettings }: Sideba
     return (
       <button
         onClick={opts.onClick}
+        aria-current={active ? "page" : undefined}
         onMouseEnter={() => setHoveredItem(item.id)}
         onMouseLeave={() => setHoveredItem(null)}
+        title={isCondensed ? item.label : undefined}
         style={{
           width: "100%", display: "flex", alignItems: "center", justifyContent: "flex-start", gap: 0,
           padding: isCondensed ? "3px 2px" : "3px 11px",
@@ -131,46 +130,48 @@ export default function Sidebar({ activeTool, onSelectTool, onSettings }: Sideba
           borderRadius: "var(--nav-item-radius)",
           boxShadow: !isCondensed && active ? NAV_BEVEL_SHADOW : "none",
           cursor: "pointer", color: iconColor, position: "relative",
-          transition: "background-color 250ms, color 250ms, box-shadow 250ms, border-color 250ms, padding 350ms cubic-bezier(0.4,0,0.2,1)",
+          transition: "background-color 250ms, color 250ms, box-shadow 250ms, border-color 250ms, padding var(--nav-dur) var(--nav-ease)",
         }}
       >
         <span style={{ flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", color: iconColor, width: "var(--nav-icon-box)", height: "var(--nav-icon-box)", borderRadius: "var(--nav-item-radius)", backgroundColor: isCondensed ? fill : "transparent", border: `1px solid ${isCondensed && active ? "var(--accent-border)" : "transparent"}`, boxShadow: isCondensed && active ? NAV_BEVEL_SHADOW : "none", transition: "background-color 250ms, color 250ms" }}>
           {item.icon}
         </span>
-        <span style={{ flex: 1, minWidth: 0, textAlign: "left", fontSize: 14, fontWeight: 500, color: labelColor, whiteSpace: "nowrap", overflow: "hidden", marginLeft: isCondensed ? 0 : 12, opacity: isCondensed ? 0 : 1, transition: "color 250ms, opacity 250ms, margin-left 350ms cubic-bezier(0.4,0,0.2,1)" }}>
+        {/* aria-hidden while condensed: the label is still in the DOM (it has to be,
+            or expanding would reflow the row), but it is 0-opacity decoration then,
+            and the accessible name comes from the title. */}
+        <span aria-hidden={isCondensed} style={{ flex: 1, minWidth: 0, textAlign: "left", fontSize: 14, fontWeight: 500, color: labelColor, whiteSpace: "nowrap", overflow: "hidden", marginLeft: isCondensed ? 0 : 12, opacity: isCondensed ? 0 : 1, transition: "color 250ms, opacity 250ms, margin-left var(--nav-dur) var(--nav-ease)" }}>
           {item.label}
         </span>
-        {isCondensed && isHovered && (
-          <div style={{ position: "absolute", left: "calc(100% + 12px)", top: "50%", transform: "translateY(-50%)", backgroundColor: "var(--surface-2)", color: "var(--text-primary)", fontSize: 13, fontWeight: 500, padding: "6px 12px", borderRadius: 6, whiteSpace: "nowrap", border: "1px solid var(--border)", zIndex: 120, pointerEvents: "none" }}>
-            {item.label}
-          </div>
-        )}
       </button>
     );
   }
 
   return (
-    <nav role="navigation" aria-label="Main sidebar navigation" className="frosted-glass nav-rail"
-      style={{ width, minWidth: width, height: "calc(100% - var(--shell-double-pad))", margin: "var(--shell-pad) 0 var(--shell-pad) var(--shell-pad)", display: "flex", flexDirection: "column", transition: "width 350ms cubic-bezier(0.4,0,0.2,1), min-width 350ms cubic-bezier(0.4,0,0.2,1)", position: "relative", zIndex: 100, overflowY: "auto", overflowX: "hidden", borderRadius: "var(--radius-lg)" }}>
-      <button onClick={toggleExpanded} aria-expanded={expanded} aria-label={expanded ? "Collapse sidebar" : "Expand sidebar"}
-        style={{ position: "absolute", top: "50%", right: 8, transform: "translateY(-50%)", width: 20, height: 20, borderRadius: 4, background: "transparent", color: "var(--text-muted)", border: "none", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", zIndex: 110, padding: 0 }}>
-        <ToggleArrow expanded={expanded} />
-      </button>
-
+    <nav
+      role="navigation" aria-label="Main sidebar navigation" className="frosted-glass nav-rail"
+      // Hover OR keyboard focus opens it. focus-within is what keeps the rail
+      // reachable without a pointer, since there is no longer a toggle to tab to.
+      onMouseEnter={() => setExpanded(true)}
+      onMouseLeave={() => setExpanded(false)}
+      onFocus={() => setExpanded(true)}
+      onBlur={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setExpanded(false); }}
+      style={{ width, minWidth: width, height: "calc(100% - var(--shell-double-pad))", margin: "var(--shell-pad) 0 var(--shell-pad) var(--shell-pad)", display: "flex", flexDirection: "column", transition: "width var(--nav-dur) var(--nav-ease), min-width var(--nav-dur) var(--nav-ease)", position: "relative", zIndex: 100, overflowY: "auto", overflowX: "hidden", borderRadius: "var(--radius-lg)" }}
+    >
       <div style={{ padding: "16px 10px 19px", display: "flex", justifyContent: "center" }}>
-        <Logo condensed={isCondensed} />
+        <div style={{ height: 42, display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <BrandLogo condensed={isCondensed} />
+        </div>
       </div>
 
-      <div style={{ display: "flex", flexDirection: "column", gap: 2, padding: "0 8px", flex: 1 }}>
+      <div style={{ display: "flex", flexDirection: "column", gap: 2, padding: "0 8px" }}>
         {NAV_ITEMS.map((item) => (
           <div key={item.id} style={{ position: "relative" }}>
-            {renderButton(item, { active: activeTool === item.id, onClick: () => onSelectTool(item.id) })}
+            {renderButton(item, {
+              active: activeTool === item.id,
+              onClick: () => (item.id === "settings" ? onSettings() : onSelectTool(item.id)),
+            })}
           </div>
         ))}
-      </div>
-
-      <div style={{ padding: "0 8px", borderTop: "1px solid var(--border-subtle)", height: "var(--footer-bar-height)", display: "flex", alignItems: "center" }}>
-        {renderButton(SETTINGS_ITEM, { active: activeTool === "settings", onClick: onSettings })}
       </div>
     </nav>
   );

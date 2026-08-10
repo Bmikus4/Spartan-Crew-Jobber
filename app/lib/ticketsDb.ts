@@ -279,3 +279,71 @@ export async function listTickets(limit = 300): Promise<Job[]> {
     return [];
   }
 }
+
+/**
+ * What is true RIGHT NOW, counted in threads.
+ *
+ * The dashboard used to answer "how many are awaiting confirm" from the event log,
+ * which cannot answer it: the log is a record of things that HAPPENED, so a thread
+ * re-processed three times contributes three `needs_human` events and a proposal
+ * that was superseded still counts as proposed forever. Live, that made every state
+ * figure on the dashboard disagree with the board it describes —
+ *
+ *      awaiting confirm   24 on the dashboard   9 on the board
+ *      needs human        32                    12
+ *      with an order       2 ("orders created") 30
+ *
+ * — and none of the three was labelled in a way that explained the gap. A count of
+ * events and a count of things are different questions; the dashboard was asking
+ * the second and reading the answer to the first.
+ *
+ * So state is read HERE, from the same table and with the same predicate the board
+ * lanes by, and the dashboard keeps the event log for what it is genuinely good at:
+ * flow over a window. The two are labelled apart on the screen.
+ */
+export interface TicketStateCounts {
+  live: number;            // threads that are real client work
+  awaiting_confirm: number; // staged, waiting for a human click
+  needs_human: number;      // flagged, or missing something only a person has
+  with_order: number;       // linked to an OnSinch order, however it got there
+  failed: number;           // an OnSinch write actually threw
+  dismissed: number;        // judged not a client enquiry
+}
+
+export async function ticketStateCounts(): Promise<TicketStateCounts | null> {
+  const sql = db();
+  if (!sql) return null;
+  try {
+    await ensure(sql);
+    // `dismissed` mirrors isDismissed() in JobsScreen exactly. Kept in SQL next to
+    // the table rather than by pulling every row into the API: it is three counts,
+    // and the board's own list query already exists for when the rows are wanted.
+    const rows = (await sql`
+      SELECT
+        count(*) FILTER (WHERE NOT dismissed)                                          AS live,
+        count(*) FILTER (WHERE NOT dismissed AND status = 'proposed' AND NOT flagged)   AS awaiting_confirm,
+        count(*) FILTER (WHERE NOT dismissed AND flagged AND status <> 'error')         AS needs_human,
+        count(*) FILTER (WHERE NOT dismissed AND onsinch_order_id IS NOT NULL)          AS with_order,
+        count(*) FILTER (WHERE NOT dismissed AND status = 'error')                      AS failed,
+        count(*) FILTER (WHERE dismissed)                                               AS dismissed
+      FROM (
+        SELECT status, onsinch_order_id,
+               (classification = 'not-a-job' OR status = 'ignored' OR is_client_inquiry = false) AS dismissed,
+               (needs_human OR status = 'needs-info') AS flagged
+        FROM tickets
+      ) t`) as Record<string, string>[];
+    const r = rows[0] ?? {};
+    const n = (k: string) => Number(r[k] ?? 0);
+    return {
+      live: n("live"),
+      awaiting_confirm: n("awaiting_confirm"),
+      needs_human: n("needs_human"),
+      with_order: n("with_order"),
+      failed: n("failed"),
+      dismissed: n("dismissed"),
+    };
+  } catch (err) {
+    console.error("[tickets] state counts failed", err);
+    return null;
+  }
+}

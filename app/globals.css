@@ -9,6 +9,11 @@
  */
 
 :root {
+  /* Native chrome the page does not paint — scrollbars, form controls, the canvas
+     behind an overscroll — follows this, not --bg. Without it the light theme keeps
+     dark scrollbars and a dark number-input spinner. */
+  color-scheme: dark;
+
   --bg: #0e0e0e;
   --surface: #161616;
   --surface-2: #1c1c1c;
@@ -33,10 +38,44 @@
 
   --danger: #ef4444;
   --danger-subtle: rgba(239, 68, 68, 0.14);
+  --danger-border: rgba(239, 68, 68, 0.32);
   --ok: #34d399;
   /* Was only ever an inline fallback — var(--warn, #f59e0b) — so "needs human"
      wore a hardcoded dark-theme amber that the light theme could not override. */
   --warn: #f59e0b;
+
+  /* Direction. One pair for every better/worse in the app, so a rising number, a
+     healthy stamp and a passing check are the same green. NOT --accent: Spartan's
+     accent is near-white, which cannot carry a verdict — an "operational" stamp
+     painted in it read as ordinary text, which is how the dashboard footer came to
+     have a status light that did not light. */
+  --up: #16a34a;
+  --up-border: #14532d;
+  --up-subtle: #052e16;
+  --down: #dc2626;
+  --down-border: #7f1d1d;
+  --down-subtle: #450a0a;
+
+  /* ── Chart series ──────────────────────────────────────────────────────────
+   * Categorical colours, and ONLY for charts. Spartan's accent is a near-white
+   * steel, so unlike the quote tool there is no brand hue to lead with — every
+   * series needs its own identity or four charts are four white lines. Hues are
+   * spaced so none can be mistaken for another, and green stays out: green means
+   * "up" (above), and a green series beside a green trend stamp would read as a
+   * verdict about the line. */
+  --viz-teal: #2bb3a3;
+  --viz-blue: #4f8ff0;
+  --viz-gold: #eab308;
+  --viz-violet: #a78bfa;
+
+  /* Chart card ground, and the popovers that sit ON it. Named by ROLE, not used as
+     raw --surface-2, because the elevation tokens INVERT between themes: in dark
+     --surface-2 is lighter than --surface, in light it is darker. Hard-coding
+     either gives cards that lift off the page in one theme and sink in the other. */
+  --chart-surface: var(--surface-2);
+  --chart-pop: var(--surface);
+  /* Read raw by the chart dot-grid pattern. */
+  --input: var(--border);
 
   --radius-sm: 6px;
   --radius: 10px;
@@ -44,6 +83,11 @@
 
   --nav-w-expanded: 232px;
   --nav-w-condensed: 60px;
+  /* How the rail moves. Anything laying out BESIDE the rail moves on exactly this
+     curve or the two come apart mid-slide. Was written out by hand in four places
+     in Sidebar.tsx, which is four chances for them to disagree. */
+  --nav-dur: 350ms;
+  --nav-ease: cubic-bezier(0.4, 0, 0.2, 1);
   --nav-item-radius: 12px;
   --nav-icon-box: 40px;
 
@@ -68,6 +112,8 @@
 }
 
 [data-theme="light"] {
+  color-scheme: light;
+
   --bg: #efe8da;
   --surface: #f5efe4;
   --surface-2: #e7decd;
@@ -96,6 +142,29 @@
   --warn: #a86a00;
   --danger: #c0342b;
   --danger-subtle: rgba(192, 52, 43, 0.12);
+  --danger-border: rgba(192, 52, 43, 0.34);
+
+  /* Inverted deliberately: in dark, --up-subtle is a near-black green ground with
+     bright text on it; on paper that same fill is a hole. Light wants the pale
+     ground and the dark text. */
+  --up: #15803d;
+  --up-border: #bbf7d0;
+  --up-subtle: #f0fdf4;
+  --down: #b91c1c;
+  --down-border: #fee2e2;
+  --down-subtle: #fef2f2;
+
+  /* Darkened for paper — the dark-theme series sit near 70% luminance and vanish
+     on a #efe8da ground. */
+  --viz-teal: #12776b;
+  --viz-blue: #2a63bd;
+  --viz-gold: #a16207;
+  --viz-violet: #7c3aed;
+
+  /* Swapped, for the reason given on these two in :root — the elevation order
+     reverses between themes, so the ROLE has to move with it. */
+  --chart-surface: var(--surface);
+  --chart-pop: var(--surface-2);
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -131,6 +200,24 @@ html, body {
 .tnum { font-variant-numeric: tabular-nums; }
 .mono { font-family: var(--font-geist-mono), "Geist Mono", ui-monospace, monospace; }
 
+/* Sun/moon toggle: one button holding both icons, data-theme picks which shows.
+   The markup already carried this class name and there were no rules behind it —
+   the button was styled entirely inline and branched in JSX for its icon. */
+.theme-toggle {
+  width: 36px; height: 36px; border-radius: 9999px;
+  display: grid; place-items: center;
+  color: var(--text-muted); background: transparent;
+  border: 1px solid var(--border); cursor: pointer;
+  transition: color 0.2s, border-color 0.2s, transform 0.2s;
+}
+.theme-toggle:hover { color: var(--text-primary); border-color: var(--accent-border); }
+.theme-toggle:active { transform: scale(0.94); }
+.theme-toggle svg { width: 17px; height: 17px; }
+.theme-toggle .icon-sun { display: none; }
+.theme-toggle .icon-moon { display: block; }
+[data-theme="light"] .theme-toggle .icon-sun { display: block; }
+[data-theme="light"] .theme-toggle .icon-moon { display: none; }
+
 .frosted-glass {
   background: var(--surface);
   border: 1px solid var(--border);
@@ -152,10 +239,123 @@ input::placeholder, textarea::placeholder { color: var(--text-faint); }
   animation: crmShimmer 1.6s linear infinite;
 }
 
+/* Responsive label visibility — a bar that must stay one line on a phone. */
+.only-mobile { display: none; }
+@media (max-width: 768px) {
+  .hide-mobile { display: none; }
+  .only-mobile { display: inline; }
+}
+
+/* ── A screen loads by drawing itself ────────────────────────────────────────
+ * A skeleton block in the true geometry of the thing that is coming, so nothing
+ * MOVES when the data lands. Every screen here used to load as one centred
+ * shimmering word, which reflowed the entire layout on arrival — the reading eye
+ * has to find its place again every single time. */
+@keyframes skelPulse { 0%, 100% { opacity: 0.45; } 50% { opacity: 0.8; } }
+.skel {
+  display: inline-block;
+  background: var(--surface-2);
+  border-radius: 5px;
+  animation: skelPulse 1.5s ease-in-out infinite;
+}
+[data-theme="light"] .skel { background: var(--surface-hover); }
+
+/* ── The info dot ────────────────────────────────────────────────────────────
+ * Every figure on the dashboard is a DERIVED quantity — an assumed rate, a share
+ * of inbound, a count of events rather than of things. None is self-evident from
+ * its label, and the explanation used to be nowhere at all.
+ *
+ * Hover is CSS, not React state, deliberately: headless Chromium starves rAF and
+ * setTimeout, so a JS tooltip cannot be exercised by the harness that checks this
+ * screen, whereas :hover and :focus-visible are computed style and can be read
+ * straight out of the DOM. tabIndex, because a hover-only affordance is
+ * unreachable from a keyboard. */
+.info-dot {
+  position: absolute; right: 10px; bottom: 8px;
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 18px; height: 18px; border-radius: 9999px;
+  color: var(--text-faint); cursor: pointer;
+  transition: color 160ms ease;
+}
+.info-dot:hover, .info-dot:focus-visible { color: var(--accent); outline: none; }
+.info-dot__bubble {
+  position: absolute; right: 0; bottom: calc(100% + 7px);
+  width: min(280px, 62vw); padding: 9px 11px; z-index: 30;
+  background: var(--chart-pop); border: 1px solid var(--border);
+  border-radius: var(--radius-sm); box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
+  color: var(--text-secondary); font-size: 11.5px; font-weight: 400;
+  line-height: 1.5; letter-spacing: normal; text-align: left; text-transform: none;
+  opacity: 0; visibility: hidden; transition: opacity 160ms ease;
+  pointer-events: none;
+}
+.info-dot:hover .info-dot__bubble, .info-dot:focus-visible .info-dot__bubble { opacity: 1; visibility: visible; }
+
+/* ── The KPI strip ───────────────────────────────────────────────────────────
+ * Cells divided by rules rather than gaps, so the row reads as one instrument
+ * with four readings instead of four cards that happen to be adjacent. */
+.metric-strip { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.metric-strip__cell {
+  padding: 14px 16px 13px;
+  border-inline-start: 1px solid var(--border);
+  background: transparent; text-align: left; cursor: pointer;
+  transition: background-color 200ms ease;
+}
+.metric-strip__cell:first-child { border-inline-start: none; }
+.metric-strip__cell:hover { background: var(--surface-hover); }
+.metric-strip__cell:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.metric-strip__cell--flat { cursor: default; }
+.metric-strip__cell--flat:hover { background: transparent; }
+@media (max-width: 1080px) { .metric-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 560px)  { .metric-strip { grid-template-columns: 1fr; } }
+
+/* The row of cards under the hero: two time series and a dial, same row, same
+   height. The dial stays square, so its width follows that shared height. */
+.dash-lower {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+  gap: 14px; align-items: stretch;
+}
+.dash-card { position: relative; }
+.dash-square { aspect-ratio: 1 / 1; }
+.dash-square__body { height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; }
+.dash-square__ring { max-height: 168px; aspect-ratio: 1 / 1; width: auto; height: 100%; }
+@media (max-width: 1180px) {
+  .dash-lower { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .dash-square { aspect-ratio: auto; grid-column: 1 / -1; }
+  .dash-square__ring { max-height: 148px; }
+}
+@media (max-width: 760px) { .dash-lower { grid-template-columns: 1fr; } }
+
+/* ── Segmented control ───────────────────────────────────────────────────────
+ * One definition. Settings hand-wrote this same shape four times, and the copies
+ * had already drifted apart in padding. */
+.seg { display: inline-flex; background: var(--surface-2); border: 1px solid var(--border); border-radius: 10px; padding: 3px; gap: 3px; align-self: flex-start; flex-wrap: wrap; }
+.seg__btn {
+  padding: 8px 16px; border-radius: 8px; border: 1px solid transparent;
+  background: transparent; color: var(--text-secondary);
+  font-family: inherit; font-weight: 600; font-size: 13px; cursor: pointer;
+  transition: background-color 200ms, color 200ms, border-color 200ms;
+}
+.seg__btn:hover { color: var(--text-primary); }
+.seg__btn[aria-pressed="true"] { background: var(--accent-subtle); border-color: var(--accent-border); color: var(--accent); }
+.seg__btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
 @media (max-width: 768px) {
   .frosted-glass { border: none; border-radius: 0; }
   input, textarea, select { font-size: 16px !important; }
 }
+
+/* During a theme switch <html> wears .theme-anim for one beat, which FORCES every
+   element to crossfade the same properties on the same clock. Without it the flip
+   is staggered: the per-component inline transitions run at their own timings, and
+   the ones that omit colour entirely snap instantly. The !important is required to
+   beat inline style="transition:…". */
+html.theme-anim, html.theme-anim *, html.theme-anim *::before, html.theme-anim *::after {
+  transition: background-color 250ms ease, border-color 250ms ease, color 250ms ease,
+              fill 250ms ease, box-shadow 250ms ease, opacity 250ms ease !important;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.001ms !important; transition-duration: 0.001ms !important; }
+  html.theme-anim, html.theme-anim * { transition: none !important; }
 }
