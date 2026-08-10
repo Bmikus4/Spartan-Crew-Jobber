@@ -38,6 +38,7 @@ export function coerceSettings(body: unknown): Partial<Settings> {
   if (b.order_mode === "draft-only" || b.order_mode === "auto") next.order_mode = b.order_mode;
   if (typeof b.replies_enabled === "boolean") next.replies_enabled = b.replies_enabled;
   if (b.reply_delivery === "draft" || b.reply_delivery === "send") next.reply_delivery = b.reply_delivery;
+  if (b.reply_scope === "all" || b.reply_scope === "enquiries") next.reply_scope = b.reply_scope;
   return next;
 }
 

@@ -138,6 +138,51 @@ console.log("\n[5] the context reaches the writer at all");
   ok(lastReplyContext !== null, "composeReply received a ReplyContext, not undefined");
 }
 
+console.log("\n[6] reply_scope decides WHICH threads get one");
+{
+  // Ben, 2026-08-09: "make it a settings thing, to toggle between send to all or
+  // send to new enquiries only." Over a 10-thread sample across all
+  // classifications, 7 were confirmation-only or not-a-job and produced correct
+  // but low-value drafts. "all" is the default he chose; this is the other half.
+  __resetListCache(); resetReplyContext();
+  const chat = thread("t-scope-chat", "Thanks, speak soon.");
+
+  const all = await compile(chat, undefined, { ...deps, replyScope: "all" });
+  ok(!!all.state.reply_body_html, "scope=all replies to a not-a-job thread");
+
+  __resetListCache(); resetReplyContext();
+  const enq = await compile(chat, undefined, { ...deps, replyScope: "enquiries" });
+  ok(!enq.state.reply_body_html, "scope=enquiries does not");
+  ok(!enq.actions.createReplyDraft, "and stages no draft");
+  ok(lastReplyContext === null, "the model was never asked to write one - the call is saved too");
+
+  // A real request still gets a reply under either scope.
+  __resetListCache(); resetReplyContext();
+  const job = await compile(
+    thread("t-scope-job", "We need 6 crew on 12 August at ExCeL London, 08:00-18:00."),
+    undefined,
+    { ...deps, replyScope: "enquiries" }
+  );
+  ok(!!job.state.reply_body_html, "a crew request is replied to under scope=enquiries");
+  ok(!!job.actions.createReplyDraft, "and the draft is staged");
+
+  // The classification it keys on is the OVERRULED one, so a thread the classifier
+  // called junk but which carries a dated crew request is still answered. Gating on
+  // the raw verdict would reintroduce the miss that overrule exists to fix.
+  __resetListCache(); resetReplyContext();
+  const overruled = {
+    ...mockReasoner,
+    async classify() { return { classification: "not-a-job" as const, priority: "low" as const, job_summary: "N/A - nothing here" }; },
+  };
+  const rescued = await compile(
+    thread("t-scope-overruled", "We need 6 crew on 12 August at ExCeL London, 08:00-18:00."),
+    undefined,
+    { ...deps, reasoner: overruled as never, replyScope: "enquiries" }
+  );
+  ok(rescued.state.classification === "new-job", "the extractor overruled the classifier", rescued.state.classification);
+  ok(!!rescued.state.reply_body_html, "and the rescued thread is still replied to");
+}
+
 console.log(fails ? `\n${fails} FAILED\n` : "\nALL PASS\n");
 process.exit(fails ? 1 : 0);
 }

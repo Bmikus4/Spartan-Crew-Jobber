@@ -9,9 +9,10 @@ import InstallButton from "./InstallButton";
 
 type OrderMode = "draft-only" | "auto";
 type ReplyDelivery = "draft" | "send";
-interface Settings { order_mode: OrderMode; replies_enabled: boolean; reply_delivery: ReplyDelivery }
+type ReplyScope = "all" | "enquiries";
+interface Settings { order_mode: OrderMode; replies_enabled: boolean; reply_delivery: ReplyDelivery; reply_scope: ReplyScope }
 
-const SETTINGS_FALLBACK: Settings = { order_mode: "draft-only", replies_enabled: false, reply_delivery: "draft" };
+const SETTINGS_FALLBACK: Settings = { order_mode: "draft-only", replies_enabled: false, reply_delivery: "draft", reply_scope: "all" };
 
 const INK = "var(--text-primary)";
 const SUB = "var(--text-secondary)";
@@ -143,6 +144,29 @@ export default function SettingsScreen() {
                   Send mode emails clients without a human reading the reply first. Only enable once drafted replies have been checked for a while.
                 </div>
               )}
+
+              {/* WHICH threads get a reply. Measured over a 10-thread sample across
+                  all classifications: 7 were acknowledgements that produced correct
+                  but low-value drafts, and that shape is ~45% of the live board. */}
+              <div style={{ borderTop: "1px solid var(--border)", paddingTop: 14, display: "flex", flexDirection: "column", gap: 12 }}>
+                <div>
+                  <div style={{ fontSize: 13.5, fontWeight: 700, color: INK }}>Which emails get a reply</div>
+                  <p style={{ fontSize: 12.5, color: MUT, margin: "4px 0 0", lineHeight: 1.5 }}>
+                    <b style={{ color: SUB }}>All emails</b> (default): every email the engine reads, including plain acknowledgements like &quot;PO received, thanks&quot;. <b style={{ color: SUB }}>New enquiries only</b>: just the threads asking for crew — a new job or a change to one. Around 45% of threads are acknowledgements, so this roughly halves the drafts waiting to be reviewed.
+                  </p>
+                </div>
+                <div style={{ display: "inline-flex", background: "var(--surface-2)", border: "1px solid var(--border)", borderRadius: 10, padding: 3, gap: 3, alignSelf: "flex-start" }}>
+                  {([["all", "All emails"], ["enquiries", "New enquiries only"]] as [ReplyScope, string][]).map(([id, label]) => {
+                    const active = settings.reply_scope === id;
+                    return (
+                      <button key={id} onClick={() => save({ ...settings, reply_scope: id })}
+                        style={{ padding: "8px 16px", borderRadius: 8, border: "1px solid " + (active ? "var(--accent-border)" : "transparent"), background: active ? "var(--accent-subtle)" : "transparent", color: active ? A : SUB, fontWeight: 600, fontSize: 13, cursor: "pointer", transition: "all 200ms" }}>
+                        {label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
             </div>
           )}
           <div style={{ fontSize: 11, color: "var(--text-faint)" }}>

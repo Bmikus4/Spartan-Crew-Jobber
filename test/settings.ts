@@ -51,12 +51,26 @@ console.log("\n[2] every setting survives the round trip (the bug)");
 
 console.log("\n[3] junk is rejected without disturbing what is stored");
 {
-  const stored: Settings = { order_mode: "auto", replies_enabled: true, reply_delivery: "send" };
-  const saved = merge(stored, { order_mode: "yolo", replies_enabled: "yes", reply_delivery: "post" });
+  const stored: Settings = { order_mode: "auto", replies_enabled: true, reply_delivery: "send", reply_scope: "enquiries" };
+  const saved = merge(stored, { order_mode: "yolo", replies_enabled: "yes", reply_delivery: "post", reply_scope: "some" });
   ok(saved.order_mode === "auto", "bad order_mode ignored", saved.order_mode);
   ok(saved.replies_enabled === true, "non-boolean replies_enabled ignored");
   ok(saved.reply_delivery === "send", "bad reply_delivery ignored", saved.reply_delivery);
+  ok(saved.reply_scope === "enquiries", "bad reply_scope ignored", saved.reply_scope);
   ok(Object.keys(whitelist({ nonsense: 1 })).length === 0, "unknown keys never reach the store");
+}
+
+console.log("\n[3b] reply_scope survives the whitelist, which dropped it once for replies_enabled");
+{
+  // coerceSettings must list EVERY field. It previously accepted only order_mode,
+  // so the replies toggle POSTed a value the store threw away and the switch
+  // looked like it worked while changing nothing. A new setting is the same trap.
+  ok(whitelist({ reply_scope: "enquiries" }).reply_scope === "enquiries", "enquiries accepted");
+  ok(whitelist({ reply_scope: "all" }).reply_scope === "all", "all accepted");
+  ok(whitelist({ reply_scope: "everything" }).reply_scope === undefined, "anything else refused");
+  const flipped = merge({ ...DEFAULT_SETTINGS }, { reply_scope: "enquiries" });
+  ok(flipped.reply_scope === "enquiries", "and it reaches the stored settings");
+  ok(flipped.replies_enabled === false, "without disturbing the master switch");
 }
 
 console.log("\n[4] replies OFF forces delivery to draft on the wire");

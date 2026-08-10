@@ -277,6 +277,10 @@ export async function buildDeps(): Promise<PipelineDeps> {
     metrics: new NeonMetrics(),
     settings,
     repliesEnabled: settings.replies_enabled, // Tool 1: off by default
+    // Which threads get one. Forwarded explicitly: this wrapper is hand-written
+    // and has dropped a field before, and a scope that silently defaulted would
+    // reply to everything while the dashboard said otherwise.
+    replyScope: settings.reply_scope,
     seededRateCard: async (companyId: number) => (await getRateCard(companyId))?.card ?? null,
     aliases: { lookup: lookupAlias, record: recordAlias },
     senderVerdict,

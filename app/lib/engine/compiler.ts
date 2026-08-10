@@ -32,6 +32,12 @@ export interface CompileDeps {
   now: () => number; // injectable clock for deterministic tests
   // Tool 1 toggle. undefined => enabled (tests); false => no reply is drafted.
   repliesEnabled?: boolean;
+  /**
+   * Which threads get one. "all" (the default) replies to everything read;
+   * "enquiries" replies only where there is a crew request — a new job or a
+   * change to one. See Settings.reply_scope.
+   */
+  replyScope?: "all" | "enquiries";
   // Seeded rate-card lookup (Phase B rate_cards). Injected so the engine stays
   // DB-agnostic; when absent, rates.ts falls back to a live history scan.
   seededRateCard?: (companyId: number) => Promise<number | null>;
@@ -711,7 +717,20 @@ export async function compile(
    * `order_state` is deliberately coarse. The model is not shown ids, statuses or
    * anything it could leak into prose — only which of four situations it is in.
    */
-  const repliesEnabled = deps.repliesEnabled !== false;
+  /**
+   * "enquiries" scope keys off isJob, which is the SAME test the order path uses,
+   * so the rule is exactly "reply where there is a booking to talk about". It
+   * deliberately includes updates: a client moving a shift is asking for
+   * something and expects an answer, and it is the classification the whole
+   * engine already treats as a live request.
+   *
+   * Note this reads the classification AFTER the extractor may have overruled it,
+   * so a thread the classifier called junk but which carries a dated crew request
+   * still gets its reply. Gating on the raw classifier verdict would reintroduce
+   * the miss that overrule exists to fix.
+   */
+  const inScope = (deps.replyScope ?? "all") === "all" || isJob;
+  const repliesEnabled = deps.repliesEnabled !== false && inScope;
   const orderState: ReplyContext["order_state"] = !isJob
     ? "not-a-job"
     : desired && !blocked

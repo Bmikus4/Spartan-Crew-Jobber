@@ -237,12 +237,31 @@ export interface Settings {
    * DRAFT by default. N/A while replies_enabled is false.
    */
   reply_delivery: "draft" | "send";
+  /**
+   * WHICH threads get a reply, once replies are on.
+   *
+   *   all       every thread the engine reads, acknowledgements included
+   *   enquiries only threads carrying a crew request — a new job, or a change
+   *             to one. Confirmations and everything else pass silently.
+   *
+   * Measured before this existed: over a 10-thread sample across all
+   * classifications, 7 were confirmation-only or not-a-job and produced correct
+   * but low-value drafts — "PO received, thank you!", "you too, have a great
+   * weekend!". On the live board that shape is ~45% of threads, and every one is
+   * a draft somebody opens and then deletes.
+   *
+   * Neither answer is safer than the other, which is why it is a setting and not
+   * a rule: a reply nobody needed is a wasted click, a missing reply is a client
+   * left waiting. Ben chose "all" as the default (2026-08-09).
+   */
+  reply_scope: "all" | "enquiries";
 }
 
 export const DEFAULT_SETTINGS: Settings = {
   order_mode: "draft-only",
   replies_enabled: false,
   reply_delivery: "draft",
+  reply_scope: "all",
 };
 
 /** The actions the executor should perform after a compile. */
