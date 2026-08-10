@@ -39,8 +39,11 @@ export function buildAuthUrl(origin: string, state: string): string {
     access_type: "online",
     prompt: "select_account",
   });
-  const hd = (process.env.AUTH_ALLOWED_DOMAIN || "").split(",")[0].trim();
-  if (hd) p.set("hd", hd);
+  // No `hd`. Google treats it as a hard filter, not a hint, so seeding it from the
+  // first AUTH_ALLOWED_DOMAIN locked out everyone the allowlist admits by EMAIL —
+  // Ben's own benjamintmikus@gmail.com among them, since samuraisolutions.co.uk is
+  // not a Google account. The allowlist is enforced on the verified email in the
+  // callback, which is the only place it can be enforced honestly anyway.
   return `${AUTHORIZE}?${p.toString()}`;
 }
 
