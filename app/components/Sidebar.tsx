@@ -193,11 +193,11 @@ export default function Sidebar({ activeTool, onSelectTool, onSettings }: Sideba
         appear beside it. No second copy, no transform arithmetic, no geometry morph.
 
         Because the arrow keeps its own 40px box, its centre is exactly the icon
-        column's when the wordmark is 0 wide — and left padding is 14px = the row
-        container's 8 plus the button's 6, so it heads that column rather than hanging
+        column's when the wordmark is 0 wide — and left padding is 10px = the row
+        container's 4 plus the button's 6, so it heads that column rather than hanging
         off the edge of the rail.
       */}
-      <div style={{ display: "flex", alignItems: "center", height: "var(--panel-header-height)", padding: "0 6px 0 14px", marginBottom: 10, flexShrink: 0, overflow: "hidden" }}>
+      <div style={{ display: "flex", alignItems: "center", height: "var(--panel-header-height)", padding: "0 6px 0 10px", marginBottom: 10, flexShrink: 0, overflow: "hidden" }}>
         <span
           aria-hidden={isCondensed}
           style={{
@@ -216,7 +216,10 @@ export default function Sidebar({ activeTool, onSelectTool, onSettings }: Sideba
         </span>
       </div>
 
-      <div style={{ display: "flex", flexDirection: "column", gap: 2, padding: "0 8px" }}>
+      {/* 4px, not 8: the button adds 6 of its own, so the 40px icon box starts at 10
+          and ends at 50 in a 60px rail — centred. At 8 it sat 4px right of centre. Any
+          change here must move the logo band's left padding by the same amount. */}
+      <div style={{ display: "flex", flexDirection: "column", gap: 2, padding: "0 4px" }}>
         {NAV_ITEMS.map((item) => (
           <div key={item.id} style={{ position: "relative" }}>
             {renderButton(item, {
