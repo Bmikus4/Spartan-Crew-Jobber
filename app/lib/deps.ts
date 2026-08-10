@@ -155,13 +155,39 @@ function onsinch(): OnsinchClient {
 
 export function executor(client: OnsinchClient): Executor {
   return {
+    /**
+     * Hand the composed reply to n8n, which holds the Gmail credential and creates
+     * the draft. See scripts/install-reply-draft-workflow.mjs.
+     *
+     * A DRAFT ID OR NOTHING. This used to return `j.draftId ?? "drafted"`, which
+     * reads any answer at all as success — and n8n's webhook returns HTTP 200 with
+     * an empty body when the workflow throws, which is exactly what a rejected
+     * secret produces. Verified live: posting with no secret gets 200, the run
+     * stops at the guard, no draft is created, and the old code would have stamped
+     * the thread "drafted" and moved on. A reply nobody can see, recorded as sent,
+     * is the failure this whole system is built to avoid.
+     *
+     * The secret is the same N8N_WEBHOOK_SECRET the inbound route uses — one shared
+     * secret between this app and its own workflows, in both directions.
+     */
     async createReplyDraft(a) {
       const hook = process.env.GMAIL_DRAFT_WEBHOOK;
       if (!hook) return "return-to-caller"; // caller drafts from the response
       try {
-        const res = await fetch(hook, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(a) });
-        const j = await res.json().catch(() => ({}));
-        return String(j.draftId ?? "drafted");
+        const res = await fetch(hook, {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            "x-webhook-secret": process.env.N8N_WEBHOOK_SECRET ?? "",
+          },
+          body: JSON.stringify(a),
+        });
+        const j = (await res.json().catch(() => ({}))) as { draftId?: unknown };
+        if (!res.ok || !j.draftId) {
+          console.error(`[gmail] draft webhook did not return a draft id (HTTP ${res.status})`, JSON.stringify(j).slice(0, 200));
+          return "draft-failed";
+        }
+        return String(j.draftId);
       } catch (err) {
         console.error("[gmail] draft webhook failed", err);
         return "draft-failed";
