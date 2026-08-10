@@ -124,8 +124,18 @@ const NEW = { message_id: "m1", body: "Hi, can I book 4 crew on 9th March at Sav
   assert(matchContact("pier@redbeast.co.uk", clients) === 1337, "contact exact-match on email, case-insensitive (no dup)");
   assert(matchContact("new@person.com", clients) === null, "new contact -> null");
   const existing = [{ id: 5001, happening: "2026-03-09T08:00:00+00:00", Job: [{ id: 7001 }] }];
-  assert(matchExistingOrder("2026-03-09", existing)?.order_id === 5001, "order dedup: same-date match -> update, not create");
+  const oneHit = matchExistingOrder("2026-03-09", existing);
+  assert(!!oneHit && "order_id" in oneHit && oneHit.order_id === 5001, "order dedup: same-date match -> update, not create");
   assert(matchExistingOrder("2026-03-10", existing) === null, "different date -> no dup match");
+  // Two orders on the day and no venue to tell them apart: ambiguous, never a guess.
+  const twoSameDay = [
+    { id: 5001, happening: "2026-03-09T08:00:00+00:00", name: "Acme @ Olympia", Job: [{ id: 7001 }] },
+    { id: 5002, happening: "2026-03-09T14:00:00+00:00", name: "Acme @ ExCeL", Job: [{ id: 7002 }] },
+  ];
+  const amb = matchExistingOrder("2026-03-09", twoSameDay);
+  assert(!!amb && "ambiguous" in amb && amb.ambiguous === 2, "two orders on the day -> ambiguous, not a coin flip");
+  const byVenue = matchExistingOrder("2026-03-09", twoSameDay, "ExCeL London, Royal Victoria Dock");
+  assert(!!byVenue && "order_id" in byVenue && byVenue.order_id === 5002, "the venue separates them -> the right order");
 
   console.log("\n[9] Tool 2 — new venue provisioned on write, then order created");
   const calls: string[] = [];

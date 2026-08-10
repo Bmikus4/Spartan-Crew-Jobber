@@ -23,7 +23,7 @@ import { composeOrder } from "./compose";
 import { validateOrder } from "./format";
 import { matchCompany, matchCompanyByDomain, matchContact, matchPlace, matchExistingOrder, normName, normAddr } from "./resolve";
 import { resolveRateCard } from "./rates";
-import type { Reasoner } from "./reason";
+import type { Reasoner, ReplyContext } from "./reason";
 import type { OnsinchClient } from "./onsinch";
 
 export interface CompileDeps {
@@ -482,15 +482,15 @@ export async function compile(
     }
   }
 
-  // 2. compose the reply — Tool 1, gated by the replies_enabled setting.
-  // Off by default: classification + order work still run, but no reply is drafted.
-  const repliesEnabled = deps.repliesEnabled !== false;
-  const reply = repliesEnabled
-    ? await reasoner.composeReply(latest, history, classification)
-    : null;
-  const replyHash = reply ? hash(reply.html) : undefined;
-
-  // 3. only a real job triggers the order path
+  // 2. only a real job triggers the order path
+  //
+  // THE ORDER WORK HAPPENS BEFORE THE REPLY, and that ordering is the point.
+  // Composing first meant the reply was written knowing nothing about whether the
+  // booking could actually be made, so it promised one either way: live thread
+  // 19fadd4ff8152dea, a needs-info ticket whose company never resolved and which
+  // has no order at all, drafted "both dates are now booked in". A drafted promise
+  // a human sends unread is a booking Spartan has agreed to and not staffed.
+  // Ben, 2026-08-09: "fix the commitment problem, compose the reply after the order."
   const isJob = classification === "new-job" || classification === "update";
   let facts: ConversationFacts = prior?.facts ?? { requests: [] };
   let desired = null as ConversationState["desired_order"];
@@ -517,6 +517,8 @@ export async function compile(
   let linkedOrderId = prior?.onsinch_order_id;
   let provisionPlace: DesiredOrder["provision_place"];
   let provisionCompany: DesiredOrder["provision_company"];
+  /** Things only the client can tell us, without which no order can be built. */
+  const askFor = new Set<string>();
 
   if (isJob) {
     // The probe above already extracted this thread's facts when the classifier was
@@ -556,12 +558,30 @@ export async function compile(
     if (pl.note) notes.push(pl.note);
     if (us.note) notes.push(us.note);
 
-    // Order dedup vs OnSinch — never create a second job for an existing one.
+    // Order dedup vs OnSinch — never create a second job for an existing one, and
+    // never attach a change to the wrong one. See matchExistingOrder: the venue is
+    // what separates a client's several jobs on the same day, and where it cannot,
+    // the thread goes to a human rather than picking.
     if (company_id && !linkedOrderId) {
-      const existing = matchExistingOrder(firstDate(facts), await onsinch.companyOrdersWithJob(company_id));
-      if (existing) {
+      const existing = matchExistingOrder(
+        firstDate(facts),
+        await onsinch.companyOrdersWithJob(company_id),
+        facts.location_text
+      );
+      if (existing && "order_id" in existing) {
         linkedOrderId = existing.order_id;
-        notes.push(`matched existing OnSinch order #${existing.order_id} (same date) — will update, not create`);
+        notes.push(
+          `matched existing OnSinch order #${existing.order_id} (${existing.by === "date+venue" ? "same date and venue" : "same date"}) — will update, not create`
+        );
+      } else if (existing) {
+        // Deliberately does NOT fall through to creating a new order: on an update
+        // that would duplicate a job that already exists. A human picks.
+        needs_human = true;
+        blocked = true;
+        notes.push(
+          `${existing.ambiguous} existing OnSinch orders for this client on ${existing.day} and the thread does not say which — ` +
+            `not guessing; pick the right one by hand`
+        );
       }
     }
 
@@ -585,6 +605,41 @@ export async function compile(
     } else if (provisionCompany) {
       notes.push(`"${provisionCompany.name}" is new, so it has no rate card yet — set one when confirming (I1)`);
     }
+
+    /**
+     * What the CLIENT would have to tell us before this job can be booked.
+     *
+     * Ben, 2026-08-09: "it is fine if there is missing information in general, but
+     * if there is missing information that impedes on the systems ability to
+     * create an order, then we should ask for it in our reply."
+     *
+     * So this is deliberately not a list of everything unknown. It is the things
+     * that stop an order existing AND that only the client can supply:
+     *
+     *   crew size, date, times   - nobody else knows what they want
+     *   venue                    - only asked when there is no venue anywhere in
+     *                              the thread, since an unrecognised one is created
+     *
+     * Company is EXCLUDED on Ben's instruction ("if not enough info is provided,
+     * other than company"). A client should never be asked to confirm who they
+     * are: an unknown company is created, and an unknown contact falls back to a
+     * stand-in. Those are our problems to solve, not questions to put to them.
+     *
+     * The rate card is excluded for the same reason from the other direction - it
+     * blocks the order, but it is Spartan's number to set, and asking a client
+     * what to charge them would be absurd.
+     */
+    for (const r of facts.requests ?? []) {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(String(r.date ?? ""))) { askFor.add("the date(s) you need crew"); }
+      if (!(Number(r.size) > 0)) { askFor.add("how many crew you need"); }
+      if (!r.start_time || !r.end_time) { askFor.add("the start and finish times"); }
+    }
+    if (!(facts.requests ?? []).length) {
+      askFor.add("the date(s) you need crew");
+      askFor.add("how many crew you need");
+      askFor.add("the start and finish times");
+    }
+    if (!facts.location_text) askFor.add("the venue address");
 
     const havePlace = !!place_id || !!provisionPlace;
     const haveCompany = !!company_id || !!provisionCompany;
@@ -623,6 +678,19 @@ export async function compile(
       // an ORDER rather than as an enquiry with nothing attached. needs_human means
       // "check this before confirming", not "nothing was produced".
       if (provisionCompany || provisionPlace || user_id === PLACEHOLDER_CONTACT_ID) needs_human = true;
+
+      /**
+       * composeOrder can decline: every request block lacked a crew size, or a date,
+       * so there is no shift to build. Every id resolved, so nothing above fired —
+       * and the thread was landing on the board as "drafted" with no order attached
+       * and nobody called. A job that produced nothing is the single case most worth
+       * surfacing, and it was the quietest.
+       */
+      if (!desired) {
+        needs_human = true;
+        blocked = true;
+        notes.push("nothing bookable could be built from this thread — see the missing details above");
+      }
     } else {
       // No rate card, or nothing dated to build a shift from. Nothing composed, so
       // nothing to stage — the thread stands on the board with the notes above saying
@@ -631,6 +699,36 @@ export async function compile(
       blocked = true;
     }
   }
+
+  /**
+   * 3. NOW compose the reply, knowing what actually happened to the order.
+   *
+   * The reply is told two things it never had: whether a booking exists, and what
+   * the client would have to send for one to exist. It can then say "we're getting
+   * this booked in" instead of "booked in", and ask for the missing crew count in
+   * the same breath rather than leaving a human to notice.
+   *
+   * `order_state` is deliberately coarse. The model is not shown ids, statuses or
+   * anything it could leak into prose — only which of four situations it is in.
+   */
+  const repliesEnabled = deps.repliesEnabled !== false;
+  const orderState: ReplyContext["order_state"] = !isJob
+    ? "not-a-job"
+    : desired && !blocked
+      ? linkedOrderId
+        ? "updating-existing"
+        : "staged"
+      : "blocked";
+  const reply = repliesEnabled
+    ? await reasoner.composeReply(latest, history, classification, {
+        order_state: orderState,
+        // Only worth asking about when it is the reason nothing exists. A staged
+        // order that happens to lack a finish time already defaulted sensibly, and
+        // a client does not need an email about it.
+        ask_for: orderState === "blocked" ? [...askFor] : [],
+      })
+    : null;
+  const replyHash = reply ? hash(reply.html) : undefined;
 
   // 4. decide actions (reads already happened; writes are returned only)
   const actions: Actions = {};

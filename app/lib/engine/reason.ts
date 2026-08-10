@@ -70,8 +70,38 @@ export interface Reasoner {
   composeReply(
     latest: ThreadMessage,
     history: ThreadMessage[],
-    classification: Classification
+    classification: Classification,
+    context?: ReplyContext
   ): Promise<ReplyResult>;
+}
+
+/**
+ * What the order path concluded, handed to the reply writer so it can stop
+ * promising bookings that were never made.
+ *
+ * The reply used to be composed BEFORE any of this was known, so it committed
+ * either way — live thread 19fadd4ff8152dea drafted "both dates are now booked in"
+ * on a needs-info ticket with no order at all.
+ *
+ * Optional on the interface so a mock or a different provider still satisfies it,
+ * but the production path always passes it. The compiler decides the wording
+ * rules; this only reports the situation.
+ */
+export interface ReplyContext {
+  /**
+   *  staged             an order is built and waiting for one click
+   *  updating-existing  an order already exists and this changes it
+   *  blocked            no order exists and cannot be built yet
+   *  not-a-job          nothing to book
+   */
+  order_state: "staged" | "updating-existing" | "blocked" | "not-a-job";
+  /**
+   * Things ONLY THE CLIENT can supply, without which no order can be built —
+   * crew size, dates, times, venue. Never company or rate: an unknown company is
+   * created and an unknown rate is Spartan's to set, so neither is a question to
+   * put to a client. Empty unless order_state is "blocked".
+   */
+  ask_for: string[];
 }
 
 // ---------------------------------------------------------------------------
@@ -281,10 +311,24 @@ ${latest.body}`,
     async extractFacts(latest, history) {
       return call(EXTRACT_SYSTEM, threadText(latest, history), FACTS_SCHEMA);
     },
-    async composeReply(latest, history, classification) {
+    async composeReply(latest, history, classification, context) {
+      // The situation is stated in words rather than passed as a flag the prompt has
+      // to decode, because the prompt is the only thing that turns it into wording.
+      const state = context?.order_state ?? "not-a-job";
+      const situation =
+        state === "staged"
+          ? "A draft booking HAS been prepared from this thread and is waiting for a colleague to confirm it. It is NOT confirmed yet."
+          : state === "updating-existing"
+            ? "A booking for this job ALREADY EXISTS and the change in this email is being applied to it."
+            : state === "blocked"
+              ? "NO booking has been made and none can be until the client sends more information."
+              : "There is nothing to book in this thread.";
+      const asks = (context?.ask_for ?? []).length
+        ? `\nTO BOOK THIS, THE CLIENT STILL NEEDS TO TELL US:\n- ${context!.ask_for.join("\n- ")}`
+        : "";
       return call(
         REPLY_SYSTEM,
-        `classification=${classification}\n\n` + threadText(latest, history),
+        `classification=${classification}\nBOOKING SITUATION: ${situation}${asks}\n\n` + threadText(latest, history),
         REPLY_SCHEMA
       );
     },

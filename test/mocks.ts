@@ -2,7 +2,7 @@
 // intentionally simple: it reads the latest body for a "N crew" count, a date,
 // and a venue, so a follow-up email that changes the count produces a
 // different DesiredOrder (exercising the patch path).
-import type { Reasoner, ClassifyResult, ReplyResult } from "../app/lib/engine/reason";
+import type { Reasoner, ClassifyResult, ReplyResult, ReplyContext } from "../app/lib/engine/reason";
 import type { ConversationFacts, ThreadMessage } from "../app/lib/engine/types";
 import type { Transport } from "../app/lib/engine/onsinch";
 
@@ -31,7 +31,13 @@ export const mockReasoner: Reasoner = {
       ],
     };
   },
-  async composeReply(_latest, _history, classification): Promise<ReplyResult> {
+  /**
+   * Records the ReplyContext it was handed, so a test can assert the compiler ran
+   * the order path FIRST and told the writer what came of it. A mock that quietly
+   * ignored the argument would let the whole commitment fix regress unnoticed.
+   */
+  async composeReply(_latest, _history, classification, context): Promise<ReplyResult> {
+    lastReplyContext = context ?? null;
     return {
       subject: "Re: Crew request",
       html: `<div><p>Hello,</p><p>Got it — all noted for the 9th (${classification}).</p><p>Thanks,<br>Spartan Crew</p></div>`,
@@ -39,6 +45,10 @@ export const mockReasoner: Reasoner = {
     };
   },
 };
+
+/** The context passed to the most recent composeReply call, for assertions. */
+export let lastReplyContext: ReplyContext | null = null;
+export const resetReplyContext = () => { lastReplyContext = null; };
 
 // Mock OnSinch transport: supports pull-all dedup (companies/places with
 // pagination + a company Client list), order-dedup (empty), and create/patch.

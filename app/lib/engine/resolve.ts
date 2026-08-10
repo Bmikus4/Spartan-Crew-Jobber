@@ -279,18 +279,68 @@ export function matchContact(email: string | undefined, clients: ClientRec[]): n
 
 export interface OrderRec { id: number; happening?: string; name?: string; Job?: { id: number }[] }
 
+export type OrderMatch =
+  | { order_id: number; job_id?: number; by: "date" | "date+venue" }
+  /** Several orders fit and nothing separates them. Never guessed at. */
+  | { ambiguous: number; day: string };
+
 /**
- * Order dedup: an incoming booking matches an existing order when it's for the
- * same company (already filtered) AND the same happening date. Returns the
- * existing order+job ids so we UPDATE instead of creating a duplicate job.
+ * Which existing OnSinch order an update belongs to — or nothing.
+ *
+ * Ben, 2026-08-09: "If a thread update/potential update comes in, we should search
+ * for it in Onsinch, so that we can potentially match it to a past thread/order
+ * within onsinch to make the update. This is a very particular one and should only
+ * apply when its absolutely 100% sure."
+ *
+ * The old rule was company + happening date, taking the FIRST hit. That is not
+ * sure at all: over the live tenant's 1,029 recent orders, 121 of 870 company+date
+ * keys carry more than one order — 13.9%, covering 280 orders — so roughly one
+ * update in seven was attaching itself to whichever of them the API happened to
+ * return first. Company 128 has FIVE orders on 2026-06-09 alone: Hackney Town
+ * Hall, The Carter Building, and three at Chicago Booth.
+ *
+ * The venue is what tells them apart. Spartan name orders "<Company> @ <Venue>"
+ * tenant-wide, and across those 121 collisions 94 give every order a distinct
+ * venue. So:
+ *
+ *   one order on the day                      -> match
+ *   several, and the thread's venue picks out
+ *     exactly one of them                     -> match
+ *   several, and the venue picks out none or
+ *     more than one                           -> AMBIGUOUS, match nothing
+ *
+ * Ambiguity is reported rather than swallowed, because "we could not tell which of
+ * your three jobs you meant" is a thing a human must see. Attaching a crew change
+ * to the wrong job is worse than not attaching it: the right job goes unstaffed
+ * and the wrong one gets people it does not need.
  */
 export function matchExistingOrder(
   earliestDateISO: string | undefined,
-  orders: OrderRec[]
-): { order_id: number; job_id?: number } | null {
+  orders: OrderRec[],
+  locationText?: string
+): OrderMatch | null {
   const day = (earliestDateISO || "").slice(0, 10);
   if (!day) return null;
-  const hit = orders.find((o) => (o.happening || "").slice(0, 10) === day);
-  if (!hit) return null;
-  return { order_id: hit.id, job_id: hit.Job?.[0]?.id };
+
+  const sameDay = orders.filter((o) => (o.happening || "").slice(0, 10) === day);
+  if (!sameDay.length) return null;
+  if (sameDay.length === 1) {
+    return { order_id: sameDay[0].id, job_id: sameDay[0].Job?.[0]?.id, by: "date" };
+  }
+
+  // More than one. Only the venue can separate them, and only if the thread names one.
+  const want = normAddr(locationText);
+  if (want) {
+    const hits = sameDay.filter((o) => {
+      const venue = normAddr(String(o.name || "").split("@").slice(1).join("@"));
+      if (!venue) return false;
+      // Either side may be the fuller string: an order name is "@ Excel" where the
+      // email says "ExCeL London, Royal Victoria Dock", and vice versa.
+      return venue === want || (venue.length >= 5 && want.includes(venue)) || (want.length >= 5 && venue.includes(want));
+    });
+    if (hits.length === 1) {
+      return { order_id: hits[0].id, job_id: hits[0].Job?.[0]?.id, by: "date+venue" };
+    }
+  }
+  return { ambiguous: sameDay.length, day };
 }
