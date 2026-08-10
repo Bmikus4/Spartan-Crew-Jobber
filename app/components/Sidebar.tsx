@@ -177,7 +177,10 @@ export default function Sidebar({ activeTool, onSelectTool, onSettings }: Sideba
           mark sits on the same line as the "/ DASHBOARD" eyebrow beside it rather
           than riding above it. Its left padding matches the rows', so the arrow and
           every icon below share one 40px column. */}
-      <div style={{ display: "flex", alignItems: "center", gap: 12, height: "var(--panel-header-height)", padding: "0 6px", marginBottom: 10, flexShrink: 0 }}>
+      {/* Left padding is 14px = the row container's 8 + the button's 6, so the arrow
+          starts on the same x as every icon below it. At 6px it sat 8px to their left
+          and read as the logo hanging off the edge of the rail. */}
+      <div style={{ display: "flex", alignItems: "center", gap: 12, height: "var(--panel-header-height)", padding: "0 6px 0 14px", marginBottom: 10, flexShrink: 0 }}>
         <span style={{ width: "var(--nav-icon-box)", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
           <BrandMark height={26} />
         </span>
