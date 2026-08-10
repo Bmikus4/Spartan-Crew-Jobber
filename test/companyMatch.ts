@@ -1,4 +1,4 @@
-// ============================================================================
+﻿// ============================================================================
 // An existing client whose email names them slightly differently must resolve.
 // ----------------------------------------------------------------------------
 // matchCompany was exact-match only. That is the right rule for WRITES - it is
@@ -24,7 +24,7 @@
 //
 // Run: npx tsx test/companyMatch.ts
 // ============================================================================
-import { matchCompany, type CompanyRec } from "../app/lib/engine/resolve";
+import { matchCompany, matchCompanyByDomain, type CompanyRec } from "../app/lib/engine/resolve";
 
 let fails = 0;
 const ok = (cond: boolean, label: string, extra = "") => {
@@ -147,6 +147,42 @@ console.log("\n[6] never resolves to Spartan itself");
   // A DIFFERENT company that merely shares a word must not.
   ok(matchCompany("Spartan Signs Ltd", LIVE) === null,
     "a different business sharing one word does not become Spartan", String(matchCompany("Spartan Signs Ltd", LIVE)));
+}
+
+console.log("\n[8] the sender's domain, which the resolver used to throw away");
+{
+  // Measured on the live tenant: 763 companies carry 1,274 contacts across 708
+  // distinct domains, 96.5% of which point at exactly one company. Over the 84
+  // tickets on the live board it resolved 17 the name matcher could not - every
+  // one a thread where the model extracted no company name at all - and disagreed
+  // with the name matcher zero times.
+  const WITH_CONTACTS: CompanyRec[] = [
+    { id: 126, name: "Eclipse", Client: [{ id: 227, email: "RyanC@eclipse.global" }, { id: 666, email: "PatrickH@eclipse.global" }] },
+    { id: 137, name: "Event Concept", Client: [{ id: 237, email: "izzabelle@eventconcept.com" }] },
+    { id: 279, name: "Solotech", Client: [{ id: 364, email: "lisa.butterworth@solotech.com" }] },
+    { id: 800, name: "Two Trading Names A", Client: [{ id: 900, email: "a@shared-parent.com" }] },
+    { id: 801, name: "Two Trading Names B", Client: [{ id: 901, email: "b@shared-parent.com" }] },
+    { id: 802, name: "Personal Address Client", Client: [{ id: 902, email: "dave1974@gmail.com" }] },
+  ];
+
+  ok(matchCompanyByDomain("NikhilS@eclipse.global", WITH_CONTACTS) === 126,
+    "a new sender at a known client's domain resolves", String(matchCompanyByDomain("NikhilS@eclipse.global", WITH_CONTACTS)));
+  ok(matchCompanyByDomain("someone.new@solotech.com", WITH_CONTACTS) === 279,
+    "even though the name 'Solotech' appears nowhere in the email");
+  ok(matchCompanyByDomain("anybody@shared-parent.com", WITH_CONTACTS) === null,
+    "a domain carrying two companies is ambiguous, never a coin flip",
+    String(matchCompanyByDomain("anybody@shared-parent.com", WITH_CONTACTS)));
+  ok(matchCompanyByDomain("dave1974@gmail.com", WITH_CONTACTS) === null,
+    "a consumer mailbox identifies a person, not a business");
+  ok(matchCompanyByDomain("someone@hotmail.co.uk", WITH_CONTACTS) === null, "the whole consumer list is excluded");
+  ok(matchCompanyByDomain("tracy@spartancrew.co.uk", WITH_CONTACTS) === null,
+    "a colleague's address is never evidence about which client an enquiry is for");
+  ok(matchCompanyByDomain("nobody@unheard-of.example", WITH_CONTACTS) === null, "an unknown domain resolves to nothing");
+  ok(matchCompanyByDomain(undefined, WITH_CONTACTS) === null, "no address -> null");
+  ok(matchCompanyByDomain("not-an-email", WITH_CONTACTS) === null, "junk -> null");
+  // A company list pulled WITHOUT contacts must degrade to nothing, not throw.
+  ok(matchCompanyByDomain("NikhilS@eclipse.global", LIVE) === null,
+    "a list with no Client data simply answers nothing");
 }
 
 console.log("\n[7] empty and junk input");

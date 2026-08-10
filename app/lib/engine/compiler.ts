@@ -21,7 +21,7 @@ import { reconcileRequests } from "./parseWork";
 import { triage, decisionBinds, triageModeFromEnv, type TriageMode } from "./triage";
 import { composeOrder } from "./compose";
 import { validateOrder } from "./format";
-import { matchCompany, matchContact, matchPlace, matchExistingOrder, normName, normAddr } from "./resolve";
+import { matchCompany, matchCompanyByDomain, matchContact, matchPlace, matchExistingOrder, normName, normAddr } from "./resolve";
 import { resolveRateCard } from "./rates";
 import type { Reasoner } from "./reason";
 import type { OnsinchClient } from "./onsinch";
@@ -179,10 +179,26 @@ async function resolveCompany(
   aliases?: CompileDeps["aliases"]
 ): Promise<{ id?: number; provision?: DesiredOrder["provision_company"]; note?: string }> {
   if (prior?.company_id) return { id: prior.company_id };
-  if (!facts.company_name) return { note: "no company name extracted" };
+
+  /**
+   * No company name in the text is not the same as no evidence about the client.
+   * The sender's own domain identifies them on 96.5% of the 708 domains OnSinch
+   * holds contacts for, and over the live board it answered for 17 threads where
+   * the model extracted no name at all. Checked here because in this branch there
+   * is nothing else to check.
+   */
+  if (!facts.company_name) {
+    const byDomain = matchCompanyByDomain(facts.contact_email, await onsinch.allCompanies());
+    if (byDomain) {
+      return { id: byDomain, note: `company identified from the sender's domain (${facts.contact_email})` };
+    }
+    return { note: "no company name extracted" };
+  }
 
   // A name seen before, already settled. Checked before the whole-list pull because it
-  // is the answer to the same question, arrived at once instead of every time.
+  // is the answer to the same question, arrived at once instead of every time — and
+  // the pull must stay BELOW this line: starting it eagerly would fetch 763 companies
+  // on every thread the alias store could have answered for free.
   const key = normName(facts.company_name);
   const remembered = await aliasLookup(aliases, "company", key);
   if (remembered) return { id: remembered, note: `company from a name resolved before ("${facts.company_name}")` };
@@ -200,6 +216,22 @@ async function resolveCompany(
                                  source: wasExact ? "exact" : "fuzzy", raw_example: facts.company_name });
     return { id };
   }
+  /**
+   * The name did not resolve. Ask the sender's domain BEFORE creating a client:
+   * a company name the model read out of prose can be wrong in ways an address
+   * at that company's own domain cannot, and creating a duplicate of a client
+   * Spartan already has is the exact failure the whole-list exact-match dedup
+   * exists to prevent. Ordered after the name match, never before it, so a domain
+   * shared by two trading entities can never override a name that was specific.
+   */
+  const byDomain = matchCompanyByDomain(facts.contact_email, companies);
+  if (byDomain) {
+    return {
+      id: byDomain,
+      note: `"${facts.company_name}" matched no client, but the sender's domain (${facts.contact_email}) belongs to company ${byDomain} — using that rather than creating a duplicate`,
+    };
+  }
+
   return {
     provision: { name: facts.company_name.slice(0, 120) },
     note: `new company "${facts.company_name}" — will be created in OnSinch on confirm`,

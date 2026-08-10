@@ -120,6 +120,10 @@ export interface ConversationFacts {
 
 /** A resolved OnSinch place candidate (subset of the Place schema). */
 export interface PlaceCandidate {
+  /** OnSinch's short form for the venue — "RAH" for the Royal Albert Hall. */
+  alias?: string;
+  /** Retired venues stay in the list; matchPlace prefers an active one. */
+  active?: boolean;
   id: number;
   name?: string;
   address?: string;
@@ -128,7 +132,6 @@ export interface PlaceCandidate {
   country?: string;
   lat?: number;
   lng?: number;
-  alias?: string;
 }
 
 /** One row of the Save State Table — the canonical state of a conversation. */

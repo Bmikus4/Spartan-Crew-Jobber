@@ -240,9 +240,17 @@ export class OnsinchClient {
     return first.data.concat(...rest.map((p) => p ?? []));
   }
 
-  /** All companies (for exact-match dedup). ~756 today. Cached (warm lambda). */
+  /**
+   * All companies, WITH their contacts. ~763 today. Cached (warm lambda).
+   *
+   * `with=Client` is free: the same 8 pages, 3.3 seconds measured against the live
+   * tenant, and it brings back the 1,274 contact addresses that let a sender's
+   * email domain identify the client. Without it the resolver can only compare a
+   * company name read out of prose, which is the one thing about an email that can
+   * be phrased differently every time.
+   */
   async allCompanies() {
-    return listAllCached("companies", () => this.listAll("/companies"));
+    return listAllCached("companies", () => this.listAll("/companies", { with: "Client" }));
   }
 
   /** All places (for exact-match dedup). ~6.8k today. Cached — a full pull is

@@ -60,8 +60,20 @@ async function main() {
         return { ...f, company_name: undefined };
       },
     };
+    // The sender must be someone OnSinch has no contact for either. The shared
+    // fixture's pier@redbeast.co.uk IS a known client domain in the mock tenant,
+    // and resolveCompany now identifies a client from the sender's domain when the
+    // text names no company - so with that address this thread resolves and stages
+    // an order, which is the feature working and not the case under test here.
     const s = await handleThread(
-      { thread_id: "t-noinfo", messages: [msg({ message_id: "m1", body: "We need 6 crew on 12 August at ExCeL London, 08:00-18:00." })] },
+      {
+        thread_id: "t-noinfo",
+        messages: [msg({
+          message_id: "m1",
+          from: "someone@a-company-onsinch-has-never-seen.example",
+          body: "We need 6 crew on 12 August at ExCeL London, 08:00-18:00.",
+        })],
+      },
       deps({ reasoner: noCompany })
     );
     ok(s.needs_human === true, "flagged for a human", String(s.needs_human));

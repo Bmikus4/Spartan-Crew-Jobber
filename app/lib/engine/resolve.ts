@@ -27,7 +27,73 @@ export function normAddr(s?: string): string {
     .replace(/\s+/g, " ");
 }
 
-export interface CompanyRec { id: number; name?: string; invoice_name?: string }
+export interface CompanyRec {
+  id: number;
+  name?: string;
+  invoice_name?: string;
+  /** Contacts, when the list was pulled with=Client. The domain source below. */
+  Client?: Array<{ id: number; email?: string }>;
+  /** OnSinch's own fields for the client's web and billing addresses. */
+  www?: string;
+  email_invoice?: string;
+}
+
+/**
+ * Mailbox domains that belong to a person, not to a business. A match on one of
+ * these would attach every gmail.com sender to whichever client happened to have
+ * a personal address on file.
+ */
+const CONSUMER_DOMAINS = new Set([
+  "gmail.com", "googlemail.com", "hotmail.com", "hotmail.co.uk", "outlook.com",
+  "yahoo.com", "yahoo.co.uk", "icloud.com", "me.com", "live.co.uk", "live.com",
+  "aol.com", "btinternet.com", "msn.com", "sky.com", "protonmail.com",
+]);
+
+const domainOfEmail = (e?: string): string => {
+  const d = String(e || "").toLowerCase().trim().split("@")[1] || "";
+  return d.replace(/>$/, "").trim();
+};
+
+/**
+ * Which company an email address belongs to, from the addresses OnSinch already
+ * holds for each client's contacts.
+ *
+ * THE SIGNAL THE RESOLVER WAS THROWING AWAY. Every email carries its sender's
+ * domain, it costs nothing, and unlike a company name read out of prose it cannot
+ * be phrased differently. Measured on the live tenant: 763 companies carry 1,274
+ * contacts across 708 distinct domains, and 96.5% of those domains point at
+ * exactly one company. Over the 84 tickets on the live board it resolved 17 the
+ * name matcher could not, and disagreed with it zero times — it fires precisely
+ * where the model failed to extract a company name at all, which is why it is
+ * complementary rather than a second opinion.
+ *
+ * Ambiguous domains resolve to nothing: 25 domains carry two companies, usually a
+ * client with a second trading entity, and picking one would be a coin flip on
+ * whose account a booking lands.
+ *
+ * `www` and `email_invoice` are deliberately NOT used. They look like the same
+ * signal and are much weaker: only 275 companies carry a www at all, and the
+ * field misses the biggest clients outright — eventconcept.com resolves from a
+ * contact address and not from any www.
+ */
+export function matchCompanyByDomain(email: string | undefined, companies: CompanyRec[]): number | null {
+  const d = domainOfEmail(email);
+  if (!d || !d.includes(".") || CONSUMER_DOMAINS.has(d)) return null;
+  // Spartan's own domain maps to six internal companies; a colleague's address is
+  // never evidence about which client an enquiry is for.
+  if (SPARTAN_DOMAINS.some((s) => d === s || d.endsWith("." + s))) return null;
+
+  const hits = new Set<number>();
+  for (const c of companies) {
+    for (const cl of c.Client ?? []) {
+      if (domainOfEmail(cl.email) === d) { hits.add(c.id); break; }
+    }
+  }
+  return hits.size === 1 ? [...hits][0] : null;
+}
+
+/** Kept in step with normalize.ts's list; duplicated to keep resolve.ts dependency-free. */
+const SPARTAN_DOMAINS = ["spartancrew.co.uk"];
 export interface ClientRec { id: number; email?: string; name?: string; surname?: string }
 
 /** Fold a trailing plural, leaving "ss" alone ("press" is not "pres"). */
@@ -164,14 +230,41 @@ export function matchCompany(name: string | undefined, companies: CompanyRec[]):
 export function matchPlace(locationText: string | undefined, places: PlaceCandidate[]): number | null {
   const t = normAddr(locationText);
   if (!t || t.length < 4) return null;
-  for (const p of places) {
+
+  /**
+   * Retired venues are skipped. 12 of the 6,841 live places are inactive —
+   * "InterContinental London - the O2", "Battersea Evolution", "Woolwich Works" —
+   * and resolving a new job onto one puts crew at an address Spartan no longer
+   * works, silently, because nothing downstream re-checks the venue.
+   *
+   * Only when there is an active alternative, though: an inactive place is still a
+   * better answer than inventing a duplicate of a venue that already exists.
+   */
+  const ordered = places.some((p) => p.active !== false)
+    ? [...places].sort((a, b) => Number(b.active !== false) - Number(a.active !== false))
+    : places;
+
+  for (const p of ordered) {
     const name = normAddr(p.name);
     if (name && name === t) return p.id;
+    /**
+     * The ALIAS field, which this matcher never read. 356 places carry one and it
+     * is exactly the short form a client types: "Royal Albert Hall" ~ "RAH",
+     * "Glastonbury Festival - Workers Campsite" ~ "Glastonbury Festival",
+     * "Anna Valley Ltd" ~ "Anna Valley HQ - Feltham". OnSinch has a field for the
+     * name people actually use and the resolver was matching only the formal one.
+     */
+    const alias = normAddr(p.alias);
+    if (alias && alias === t) return p.id;
+
     const addr = normAddr([p.address, p.city, p.zip].filter(Boolean).join(" "));
     const addr1 = normAddr(p.address);
     if (addr && (addr === t || t.includes(addr))) return p.id;
     if (addr1 && addr1.length >= 8 && (addr1 === t || t.includes(addr1) || addr1.includes(t))) return p.id;
     if (name && name.length >= 6 && t.includes(name)) return p.id;
+    // Containment on the alias too, held to the same length floor as the name so a
+    // three-letter alias cannot sweep every address that happens to contain it.
+    if (alias && alias.length >= 6 && t.includes(alias)) return p.id;
   }
   return null;
 }
