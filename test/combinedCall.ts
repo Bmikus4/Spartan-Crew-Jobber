@@ -109,8 +109,12 @@ async function main() {
 
     process.env.REASONER_HISTORY_CAP = "500";
     const reasoner = createOpenRouterReasoner({ apiKey: "test" });
+    // Strictly increasing, because the renderer orders by DATE now. These dates used
+    // to be `(i % 28) + 1`, which wrapped, so "OLD MESSAGE 39" was the 12th of January
+    // and the 27th was the most recent — array position and chronology disagreed and
+    // the assertion below was reading array position.
     const history = Array.from({ length: 40 }, (_, i) =>
-      msg({ from: "pier@redbeast.co.uk", subject: "old", body: `OLD MESSAGE ${i} ` + "x".repeat(120), date_iso: `2026-01-${String((i % 28) + 1).padStart(2, "0")}T09:00:00Z` })
+      msg({ from: "pier@redbeast.co.uk", subject: "old", body: `OLD MESSAGE ${i} ` + "x".repeat(120), date_iso: `2026-01-01T09:${String(i).padStart(2, "0")}:00Z` })
     );
     const latest = msg({ from: "pier@redbeast.co.uk", subject: "NEWEST SUBJECT", body: "NEWEST BODY " + "y".repeat(4000) });
     await reasoner.classifyAndExtract!(latest, history, false);
@@ -122,8 +126,9 @@ async function main() {
     ok(userMsg.includes("NEWEST SUBJECT") && userMsg.includes("y".repeat(4000)), "the newest message is sent whole, never truncated");
     ok(userMsg.includes("OLD MESSAGE 39"), "the most recent history survives", "kept");
     ok(!userMsg.includes("OLD MESSAGE 0"), "the oldest history is what gets dropped");
-    ok(/earlier message\(s\) omitted for length/.test(userMsg), "and the omission is stated, not silent");
-    const historyPart = userMsg.split("HISTORY (oldest first):")[1] ?? "";
+    ok(/omitted for length/.test(userMsg), "and the omission is stated, not silent");
+    // Everything above the newest message's header is the history the cap governs.
+    const historyPart = userMsg.slice(0, userMsg.indexOf("[NEWEST]"));
     ok(historyPart.length < 900, "history stays near the cap", `${historyPart.length} chars against a 500 cap`);
     ok(body.max_tokens === 4096, "the reply ceiling is capped too", String(body.max_tokens));
   }

@@ -422,11 +422,18 @@ export async function compile(
   // sent the whole thread twice — 402M characters to label the corpus once. A reasoner
   // without the combined method (a mock, a different provider) still works.
   //
-  // And when the thread has already been read, the earlier messages are not sent at
-  // all — the facts they produced are sent instead. A thread is re-processed on every
-  // new client message, so re-sending the history each time read the corpus 6.26 times
-  // over. mergeFacts below is what makes this safe: the model can answer narrowly
-  // without deleting what four earlier emails established.
+  // When the thread has already been read, the facts it produced are sent AS WELL as
+  // the conversation — a summary alongside the evidence, with the conversation winning
+  // where they disagree. The facts alone were tried and are not enough to classify on:
+  // "does ANY client message in this thread ask for crew" cannot be answered from a
+  // summary of what was already understood, and every repeat message on a live thread
+  // took that path. mergeFacts below is what keeps a narrow answer safe — the model can
+  // reply about one message without deleting what four earlier emails established.
+  //
+  // It costs the re-read the incremental path existed to avoid. Priced before the
+  // change: NORMALISED history is 4,674 chars mean / 18,369 max over 307 live threads
+  // (~1.2k tokens an event, ~34 events a day). The 6.26x figure that justified dropping
+  // it was measured on raw bodies, which carry the quoted copies normalize now strips.
   const priorFacts = prior?.facts;
   const incremental =
     reasoner.classifyAndExtractIncremental &&
@@ -435,11 +442,11 @@ export async function compile(
     history.length > 0;
 
   const combined = incremental
-    ? await reasoner.classifyAndExtractIncremental!(latest, priorFacts!, prior?.classification, !!prior?.onsinch_order_id)
+    ? await reasoner.classifyAndExtractIncremental!(latest, priorFacts!, prior?.classification, !!prior?.onsinch_order_id, history)
     : reasoner.classifyAndExtract
       ? await reasoner.classifyAndExtract(latest, history, !!prior?.onsinch_order_id)
       : null;
-  if (incremental) notes.push("read this message against stored facts — earlier messages not re-read");
+  if (incremental) notes.push("read the whole conversation against the facts already stored for it");
   const cls = combined ?? (await reasoner.classify(latest, history, !!prior?.onsinch_order_id));
 
   // Keep the classifier's own explanation for a rejection. job_summary is the
@@ -449,13 +456,18 @@ export async function compile(
   // the first 25 dismissals recorded no reason at all. The "N/A -" prefix is a
   // machine artefact of the prompt's output format, not something to show a human.
   // THE CLASSIFIER DEFERS TO THE EXTRACTOR.
-  // The classifier judges only the latest email — the live prompt says so outright
-  // ("Never classify Thread History messages. Only classify Current Email") — so a
-  // thread whose newest message is Spartan's own reply, a bounce or an emoji reaction
-  // is called junk while the client's actual request sits one message earlier. Over a
-  // 150-thread random sample of the year, 91 threads were labelled not-a-job, 28 of
-  // them carried a crew number and a date, and 21 of the 41 with a dated block became
-  // real OnSinch orders anyway. Fifteen were read by hand: 13 were genuine jobs.
+  // This was written when the ported n8n prompt said "Never classify Thread History
+  // messages. Only classify Current Email", so a thread whose newest message was
+  // Spartan's own reply, a bounce or an emoji reaction was called junk while the
+  // client's request sat one message earlier. Over a 150-thread random sample of the
+  // year, 91 threads were labelled not-a-job, 28 of them carried a crew number and a
+  // date, and 21 of the 41 with a dated block became real OnSinch orders anyway.
+  // Fifteen were read by hand: 13 were genuine jobs.
+  //
+  // That instruction is GONE — CLASSIFY_SYSTEM now asks "does ANY client message in
+  // the thread contain job-request language", and the whole labelled conversation is
+  // what gets sent. The overrule stays anyway: it is the cheap backstop for the same
+  // failure returning by another route, and it costs nothing on the combined path.
   //
   // So where the extractor finds a dated request WITH a crew size, it wins. A missed
   // job costs a booking; a spurious one costs someone ten seconds deleting a draft.

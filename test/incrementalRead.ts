@@ -1,10 +1,15 @@
 // ============================================================================
 // Reading each message once must not lose what the earlier messages said.
 // ----------------------------------------------------------------------------
-// This is the risk the incremental path introduces. The model no longer sees messages
-// 1..n-1, so if a narrow reply ("yes, confirmed") returns thin facts and we overwrite,
-// the venue and dates that took four emails to establish are gone — and nothing would
-// report it, because the order would simply come out incomplete.
+// This is the risk the incremental path introduces. If a narrow reply ("yes, confirmed")
+// returns thin facts and we overwrite, the venue and dates that took four emails to
+// establish are gone — and nothing would report it, because the order would simply come
+// out incomplete. mergeFacts is the guard, and it runs on BOTH paths.
+//
+// The path once sent the stored facts INSTEAD of the earlier messages. It now sends the
+// whole labelled conversation as well, so classification is answering "does any client
+// message in this thread ask for crew" against the messages rather than against a
+// summary of them. Both are asserted at the model boundary below.
 //
 // Fixtures only. No provider, no key, no spend.
 // ============================================================================
@@ -84,10 +89,16 @@ async function main() {
       calls.push("full");
       return { classification: "update", priority: "medium", job_summary: "s", facts: { requests: [] } };
     },
-    async classifyAndExtractIncremental(_latest, priorFacts) {
+    async classifyAndExtractIncremental(_latest, priorFacts, _priorCls, _priorOrder, history) {
       calls.push("incremental");
       // Prove the prior facts genuinely arrive at the model boundary.
       ok(priorFacts.location_text === "Tobacco Dock, London E1W 2SF", "prior facts reach the incremental call");
+      // And the conversation itself. The facts are a summary of what was understood;
+      // "does ANY client message ask for crew" cannot be answered from a summary, and
+      // this call is the one every repeat message on a live thread takes.
+      ok((history ?? []).length === 2, "the earlier messages reach it too", `got ${(history ?? []).length}`);
+      ok((history ?? []).some((m) => /6 crew at Tobacco Dock/.test(m.body)),
+         "including the client's original request", (history ?? []).map((m) => m.body.slice(0, 24)).join(" | "));
       return { classification: "update", priority: "medium", job_summary: "s", facts: { requests: [] } };
     },
     async classify() { calls.push("classify"); return { classification: "update", priority: "medium", job_summary: "s" }; },
@@ -128,12 +139,12 @@ async function main() {
   } as never);
 
   ok(calls.includes("incremental"), "a thread with stored facts takes the incremental call", calls.join(","));
-  ok(!calls.includes("full"), "and does NOT re-send the whole thread", calls.join(","));
+  ok(!calls.includes("full"), "and not the cold-start call as well", calls.join(","));
   ok(calls.filter((c) => c !== "incremental").length === 0, "exactly one model call for this message", calls.join(","));
   ok(state.facts.location_text === "Tobacco Dock, London E1W 2SF",
      "the venue survived a message that mentioned no venue", JSON.stringify(state.facts));
   ok((state.facts.requests ?? []).length === 1, "the work block survived too");
-  ok(state.notes.some((n) => /earlier messages not re-read/.test(n)), "the state records that history was not re-read", state.notes.join(" | "));
+  ok(state.notes.some((n) => /whole conversation against the facts already stored/.test(n)), "the state records which path was taken", state.notes.join(" | "));
 }
 
 // --------------------------------------------- a first message has no prior facts

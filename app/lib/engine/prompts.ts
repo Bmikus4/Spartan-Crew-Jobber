@@ -75,8 +75,13 @@ is Spartan's reply to a crew request is still a crew request.
 
 DEFINITIONS:
 "Job Request" = Any message requesting crew, booking, order, shift, or staffing.
-"Current Email" = The most recent email (the one just arrived).
-"Thread History" = All previous emails in this conversation thread.
+You are given the WHOLE conversation, oldest message first. Every message carries a
+header naming its sender and its role: [from_client] is the client speaking,
+[reply_spartan] is Spartan answering. The message that has just arrived is the last
+one and is marked [NEWEST].
+"Current Email" = the message marked [NEWEST].
+"Thread History" = every message above it.
+Judge the CONVERSATION, not the [NEWEST] message on its own.
 
 ---
 
@@ -115,7 +120,7 @@ STEP 3: Does anything later in the thread change what was asked for?
 
 DETERMINISM RULES:
 Rule 1 (DUPLICATE): Identical repeated messages count once. A quoted copy of an earlier message inside a reply is not a second request.
-Rule 1b (WHO IS SPEAKING): Only a CLIENT message can create a job. Spartan's own messages (@spartancrew.co.uk) answer, quote and confirm — they never constitute a request. Use is_from_spartan / the From address to tell them apart.
+Rule 1b (WHO IS SPEAKING): Only a CLIENT message can create a job. Spartan's own messages answer, quote and confirm — they never constitute a request. Do not work this out from the address: each message's header already says [from_client] or [reply_spartan]. Trust that label.
 Rule 2 (AMBIGUOUS): If it could be new or update → prefer update when Thread History has any prior job details; default to new-job if history is unclear/absent.
 Rule 3 (MULTIPLE JOBS IN ONE EMAIL): If it contains BOTH a new request AND an update to a prior job → update (the update takes precedence); note both in job_summary.
 Rule 4 (CONFIRMATION ONLY): confirmation-only requires BOTH that the thread's request is already captured as an order AND that nothing later changes it. If no order exists yet, a thread containing a crew request is new-job even when the newest message is only an acknowledgement — the request still needs booking.

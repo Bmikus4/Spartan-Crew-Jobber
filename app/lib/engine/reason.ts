@@ -17,6 +17,7 @@ import type {
   ThreadMessage,
 } from "./types";
 import { CLASSIFY_SYSTEM, EXTRACT_SYSTEM, REPLY_SYSTEM } from "./prompts";
+import { renderConversation } from "./renderThread";
 
 export interface ClassifyResult {
   classification: Classification;
@@ -53,7 +54,10 @@ export interface Reasoner {
     latest: ThreadMessage,
     priorFacts: ConversationFacts,
     priorClassification: Classification | undefined,
-    priorOrderExists: boolean
+    priorOrderExists: boolean,
+    // Required in practice, optional in the type only so an existing mock still
+    // compiles. Omit it and classification is back to judging one email.
+    history?: ThreadMessage[]
   ): Promise<ClassifyResult & { facts: ConversationFacts }>;
 
   classify(
@@ -215,26 +219,15 @@ export function createOpenRouterReasoner(cfg: OpenRouterConfig): Reasoner {
     return typeof args === "string" ? JSON.parse(args) : args;
   }
 
-  // History is capped. Uncapped, a thread averaging 31k characters was re-sent on every
-  // call — 402M characters to label the corpus once, at $0.247 a thread. The newest
-  // message is never truncated, and history is kept NEWEST-FIRST up to the cap, because
-  // what a client last said outranks what they said in March.
-  const HISTORY_CAP = Number(process.env.REASONER_HISTORY_CAP || 12_000);
-  const threadText = (latest: ThreadMessage, history: ThreadMessage[]) => {
-    const head =
-      `LATEST (${latest.date_iso}) from ${latest.from}\nSubject: ${latest.subject}\n${latest.body}\n\n`;
-    const lines: string[] = [];
-    let used = 0, dropped = 0;
-    for (let i = history.length - 1; i >= 0; i--) {
-      const m = history[i];
-      const line = `[${m.date_iso}] ${m.from}: ${m.body}`;
-      if (used + line.length > HISTORY_CAP) { dropped = i + 1; break; }
-      lines.unshift(line);
-      used += line.length;
-    }
-    const note = dropped ? `[${dropped} earlier message(s) omitted for length]\n` : "";
-    return `${head}HISTORY (oldest first):\n${note}${lines.join("\n")}`;
-  };
+  // The conversation is rendered as ONE labelled block — see renderThread.ts for the
+  // shape and for why the cap sheds Spartan's replies before the client's messages.
+  //
+  // What was here put the newest message under a "LATEST" heading with the rest under
+  // "HISTORY", which is a structure that invites classifying the heading rather than
+  // the thread: a client's crew request one message down reads as background. The
+  // newest message is now the last line of the conversation, marked [NEWEST].
+  const threadText = (latest: ThreadMessage, history: ThreadMessage[]) =>
+    `Subject: ${latest.subject}\n\n${renderConversation(latest, history).text}`;
 
   return {
     // One call where there were two, sometimes three. classify and extractFacts were
@@ -270,7 +263,7 @@ ${EXTRACT_SYSTEM}`,
     // It asks for the COMPLETE updated facts rather than a diff: a patch language is a
     // second thing to get right, and the caller merges the answer conservatively anyway
     // (mergeFacts refuses to blank a known field), so a lazy reply cannot erase history.
-    async classifyAndExtractIncremental(latest, priorFacts, priorClassification, priorOrderExists) {
+    async classifyAndExtractIncremental(latest, priorFacts, priorClassification, priorOrderExists, history = []) {
       const r = await call(
         `${CLASSIFY_SYSTEM}
 
@@ -282,16 +275,16 @@ ${EXTRACT_SYSTEM}`,
         `priorOrderExists=${priorOrderExists}
 priorClassification=${priorClassification ?? "none"}
 
-FACTS ALREADY ESTABLISHED FROM THE EARLIER MESSAGES IN THIS THREAD.
-These were read from messages you are not being shown again. Treat them as the thread
-history: the NEW MESSAGE below either adds to them, changes them, or leaves them alone.
-Return the COMPLETE facts as they now stand, not only what changed.
+FACTS ALREADY ESTABLISHED FROM EARLIER MESSAGES IN THIS THREAD.
+Return the COMPLETE facts as they now stand, not only what changed. Where the
+conversation below contradicts them, the conversation wins — these are a summary,
+it is the evidence.
 
 ${JSON.stringify(priorFacts)}
 
-NEW MESSAGE (${latest.date_iso}) from ${latest.from}
 Subject: ${latest.subject}
-${latest.body}`,
+
+${renderConversation(latest, history).text}`,
         COMBINED_SCHEMA
       );
       return {
