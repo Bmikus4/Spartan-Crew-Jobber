@@ -71,6 +71,13 @@ const NAV_ITEMS: NavItemConfig[] = [
 ];
 const NAV_BEVEL_SHADOW = "inset 0 1px 0 rgba(255,255,255,0.08), 0 1px 2px rgba(0,0,0,0.25)";
 
+// The wordmark's drawn size. Its width is computed from the artwork's own aspect
+// ratio (the letters occupy 640×195 of the source viewBox) rather than measured at
+// runtime, because the rail has to know the target width BEFORE the first frame of
+// the slide — a width animation cannot start from "auto".
+const WORDMARK_H = 19;
+const WORDMARK_W = Math.round(WORDMARK_H * (640 / 195));
+
 function MobileBottomBar({ activeTool, onSelectTool, onSettings }: SidebarProps) {
   return (
     <nav aria-label="Main navigation" style={{ position: "fixed", bottom: 0, left: 0, right: 0, zIndex: 200, display: "flex", justifyContent: "space-around", alignItems: "stretch", height: "calc(var(--mobile-nav-h) + var(--mobile-nav-safe) + 20px)", paddingTop: 6, paddingBottom: "calc(var(--mobile-nav-safe) + 6px)", background: "var(--surface)", borderTop: "1px solid var(--border)" }}>
@@ -177,14 +184,36 @@ export default function Sidebar({ activeTool, onSelectTool, onSettings }: Sideba
           mark sits on the same line as the "/ DASHBOARD" eyebrow beside it rather
           than riding above it. Its left padding matches the rows', so the arrow and
           every icon below share one 40px column. */}
-      {/* Left padding is 14px = the row container's 8 + the button's 6, so the arrow
-          starts on the same x as every icon below it. At 6px it sat 8px to their left
-          and read as the logo hanging off the edge of the rail. */}
-      <div style={{ display: "flex", alignItems: "center", gap: 12, height: "var(--panel-header-height)", padding: "0 6px 0 14px", marginBottom: 10, flexShrink: 0 }}>
+      {/*
+        The real lockup is WORDMARK THEN ARROW, and that is what the open rail shows.
+        Condensed it has to be the arrow alone, because the arrow is the icon.
+        Reconciled without a cross-fade, which would have put two arrows on screen at
+        once mid-transition: there is only ever ONE arrow, and the wordmark's width
+        animates from 0, so the arrow simply slides right in normal flow as the letters
+        appear beside it. No second copy, no transform arithmetic, no geometry morph.
+
+        Because the arrow keeps its own 40px box, its centre is exactly the icon
+        column's when the wordmark is 0 wide — and left padding is 14px = the row
+        container's 8 plus the button's 6, so it heads that column rather than hanging
+        off the edge of the rail.
+      */}
+      <div style={{ display: "flex", alignItems: "center", height: "var(--panel-header-height)", padding: "0 6px 0 14px", marginBottom: 10, flexShrink: 0, overflow: "hidden" }}>
+        <span
+          aria-hidden={isCondensed}
+          style={{
+            // Derived from the face's own aspect ratio, not measured or guessed, so it
+            // cannot drift if the mark's height changes.
+            width: isCondensed ? 0 : WORDMARK_W + 8,
+            opacity: isCondensed ? 0 : 1,
+            overflow: "hidden", display: "flex", alignItems: "center", flexShrink: 0,
+            transition: "width var(--nav-dur) var(--nav-ease), opacity var(--nav-dur) var(--nav-ease)",
+          }}
+        >
+          <BrandWordmark height={WORDMARK_H} />
+        </span>
         <span style={{ width: "var(--nav-icon-box)", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
           <BrandMark height={26} />
         </span>
-        <span style={fade}><BrandWordmark height={19} /></span>
       </div>
 
       <div style={{ display: "flex", flexDirection: "column", gap: 2, padding: "0 8px" }}>
