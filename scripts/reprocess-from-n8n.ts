@@ -157,26 +157,39 @@ async function deps(): Promise<PipelineDeps> {
  * every message look like a stranger's and the answer would be worse than the one
  * being corrected.
  */
-const RAW_TRUSTWORTHY_FROM = "2026-08-04";
+/** Every message names a sender — the property a 2026-08-04 date cutoff stood in for. */
+function hasSenders(payload: any): boolean {
+  const ms = payload?.messages;
+  return Array.isArray(ms) && ms.length > 0 && ms.every((m: any) => String(m?.from || "").includes("@"));
+}
 
 async function threadsFromRaw(): Promise<Map<string, any>> {
   const { neon } = await import("@neondatabase/serverless");
   const sql = neon(requireEnv("DATABASE_URL"));
   const rows = (await sql`
     SELECT thread_id, payload, received_at FROM inbound_raw
-    WHERE received_at >= ${RAW_TRUSTWORTHY_FROM} AND thread_id IS NOT NULL
-    ORDER BY received_at ASC`) as Array<{ thread_id: string; payload: any }>;
+    WHERE thread_id IS NOT NULL
+    ORDER BY received_at ASC`) as Array<{ thread_id: string; payload: any; received_at: string }>;
 
   // Newest payload wins per thread: it carries the most complete message list.
   const byThread = new Map<string, any>();
+  let refused = 0;
   for (const r of rows) {
     const payload = r.payload?.messages ? r.payload : r.payload?.body ?? r.payload;
     if (!payload?.messages?.length) continue;
+    // The date was a PROXY for this. Payloads written before 2026-08-04 went through
+    // the Gmail node's flattened headers and can carry blank senders, and a payload
+    // with no sender makes every message look like a stranger's — the re-driven answer
+    // would be worse than the one being corrected. But the date refuses sound older
+    // payloads too: of 11 threads stuck at confirmation-only with no order, 5 predate
+    // it and ALL 5 name a sender on every message. Test the property, not its proxy.
+    if (!hasSenders(payload)) { refused++; continue; }
     const prev = byThread.get(r.thread_id);
     if (!prev || payload.messages.length > (prev.payload.messages?.length ?? 0)) {
       byThread.set(r.thread_id, { id: `raw:${r.thread_id}`, payload });
     }
   }
+  if (refused) console.log(`skipped ${refused} payload(s) with a blank sender on some message`);
   return byThread;
 }
 
@@ -187,7 +200,7 @@ async function main() {
 
   if (FROM_RAW) {
     byThread = await threadsFromRaw();
-    console.log(`source: inbound_raw (from ${RAW_TRUSTWORTHY_FROM})`);
+    console.log(`source: inbound_raw (every message must name a sender)`);
   } else {
     const list = await (await fetch(`${BASE}/executions?workflowId=${WF}&limit=${LIMIT}`, { headers: h })).json();
     const ids: string[] = (list.data || []).filter((e: any) => e.status === "success").map((e: any) => String(e.id));
