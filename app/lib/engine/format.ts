@@ -26,6 +26,52 @@ import type { DesiredOrder } from "./types";
  */
 export const DRAFT_POSTURE = { provisional: true, quote: false } as const;
 
+/**
+ * OnSinch rejects a SlotTeam name over 80 characters, and rejects the WHOLE
+ * order with it — `400 {"0":{"SlotTeam":{"0":{"name":["Name is too long,
+ * maximum is 80 characters."]}}}}`. There is no truncation server-side.
+ *
+ * The name is composed from the extracted `task`, which is a description of the
+ * work whenever the client wrote one out ("Rig: unloading vans, shunting cases,
+ * assist lighting tech putting out lights, hanging mirror balls, working at
+ * heights" — 118 chars, live on thread 19ff0292d9c8a86c). So it overflows on
+ * exactly the enquiries that describe the job best. It is the only error the
+ * engine has ever produced against OnSinch: three failed creates on thread
+ * 19fdc18aeb550d3b, 2026-08-07, and nothing else.
+ *
+ * `orderName` was already capped at 80 (compiler.ts) and the Job name at 100
+ * (jobNameFrom); the slot team was the one name nobody capped.
+ */
+export const SLOT_TEAM_NAME_MAX = 80;
+
+/**
+ * Fit a slot team's name inside the limit, keeping the full text as its
+ * `description` — the field OnSinch documents for per-team task detail. The
+ * overflow is the most specific thing the client said about the work, so it
+ * moves rather than being cut off the end of a name.
+ *
+ * Idempotent, and applied in TWO places on purpose. compose.ts caps as it
+ * builds, so what the board shows is what gets sent. This function is applied
+ * again at serialisation because a staged order is written from JSON stored
+ * before the cap existed and is never re-composed — 21 of them were waiting in
+ * `conversation_state` when this was written, one of them over the limit. The
+ * choke point every write passes through is the only place that can fix those.
+ *
+ * An existing description wins: it was set deliberately, and losing it to
+ * recover a name tail would be the worse trade.
+ */
+export function capSlotTeamName<T extends { name?: string; description?: string }>(
+  s: T
+): T & { description?: string } {
+  const name = s.name ?? "";
+  if (name.length <= SLOT_TEAM_NAME_MAX) return s;
+  return {
+    ...s,
+    name: name.slice(0, SLOT_TEAM_NAME_MAX).trimEnd(),
+    description: s.description?.trim() || name,
+  };
+}
+
 export interface OnsinchOrderBody {
   name: string;
   company_id: number;
@@ -84,7 +130,7 @@ export function buildOrderBody(o: DesiredOrder): OnsinchOrderBody[] {
       name: o.job_name,
       pricelist_category_id: o.pricelist_category_id,
     },
-    SlotTeam: o.slot_teams.map((s) => ({
+    SlotTeam: o.slot_teams.map(capSlotTeamName).map((s) => ({
       name: s.name,
       profession_id: s.profession_id,
       beginning: s.beginning,

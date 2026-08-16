@@ -11,7 +11,7 @@
 //     general crew and specific roles alike (Ben, 2026-08-03)
 // ============================================================================
 import { PROFESSION } from "./types";
-import { DRAFT_POSTURE } from "./format";
+import { DRAFT_POSTURE, SLOT_TEAM_NAME_MAX } from "./format";
 import type { ConversationFacts, DesiredOrder, DesiredSlotTeam } from "./types";
 
 // ---------------------------------------------------------------- crew chief
@@ -144,8 +144,21 @@ export function composeOrder(inp: ComposeInput): ComposeResult {
     if (!date) warnings.push(`SlotTeam[${i}] has no confirmed date (TBC)`);
     const profession_id = professionFromHint(r.profession_hint);
     const nameBase = r.task ? r.task : "Crew";
+    // OnSinch caps the slot team name at 80 and 400s the whole order over it.
+    // Capped HERE as well as at serialisation so the staged order the board shows
+    // is the one that gets sent, and the truncation is said out loud rather than
+    // discovered by comparing a ticket with OnSinch.
+    //
+    // The suffix keeps its room: "(TBC)" is the marker that this block has no
+    // confirmed date, and cutting the string as a whole would drop it off exactly
+    // the long names — the same failure jobNameFrom had with the date.
+    const suffix = date ? "" : " (TBC)";
+    const room = SLOT_TEAM_NAME_MAX - suffix.length;
+    const long = nameBase.length > room;
+    if (long) warnings.push(`SlotTeam[${i}] name over ${SLOT_TEAM_NAME_MAX} chars — shortened, full text moved to its description`);
     return {
-      name: date ? nameBase : `${nameBase} (TBC)`,
+      name: (long ? nameBase.slice(0, room).trimEnd() : nameBase) + suffix,
+      ...(long ? { description: nameBase } : {}),
       profession_id,
       beginning: date ? isoDateTime(date, start) : "",
       end: date ? isoDateTime(date, end) : "",
