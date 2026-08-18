@@ -121,6 +121,13 @@ export interface ConversationFacts {
     size?: number;
     task?: string;           // free text describing the work
     profession_hint?: string;// e.g. "CSCS", "driver", "AV"
+    /**
+     * A resolved OnSinch place for THIS block, when the enquiry moves crew between
+     * venues. Location is half of what separates one SlotTeam from another, so the
+     * field has to exist for the rule to be expressible at all; when it is absent
+     * the block inherits the order's place and location never splits.
+     */
+    place_id?: number;
   }>;
 }
 

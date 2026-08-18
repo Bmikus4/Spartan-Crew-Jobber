@@ -6,41 +6,65 @@
 //   - explicit rate card (I1); job summary -> specification; PO -> intern_name
 //   - place_id copied onto every slot team; default 08:00-18:00 when missing
 //   - profession_id mapping (default Crew=1)
-//   - one slot team per distinct request block
-//   - CREW-CHIEF rule applied: banded per shift (4+/10+/20+ -> 1/2/3), add-on for
-//     general crew and specific roles alike (Ben, 2026-08-03)
+//   - one slot team per distinct time window + location + profession; sizes summed
+//   - CREW-CHIEF rule applied: banded per TEAM (4+/10+/20+ -> 1/2/3), the chief
+//     carved OUT of the team so headcount is unchanged (Ben, 2026-08-18)
 // ============================================================================
 import { PROFESSION } from "./types";
 import { DRAFT_POSTURE, SLOT_TEAM_NAME_MAX } from "./format";
 import type { ConversationFacts, DesiredOrder, DesiredSlotTeam } from "./types";
 
 // ---------------------------------------------------------------- crew chief
-// Ben's rule, given verbatim 2026-08-03 and settled: bands, not a ratio.
+// Ben's rule, restated 2026-08-18 and settled: bands, not a ratio, and the chief
+// is CARVED OUT of the team rather than added to it.
 //
-//     4 or more crew on a shift -> 1 chief
-//    10 or more                 -> 2
-//    20 or more                 -> 3
+//     4 or more in a team -> 1 chief
+//    10 or more           -> 2
+//    20 or more           -> 3
 //
-// "add-on for both": the chief is ADDED, never substituted, for general crew and
-// for specific roles alike. Four carpenters means four carpenters plus a chief,
-// five people billed.
+// The client's number is the number that turns up. 6 becomes 5 crew + 1 chief,
+// 4 becomes 3 + 1, 20 becomes 17 + 3. This holds for specialists too: 4 carpenters
+// is 3 carpenters and a chief, not 5 people (Ben, Q9(a), overruling the proposal
+// that the chief always come out of general labour).
 //
-// This replaced chiefCount = ceil(size / 4) applied per team and only to
-// profession CREW, which over-staffed everything above 4 (8 crew -> 2 chiefs,
-// 20 -> 5, 40 -> 10) and gave a carpenters-only request no chief at all.
+// The band reads ONE SlotTeam, and a SlotTeam is the unit of work: a new team when
+// the time window or the location differs, never when the size does. Two blocks of
+// 3 at 14:00 at the same place are one team of 6 — so they are merged BEFORE the
+// band runs, and "Call 1 / Call 2" style labels do not split anything.
+//
+// This replaced per-shift summing, which banded across professions sharing a start
+// and end, and before that chiefCount = ceil(size / 4) applied only to profession
+// CREW, which over-staffed everything above 4 and gave a carpenters-only request
+// no chief at all.
 //
 // This is a REPLACEMENT tool: these numbers reach a real order and get billed, so
 // the rule is stated here and pinned by test/crewChief.ts rather than left to a
 // comment asking someone to confirm it.
-export const CREW_CHIEF_MODE: "add-on" | "off" = "add-on";
+export const CREW_CHIEF_MODE: "carve-out" | "off" = "carve-out";
 const CREW_CHIEF_PROFESSION_ID = PROFESSION.CREW_CHIEF; // 36
 
-/** Chiefs required for a whole SHIFT of `size` people. */
-export function chiefsForShift(size: number): number {
+/** Chiefs required for a single SlotTeam of `size` people. */
+export function chiefsForTeam(size: number): number {
   if (size >= 20) return 3;
   if (size >= 10) return 2;
   if (size >= 4) return 1;
   return 0;
+}
+
+/**
+ * The unit of work. A team is one window at one place doing one profession —
+ * profession is in the key only because OnSinch forces it to be: `profession_id`
+ * is a required single integer with no array form and no sibling collection
+ * (probed against the live tenant 2026-08-18), so "one of these four is a chief"
+ * has no direct representation and the carve-out is the only encoding there is.
+ */
+function teamKey(t: DesiredSlotTeam): string {
+  return `${t.beginning}|${t.end}|${t.place_id}|${t.profession_id}`;
+}
+
+/** Window + place alone — the scope a client-requested chief offsets across. */
+function siteKey(t: DesiredSlotTeam): string {
+  return `${t.beginning}|${t.end}|${t.place_id}`;
 }
 
 /** Map a free-text skill hint to a concrete OnSinch profession id. */
@@ -83,42 +107,96 @@ export interface ComposeResult {
   warnings: string[];
 }
 
-/** Apply the crew-chief rule to a set of base slot teams, returning the final set. */
+/**
+ * Merge request blocks into SlotTeams. Same window, same place, same profession is
+ * ONE team with the sizes summed — size never splits a team, so "3 crew and 3 crew"
+ * at 14:00 at the Guildhall is a team of 6. Differing task text is kept: the first
+ * label names the team and the rest ride in its description, because the label is
+ * the client's wording and ops read it to recognise the block.
+ */
+function mergeTeams(teams: DesiredSlotTeam[], warnings: string[]): DesiredSlotTeam[] {
+  const byKey = new Map<string, DesiredSlotTeam>();
+  const labels = new Map<string, string[]>();
+  for (const t of teams) {
+    const key = teamKey(t);
+    const seen = byKey.get(key);
+    if (!seen) {
+      byKey.set(key, { ...t });
+      labels.set(key, [t.description || t.name]);
+      continue;
+    }
+    seen.size += t.size;
+    const label = t.description || t.name;
+    const list = labels.get(key)!;
+    if (!list.includes(label)) list.push(label);
+  }
+  for (const [key, t] of byKey) {
+    const list = labels.get(key)!;
+    if (list.length > 1) {
+      t.description = list.join(" / ");
+      warnings.push(
+        `merged ${list.length} blocks into one team of ${t.size} — same time and place (${list.join(" / ")})`
+      );
+    }
+  }
+  return [...byKey.values()];
+}
+
+/**
+ * Apply the crew-chief rule to merged teams: band each team on its own size and
+ * take the chiefs OUT of it. Chiefs the client asked for already offset the carve
+ * across the window and place, so 3 crew + 1 chief stays 3 + 1 and 10 crew + 1 chief
+ * becomes 9 + 1 + the one they named, never 11 people to fill an order for 11.
+ */
 function applyCrewChief(teams: DesiredSlotTeam[], warnings: string[]): DesiredSlotTeam[] {
   if (CREW_CHIEF_MODE === "off") return teams;
 
-  // A "shift" is a start and an end. Teams sharing one are summed before the band
-  // applies, so 4 carpenters plus 4 crew at the same time is 8 people and ONE
-  // chief — banding each team separately would have billed two.
-  const shifts = new Map<string, DesiredSlotTeam[]>();
+  const requestedChiefs = new Map<string, number>();
   for (const t of teams) {
-    const key = `${t.beginning}|${t.end}`;
-    shifts.set(key, [...(shifts.get(key) ?? []), t]);
+    if (t.profession_id !== CREW_CHIEF_PROFESSION_ID) continue;
+    requestedChiefs.set(siteKey(t), (requestedChiefs.get(siteKey(t)) ?? 0) + t.size);
   }
 
-  const out: DesiredSlotTeam[] = [...teams];
-  for (const group of shifts.values()) {
-    // Chiefs already asked for count towards the shift but are never given a chief
-    // of their own.
-    const requestedChiefs = group
-      .filter((t) => t.profession_id === CREW_CHIEF_PROFESSION_ID)
-      .reduce((n, t) => n + t.size, 0);
-    const people = group.reduce((n, t) => n + t.size, 0);
-    const needed = chiefsForShift(people) - requestedChiefs;
-    if (needed <= 0) continue;
+  const carved = new Map<string, number>();
+  for (const t of teams) {
+    // A chief is never given a chief of their own.
+    if (t.profession_id === CREW_CHIEF_PROFESSION_ID) continue;
+    const site = siteKey(t);
+    const credit = requestedChiefs.get(site) ?? 0;
+    const needed = chiefsForTeam(t.size) - credit;
+    if (needed <= 0) {
+      // The credit is spent against this team, not re-spent against the next one.
+      requestedChiefs.set(site, credit - chiefsForTeam(t.size));
+      continue;
+    }
+    requestedChiefs.set(site, 0);
+    const before = t.size;
+    t.size -= needed;
+    carved.set(site, (carved.get(site) ?? 0) + needed);
+    warnings.push(
+      `crew-chief rule: team of ${before} -> ${t.size} + ${needed} chief${needed > 1 ? "s" : ""} (headcount unchanged)`
+    );
+  }
 
-    const anchor = group[0];
+  const out = teams.filter((t) => t.size > 0);
+  for (const [site, n] of carved) {
+    if (n <= 0) continue;
+    const existing = out.find(
+      (t) => t.profession_id === CREW_CHIEF_PROFESSION_ID && siteKey(t) === site
+    );
+    if (existing) {
+      existing.size += n;
+      continue;
+    }
+    const anchor = teams.find((t) => siteKey(t) === site)!;
     out.push({
       name: "Crew Chief",
       profession_id: CREW_CHIEF_PROFESSION_ID,
       beginning: anchor.beginning,
       end: anchor.end,
-      size: needed,
+      size: n,
       place_id: anchor.place_id,
     });
-    warnings.push(
-      `crew-chief rule: ${people} on shift ${String(anchor.beginning).slice(0, 16)} -> +${needed} chief${needed > 1 ? "s" : ""}`
-    );
   }
   return out;
 }
@@ -163,11 +241,11 @@ export function composeOrder(inp: ComposeInput): ComposeResult {
       beginning: date ? isoDateTime(date, start) : "",
       end: date ? isoDateTime(date, end) : "",
       size: r.size as number,
-      place_id: inp.place_id, // MANDATORY on every slot team
+      place_id: r.place_id ?? inp.place_id, // MANDATORY on every slot team
     };
   });
 
-  const slot_teams = applyCrewChief(base, warnings);
+  const slot_teams = applyCrewChief(mergeTeams(base, warnings), warnings);
 
   const order: DesiredOrder = {
     name: inp.orderName,

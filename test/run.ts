@@ -59,7 +59,7 @@ const NEW = { message_id: "m1", body: "Hi, can I book 4 crew on 9th March at Sav
   // To Confirm, not Price Quotes (Ben, 2026-08-09). test/draftPosture.ts owns the
   // reasoning and the wire-level check; this asserts the end-to-end path carries it.
   assert(s.pending_order?.desired.provisional === true && s.pending_order?.desired.quote === false, "draft posture: To Confirm (provisional, not quote)");
-  assert(!!s.pending_order?.desired.slot_teams.some((t) => t.profession_id === 36), "crew-chief slot team added (4 crew -> +chief)");
+  assert(!!s.pending_order?.desired.slot_teams.some((t) => t.profession_id === 36), "crew-chief slot team carved out (4 crew -> 3 + chief)");
   assert(!!s.pending_order?.desired.specification, "job summary emitted to specification");
   assert(s.pending_order?.desired.intern_name === "PO-44821", "customer ref emitted to intern_name");
 
@@ -82,7 +82,10 @@ const NEW = { message_id: "m1", body: "Hi, can I book 4 crew on 9th March at Sav
   ]), deps);
   assert(s.classification === "update", "classified update");
   assert(s.status === "proposed" && s.pending_order?.kind === "patch", "patch proposed");
-  assert(s.pending_order?.desired.slot_teams[0].size === 6, "staged patch size = 6");
+  // 6 crew is 5 crew and a chief carved out of them — the client's number is the
+  // number that turns up, so the patch is checked on the total, not on one team.
+  assert(s.pending_order?.desired.slot_teams.reduce((n, t) => n + t.size, 0) === 6, "staged patch is 6 people");
+  assert(s.pending_order?.desired.slot_teams.find((t) => t.profession_id !== 36)?.size === 5, "of which 5 crew");
   s = (await confirmOrder(TID, deps))!;
   assert(s.order_action_log.filter((l) => l.kind === "patch").length === 1, "one patch executed on confirm");
 
