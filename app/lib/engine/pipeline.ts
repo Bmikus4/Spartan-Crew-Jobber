@@ -133,18 +133,35 @@ export async function handleThread(
      * it holds for a patch as well as a create, and cannot be switched off from
      * the dashboard.
      */
+    /**
+     * Ben, Q1 (2026-08-18): an order goes to OnSinch as To Confirm the moment it
+     * composes. The Neon staging queue stops being a gate.
+     *
+     * It was one. In 90 days the engine created 2 orders and updated 23, while 101
+     * sat in a Postgres table nobody opened — every OnSinch id on those tickets was
+     * an order ops raised by hand. To Confirm is already a human gate, and it lives
+     * where the humans work; a second gate in a dashboard is not safety, it is a
+     * drawer. `order_mode` retires with it.
+     *
+     * The queue itself stays, as the record: every inbound request is still visible
+     * in the tool with the order it produced. What it no longer does is hold.
+     *
+     * The ONE case that still holds is money, and it is not a mode — it is checked
+     * on the order being written, so it holds for a patch as well as a create and
+     * cannot be switched off from the dashboard. An assumed rate card is a guess
+     * that reaches an invoice; card 245, the silent OnSinch default, is Tracy's
+     * original wrong-rate failure. What happens to an assumed rate once draft
+     * writes for real is a question Ben has not answered yet, so it keeps the
+     * behaviour it already had rather than acquiring a new one by omission.
+     */
     const assumedRate = intended.desired.rate_card_source === "default";
-    if (settings.order_mode === "auto" && !assumedRate) {
-      // hands-free: write straight to OnSinch
+    if (!assumedRate) {
       await executeOrder(next, intended, deps, emit);
     } else {
-      if (assumedRate && settings.order_mode === "auto") {
-        next.notes = [
-          ...next.notes,
-          `held for confirmation despite auto mode: the rate card was assumed, not derived from this client's history`,
-        ];
-      }
-      // draft-only (launch default): stage for one-click human confirm
+      next.notes = [
+        ...next.notes,
+        `held for confirmation: the rate card was assumed, not derived from this client's history`,
+      ];
       next.pending_order = intended;
       next.status = "proposed";
       await emit("order_proposed", {

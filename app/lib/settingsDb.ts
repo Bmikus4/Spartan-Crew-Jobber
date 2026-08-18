@@ -28,14 +28,13 @@ async function ensure(sql: NeonQueryFunction<false, false>): Promise<void> {
  * Whitelist an untrusted partial update. Lives here rather than inline in the
  * route so the tests exercise the REAL rule instead of a copy that can drift.
  *
- * Every field must be listed. It previously accepted only order_mode, so the
+ * Every field must be listed. It previously accepted only the retired order_mode, so the
  * Settings screen's replies toggle POSTed replies_enabled and it was dropped on
  * the floor - the toggle looked like it worked and changed nothing.
  */
 export function coerceSettings(body: unknown): Partial<Settings> {
   const b = (body ?? {}) as Record<string, unknown>;
   const next: Partial<Settings> = {};
-  if (b.order_mode === "draft-only" || b.order_mode === "auto") next.order_mode = b.order_mode;
   if (typeof b.replies_enabled === "boolean") next.replies_enabled = b.replies_enabled;
   if (b.reply_delivery === "draft" || b.reply_delivery === "send") next.reply_delivery = b.reply_delivery;
   if (b.reply_scope === "all" || b.reply_scope === "enquiries") next.reply_scope = b.reply_scope;

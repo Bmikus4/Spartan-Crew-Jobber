@@ -253,11 +253,6 @@ export interface ConversationState {
 /** Client-tunable settings (surfaced in the Vercel settings menu). */
 export interface Settings {
   /**
-   * draft-only  = orders STAGED for one-click confirm (launch default)
-   * auto        = confident orders written to OnSinch hands-free
-   */
-  order_mode: "draft-only" | "auto";
-  /**
    * Tool 1 — the verbatim Spartan reply generator. OFF by default: the engine
    * still classifies + does order work, but drafts NO reply until this is on.
    */
@@ -306,14 +301,14 @@ export interface Settings {
    *
    * So three new clients in four are priced correctly by this, and the fourth is
    * caught because an order priced this way is NEVER written hands-free: it is
-   * staged for a human whatever order_mode says (pipeline.ts), and the ticket says
-   * the card was assumed. Money is the one thing worth a click.
+   * staged for a human (pipeline.ts) even though every other order now goes
+   * straight to OnSinch as To Confirm, and the ticket says the card was assumed.
+   * Money is the one thing worth a click.
    */
   default_rate_card: number;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
-  order_mode: "draft-only",
   replies_enabled: false,
   reply_delivery: "draft",
   reply_scope: "all",

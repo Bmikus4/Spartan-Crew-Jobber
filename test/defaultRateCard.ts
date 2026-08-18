@@ -113,16 +113,17 @@ console.log("\n[4] AN ASSUMED PRICE IS NEVER WRITTEN HANDS-FREE");
   const deps = {
     reasoner: mockReasoner, onsinch: new OnsinchClient(noHistory), store: new InMemoryStore(),
     metrics: new InMemoryMetrics(),
-    // AUTO mode: this is exactly the configuration the guard has to survive.
-    settings: { ...DEFAULT_SETTINGS, order_mode: "auto" as const, default_rate_card: 315 },
+    // Every other order now goes straight to OnSinch (Ben, Q1). This is the one
+    // guard that survives that, and it is checked on the order rather than on a mode.
+    settings: { ...DEFAULT_SETTINGS, default_rate_card: 315 },
     executor: exec, now: () => 1, hashOrder, repliesEnabled: false, defaultRateCard: 315,
   } as unknown as PipelineDeps;
 
   const s = await handleThread(thread("t-auto-assumed"), deps);
-  ok(written.length === 0, "auto mode did NOT write it to OnSinch", JSON.stringify(written));
+  ok(written.length === 0, "an assumed card is NOT written to OnSinch", JSON.stringify(written));
   ok(s.status === "proposed", "it was staged for confirmation instead", String(s.status));
   ok(!!s.pending_order, "the staged order is on the confirm queue");
-  ok((s.notes ?? []).some((n) => /held for confirmation despite auto mode/.test(n)),
+  ok((s.notes ?? []).some((n) => /held for confirmation: the rate card was assumed/.test(n)),
     "and the reason is on the ticket", JSON.stringify(s.notes));
 }
 

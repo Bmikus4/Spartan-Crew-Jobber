@@ -131,7 +131,7 @@ const deps: PipelineDeps = {
   store,
   metrics: new InMemoryMetrics(),
   executor,
-  settings: { ...DEFAULT_SETTINGS }, // draft-only, replies off — launch defaults
+  settings: { ...DEFAULT_SETTINGS }, // replies off — launch defaults
   hashOrder: (o: unknown) => createHash("sha256").update(JSON.stringify(o)).digest("hex").slice(0, 16),
 };
 
@@ -139,11 +139,13 @@ async function main() {
 const state = await handleThread(thread!, deps);
 assert(state.thread_id === "thr_seam_1", "state keyed on the thread", state.thread_id);
 assert(state.classification === "new-job", "classified new-job", state.classification);
-assert(state.pending_order != null, "an order was STAGED for confirm");
-assert(state.pending_order?.kind === "create", "staged as a create", state.pending_order?.kind);
-assert(state.status === "proposed", "status proposed (nothing written to OnSinch yet)", state.status);
-assert((state.pending_order?.desired.slot_teams.length ?? 0) > 0, "the draft order has slot teams");
-assert(state.pending_order?.desired.provisional === true, "provisional -> it IS a draft order");
+// Ben, Q1: the order reaches OnSinch as To Confirm on the spot; the staging queue
+// is the record, not a gate.
+assert(state.onsinch_order_id != null, "an order was WRITTEN to OnSinch");
+assert(state.status === "ordered", "status ordered", state.status);
+assert(state.pending_order == null, "nothing left holding in the queue");
+assert((state.desired_order?.slot_teams.length ?? 0) > 0, "the order has slot teams");
+assert(state.desired_order?.provisional === true, "provisional -> it IS a To Confirm order");
 
 // ---------------------------------------------------------------- 4. idempotent
 console.log("\n[4] the same payload again changes nothing (exactly-once)");

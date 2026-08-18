@@ -72,9 +72,9 @@ function build(transport: Transport, exec: Partial<Executor>): PipelineDeps {
 
   console.log("\n[2] A CREATED order: the J number is read back after the POST");
   const deps = build(mockTransport, { async jobIdForOrder(id) { return id === 9001 ? 12345 : undefined; } });
-  let s = await handleThread(thread("t-create"), deps);
-  assert(s.status === "proposed" && s.onsinch_job_id === undefined, "nothing staged carries a job number — no order exists yet");
-  s = (await confirmOrder("t-create", deps))!;
+  // The order is written on the spot now (Ben, Q1), so the read-back happens there
+  // rather than after a confirm click. confirmOrder is still exercised below.
+  const s = await handleThread(thread("t-create"), deps);
   assert(s.onsinch_order_id === 9001, "order created");
   assert(s.onsinch_order_number === "SC-9001", "order number stored");
   assert(s.onsinch_job_id === 12345, "job number stored from the read-back");
@@ -83,16 +83,14 @@ function build(transport: Transport, exec: Partial<Executor>): PipelineDeps {
   const boom = build(mockTransport, {
     async jobIdForOrder() { throw new Error("orders read timed out"); },
   });
-  let t = await handleThread(thread("t-boom"), boom);
-  t = (await confirmOrder("t-boom", boom))!;
+  const t = await handleThread(thread("t-boom"), boom);
   assert(t.onsinch_order_id === 9001, "the order is still recorded as created");
   assert(t.status === "ordered", "status is ordered, NOT error — a retry would create it twice");
   assert(t.onsinch_job_id === undefined, "job number simply absent");
 
   console.log("\n[4] An executor with no jobIdForOrder at all still writes orders");
   const bare = build(mockTransport, {});
-  let u = await handleThread(thread("t-bare"), bare);
-  u = (await confirmOrder("t-bare", bare))!;
+  const u = await handleThread(thread("t-bare"), bare);
   assert(u.onsinch_order_id === 9001 && u.status === "ordered", "order created without the optional method");
 
   console.log("\n[5] An INHERITED order: numbers come free from the dedup lookup");

@@ -1,12 +1,12 @@
 // ============================================================================
-// Offline end-to-end proof of the foundational design + metrics + draft-only.
-// Proves: (1) draft-only new-job -> reply drafted + order PROPOSED (not written),
-//         (1b) one-click confirm -> order created,
+// Offline end-to-end proof of the foundational design + metrics + the write path.
+// Proves: (1) a new job -> reply drafted + order WRITTEN to OnSinch as To Confirm,
 //         (2) re-handling the SAME thread is idempotent,
-//         (3) a follow-up crew-count change -> proposed PATCH -> confirm,
+//         (3) a follow-up crew-count change patches the order straight through,
 //         (4) a bare "thanks" -> confirmation-only,
 //         (5) dashboard aggregate reflects the funnel,
-//         (6) flipping order_mode:"auto" writes the order hands-free.
+//         (5b) an ASSUMED rate card is the one thing that still stages for a click,
+//         (6) no mode has to be flipped for any of it.
 // ============================================================================
 import { createHash } from "node:crypto";
 import { OnsinchClient, type Transport } from "../app/lib/engine/onsinch";
@@ -47,26 +47,25 @@ const thread = (msgs: Parameters<typeof msg>[0][]): HydratedThread => ({ thread_
 const NEW = { message_id: "m1", body: "Hi, can I book 4 crew on 9th March at Savoy Place for an exhibition stand build?" };
 
 (async () => {
-  console.log("\n[1] Draft-only: new job -> reply drafted, order PROPOSED (not written)");
+  console.log("\n[1] New job -> reply drafted, order WRITTEN to OnSinch as To Confirm");
   let s = await handleThread(thread([NEW]), deps);
   assert(s.classification === "new-job", "classified new-job");
   assert(!!s.reply_draft_id, "reply draft created");
-  assert(s.status === "proposed", "status = proposed");
-  assert(!!s.pending_order && s.pending_order.kind === "create", "order staged for confirm");
-  assert(s.onsinch_order_id === undefined, "NO order written to OnSinch yet");
-  assert(s.pending_order?.desired.slot_teams[0].place_id === 88, "staged order has place_id 88");
-  assert(s.pending_order?.desired.pricelist_category_id === 197, "rate card 197 resolved onto the order (I1)");
+  assert(s.status === "ordered", "status = ordered");
+  assert(s.onsinch_order_id === 9001, "order 9001 exists in OnSinch, no confirm click needed");
+  assert(!s.pending_order, "nothing left sitting in the staging queue");
+  assert(s.desired_order?.slot_teams[0].place_id === 88, "order has place_id 88");
+  assert(s.desired_order?.pricelist_category_id === 197, "rate card 197 resolved onto the order (I1)");
   // To Confirm, not Price Quotes (Ben, 2026-08-09). test/draftPosture.ts owns the
   // reasoning and the wire-level check; this asserts the end-to-end path carries it.
-  assert(s.pending_order?.desired.provisional === true && s.pending_order?.desired.quote === false, "draft posture: To Confirm (provisional, not quote)");
-  assert(!!s.pending_order?.desired.slot_teams.some((t) => t.profession_id === 36), "crew-chief slot team carved out (4 crew -> 3 + chief)");
-  assert(!!s.pending_order?.desired.specification, "job summary emitted to specification");
-  assert(s.pending_order?.desired.intern_name === "PO-44821", "customer ref emitted to intern_name");
-
-  console.log("\n[1b] One-click confirm -> order created");
-  s = (await confirmOrder(TID, deps))!;
-  assert(s.onsinch_order_id === 9001, "order 9001 created on confirm");
-  assert(s.status === "ordered" && !s.pending_order, "status ordered, pending cleared");
+  // It is what makes writing straight through safe: the human gate is in OnSinch.
+  assert(s.desired_order?.provisional === true && s.desired_order?.quote === false, "draft posture: To Confirm (provisional, not quote)");
+  assert(!!s.desired_order?.slot_teams.some((t) => t.profession_id === 36), "crew-chief slot team carved out (4 crew -> 3 + chief)");
+  assert(!!s.desired_order?.specification, "job summary emitted to specification");
+  assert(s.desired_order?.intern_name === "PO-44821", "customer ref emitted to intern_name");
+  // Ben, Q1: the queue stops being a gate, but every inbound request must still be
+  // visible in the tool. The row is the record.
+  assert((await store.get(TID))?.thread_id === TID, "the thread is still recorded in the tool");
 
   console.log("\n[2] Re-handle SAME thread (idempotency)");
   const createsBefore = (await metrics.all()).filter((e) => e.type === "order_created").length;
@@ -81,13 +80,12 @@ const NEW = { message_id: "m1", body: "Hi, can I book 4 crew on 9th March at Sav
     { message_id: "m2", date_iso: "2026-02-13T09:00:00Z", body: "Actually please make it 6 crew instead." },
   ]), deps);
   assert(s.classification === "update", "classified update");
-  assert(s.status === "proposed" && s.pending_order?.kind === "patch", "patch proposed");
+  assert(!s.pending_order, "patch executed, not staged");
   // 6 crew is 5 crew and a chief carved out of them — the client's number is the
   // number that turns up, so the patch is checked on the total, not on one team.
-  assert(s.pending_order?.desired.slot_teams.reduce((n, t) => n + t.size, 0) === 6, "staged patch is 6 people");
-  assert(s.pending_order?.desired.slot_teams.find((t) => t.profession_id !== 36)?.size === 5, "of which 5 crew");
-  s = (await confirmOrder(TID, deps))!;
-  assert(s.order_action_log.filter((l) => l.kind === "patch").length === 1, "one patch executed on confirm");
+  assert(s.desired_order?.slot_teams.reduce((n, t) => n + t.size, 0) === 6, "the patched order is 6 people");
+  assert(s.desired_order?.slot_teams.find((t) => t.profession_id !== 36)?.size === 5, "of which 5 crew");
+  assert(s.order_action_log.filter((l) => l.kind === "patch").length === 1, "one patch reached OnSinch");
 
   console.log("\n[4] Bare acknowledgement -> confirmation-only");
   s = await handleThread(thread([
@@ -99,9 +97,28 @@ const NEW = { message_id: "m1", body: "Hi, can I book 4 crew on 9th March at Sav
   console.log("\n[5] Dashboard aggregate");
   const stats = aggregate(await metrics.all());
   console.log("   " + JSON.stringify(stats));
-  assert(stats.orders_proposed === 2, "2 orders proposed (create + patch)");
-  assert(stats.orders_created === 1 && stats.orders_updated === 1, "1 created, 1 updated after confirms");
+  assert(stats.orders_proposed === 0, "nothing was proposed — the queue is no longer a gate");
+  assert(stats.orders_created === 1 && stats.orders_updated === 1, "1 created, 1 updated, both straight through");
   assert(stats.awaiting_confirmation === 0, "nothing left awaiting confirmation");
+
+  console.log("\n[5b] the ONE gate that survives: an assumed rate card still holds");
+  {
+    // A client with no order history has no card to derive, so the house standard is
+    // applied — a guess that reaches an invoice. Card 245, OnSinch's silent default,
+    // is Tracy's original wrong-rate failure. Money is worth the click.
+    const noHistory: Transport = async (method, path) =>
+      path.startsWith("/orders") && method === "GET"
+        ? { status: 200, data: { data: [], pagination: { count: 0, pageCount: 1, nextPage: false } } }
+        : mockTransport(method, path);
+    const newClientDeps: PipelineDeps = { ...deps, onsinch: new OnsinchClient(noHistory), defaultRateCard: 315 };
+    const sr = await handleThread({ thread_id: "thread-D", messages: [msg({ message_id: "d1", body: NEW.body })] }, newClientDeps);
+    assert(sr.desired_order?.rate_card_source === "default", "the card was assumed");
+    assert(sr.status === "proposed" && !!sr.pending_order, "so it is STAGED, not written");
+    assert(sr.onsinch_order_id === undefined, "and nothing reached OnSinch");
+    assert(sr.notes.some((n) => /rate card was assumed/.test(n)), "the ticket says why it is holding");
+    const confirmed = (await confirmOrder("thread-D", newClientDeps))!;
+    assert(confirmed.onsinch_order_id === 9001, "one click still writes it");
+  }
 
   console.log("\n[7] Newest message is our OWN Spartan reply -> act on the client email, never ourselves");
   const s7 = await handleThread({ thread_id: "thread-C", messages: [
@@ -111,10 +128,12 @@ const NEW = { message_id: "m1", body: "Hi, can I book 4 crew on 9th March at Sav
   assert(s7.last_message_id === "c1", "latest = the client message, not our Spartan reply");
   assert(s7.classification === "new-job", "classified the client's request, not our own email");
 
-  console.log("\n[6] order_mode:auto -> hands-free write (separate thread)");
-  const autoDeps: PipelineDeps = { ...deps, settings: { ...DEFAULT_SETTINGS, order_mode: "auto", replies_enabled: true } };
+  // Ben, Q1: the Neon staging queue stops being a gate — an order goes to OnSinch as
+  // To Confirm the moment it composes. There is no mode to flip any more.
+  console.log("\n[6] an order reaches OnSinch without a second gate (separate thread)");
+  const autoDeps: PipelineDeps = { ...deps, settings: { ...DEFAULT_SETTINGS, replies_enabled: true } };
   const s2 = await handleThread({ thread_id: "thread-B", messages: [msg({ message_id: "b1", body: NEW.body })] }, autoDeps);
-  assert(s2.status === "ordered" && s2.onsinch_order_id === 9001, "auto mode wrote order without confirm");
+  assert(s2.status === "ordered" && s2.onsinch_order_id === 9001, "written without a confirm click");
 
   console.log("\n[8] Tool 2 dedup — pull-all EXACT match (resolve.ts)");
   const companies = [{ id: 1, name: "RedBeast Energy Ltd" }, { id: 2, name: "Acme Events" }];

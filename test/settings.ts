@@ -26,7 +26,6 @@ const whitelist = coerceSettings;
 const merge = (stored: Settings, body: unknown): Settings => ({ ...stored, ...coerceSettings(body) });
 
 console.log("\n[1] the launch defaults are the safe ones");
-ok(DEFAULT_SETTINGS.order_mode === "draft-only", "order_mode draft-only", DEFAULT_SETTINGS.order_mode);
 ok(DEFAULT_SETTINGS.replies_enabled === false, "replies OFF");
 ok(DEFAULT_SETTINGS.reply_delivery === "draft", "delivery DRAFT", DEFAULT_SETTINGS.reply_delivery);
 
@@ -36,7 +35,6 @@ console.log("\n[2] every setting survives the round trip (the bug)");
   const posted = { ...DEFAULT_SETTINGS, replies_enabled: true };
   const saved = merge(DEFAULT_SETTINGS, posted);
   ok(saved.replies_enabled === true, "replies_enabled persisted (was silently dropped)");
-  ok(saved.order_mode === "draft-only", "order_mode untouched");
 }
 {
   const saved = merge({ ...DEFAULT_SETTINGS, replies_enabled: true }, { reply_delivery: "send" });
@@ -44,19 +42,24 @@ console.log("\n[2] every setting survives the round trip (the bug)");
   ok(saved.replies_enabled === true, "other fields not clobbered by a partial update");
 }
 {
-  const saved = merge(DEFAULT_SETTINGS, { order_mode: "auto" });
-  ok(saved.order_mode === "auto", "order_mode persisted");
+  const saved = merge(DEFAULT_SETTINGS, { reply_scope: "enquiries" });
+  ok(saved.reply_scope === "enquiries", "reply_scope persisted");
   ok(saved.replies_enabled === false, "a partial update leaves the rest alone");
+}
+{
+  // order_mode retired with Ben's Q1: orders reach OnSinch as To Confirm and the
+  // staging queue is a record, not a gate. A stored one must not come back to life.
+  ok(!("order_mode" in DEFAULT_SETTINGS), "order_mode is gone from the defaults");
+  ok(!("order_mode" in whitelist({ order_mode: "auto" })), "and a posted one is not accepted");
 }
 
 console.log("\n[3] junk is rejected without disturbing what is stored");
 {
-  const stored: Settings = { order_mode: "auto", replies_enabled: true, reply_delivery: "send", reply_scope: "enquiries", default_rate_card: 315 };
-  const saved = merge(stored, { order_mode: "yolo", replies_enabled: "yes", reply_delivery: "post", reply_scope: "some", default_rate_card: "cheap" });
+  const stored: Settings = { replies_enabled: true, reply_delivery: "send", reply_scope: "enquiries", default_rate_card: 315 };
+  const saved = merge(stored, { replies_enabled: "yes", reply_delivery: "post", reply_scope: "some", default_rate_card: "cheap" });
   ok(saved.default_rate_card === 315, "non-numeric default_rate_card ignored", String(saved.default_rate_card));
   ok(merge(stored, { default_rate_card: -1 }).default_rate_card === 315, "a negative card id is refused");
   ok(merge(stored, { default_rate_card: 0 }).default_rate_card === 0, "0 IS a real value - it means hold the thread instead");
-  ok(saved.order_mode === "auto", "bad order_mode ignored", saved.order_mode);
   ok(saved.replies_enabled === true, "non-boolean replies_enabled ignored");
   ok(saved.reply_delivery === "send", "bad reply_delivery ignored", saved.reply_delivery);
   ok(saved.reply_scope === "enquiries", "bad reply_scope ignored", saved.reply_scope);

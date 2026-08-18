@@ -12,12 +12,11 @@
 import { useCallback, useEffect, useState } from "react";
 import InstallButton from "./InstallButton";
 
-type OrderMode = "draft-only" | "auto";
 type ReplyDelivery = "draft" | "send";
 type ReplyScope = "all" | "enquiries";
-interface Settings { order_mode: OrderMode; replies_enabled: boolean; reply_delivery: ReplyDelivery; reply_scope: ReplyScope; default_rate_card: number }
+interface Settings { replies_enabled: boolean; reply_delivery: ReplyDelivery; reply_scope: ReplyScope; default_rate_card: number }
 
-const SETTINGS_FALLBACK: Settings = { order_mode: "draft-only", replies_enabled: false, reply_delivery: "draft", reply_scope: "all", default_rate_card: 315 };
+const SETTINGS_FALLBACK: Settings = { replies_enabled: false, reply_delivery: "draft", reply_scope: "all", default_rate_card: 315 };
 
 const INK = "var(--text-primary)";
 const SUB = "var(--text-secondary)";
@@ -170,17 +169,6 @@ export default function SettingsScreen({ signedInAs }: { signedInAs?: string }) 
             {failed ? "Save failed — not applied" : saving ? "Saving…" : savedAt ? "Saved" : "Changes save as you make them"}
           </span>
         </header>
-
-        <Panel
-          title="Order mode"
-          blurb={<><b style={{ color: SUB }}>Draft-only</b> stages every OnSinch order for one-click approval on the Jobs Board — nothing is written automatically. <b style={{ color: SUB }}>Auto</b> writes confident orders hands-free.</>}
-        >
-          <Segmented label="Order mode" value={s.order_mode} onChange={(v) => save({ ...s, order_mode: v })}
-            options={[{ id: "draft-only" as OrderMode, label: "Draft-only" }, { id: "auto" as OrderMode, label: "Auto (hands-free)" }]} />
-          {s.order_mode === "auto" && (
-            <Warn>Auto mode writes orders to OnSinch with no human check. Only turn this on once the needs-human and failure rates have been low for a while.</Warn>
-          )}
-        </Panel>
 
         <Panel
           title="AI email replies"

@@ -36,7 +36,7 @@ function deps(over: Partial<PipelineDeps> = {}): PipelineDeps {
     now: () => ++clock,
     store: new InMemoryStore(),
     metrics: new InMemoryMetrics(),
-    settings: { ...DEFAULT_SETTINGS, order_mode: "auto" }, // auto so writes are attempted
+    settings: { ...DEFAULT_SETTINGS },
     hashOrder,
     executor: {
       async createReplyDraft() { return "d1"; },

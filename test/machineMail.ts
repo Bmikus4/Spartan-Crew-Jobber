@@ -121,7 +121,7 @@ console.log("4. the OnSinch notification composes no order");
   };
   const state = await handleThread(thread, {
     reasoner: counting, onsinch, now: () => 1_700_000_000_000,
-    store, metrics, executor, settings: { ...DEFAULT_SETTINGS, order_mode: "auto" }, hashOrder: JSON.stringify,
+    store, metrics, executor, settings: { ...DEFAULT_SETTINGS }, hashOrder: JSON.stringify,
   });
   ok(state.classification === "not-a-job", "classified not-a-job", state.classification);
   ok(state.status === "ignored", "status ignored", state.status);
