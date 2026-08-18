@@ -191,6 +191,10 @@ export async function handleThread(
      * The floor is client + date + venue (Q4). It fires rarely by construction, and
      * when it fires nothing has been written that would need undoing.
      */
+    // store.all() is the 500 most recently updated threads, not every thread ever.
+    // That is the right window — a twin arrives days apart, not months — but it IS a
+    // window: a job re-enquired about after 500 other threads have moved will not be
+    // seen, and the check will say nothing rather than saying no.
     const twin = findCrossThreadMatches(shapeOf(next), (await store.all()).map(shapeOf));
     if (twin.length) {
       const draft = crossThreadDraft(shapeOf(next), twin)!;
