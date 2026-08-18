@@ -8,7 +8,7 @@ import { compile, type CompileDeps } from "./compiler";
 import { selectLatest } from "./normalize";
 import type { StateStore } from "./store";
 import type { MetricSink } from "./metrics";
-import type { Actions, ConversationState, DesiredOrder, HydratedThread, Settings } from "./types";
+import type { Actions, ConversationState, DesiredOrder, DesiredSlotTeam, HydratedThread, Settings } from "./types";
 import { findCrossThreadMatches, crossThreadDraft, type ThreadShape, type InternalDraft } from "./crossThread";
 import { assessAmendment } from "./amendment";
 
@@ -93,6 +93,26 @@ export interface PipelineDeps extends CompileDeps {
   hashOrder: (o: unknown) => string;
   /** Feeds the sender ledger that triage reads. Injected; absent in tests. */
   recordSender?: (a: { addr: string; thread_id: string; wasJob: boolean; subject?: string }) => Promise<void>;
+  /**
+   * The permanent record of an order about to be deleted, and what replaced it.
+   * Injected so the pipeline stays testable with no database. Absent, a rebuild still
+   * happens — the archive is how the old numbers stay answerable, not a safety.
+   */
+  archiveOrder?: (a: {
+    thread_id: string;
+    order_id: number;
+    order_number?: string;
+    job_id?: number;
+    live_order?: Record<string, unknown> | null;
+    slot_teams: DesiredSlotTeam[];
+    slot_teams_are_reconstruction: boolean;
+    reason?: string;
+    created?: string | null;
+  }) => Promise<number | null>;
+  recordReplacement?: (
+    archive_id: number,
+    by: { order_id: number; order_number?: string; job_id?: number }
+  ) => Promise<void>;
 }
 
 export async function handleThread(
@@ -365,6 +385,10 @@ async function tryReplace(
     (a) => a.ok && (a.kind === "create" || a.kind === "replace") && Number(a.order_id) === Number(order_id)
   );
 
+  let archiveId: number | null = null;
+  const beforeCrew = (next.desired_order?.slot_teams ?? []).reduce((n, t) => n + t.size, 0);
+  const afterCrew = (intended.desired.slot_teams ?? []).reduce((n, t) => n + t.size, 0);
+
   try {
     const res = await executor.replaceOrder({
       order_id,
@@ -374,6 +398,31 @@ async function tryReplace(
       async onIntent(snapshot) {
         next.order_replace = { order_id, deleted: false, snapshot, ts: now() };
         await store.put(next);
+        /**
+         * The permanent record of the order about to be destroyed, written BEFORE the
+         * delete so a crash between the two leaves a row describing an order that still
+         * exists — recoverable — rather than a deleted order nothing remembers.
+         *
+         * order_replace above is the crash-safety marker and is cleared on success.
+         * This is the archive and is never cleared: a client quotes "J13918" months
+         * later and it exists nowhere in OnSinch, because the booking they mean is
+         * J14022 now. Ben, 2026-08-18.
+         */
+        archiveId = await deps.archiveOrder?.({
+          thread_id: next.thread_id,
+          order_id,
+          order_number: next.onsinch_order_number,
+          job_id: next.onsinch_job_id,
+          live_order: snapshot as Record<string, unknown>,
+          // The engine's own copy. There is no endpoint that returns an order's slot
+          // teams, so on an order raised by hand in OnSinch this may not be what was
+          // really on it — which is why the flag says so rather than leaving someone
+          // to trust it. See orderArchiveDb.ts.
+          slot_teams: next.desired_order?.slot_teams ?? [],
+          slot_teams_are_reconstruction: !weCreatedIt,
+          reason: `crew ${beforeCrew} -> ${afterCrew}`,
+          created: (snapshot as { created?: string })?.created ?? null,
+        }) ?? null;
       },
       async onDeleted() {
         next.order_replace = { ...(next.order_replace ?? { order_id, ts: now() }), order_id, deleted: true };
@@ -407,6 +456,12 @@ async function tryReplace(
         `crew/time change applied by replacing draft order #${old} with #${res.created.id} — PATCH cannot carry slot teams`,
       ];
       next.order_action_log = [...next.order_action_log, { ts: now(), kind: "replace", order_id: res.created.id, ok: true }];
+      // Close the chain, so the old number resolves to the job it became.
+      if (archiveId) {
+        await deps.recordReplacement?.(archiveId, {
+          order_id: res.created.id, order_number: res.created.number, job_id: next.onsinch_job_id,
+        }).catch?.((err: unknown) => console.error("[order-archive] replacement not recorded", err));
+      }
       await emit("order_updated", {
         order_id: res.created.id,
         replaced: old,

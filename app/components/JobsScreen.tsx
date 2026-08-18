@@ -18,6 +18,7 @@ interface Job {
   thread_id: string; subject: string; contact: string;
   company_id: number | null; order_id: number | null; order_number: string | null;
   job_id?: number | null;
+  superseded?: Array<{ job_id: number | null; order_number: string | null }>;
   classification: string; status: string; priority: string;
   needs_human: boolean; ai_replied: boolean; crew_size: number | null;
   is_client_inquiry?: boolean; gate_reason?: string | null;
@@ -162,6 +163,16 @@ function rowTags(j: Job): { label: string; tone: TagTone; title: string; mono?: 
   // IDENTITY. Both numbers, both prefixed, both coloured — the J number is what a
   // client quotes back at us and the R number is what the order is called in OnSinch.
   if (j.job_id) tags.push({ label: `J${j.job_id}`, tone: "blue", title: "OnSinch job number — search this", mono: true });
+  /**
+   * The numbers this job used to have. A client quotes the old one back months later
+   * and it exists nowhere in OnSinch, because an amendment cannot be applied in place —
+   * the order is deleted and reposted under a new number. Shown rather than merely
+   * searchable so whoever opens that email sees the connection without hunting for it.
+   */
+  for (const old of j.superseded ?? []) {
+    if (!old.job_id) continue;
+    tags.push({ label: `was J${old.job_id}`, tone: "neutral", title: "superseded by an amendment — the same job under its old number", mono: true });
+  }
   if (j.order_number) tags.push({ label: `R${j.order_number}`, tone: "amber", title: "OnSinch order number", mono: true });
   // A staged order has no number yet, and saying so is worth a slot: it is the
   // difference between "not booked" and "booked, number pending".

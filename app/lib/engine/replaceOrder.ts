@@ -16,9 +16,20 @@
 //
 // REFUSES, rather than destroying, when anything is off. It re-reads the order from
 // OnSinch first — never trusting our stored copy, which is what we wrote weeks ago —
-// and stands down unless the live order is still `provisional` AND `quote`, still
-// belongs to the company we think, and the replacement actually has crew in it. An
-// order a human has approved is theirs; we do not delete it to apply an email.
+// and stands down unless the live order is still `provisional`, still belongs to the
+// company we think, and the replacement actually has crew in it.
+//
+// CUSTODY USED TO BE A SECOND GATE AND IS NOT ANY MORE (Ben, 2026-08-18). It refused
+// any order this engine had not created, on the reasoning that an ops-raised draft is
+// not ours to delete. Ben overruled it: an amendment rebuilds the order whoever raised
+// it, because the alternative is a booking that disagrees with the client's latest
+// email and a human who has to notice on their own. `provisional` now carries the
+// whole guarantee by itself — a CONFIRMED order is never touched, whoever raised it.
+//
+// That widening is why carryForward exists. Rebuilding an ops draft from the engine's
+// own idea of the order would return it correct in crew and blank in every field a
+// person had typed, so the live order's values are read back and put on the
+// replacement, and anything a rebuild cannot preserve refuses instead of dropping it.
 //
 // CANNOT LOSE THE ORDER. The sequence is persist-intent, delete, persist-deleted,
 // create, and the caller supplies the persistence. Every interruption is recoverable:
@@ -72,39 +83,6 @@ export async function replaceProvisionalOrder(
 ): Promise<ReplaceResult> {
   const { order_id, desired } = args;
 
-  /**
-   * CUSTODY, NOT FLAGS. This function may only destroy an order this engine
-   * created. `weCreatedIt` comes from the thread's own order_action_log — a
-   * recorded, successful create against this exact order id — and not from
-   * anything read back off OnSinch.
-   *
-   * The old test was `provisional && quote`, on the theory that those two flags
-   * were the engine's signature. They never were. Order dedup links a thread to
-   * any existing order for the same company and date, including one a human
-   * raised, so an ops-created draft carrying both flags could be deleted to
-   * apply an email — and 5 of the 100 most recent live orders carry exactly
-   * that pair. Ben's move to the To Confirm posture makes the point unarguable:
-   * provisional-without-quote is what ops themselves use most (27 of that 100),
-   * so no flag combination distinguishes our draft from theirs any more.
-   *
-   * An order we did not create is never ours to delete. The change goes to a
-   * human, which is what already happens for an approved order.
-   *
-   * REQUIRED and tested for `!== true`, so the failure mode is refusal. A caller
-   * that forgets to establish custody gets nothing deleted; had this been
-   * optional, forgetting would have meant deleting. deps.ts builds the executor
-   * by hand, method by method — that wrapper has already shipped one missing
-   * method to production — so the type must force the question to be answered.
-   */
-  if (args.weCreatedIt !== true) {
-    return {
-      deleted: false,
-      refused:
-        `order #${order_id} was not created by this engine — refusing to delete an order raised in OnSinch; ` +
-        `crew and times must be changed by hand`,
-    };
-  }
-
   // A replacement with no crew in it is not a correction, it is a deletion wearing one.
   const teams = desired.slot_teams ?? [];
   if (!teams.length) {
@@ -128,10 +106,15 @@ export async function replaceProvisionalOrder(
     // replace, and creating silently could duplicate a job booked elsewhere.
     return { deleted: false, refused: `order #${order_id} no longer exists in OnSinch — not recreating it blindly` };
   }
-  // Still a draft? `provisional` is the flag a human clears when they take the order on,
-  // so losing it means the booking has been confirmed and is no longer ours to replace.
-  // This is a check on the order's STATE; custody above is the check on whose it is, and
-  // both have to hold.
+  /**
+   * Still a draft? `provisional` is the flag a human clears when they take the order
+   * on, so losing it means the booking has been confirmed.
+   *
+   * Since custody was dropped (Ben, 2026-08-18 — an amendment rebuilds an ops-raised
+   * draft too), this is the ONLY thing standing between an amendment and a live
+   * booking. It carries the whole guarantee now: a confirmed order is never deleted,
+   * whoever raised it, and the change goes to a human instead.
+   */
   if (live.provisional !== true) {
     return {
       deleted: false,
@@ -147,6 +130,29 @@ export async function replaceProvisionalOrder(
     };
   }
 
+  /**
+   * Carry forward what the engine does not model.
+   *
+   * A rebuild posts the engine's idea of the order, and the engine's idea has no room
+   * for most of what a person types into OnSinch. On an order we raised that costs
+   * nothing — there was never anything else on it. On an ops-raised draft, which is
+   * now in scope, everything they set by hand would quietly cease to exist: the order
+   * would come back correct in crew and blank in every field somebody filled in.
+   *
+   * So the live order's own values win for every field the engine does not set, and a
+   * field it cannot carry stops the rebuild rather than being dropped silently. Losing
+   * ops' hand-entered detail is the failure they would notice and we would not.
+   */
+  const carried = carryForward(live, desired);
+  if (carried.unsupported.length) {
+    return {
+      deleted: false,
+      refused:
+        `order #${order_id} carries ${carried.unsupported.join(", ")}, which a rebuild cannot preserve — ` +
+        `refusing to delete it rather than dropping what somebody set by hand`,
+    };
+  }
+
   // From here on the order is going away, so the record of it goes down first.
   await hooks.onIntent(live);
   await client.deleteOrders([order_id]);
@@ -154,6 +160,58 @@ export async function replaceProvisionalOrder(
 
   // If this throws, the caller sees the error with deleted:true already persisted, so
   // the retry re-posts rather than deleting a second time.
-  const created = await client.createOrder(buildOrderBody(desired));
+  const created = await client.createOrder(buildOrderBody(carried.desired));
   return { deleted: true, created, snapshot: live };
+}
+
+/**
+ * Fields OnSinch accepts on an order that the engine never sets. Read off the live
+ * order and put back on the rebuild, so a hand-raised draft comes back whole.
+ *
+ * `supervisor_id` and the job's `admin_note` live on the Job rather than the order and
+ * are set through it; the rest are top-level.
+ */
+const CARRIED_FIELDS = [
+  "agency_invoice_address_id",
+  "reverse_charge",
+  "order_manager_id",
+  "intern_name",
+  "specification",
+] as const;
+
+/**
+ * Anything present on the live order that a rebuild would silently lose. Attachments
+ * are the one that matters: DELETE /orders cascades, and a PDF somebody uploaded is
+ * not recreatable from anything the engine holds.
+ */
+const CANNOT_CARRY: Array<[string, (live: Record<string, unknown>) => boolean]> = [
+  ["an attachment", (l) => Array.isArray(l.Attachment) && (l.Attachment as unknown[]).length > 0],
+];
+
+export function carryForward(
+  live: Record<string, unknown>,
+  desired: DesiredOrder
+): { desired: DesiredOrder; carried: string[]; unsupported: string[] } {
+  const mine = desired as unknown as Record<string, unknown>;
+  const add: Record<string, unknown> = {};
+  const carried: string[] = [];
+  for (const f of CARRIED_FIELDS) {
+    const v = live[f];
+    /**
+     * Only a value somebody actually set. Every field here is an id, a string or a
+     * flag whose unset state is falsy, so a blanket falsy test is right and a
+     * null/undefined test is not: `order_manager_id: 0` is not a manager, and
+     * `reverse_charge: false` is the default rather than a choice. Carrying either
+     * would write OnSinch's own emptiness back as though it were ops' intent.
+     */
+    if (!v) continue;
+    // Only when the engine is not itself setting it: the amendment is the newer truth
+    // for anything it actually read out of the email.
+    if (mine[f] !== undefined && mine[f] !== "") continue;
+    add[f] = v;
+    carried.push(f);
+  }
+  const out = { ...desired, ...add } as DesiredOrder;
+  const unsupported = CANNOT_CARRY.filter(([, has]) => has(live)).map(([name]) => name);
+  return { desired: out, carried, unsupported };
 }

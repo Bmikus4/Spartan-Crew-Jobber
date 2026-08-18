@@ -110,12 +110,16 @@ async function main() {
   ok(!r.refused && r.created?.id === 14001, "an order in the To Confirm posture is still ours to replace", r.refused ?? String(r.created?.id));
 }
 {
-  // Exists, provisional, right company - and ops raised it, not us.
+  // Exists, provisional, right company - and OPS raised it, not us.
+  //
+  // This used to refuse. Ben overruled it on 2026-08-18: an amendment rebuilds the
+  // order whoever raised it, because the alternative is a booking that disagrees with
+  // the client's latest email and a human who has to notice unaided. `provisional` is
+  // now the only gate, and it still holds — see the confirmed-order case below.
   const { client, calls } = fakeOnsinch({ liveOrder: { id: 13632, provisional: true, quote: false, company_id: 501 } });
   const r = await replaceProvisionalOrder(client, { weCreatedIt: false, order_id: 13632, desired: desired(6) }, recordingHooks(calls));
-  ok(!!r.refused && /not created by this engine/.test(r.refused),
-    "an order we did not raise is refused however draft-like it looks", r.refused);
-  ok(calls.length === 0, "and it refuses before reading OnSinch at all", calls.join(" -> "));
+  ok(!r.refused, "an ops-raised DRAFT is rebuilt, not refused", r.refused ?? "(not refused)");
+  ok(r.deleted && !!r.created, "it is deleted and reposted", `deleted=${r.deleted} created=${!!r.created}`);
 }
 {
   const { client, calls } = fakeOnsinch({ liveOrder: null });
@@ -328,17 +332,12 @@ async function runConfirm(opts: {
 {
   // THE INHERITED ORDER. Order dedup links a thread to any existing order for the same
   // company and date, so a thread routinely ends up pointing at one ops raised by hand.
-  // Everything else about this case is identical to the happy path above - same crew
-  // change, same provisional order, same company - and the only difference is that the
-  // action log holds no create for 13632. That must be enough to stop a deletion.
+  // The action log holds no create for 13632, which used to stop the deletion outright.
+  // It no longer does: only `provisional` does.
   const inherited = staged({ order_action_log: [] });
-  const { out, calls, patched } = await runConfirm({ state: inherited });
-  ok(!calls.some((c) => c.startsWith("DELETE")), "an order the engine did not raise is never deleted", calls.join(" -> "));
-  ok(out?.onsinch_order_id === 13632, "the thread still points at the original order", String(out?.onsinch_order_id));
-  ok(out?.status === "needs-info", "the crew change goes to a human instead", String(out?.status));
-  ok((out?.notes ?? []).some((n) => /not created by this engine/.test(n)),
-     "and says why, in those words", JSON.stringify(out?.notes));
-  ok(!patched.length || patched.length === 1, "nothing destructive happened either way", JSON.stringify(patched));
+  const { out, calls } = await runConfirm({ state: inherited });
+  ok(calls.some((c) => c.startsWith("DELETE")), "an inherited DRAFT is now rebuilt too (Ben, 2026-08-18)", calls.join(" -> "));
+  ok(out?.onsinch_order_id !== 13632, "so the thread moves to the replacement order", String(out?.onsinch_order_id));
 }
 
 {

@@ -22,7 +22,7 @@ async function main() {
 const rows = await sql`
   SELECT t.thread_id, t.subject, t.message_count, t.first_date, t.last_date, t.payload,
          l.model, l.classification, l.is_cancellation, l.company_name, l.location_text,
-         l.first_start, l.last_end, l.error
+         l.first_start, l.last_end, l.blocks, l.error
   FROM sweep_labels l
   JOIN sweep_threads t ON t.thread_id = l.thread_id
   ORDER BY t.last_date DESC NULLS LAST`;

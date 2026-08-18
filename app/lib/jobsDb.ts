@@ -33,6 +33,8 @@ export interface Job {
   order_number: string | null;
   /** The J number — `Job[0].id` of the order. See ConversationState. */
   job_id?: number | null;
+  /** Numbers this job used to carry, newest first: [{ job_id, order_number }]. */
+  superseded?: Array<{ job_id: number | null; order_number: string | null }>;
   classification: string;
   status: string;
   priority: string;
@@ -67,6 +69,15 @@ function toJob(s: ConversationState, updated_at: string): Job {
     order_id: s.onsinch_order_id ?? null,
     order_number: s.onsinch_order_number ?? null,
     job_id: s.onsinch_job_id ?? null,
+    /**
+     * The J number this job used to have, before an amendment rebuilt it.
+     *
+     * A crew change cannot be applied to an OnSinch order in place, so the order is
+     * deleted and reposted and the job comes back under a NEW number. Clients quote
+     * the old one back at us unprompted, and without this the person reading that
+     * email has to search for a number that exists nowhere. Ben, 2026-08-18.
+     */
+    superseded: [],
     classification: s.classification,
     status: s.status,
     priority: s.priority,
@@ -98,9 +109,34 @@ export async function listJobs(limit = 300): Promise<Job[]> {
       FROM conversation_state
       ORDER BY updated_at DESC
       LIMIT ${limit}`) as { ts: number; state: ConversationState }[];
-    return rows
+    const jobs = rows
       .filter((r) => r.state && isJob(r.state))
       .map((r) => toJob(r.state, new Date(Number(r.ts)).toISOString()));
+
+    /**
+     * One query for the whole page rather than one per row: an amendment is rare, so
+     * almost every job has nothing here, and a per-row lookup would be 300 round trips
+     * to attach nothing.
+     */
+    try {
+      const ids = jobs.map((j) => j.thread_id);
+      if (ids.length) {
+        const sup = (await sql`
+          SELECT thread_id, job_id, order_number
+            FROM order_archive
+           WHERE thread_id = ANY(${ids})
+           ORDER BY deleted_at DESC`) as unknown as Array<{ thread_id: string; job_id: number | null; order_number: string | null }>;
+        const byThread = new Map<string, Array<{ job_id: number | null; order_number: string | null }>>();
+        for (const r of sup) {
+          byThread.set(r.thread_id, [...(byThread.get(r.thread_id) ?? []), { job_id: r.job_id, order_number: r.order_number }]);
+        }
+        for (const j of jobs) j.superseded = byThread.get(j.thread_id) ?? [];
+      }
+    } catch (err) {
+      // The board is more useful without the old numbers than not at all.
+      console.error("[jobs] superseded numbers unavailable", err);
+    }
+    return jobs;
   } catch (err) {
     console.error("[jobs] list failed", err);
     return [];

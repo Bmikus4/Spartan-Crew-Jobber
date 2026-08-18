@@ -79,6 +79,7 @@ export async function createOrderWithPlace(
 
   return client.createOrder(buildOrderBody(o));
 }
+import { archiveOrder, recordReplacement } from "./orderArchiveDb";
 import { NeonStateStore } from "./stateDb";
 import { NeonMetrics } from "./metricsDb";
 import { getSettings } from "./settingsDb";
@@ -298,6 +299,9 @@ export async function buildDeps(): Promise<PipelineDeps> {
     aliases: { lookup: lookupAlias, record: recordAlias },
     senderVerdict,
     recordSender,
+    // The permanent record of every order a rebuild destroys, and what replaced it.
+    archiveOrder,
+    recordReplacement,
     executor: executor(client),
     now: () => Date.now(),
     hashOrder,
