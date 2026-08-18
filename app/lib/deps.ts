@@ -80,6 +80,8 @@ export async function createOrderWithPlace(
   return client.createOrder(buildOrderBody(o));
 }
 import { archiveOrder, recordReplacement } from "./orderArchiveDb";
+import { loadProfessions } from "./professionsDb";
+import { PROFESSION_LIST } from "./engine/professionList";
 import { NeonStateStore } from "./stateDb";
 import { NeonMetrics } from "./metricsDb";
 import { getSettings } from "./settingsDb";
@@ -194,6 +196,43 @@ export function executor(client: OnsinchClient): Executor {
         return "draft-failed";
       }
     },
+    /**
+     * The internal "is this one job or two?" email to ops, when a second thread looks
+     * like a job we already hold (crossThread.ts).
+     *
+     * It goes through the SAME Gmail draft webhook as a client reply, because it is the
+     * same operation — a draft in the bookings inbox — and a second delivery path would
+     * be a second thing to keep working. The difference is only the recipient, and the
+     * webhook already takes one.
+     *
+     * A failure here is logged and swallowed by the caller: the ORDER IS ALREADY HELD
+     * by the time this runs, and the hold is the safety. An undelivered email means ops
+     * find the held thread on the board instead of in their inbox, which is slower, not
+     * dangerous.
+     */
+    async createInternalDraft(d) {
+      const hook = process.env.GMAIL_DRAFT_WEBHOOK;
+      if (!hook) {
+        console.error("[cross-thread] no GMAIL_DRAFT_WEBHOOK — ops were not emailed:", d.subject);
+        return;
+      }
+      const res = await fetch(hook, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-webhook-secret": process.env.N8N_WEBHOOK_SECRET ?? "",
+        },
+        // `to` is what makes this internal. in_reply_to is deliberately absent: this
+        // must NOT land in the client's thread, which is the one way this email could
+        // do harm rather than merely fail to arrive.
+        body: JSON.stringify({ to: d.to, subject: d.subject, html: htmlFromText(d.body) }),
+      });
+      const j = (await res.json().catch(() => ({}))) as { draftId?: unknown };
+      if (!res.ok || !j.draftId) {
+        throw new Error(`internal draft webhook returned no draft id (HTTP ${res.status})`);
+      }
+      return String(j.draftId);
+    },
     async createOrder(order) {
       // recordAlias is what makes a created company or venue findable from a cold
       // lambda. Passed rather than imported inside createOrderWithPlace so the write
@@ -278,6 +317,16 @@ export function executor(client: OnsinchClient): Executor {
   };
 }
 
+/**
+ * The cross-thread draft is composed as plain text because it is a list of facts, not
+ * prose. Gmail drafts are HTML, so it is escaped and wrapped in a <pre> rather than
+ * being run through a markdown renderer that would reflow the columns it lines up.
+ */
+function htmlFromText(text: string): string {
+  const esc = text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  return `<pre style="font:13px/1.5 ui-monospace,Menlo,Consolas,monospace;white-space:pre-wrap">${esc}</pre>`;
+}
+
 export async function buildDeps(): Promise<PipelineDeps> {
   const client = onsinch();
   const settings = await getSettings();
@@ -297,6 +346,8 @@ export async function buildDeps(): Promise<PipelineDeps> {
     defaultRateCard: settings.default_rate_card,
     seededRateCard: async (companyId: number) => (await getRateCard(companyId))?.card ?? null,
     aliases: { lookup: lookupAlias, record: recordAlias },
+    // Read once per invocation from the Neon cache; the committed list is the floor.
+    professions: await loadProfessions(PROFESSION_LIST),
     senderVerdict,
     recordSender,
     // The permanent record of every order a rebuild destroys, and what replaced it.

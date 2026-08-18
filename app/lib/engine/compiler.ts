@@ -22,9 +22,14 @@ import { triage, decisionBinds, triageModeFromEnv, type TriageMode } from "./tri
 import { composeOrder } from "./compose";
 import { validateOrder } from "./format";
 import { matchCompany, matchCompanyByDomain, matchContact, matchPlace, matchExistingOrder, normName, normAddr } from "./resolve";
+import { resolveProfession, normProf, type ProfessionRec } from "./professions";
+import { PROFESSION_LIST } from "./professionList";
 import { resolveRateCard } from "./rates";
 import type { Reasoner, ReplyContext } from "./reason";
 import type { OnsinchClient } from "./onsinch";
+
+/** The third alias kind, added for professions — see aliasesDb.ts. */
+type AliasKind = "company" | "place" | "profession";
 
 export interface CompileDeps {
   reasoner: Reasoner;
@@ -67,9 +72,14 @@ export interface CompileDeps {
    * cached exact match). `record` is fire-and-forget — a resolution that already worked
    * must not fail because remembering it did.
    */
+  /**
+   * The tenant's profession list. Injected for the same reason as the alias store: the
+   * engine must compile with no database. See professionsDb.ts.
+   */
+  professions?: ProfessionRec[];
   aliases?: {
-    lookup: (kind: "company" | "place", aliasNorm: string) => Promise<number | null>;
-    record: (a: { kind: "company" | "place"; alias_norm: string; entity_id: number; source: "exact" | "fuzzy"; raw_example?: string }) => Promise<void>;
+    lookup: (kind: AliasKind, aliasNorm: string) => Promise<number | null>;
+    record: (a: { kind: AliasKind; alias_norm: string; entity_id: number; source: "exact" | "fuzzy"; raw_example?: string }) => Promise<void>;
   };
 }
 
@@ -81,7 +91,7 @@ export interface CompileDeps {
  */
 async function aliasLookup(
   aliases: CompileDeps["aliases"],
-  kind: "company" | "place",
+  kind: AliasKind,
   key: string
 ): Promise<number | null> {
   if (!aliases || !key) return null;
@@ -91,7 +101,7 @@ async function aliasLookup(
 
 async function aliasRecord(
   aliases: CompileDeps["aliases"],
-  a: { kind: "company" | "place"; alias_norm: string; entity_id: number; source: "exact" | "fuzzy"; raw_example?: string }
+  a: { kind: AliasKind; alias_norm: string; entity_id: number; source: "exact" | "fuzzy"; raw_example?: string }
 ): Promise<void> {
   if (!aliases || !a.alias_norm) return;
   try { await aliases.record(a); }
@@ -597,6 +607,56 @@ export async function compile(
      * shells got there in the first place, and the block-level string is the shortest
      * and least reliable venue text in the whole email.
      */
+    /**
+     * Learn the profession wordings this client actually uses (Ben, Q11).
+     *
+     * The resolver works every hint out from first principles on every email, so a
+     * phrasing it gets right today it re-derives tomorrow, and one it gets WRONG is
+     * wrong forever with nowhere for a human to correct it. The alias store is the
+     * correction surface: `exact` rows resolve automatically, `fuzzy` rows are recorded
+     * as suggestions and change nothing until someone confirms them — the same
+     * human/exact/fuzzy split that already governs companies and places.
+     *
+     * Recorded here rather than inside resolveProfession so the resolver stays a pure
+     * function: it is called from compose, which must not write to a database.
+     */
+    const learnedProfessions: Record<number, number> = {};
+    for (const [i, r] of (facts.requests ?? []).entries()) {
+      const hint = r.profession_hint?.trim();
+      if (!hint) continue;
+      const key = normProf(hint);
+
+      // A wording somebody has already settled beats working it out again. This is the
+      // whole point of the store: the same phrasing stops being re-derived, and a wrong
+      // answer has somewhere to be corrected.
+      const remembered = await aliasLookup(deps.aliases, "profession", key);
+      if (remembered) {
+        learnedProfessions[i] = remembered;
+        continue;
+      }
+
+      const m = resolveProfession(hint, PROFESSION_LIST, { hours: undefined });
+      if (m.why === "default") continue; // nothing was learned, so nothing is recorded
+      await aliasRecord(deps.aliases, {
+        kind: "profession",
+        alias_norm: normProf(hint),
+        entity_id: m.id,
+        // Only a match on the tenant's own name for it is a fact. A keyword or a cue is
+        // a judgement, and a judgement that resolves itself automatically is how one
+        // wrong answer becomes permanent.
+        source: m.why === "exact" || m.why === "alias" ? "exact" : "fuzzy",
+        raw_example: hint,
+      });
+    }
+    if (Object.keys(learnedProfessions).length) {
+      facts = {
+        ...facts,
+        requests: (facts.requests ?? []).map((r, i) =>
+          learnedProfessions[i] ? { ...r, profession_id: learnedProfessions[i] } : r
+        ),
+      };
+    }
+
     const perBlock = (facts.requests ?? []).filter((r) => r.location_text?.trim());
     if (perBlock.length) {
       const places = await onsinch.allPlaces();
@@ -731,6 +791,13 @@ export async function compile(
     if (haveCompany && user_id && havePlace && pricelist_category_id) {
       const composed = composeOrder({
         facts,
+        /**
+         * The live profession list when the deployment has one — the Neon cache, kept
+         * fresh by scripts/pull-professions.mjs. Absent, compose falls back to the
+         * committed PROFESSION_LIST, which is why a database outage costs accuracy on
+         * professions added since the last commit and nothing more.
+         */
+        professions: deps.professions,
         // 0 => created on write from provisionCompany, exactly as place_id already works.
         company_id: company_id ?? 0,
         user_id,

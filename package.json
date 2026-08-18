@@ -3,6 +3,9 @@
   "version": "0.2.0",
   "private": true,
   "description": "Spartan Crew Enquiry -> Booking engine. Next.js dashboard (HoH architecture) + Vercel automation, triggered by n8n.",
+  "engines": {
+    "node": ">=20 <25"
+  },
   "scripts": {
     "dev": "next dev",
     "build": "next build",
