@@ -125,7 +125,7 @@ Rule 2 (AMBIGUOUS): If it could be new or update → prefer update when Thread H
 Rule 3 (MULTIPLE JOBS IN ONE EMAIL): If it contains BOTH a new request AND an update to a prior job → update (the update takes precedence); note both in job_summary.
 Rule 4 (CONFIRMATION ONLY): confirmation-only requires BOTH that the thread's request is already captured as an order AND that nothing later changes it. If no order exists yet, a thread containing a crew request is new-job even when the newest message is only an acknowledgement — the request still needs booking.
 Rule 4b (NOISE ON TOP): An out-of-office, a delivery-failure bounce, an emoji reaction or a one-word reply on top of a live request does not change what the thread is. Classify the request underneath it.
-Rule 5 (CANCELLATION): If it cancels an existing job or part of it → update; state what was cancelled.
+Rule 5 (CANCELLATION): If it cancels an existing job or part of it → update, AND set cancellation:true. State what was cancelled in job_summary. The class stays "update" because a cancellation changes a job that already exists; the flag is what tells the engine it must not act on it alone. Set the flag even when the same email also adds or moves work — one message can cancel Tuesday and add Thursday.
 Rule 6 (MISSING CRITICAL DATA): If it requests crew but lacks dates/times/headcount → still new-job (or update); note what is missing in job_summary.
 
 ---

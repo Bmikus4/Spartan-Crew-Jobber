@@ -229,6 +229,32 @@ export async function handleThread(
      * one shape that holds, because a cancellation arrives labelled "update" and
      * would otherwise strip a real booking to nothing.
      */
+    /**
+     * A cancellation is never acted on, only reported.
+     *
+     * Cancelling or shrinking a booking in OnSinch is destructive and there is no
+     * undo — and the flag comes from the same model that has to tell a real
+     * cancellation apart from "postponed", "on hold", and "we may need to pull
+     * Thursday". Being wrong here empties a job that is still happening, which is
+     * the one failure worse than doing nothing: the client turns up to no crew.
+     *
+     * So it holds, keeps the composed order so a human can see what the thread now
+     * asks for, and says so. This is the case the empty-order guard below was
+     * catching blind — with the flag it is caught by name, and caught even when the
+     * cancellation is partial and the order is not empty at all.
+     */
+    if (next.cancellation) {
+      next.notes = [
+        ...next.notes,
+        `the client is cancelling. The engine does not cancel or shrink a booking — nothing was written, a human must do it in OnSinch.`,
+      ];
+      next.pending_order = intended;
+      next.status = "proposed";
+      await emit("cancellation_suspected", { order_id: next.onsinch_order_id });
+      await store.put(next);
+      return next;
+    }
+
     const amend = assessAmendment(prior?.desired_order, intended.desired);
     if (amend.note) next.notes = [...next.notes, amend.note];
     if (amend.action === "hold") {

@@ -851,6 +851,7 @@ export async function compile(
     last_message_id: latest.message_id,
     last_processed_epoch: now(),
     classification,
+    cancellation: cls.cancellation === true,
     facts,
     company_id,
     user_id,

@@ -23,6 +23,16 @@ export interface ClassifyResult {
   classification: Classification;
   priority: "low" | "medium" | "high";
   job_summary: string;
+  /**
+   * The client is calling a job off, in whole or in part.
+   *
+   * A FLAG rather than a fifth value of Classification, deliberately. A cancellation
+   * IS an update — it changes a job that already exists — and every consumer of the
+   * enum already branches on four values. It is also not exclusive: one email can
+   * cancel Tuesday and add Thursday. Modelling it as its own field is what the swept
+   * corpus already does (sweep_labels.is_cancellation), for the same reason.
+   */
+  cancellation?: boolean;
 }
 
 export interface ReplyResult {
@@ -335,6 +345,7 @@ const CLASSIFY_SCHEMA = {
     classification: { type: "string", enum: ["new-job", "update", "confirmation-only", "not-a-job"] },
     priority: { type: "string", enum: ["low", "medium", "high"] },
     job_summary: { type: "string" },
+    cancellation: { type: "boolean" },
   },
 };
 const FACTS_SCHEMA = {
@@ -376,6 +387,7 @@ const COMBINED_SCHEMA = {
     classification: { type: "string", enum: ["new-job", "update", "confirmation-only", "not-a-job"] },
     priority: { type: "string", enum: ["low", "medium", "high"] },
     job_summary: { type: "string" },
+    cancellation: { type: "boolean" },
     facts: FACTS_SCHEMA,
   },
 };

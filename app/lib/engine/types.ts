@@ -162,6 +162,17 @@ export interface ConversationState {
   last_processed_epoch: number;
 
   classification: Classification;
+  /**
+   * The client is calling this job off, in whole or in part. Its own field rather
+   * than a fifth Classification: a cancellation IS an update, and one email can
+   * cancel one day and add another.
+   *
+   * The engine never acts on it. Cancelling a booking in OnSinch is destructive and
+   * irreversible, and the model that raised the flag is the same one that reads
+   * "postponed", "on hold" and "we may need to pull Thursday" — so a flagged thread
+   * holds and a human is told (pipeline.ts).
+   */
+  cancellation?: boolean;
   facts: ConversationFacts;
 
   // resolved entities — cached once known so we never re-resolve/guess
