@@ -25,6 +25,7 @@
     "test:forwarded": "tsx test/forwardedEnquiry.ts",
     "test:company": "tsx test/companyMatch.ts",
     "test:chief": "tsx test/crewChief.ts",
+    "test:venue": "tsx test/venueDedup.ts",
     "test:sweep": "tsx test/sweepIsolation.ts",
     "gmail:login": "node scripts/gmail-login.mjs",
     "gmail:sweep": "tsx scripts/sweep-gmail.ts",

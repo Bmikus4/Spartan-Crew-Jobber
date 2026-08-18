@@ -227,12 +227,24 @@ export function matchCompany(name: string | undefined, companies: CompanyRec[]):
  * We match on: name equality, address equality, or one normalised address fully
  * containing the other (with a length guard so short fragments can't collide).
  */
+/**
+ * How much a place record actually tells you. The live tenant holds 632 rows named
+ * "Excel London, Royal Victoria Dock, 1 Western Gateway, London E16 1XL" with every
+ * other field null, beside ONE row named "ExCel London" carrying the address, the
+ * alias, the postcode and the coordinates. They are the same building; only one of
+ * them is worth booking crew to.
+ */
+export function placeContext(p: PlaceCandidate): number {
+  const q = p as PlaceCandidate & { lat?: unknown; lng?: unknown; note?: unknown; region?: unknown };
+  return [p.address, p.city, p.zip, p.alias, q.lat, q.lng, q.note, q.region].filter(Boolean).length;
+}
+
 export function matchPlace(locationText: string | undefined, places: PlaceCandidate[]): number | null {
   const t = normAddr(locationText);
   if (!t || t.length < 4) return null;
 
   /**
-   * Retired venues are skipped. 12 of the 6,841 live places are inactive —
+   * Retired venues are skipped. 12 of the 6,847 live places are inactive —
    * "InterContinental London - the O2", "Battersea Evolution", "Woolwich Works" —
    * and resolving a new job onto one puts crew at an address Spartan no longer
    * works, silently, because nothing downstream re-checks the venue.
@@ -240,13 +252,43 @@ export function matchPlace(locationText: string | undefined, places: PlaceCandid
    * Only when there is an active alternative, though: an inactive place is still a
    * better answer than inventing a duplicate of a venue that already exists.
    */
-  const ordered = places.some((p) => p.active !== false)
-    ? [...places].sort((a, b) => Number(b.active !== false) - Number(a.active !== false))
-    : places;
+  const anyActive = places.some((p) => p.active !== false);
 
-  for (const p of ordered) {
+  /**
+   * Every match is collected and the richest one wins, rather than returning the
+   * first row the list happens to hold. 3,000 of the 6,847 places are context-free
+   * duplicates of about 20 real venues — 632 ExCeL, 221 Olympia, 221 NEC — all of
+   * them active, so "first active hit" was really "whichever page it landed on".
+   * Ben, 2026-08-18: keep the one with the most context attached.
+   *
+   * CONTEXT OUTRANKS TIER, which is the part that is easy to get backwards. The
+   * shells match the client's text exactly, because the client's text is what made
+   * them; the real ExCeL row only matches by containment, because it is named
+   * "ExCeL London" and the email says the whole address. Ranking by how the match
+   * was made picks the shell every time. How much the record knows is the question,
+   * and the tier only separates rows that know the same amount.
+   */
+  let best: { tier: number; ctx: number; id: number } | null = null;
+  const consider = (p: PlaceCandidate, tier: number) => {
+    const cand = {
+      tier,
+      // An active row beats an inactive one before richness is even read.
+      ctx: (anyActive && p.active !== false ? 1000 : 0) + placeContext(p),
+      id: p.id,
+    };
+    if (
+      !best ||
+      cand.ctx > best.ctx ||
+      (cand.ctx === best.ctx && cand.tier < best.tier) ||
+      // A tie on both is settled by the oldest id: it is the row the tenant's own
+      // history is most likely already hanging off.
+      (cand.ctx === best.ctx && cand.tier === best.tier && cand.id < best.id)
+    ) best = cand;
+  };
+
+  for (const p of places) {
     const name = normAddr(p.name);
-    if (name && name === t) return p.id;
+    if (name && name === t) { consider(p, 0); continue; }
     /**
      * The ALIAS field, which this matcher never read. 356 places carry one and it
      * is exactly the short form a client types: "Royal Albert Hall" ~ "RAH",
@@ -255,18 +297,28 @@ export function matchPlace(locationText: string | undefined, places: PlaceCandid
      * name people actually use and the resolver was matching only the formal one.
      */
     const alias = normAddr(p.alias);
-    if (alias && alias === t) return p.id;
+    if (alias && alias === t) { consider(p, 0); continue; }
 
     const addr = normAddr([p.address, p.city, p.zip].filter(Boolean).join(" "));
     const addr1 = normAddr(p.address);
-    if (addr && (addr === t || t.includes(addr))) return p.id;
-    if (addr1 && addr1.length >= 8 && (addr1 === t || t.includes(addr1) || addr1.includes(t))) return p.id;
-    if (name && name.length >= 6 && t.includes(name)) return p.id;
+    /**
+     * An address can only claim a job when it carries something that separates one
+     * street from every other street of that name. "Westbridge Manor Hall, 32 High
+     * Street, Westbridge AB12 3CD" was resolving to Walthamstow Library, whose
+     * address is the two words "High Street" — a containment match, and crew sent
+     * to the wrong building in a different town. So the postcode has to agree when
+     * the record has one, and a record with no postcode has to name a street NUMBER.
+     */
+    const zip = normAddr(p.zip);
+    const discriminating = zip ? t.includes(zip) : /\d/.test(addr1);
+    if (addr && discriminating && (addr === t || t.includes(addr))) { consider(p, 1); continue; }
+    if (addr1 && addr1.length >= 8 && discriminating && (addr1 === t || t.includes(addr1) || addr1.includes(t))) { consider(p, 1); continue; }
+    if (name && name.length >= 6 && t.includes(name)) { consider(p, 2); continue; }
     // Containment on the alias too, held to the same length floor as the name so a
     // three-letter alias cannot sweep every address that happens to contain it.
-    if (alias && alias.length >= 6 && t.includes(alias)) return p.id;
+    if (alias && alias.length >= 6 && t.includes(alias)) { consider(p, 2); continue; }
   }
-  return null;
+  return best ? (best as { id: number }).id : null;
 }
 
 /** Exact contact match on email (case-insensitive). */
