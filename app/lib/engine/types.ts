@@ -128,6 +128,12 @@ export interface ConversationFacts {
      * the block inherits the order's place and location never splits.
      */
     place_id?: number;
+    /**
+     * An OnSinch profession id already settled for this block — a confirmed alias
+     * from the store, or a human's correction. It beats the wording outright; the
+     * store exists so a name resolved once is not re-derived from the text forever.
+     */
+    profession_id?: number;
   }>;
 }
 

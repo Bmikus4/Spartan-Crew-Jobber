@@ -26,6 +26,8 @@
     "test:company": "tsx test/companyMatch.ts",
     "test:chief": "tsx test/crewChief.ts",
     "test:venue": "tsx test/venueDedup.ts",
+    "test:professions": "tsx test/professions.ts",
+    "professions:pull": "node scripts/pull-professions.mjs",
     "test:sweep": "tsx test/sweepIsolation.ts",
     "gmail:login": "node scripts/gmail-login.mjs",
     "gmail:sweep": "tsx scripts/sweep-gmail.ts",

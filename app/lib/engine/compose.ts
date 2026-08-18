@@ -12,6 +12,8 @@
 // ============================================================================
 import { PROFESSION } from "./types";
 import { DRAFT_POSTURE, SLOT_TEAM_NAME_MAX } from "./format";
+import { resolveProfession, professionNote, type ProfessionRec } from "./professions";
+import { PROFESSION_LIST } from "./professionList";
 import type { ConversationFacts, DesiredOrder, DesiredSlotTeam } from "./types";
 
 // ---------------------------------------------------------------- crew chief
@@ -67,21 +69,15 @@ function siteKey(t: DesiredSlotTeam): string {
   return `${t.beginning}|${t.end}|${t.place_id}`;
 }
 
-/** Map a free-text skill hint to a concrete OnSinch profession id. */
-function professionFromHint(hint?: string): number {
-  const h = (hint || "").toLowerCase();
-  // Before any other test: "crew chief" contains "crew", so a chief asked for by
-  // name was being booked as general crew — and then the band added a chief on top
-  // of the chief.
-  if (h.includes("chief") || h.includes("crew lead") || h.includes("crew leader") || h.includes("crew manager")) return PROFESSION.CREW_CHIEF;
-  if (h.includes("cscs")) return PROFESSION.CSCS;                 // 32 (only if REQUIRED)
-  if (h.includes("driver") || h.includes("driving")) return PROFESSION.DRIVER; // 9
-  if (h.includes("av") || h.includes("audio")) return PROFESSION.AV;           // 16
-  if (h.includes("carpenter") || h.includes("chippy")) return PROFESSION.CARPENTER; // 3
-  if (h.includes("telehandler")) return 4;      // Telehandler U<9M J2
-  if (h.includes("forklift") || h.includes("counterbalance")) return 11; // Counterbalance B1
-  if (h.includes("rough") || h.includes("all terrain")) return 17;       // Rough/All Terrain J1
-  return PROFESSION.CREW; // 1 — default & overwhelmingly most common
+/** Hours between two HH:MM times, for the day-rate/hourly choice (Q8). */
+function shiftHours(start: string, end: string): number | undefined {
+  const m = /^(\d{1,2}):(\d{2})$/.exec(start);
+  const n = /^(\d{1,2}):(\d{2})$/.exec(end);
+  if (!m || !n) return undefined;
+  const from = Number(m[1]) * 60 + Number(m[2]);
+  // A finish before the start is an overnight shift, not a negative one.
+  const to = Number(n[1]) * 60 + Number(n[2]);
+  return ((to <= from ? to + 24 * 60 : to) - from) / 60;
 }
 
 function isoDateTime(date: string, time: string): string {
@@ -100,6 +96,12 @@ export interface ComposeInput {
   intern_name?: string;   // PO / customer ref
   order_manager_id?: number;
   supervisor_id?: number;
+  /**
+   * The live profession list, when the caller has it — from the Neon cache, or a
+   * fresh GET /professions. Absent, the committed list is used, so the engine still
+   * resolves all 43 professions offline rather than the six the old static map knew.
+   */
+  professions?: ProfessionRec[];
 }
 
 export interface ComposeResult {
@@ -220,7 +222,23 @@ export function composeOrder(inp: ComposeInput): ComposeResult {
     if (!r.start_time) warnings.push(`SlotTeam[${i}] start time not stated — defaulted to 08:00`);
     if (!r.end_time) warnings.push(`SlotTeam[${i}] finish time not stated — defaulted to 18:00`);
     if (!date) warnings.push(`SlotTeam[${i}] has no confirmed date (TBC)`);
-    const profession_id = professionFromHint(r.profession_hint);
+    /**
+     * Q12: a profession the resolver works out is used on the order immediately and
+     * said out loud on the ticket — there is no first-use human gate. The note is
+     * what makes that safe: an inferred booking that nobody can see is the thing to
+     * avoid, not an inferred booking.
+     */
+    const prof = resolveProfession(r.profession_hint, inp.professions ?? PROFESSION_LIST, {
+      // Only a STATED shift can choose a day rate. The 08:00-18:00 default is ten
+      // hours, so reading the default would put every plant request with no times on
+      // a day rate — an inference stacked on an inference, and a billing decision
+      // made out of an email that said nothing about the hours.
+      hours: r.start_time && r.end_time ? shiftHours(start, end) : undefined,
+      aliasId: r.profession_id ?? null,
+    });
+    const profession_id = prof.id;
+    const note = professionNote(r.profession_hint, prof);
+    if (note) warnings.push(`SlotTeam[${i}] ${note}`);
     const nameBase = r.task ? r.task : "Crew";
     // OnSinch caps the slot team name at 80 and 400s the whole order over it.
     // Capped HERE as well as at serialisation so the staged order the board shows

@@ -23,7 +23,11 @@
 // ============================================================================
 import { neon, type NeonQueryFunction } from "@neondatabase/serverless";
 
-export type AliasKind = "company" | "place";
+// "profession" is the third kind and needs nothing else: the table already keys on
+// (kind, alias_norm), so a learned wording for a profession inherits the whole
+// human/exact/fuzzy story above unchanged (Ben, Q11 — an alias store "in the shape
+// of the company-alias mechanism that already works").
+export type AliasKind = "company" | "place" | "profession";
 export type AliasSource = "human" | "exact" | "fuzzy";
 
 let _sql: NeonQueryFunction<false, false> | null = null;
