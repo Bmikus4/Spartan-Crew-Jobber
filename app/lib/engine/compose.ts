@@ -69,6 +69,33 @@ function siteKey(t: DesiredSlotTeam): string {
   return `${t.beginning}|${t.end}|${t.place_id}`;
 }
 
+/**
+ * MINIMUM CALL-OUT and LONG SHIFTS — the two rules docs/ORDER-RULES.md left open.
+ *
+ * Both are answered the same way, and the answer is "the engine books what was
+ * asked", because the corpus says so. Over 684 stated blocks in the swept threads:
+ *
+ *     under 4h   209   30.6%     (the mode is 2-3h, 19.2% on its own)
+ *     over 12h    34    5.0%
+ *
+ * A minimum call-out that extended or rounded a short shift would rewrite nearly a
+ * third of all bookings and bill for hours nobody asked for. Short shifts are not an
+ * anomaly here, they are the single most common shape of work. If Spartan has a
+ * contractual minimum it belongs in the RATE CARD, where OnSinch prices it — not in
+ * composition, which would be inventing hours and then charging for them.
+ *
+ * The same for a long day: whether ten hours needs a break, a split or a different
+ * rate is a scheduling and pricing decision, and the engine has neither the roster
+ * nor the authority. Splitting a block would also change the crew-chief bands, since
+ * the band reads one team.
+ *
+ * So neither is transformed. What IS worth saying is when a duration is more likely
+ * to be a misread than a request, and those bounds are set where the data thins out
+ * rather than at a round number.
+ */
+const IMPLAUSIBLY_SHORT_H = 1;   // 6 of 684 blocks, 0.9%
+const NEEDS_AN_EYE_H = 14;       // 34 of 684, 5.0% — the tail past the 10-12h band
+
 /** Hours between two HH:MM times, for the day-rate/hourly choice (Q8). */
 function shiftHours(start: string, end: string): number | undefined {
   const m = /^(\d{1,2}):(\d{2})$/.exec(start);
@@ -222,6 +249,20 @@ export function composeOrder(inp: ComposeInput): ComposeResult {
     if (!r.start_time) warnings.push(`SlotTeam[${i}] start time not stated — defaulted to 08:00`);
     if (!r.end_time) warnings.push(`SlotTeam[${i}] finish time not stated — defaulted to 18:00`);
     if (!date) warnings.push(`SlotTeam[${i}] has no confirmed date (TBC)`);
+
+    // Said, never changed — see the note above the bounds.
+    if (r.start_time && r.end_time) {
+      const h = shiftHours(start, end);
+      if (h !== undefined && h < IMPLAUSIBLY_SHORT_H) {
+        warnings.push(`SlotTeam[${i}] is ${h.toFixed(1)}h — shorter than any real call-out, check the times were read right`);
+      } else if (start === end) {
+        // 24h out of a start that equals its finish is a stated time repeated, not a
+        // day-long shift. Booked as asked, but nobody should read it as deliberate.
+        warnings.push(`SlotTeam[${i}] starts and finishes at ${start} — read as a 24h shift, check that is meant`);
+      } else if (h !== undefined && h > NEEDS_AN_EYE_H) {
+        warnings.push(`SlotTeam[${i}] is ${h.toFixed(1)}h — no break or split is applied, booked as asked`);
+      }
+    }
     /**
      * Q12: a profession the resolver works out is used on the order immediately and
      * said out loud on the ticket — there is no first-use human gate. The note is

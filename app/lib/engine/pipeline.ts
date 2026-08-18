@@ -10,6 +10,7 @@ import type { StateStore } from "./store";
 import type { MetricSink } from "./metrics";
 import type { Actions, ConversationState, DesiredOrder, HydratedThread, Settings } from "./types";
 import { findCrossThreadMatches, crossThreadDraft, type ThreadShape, type InternalDraft } from "./crossThread";
+import { assessAmendment } from "./amendment";
 
 /**
  * The shape the cross-thread check compares. Built from the state row rather than
@@ -176,9 +177,16 @@ export async function handleThread(
      * on the order being written, so it holds for a patch as well as a create and
      * cannot be switched off from the dashboard. An assumed rate card is a guess
      * that reaches an invoice; card 245, the silent OnSinch default, is Tracy's
-     * original wrong-rate failure. What happens to an assumed rate once draft
-     * writes for real is a question Ben has not answered yet, so it keeps the
-     * behaviour it already had rather than acquiring a new one by omission.
+     * original wrong-rate failure.
+     *
+     * The obvious objection to keeping it is Ben's own Q1 argument: a gate nobody
+     * opens is a drawer, not safety. What answers that is the volume. A card is only
+     * assumed for a company with NO order history, and over the tenant's 6,686 orders
+     * there are 557 such companies — 8.3% of all orders ever, and 5.6% of the last
+     * thousand. It is one click per NEW CLIENT, not one per order: the moment that
+     * first order exists, every later one derives its card from history and writes
+     * straight through. A first booking for a company nobody has priced before is the
+     * one moment in the life of an account where a human should see the number.
      */
     /**
      * Before anything is written: is this the same job as a thread we already hold?
@@ -212,6 +220,21 @@ export async function handleThread(
         console.error("[cross-thread] internal draft not created", err);
       }
       await emit("cross_thread_suspected", { other: twin[0].thread_id, relation: twin[0].relation });
+      await store.put(next);
+      return next;
+    }
+
+    /**
+     * May an amendment shrink the order? Yes — see amendment.ts. Emptying it is the
+     * one shape that holds, because a cancellation arrives labelled "update" and
+     * would otherwise strip a real booking to nothing.
+     */
+    const amend = assessAmendment(prior?.desired_order, intended.desired);
+    if (amend.note) next.notes = [...next.notes, amend.note];
+    if (amend.action === "hold") {
+      next.pending_order = intended;
+      next.status = "proposed";
+      await emit("order_proposed", { kind: intended.kind, size: amend.after });
       await store.put(next);
       return next;
     }
