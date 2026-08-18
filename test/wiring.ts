@@ -66,12 +66,14 @@ console.log("\n[4] the Neon profession cache is read by the engine");
   ok(/professions: deps\.professions/.test(compiler), "which the compiler hands to compose");
 }
 
-console.log("\n[5] the destructive path is still behind its flag");
+console.log("\n[5] the destructive path is ON, with a kill switch");
 {
-  // Not a bug — a deliberate kill switch on the only code that deletes a real booking.
-  // Pinned so it cannot be armed by accident, and so its absence is a decision rather
-  // than something nobody noticed.
-  ok(/SPARTAN_ALLOW_ORDER_REPLACE/.test(deps), "replaceOrder is env-gated");
+  // Ben ruled that every amendment rebuilds the order, so the old opt-IN flag would
+  // have meant the ruling did nothing at all. The switch is inverted, not removed:
+  // this is still the only code in the repo that destroys a real booking.
+  ok(/SPARTAN_BLOCK_ORDER_REPLACE/.test(deps), "the kill switch exists");
+  ok(!/SPARTAN_ALLOW_ORDER_REPLACE\s*===/.test(deps), "and the old opt-in gate is gone");
+  ok(/SPARTAN_BLOCK_ORDER_REPLACE\s*!==\s*"1"/.test(deps), "so replaceOrder is present unless it is set");
 }
 
 console.log(fails ? `\n${fails} FAILED\n` : "\nALL PASS\n");

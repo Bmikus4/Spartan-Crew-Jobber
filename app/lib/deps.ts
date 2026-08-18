@@ -240,16 +240,29 @@ export function executor(client: OnsinchClient): Executor {
       return createOrderWithPlace(client, order, recordAlias);
     },
     /**
-     * The crew/time change PATCH cannot carry. Gated by an env flag because it DELETES
-     * a real order to apply an email: the capability is built and tested, but arming it
-     * on a live tenant is an operational decision.
+     * The crew/time change PATCH cannot carry — the order is deleted and reposted.
      *
-     *   SPARTAN_ALLOW_ORDER_REPLACE=1
+     * ON BY DEFAULT since 2026-08-18. It was gated behind SPARTAN_ALLOW_ORDER_REPLACE=1
+     * while arming it was an open question; Ben has since ruled that every amendment
+     * rebuilds the order, so leaving it off would have meant the ruling did nothing and
+     * every crew change kept landing in a note for a human. A flag that quietly cancels
+     * a decision is worse than no flag.
      *
-     * Unset, the method is absent and the pipeline falls back to patching what it can and
-     * telling a human the rest — exactly the behaviour before this existed.
+     * The kill switch survives, inverted:
+     *
+     *   SPARTAN_BLOCK_ORDER_REPLACE=1
+     *
+     * Set that and the method is absent, the pipeline falls back to patching what it
+     * can and telling a human the rest, and nothing in this codebase can delete an
+     * order. It is worth keeping precisely because this is the only code that destroys
+     * a real booking — but it is now something you turn ON to stop the engine, not
+     * something you must remember to turn on to start it.
+     *
+     * What stops it running away is not the flag: a CONFIRMED order is never touched
+     * (replaceOrder.ts), an attachment refuses the rebuild, and every deleted order is
+     * archived in full before it goes.
      */
-    ...(process.env.SPARTAN_ALLOW_ORDER_REPLACE === "1"
+    ...(process.env.SPARTAN_BLOCK_ORDER_REPLACE !== "1"
       ? {
           async replaceOrder(p: {
             order_id: number;
