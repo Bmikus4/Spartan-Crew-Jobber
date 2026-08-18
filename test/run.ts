@@ -110,7 +110,11 @@ const NEW = { message_id: "m1", body: "Hi, can I book 4 crew on 9th March at Sav
       path.startsWith("/orders") && method === "GET"
         ? { status: 200, data: { data: [], pagination: { count: 0, pageCount: 1, nextPage: false } } }
         : mockTransport(method, path);
-    const newClientDeps: PipelineDeps = { ...deps, onsinch: new OnsinchClient(noHistory), defaultRateCard: 315 };
+    // Its own store: every thread in this file is the SAME enquiry, so the cross-thread
+    // check would correctly hold it as a twin of thread-A and never reach the rate gate.
+    const newClientDeps: PipelineDeps = {
+      ...deps, onsinch: new OnsinchClient(noHistory), defaultRateCard: 315, store: new InMemoryStore(),
+    };
     const sr = await handleThread({ thread_id: "thread-D", messages: [msg({ message_id: "d1", body: NEW.body })] }, newClientDeps);
     assert(sr.desired_order?.rate_card_source === "default", "the card was assumed");
     assert(sr.status === "proposed" && !!sr.pending_order, "so it is STAGED, not written");
@@ -131,7 +135,8 @@ const NEW = { message_id: "m1", body: "Hi, can I book 4 crew on 9th March at Sav
   // Ben, Q1: the Neon staging queue stops being a gate — an order goes to OnSinch as
   // To Confirm the moment it composes. There is no mode to flip any more.
   console.log("\n[6] an order reaches OnSinch without a second gate (separate thread)");
-  const autoDeps: PipelineDeps = { ...deps, settings: { ...DEFAULT_SETTINGS, replies_enabled: true } };
+  // Its own store, for the same reason as [5b].
+  const autoDeps: PipelineDeps = { ...deps, settings: { ...DEFAULT_SETTINGS, replies_enabled: true }, store: new InMemoryStore() };
   const s2 = await handleThread({ thread_id: "thread-B", messages: [msg({ message_id: "b1", body: NEW.body })] }, autoDeps);
   assert(s2.status === "ordered" && s2.onsinch_order_id === 9001, "written without a confirm click");
 

@@ -9,6 +9,26 @@ import { selectLatest } from "./normalize";
 import type { StateStore } from "./store";
 import type { MetricSink } from "./metrics";
 import type { Actions, ConversationState, DesiredOrder, HydratedThread, Settings } from "./types";
+import { findCrossThreadMatches, crossThreadDraft, type ThreadShape, type InternalDraft } from "./crossThread";
+
+/**
+ * The shape the cross-thread check compares. Built from the state row rather than
+ * the email, so a thread already recorded is comparable without re-reading its mail.
+ */
+function shapeOf(s: ConversationState): ThreadShape {
+  const reqs = s.facts?.requests ?? [];
+  return {
+    thread_id: s.thread_id,
+    subject: s.subject,
+    company_id: s.company_id,
+    place_id: s.place_id,
+    location_text: s.facts?.location_text,
+    dates: reqs.map((r) => r.date).filter(Boolean) as string[],
+    windows: reqs.filter((r) => r.start_time && r.end_time).map((r) => `${r.start_time}-${r.end_time}`),
+    sizes: reqs.map((r) => r.size).filter((n): n is number => typeof n === "number"),
+    onsinch_order_id: s.onsinch_order_id,
+  };
+}
 
 /** The side-effecting edges. Injected so the pipeline stays testable. */
 export interface Executor {
@@ -22,6 +42,12 @@ export interface Executor {
    * never be applied this way, and there is no GET /slotTeams to even diff it.
    */
   patchOrder(p: NonNullable<Actions["patchOrder"]>): Promise<string[] | void>;
+  /**
+   * An internal email to ops — today only the cross-thread "is this one job or two"
+   * question (Ben, Q6). Optional: a deployment without it still HOLDS the order,
+   * which is the part that protects the booking.
+   */
+  createInternalDraft?(d: InternalDraft): Promise<string | void>;
   /**
    * Apply a crew or time change to a DRAFT order by deleting it and posting the
    * corrected one — the only route the API leaves (see replaceOrder.ts).
@@ -154,6 +180,38 @@ export async function handleThread(
      * writes for real is a question Ben has not answered yet, so it keeps the
      * behaviour it already had rather than acquiring a new one by omission.
      */
+    /**
+     * Before anything is written: is this the same job as a thread we already hold?
+     *
+     * Ben's standing constraint — a cross-thread same-job suspicion produces a DRAFT
+     * EMAIL ONLY, never a draft order. So a hit holds the order rather than writing
+     * it, which is the whole point: the failure this prevents is a second order for
+     * a job that already exists, and crew booked twice for it.
+     *
+     * The floor is client + date + venue (Q4). It fires rarely by construction, and
+     * when it fires nothing has been written that would need undoing.
+     */
+    const twin = findCrossThreadMatches(shapeOf(next), (await store.all()).map(shapeOf));
+    if (twin.length) {
+      const draft = crossThreadDraft(shapeOf(next), twin)!;
+      next.notes = [
+        ...next.notes,
+        `held: looks like the same job as thread ${twin[0].thread_id} (${twin[0].relation}) — ops asked, no order written`,
+      ];
+      next.pending_order = intended;
+      next.status = "proposed";
+      try {
+        await executor.createInternalDraft?.(draft);
+      } catch (err) {
+        // The email is how a human hears about this, but failing to draft it must not
+        // turn a held thread into an errored one — the hold is the safety, not the mail.
+        console.error("[cross-thread] internal draft not created", err);
+      }
+      await emit("cross_thread_suspected", { other: twin[0].thread_id, relation: twin[0].relation });
+      await store.put(next);
+      return next;
+    }
+
     const assumedRate = intended.desired.rate_card_source === "default";
     if (!assumedRate) {
       await executeOrder(next, intended, deps, emit);
