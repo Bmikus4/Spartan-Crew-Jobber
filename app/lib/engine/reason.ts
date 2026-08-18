@@ -369,6 +369,7 @@ const FACTS_SCHEMA = {
           size: { type: "integer" },
           task: { type: "string" },
           profession_hint: { type: "string" },
+          location_text: { type: "string" },
         },
       },
     },

@@ -122,6 +122,13 @@ export interface ConversationFacts {
     task?: string;           // free text describing the work
     profession_hint?: string;// e.g. "CSCS", "driver", "AV"
     /**
+     * A venue named for THIS block, when the enquiry moves crew between places —
+     * "4 crew at ExCeL then 2 at Olympia the same afternoon". Absent for the
+     * overwhelming majority of threads, which name one venue for the whole job and
+     * put it in the order-level location_text.
+     */
+    location_text?: string;
+    /**
      * A resolved OnSinch place for THIS block, when the enquiry moves crew between
      * venues. Location is half of what separates one SlotTeam from another, so the
      * field has to exist for the rule to be expressible at all; when it is absent

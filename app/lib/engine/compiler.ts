@@ -585,6 +585,36 @@ export async function compile(
     if (pl.note) notes.push(pl.note);
     if (us.note) notes.push(us.note);
 
+    /**
+     * A block that names its OWN venue — "4 crew at ExCeL, then 2 at Olympia that
+     * afternoon". Location is half of what separates one SlotTeam from another, and
+     * until now nothing upstream could express it: every block inherited the order's
+     * single place, so a job that moved crew between venues composed as one team.
+     *
+     * Only resolved against places that already exist. A per-block venue that does
+     * not resolve keeps the order's place rather than provisioning a second one:
+     * creating a venue from a fragment inside a request block is how the 632 ExCeL
+     * shells got there in the first place, and the block-level string is the shortest
+     * and least reliable venue text in the whole email.
+     */
+    const perBlock = (facts.requests ?? []).filter((r) => r.location_text?.trim());
+    if (perBlock.length) {
+      const places = await onsinch.allPlaces();
+      let moved = 0;
+      facts = {
+        ...facts,
+        requests: (facts.requests ?? []).map((r) => {
+          if (!r.location_text?.trim()) return r;
+          const id = matchPlace(r.location_text, places);
+          if (!id || id === place_id) return r;
+          moved++;
+          return { ...r, place_id: id };
+        }),
+      };
+      if (moved) notes.push(`${moved} block(s) name a different venue — staffed as separate teams`);
+      else notes.push(`a block named its own venue but it did not resolve — kept on the job's venue`);
+    }
+
     // Order dedup vs OnSinch — never create a second job for an existing one, and
     // never attach a change to the wrong one. See matchExistingOrder: the venue is
     // what separates a client's several jobs on the same day, and where it cannot,
