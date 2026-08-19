@@ -131,6 +131,35 @@ export async function replaceProvisionalOrder(
   }
 
   /**
+   * IS ANYBODY BOOKED ON IT? This is the gate `provisional` was wrongly carrying.
+   *
+   * A draft was assumed to be nobody's booking yet. It is not: on the live tenant, 18
+   * of the 40 most recent provisional orders already had crew signed on, one of them 94
+   * people. Deleting the order cascades to its slots, and the replacement's slots are
+   * new and empty, so every one of those people is silently detached from a job they
+   * think they are working — and the job is left unstaffed with nobody told.
+   *
+   * That is worse than the failure this whole path exists to fix. An amendment that
+   * cannot be applied leaves a booking that disagrees with the client's latest email,
+   * which a human can read and correct; an amendment that unbooks fourteen people is
+   * discovered on the day, at the venue.
+   *
+   * So a staffed order is never rebuilt. The crew change goes to a human instead, with
+   * the count in the message so they know what they are being asked to preserve.
+   */
+  const assigned = await client.attendanceCount(order_id).catch(() => -1);
+  if (assigned !== 0) {
+    return {
+      deleted: false,
+      refused:
+        assigned < 0
+          ? `could not check whether anyone is booked on order #${order_id} — refusing to rebuild it blind`
+          : `order #${order_id} already has ${assigned} crew signed on; rebuilding it would detach them. ` +
+            `Crew and times must be changed by hand so the people keep their shifts`,
+    };
+  }
+
+  /**
    * Carry forward what the engine does not model.
    *
    * A rebuild posts the engine's idea of the order, and the engine's idea has no room

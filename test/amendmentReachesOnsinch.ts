@@ -39,6 +39,8 @@ const deleted: number[] = [];
 let nextId = 9001;
 /** Flipped to make the order read back as confirmed. */
 let provisional = true;
+/** Crew signed on to the order. 45% of real provisional orders have some. */
+let assigned = 0;
 
 const transport: Transport = async (method, path, body) => {
   if (method === "POST" && path === "/orders") {
@@ -49,6 +51,12 @@ const transport: Transport = async (method, path, body) => {
   if (method === "DELETE" && path === "/orders") {
     deleted.push(...(body as number[]));
     return { status: 200, data: null };
+  }
+  // The attendance gate: how many crew are signed on. -999 stands for "the call fails",
+  // which must refuse rather than be read as zero.
+  if (method === "GET" && path.startsWith("/attendance")) {
+    if (assigned === -999) throw new Error("attendance read timed out");
+    return { status: 200, data: { data: [], pagination: { count: assigned, pageCount: 1, nextPage: false } } };
   }
   // The replace preflight: GET /orders?id=<n>. Must look like a real live order.
   const byId = /[?&]id=(\d+)/.exec(path);
@@ -176,6 +184,48 @@ const thread = (bodies: Array<{ id: string; body: string; at: string }>): Hydrat
 
     ok(!deleted.includes(original), "the order was not deleted", `deleted=${JSON.stringify(deleted)}`);
     ok(second.onsinch_order_id === original, "and it is still the same order", `#${second.onsinch_order_id}`);
+  }
+
+  console.log("\n[4] an order with crew already signed on is NEVER rebuilt");
+  {
+    // Measured on the live tenant 2026-08-19: 18 of the 40 most recent PROVISIONAL
+    // orders already had crew assigned, one of them 94 people. `provisional` alone
+    // therefore does not mean "nobody's booking yet", and a rebuild detaches every one
+    // of them — the replacement's slots are new and empty.
+    created.length = 0; deleted.length = 0; nextId = 9301; provisional = true; assigned = 14;
+    const { deps } = rig();
+    await handleThread(thread([{ id: "m1", body: FIRST, at: "2026-02-12T10:00:00Z" }]), deps);
+    const original = created[0];
+
+    const second = await handleThread(thread([
+      { id: "m1", body: FIRST, at: "2026-02-12T10:00:00Z" },
+      { id: "m2", body: "Actually please make it 6 crew instead.", at: "2026-02-13T09:00:00Z" },
+    ]), deps);
+
+    ok(!deleted.includes(original), "the staffed order was NOT deleted", `deleted=${JSON.stringify(deleted)}`);
+    ok(second.onsinch_order_id === original, "it is still the same order", `#${second.onsinch_order_id}`);
+    ok(second.status === "needs-info", "the thread asks for a human", second.status);
+    ok(
+      second.notes.some((n) => /14 crew signed on/.test(n)),
+      "and the note says how many people would have been detached",
+      second.notes.join(" | ")
+    );
+    assigned = 0; // leave the module clean for any later case
+  }
+
+  console.log("\n[5] an unreadable attendance count refuses rather than guessing");
+  {
+    created.length = 0; deleted.length = 0; nextId = 9401; provisional = true; assigned = -999; // sentinel: throw
+    const { deps } = rig();
+    await handleThread(thread([{ id: "m1", body: FIRST, at: "2026-02-12T10:00:00Z" }]), deps);
+    const original = created[0];
+    const second = await handleThread(thread([
+      { id: "m1", body: FIRST, at: "2026-02-12T10:00:00Z" },
+      { id: "m2", body: "Actually please make it 6 crew instead.", at: "2026-02-13T09:00:00Z" },
+    ]), deps);
+    ok(!deleted.includes(original), "nothing was deleted when the count could not be read");
+    ok(second.notes.some((n) => /could not check|crew signed on/.test(n)), "and it says so", second.notes.join(" | "));
+    assigned = 0;
   }
 
   console.log(`\n${fails === 0 ? "ALL PASS" : fails + " FAILED"}\n`);

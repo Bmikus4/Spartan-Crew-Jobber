@@ -174,6 +174,27 @@ export class OnsinchClient {
   }
 
   /**
+   * How many crew are signed on to an order — the number of Attendance rows hanging
+   * off its slots.
+   *
+   * THE GATE THAT WAS MISSING. `provisional` was the only thing standing between an
+   * amendment and a destructive rebuild, on the reasoning that a draft is nobody's
+   * booking yet. It is not: measured on the live tenant 2026-08-19, 18 of the 40 most
+   * recent provisional orders already had crew assigned, one of them 94 people. A
+   * rebuild detaches every one of them — the replacement's slots are new and empty —
+   * so the crew think they are working and the job thinks it is unstaffed.
+   *
+   * There is no `order_id` filter on Attendance, so the Order relation is joined and
+   * filtered through: `?with=Order&Order__id=`. Probed live; this is also the only
+   * route by which an order's slot team ids are readable at all.
+   */
+  async attendanceCount(order_id: number): Promise<number> {
+    const r = await this.t("GET", "/attendance" + qs({ limit: 1, with: "Order", Order__id: order_id }));
+    const n = r.data?.pagination?.count;
+    return Number.isFinite(Number(n)) ? Number(n) : 0;
+  }
+
+  /**
    * DELETE /orders — array of ids at the tag root. Deleting an order cascades to its
    * job and slot teams, which is what makes replace-by-recreate viable at all.
    *
