@@ -322,10 +322,21 @@ export function executor(client: OnsinchClient): Executor {
      * reading the order back: POST /orders returns the order id alone, and there is
      * no GET /jobs at all (see the API reference).
      */
-    async jobIdForOrder(order_id: number) {
-      const live = (await client.orderById(order_id)) as { Job?: { id: number }[] } | null;
+    /**
+     * One GET, both numbers. The order's own `number` was already in this response and
+     * was being thrown away, so every order the engine created reached the board, the
+     * tickets table and the confirm-order API with a null R number — the identifier
+     * clients quote back at us.
+     */
+    async identifiersForOrder(order_id: number) {
+      const live = (await client.orderById(order_id)) as
+        | ({ Job?: { id: number }[] | { id: number }; number?: string })
+        | null;
       const job = Array.isArray(live?.Job) ? live?.Job?.[0] : (live?.Job as { id: number } | undefined);
-      return job?.id != null ? Number(job.id) : undefined;
+      return {
+        job_id: job?.id != null ? Number(job.id) : undefined,
+        order_number: live?.number != null ? String(live.number) : undefined,
+      };
     },
   };
 }

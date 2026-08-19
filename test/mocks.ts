@@ -57,8 +57,13 @@ export const mockTransport: Transport = async (method, path) => {
     return { status: 201, data: { data: [{ id: 777 }] } };
   if (method === "POST" && path === "/companies")
     return { status: 201, data: { data: [{ id: 999 }] } };
-  if (method === "POST" && path === "/orders")
-    return { status: 201, data: { data: [{ id: 9001, number: "SC-9001" }] } };
+  // POST /orders returns the id and NOTHING ELSE. This mock used to invent a
+  // `number: "SC-9001"`, and test/jobNumber.ts asserted the engine stored it — so a
+  // field that is always undefined against the real tenant looked covered. Probed
+  // live 2026-08-19: the body is `{"id":13744}`, and a GET on that id returns
+  // `number: "10638"`. A fixture more generous than the API it stands in for hides
+  // exactly the bugs a fixture exists to catch.
+  if (method === "POST" && path === "/orders") return { status: 201, data: { data: [{ id: 9001 }] } };
   if (method === "PATCH" && path === "/orders") return { status: 204, data: null };
   if (path.startsWith("/companies"))
     return {

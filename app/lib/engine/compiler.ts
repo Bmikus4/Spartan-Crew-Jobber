@@ -958,6 +958,25 @@ export async function compile(
     onsinch_job_id: linkedJobId,
     desired_order: desired,
     last_ordered_hash: prior?.last_ordered_hash,
+    /**
+     * Both of these are written by the PIPELINE, after this function has returned, and
+     * both have to survive into the next email's compile or the code that reads them
+     * never runs.
+     *
+     * last_ordered_teams_hash is what tells a crew change apart from a PO follow-up.
+     * tryReplace reads it off the state compile produces, so while it was dropped here
+     * `teamsChanged` was false on every second email and delete-and-repost — the only
+     * route a crew or time change has to an existing order — could not fire at all. The
+     * change went to a note asking a human to apply it by hand, which is the behaviour
+     * the replace path was built to end. Every test covering it builds the state by
+     * hand and calls the pipeline directly, so all of them passed.
+     *
+     * order_replace is the crash-safety marker for a part-finished replace. Dropped, a
+     * resumed run cannot see that the old order is already deleted, and the recovery
+     * that re-posts from the snapshot never happens.
+     */
+    last_ordered_teams_hash: prior?.last_ordered_teams_hash,
+    order_replace: prior?.order_replace,
     priority: cls.priority,
     reply_body_html: reply?.html ?? prior?.reply_body_html,
     reply_subject: reply?.subject ?? prior?.reply_subject,

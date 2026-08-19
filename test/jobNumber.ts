@@ -71,17 +71,20 @@ function build(transport: Transport, exec: Partial<Executor>): PipelineDeps {
   assert(!!m && "order_id" in m && m.job_id === 13925, "job id 13925 (J13925)");
 
   console.log("\n[2] A CREATED order: the J number is read back after the POST");
-  const deps = build(mockTransport, { async jobIdForOrder(id) { return id === 9001 ? 12345 : undefined; } });
+  const deps = build(mockTransport, {
+    async identifiersForOrder(id) { return id === 9001 ? { job_id: 12345, order_number: "10560" } : {}; },
+  });
   // The order is written on the spot now (Ben, Q1), so the read-back happens there
   // rather than after a confirm click. confirmOrder is still exercised below.
   const s = await handleThread(thread("t-create"), deps);
   assert(s.onsinch_order_id === 9001, "order created");
-  assert(s.onsinch_order_number === "SC-9001", "order number stored");
+  // POST /orders never returns the number, so this can only have come from the read-back.
+  assert(s.onsinch_order_number === "10560", "order number stored from the read-back, not from the POST");
   assert(s.onsinch_job_id === 12345, "job number stored from the read-back");
 
   console.log("\n[3] The read-back cannot turn a written order into a failure");
   const boom = build(mockTransport, {
-    async jobIdForOrder() { throw new Error("orders read timed out"); },
+    async identifiersForOrder() { throw new Error("orders read timed out"); },
   });
   const t = await handleThread(thread("t-boom"), boom);
   assert(t.onsinch_order_id === 9001, "the order is still recorded as created");

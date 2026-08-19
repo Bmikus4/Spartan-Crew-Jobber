@@ -141,14 +141,23 @@ export class OnsinchClient {
     return (r.data?.data ?? []) as any[];
   }
 
-  /** POST /orders — array body, expect 201 { data:[{id,number,...}] }. */
+  /**
+   * POST /orders — array body, expect 201 `{ data: [{ id }] }`.
+   *
+   * `number` IS OPTIONAL AND IN PRACTICE ABSENT. Probed live 2026-08-19: the response
+   * body is `{"id":13744}` and nothing else, while a GET on that same id returns
+   * `number: "10638"`. The R number is assigned at creation and is simply not handed
+   * back, so anything that wants it has to read the order again — which is what the
+   * identifier read-back after a create is for. Typed as present, it silently wrote
+   * `undefined` into the one field a human searches OnSinch on.
+   */
   async createOrder(body: OnsinchOrderBody[]) {
     const r = await this.t("POST", "/orders", body);
     if (r.status !== 201)
       throw new Error(
         `createOrder ${r.status}: ${JSON.stringify(r.data?.validationErrors ?? r.data)}`
       );
-    return r.data.data[0] as { id: number; number: string };
+    return r.data.data[0] as { id: number; number?: string };
   }
 
   /**

@@ -34,7 +34,7 @@ function shapeOf(s: ConversationState): ThreadShape {
 /** The side-effecting edges. Injected so the pipeline stays testable. */
 export interface Executor {
   createReplyDraft(a: NonNullable<Actions["createReplyDraft"]>): Promise<string>; // -> draft id
-  createOrder(order: NonNullable<Actions["createOrder"]>): Promise<{ id: number; number: string }>;
+  createOrder(order: NonNullable<Actions["createOrder"]>): Promise<{ id: number; number?: string }>;
   /**
    * Apply what can safely be applied to an EXISTING order, and report which
    * fields actually went. Returning the applied list is what stops the engine
@@ -73,16 +73,20 @@ export interface Executor {
     alreadyDeleted?: boolean;
     onIntent(snapshot: unknown): Promise<void>;
     onDeleted(): Promise<void>;
-  }): Promise<{ created?: { id: number; number: string }; refused?: string; deleted: boolean }>;
+  }): Promise<{ created?: { id: number; number?: string }; refused?: string; deleted: boolean }>;
   /**
-   * The `J` number of the job inside an order — `Job[0].id`, read back because
-   * POST /orders returns the order id alone and never the nested job's.
+   * The identifiers a human types into OnSinch, read back after a create.
    *
-   * Optional, and a failure to read it is never a failure of the write: the order
+   * POST /orders returns `{ id }` and nothing else — not the nested job's id, and not
+   * the order's own `number` (probed live: the response is `{"id":13744}` while a GET
+   * on it returns `number: "10638"`). Both of the numbers anybody can search on
+   * therefore cost one read, and it is the same read, so they are fetched together.
+   *
+   * Optional, and a failure to read them is never a failure of the write: the order
    * exists either way, and an identifier missing from the board is a worse outcome
    * only than an order that was created twice.
    */
-  jobIdForOrder?(order_id: number): Promise<number | undefined>;
+  identifiersForOrder?(order_id: number): Promise<{ job_id?: number; order_number?: string }>;
 }
 
 export interface PipelineDeps extends CompileDeps {
@@ -326,18 +330,21 @@ export async function handleThread(
 }
 
 /**
- * The J number for an order we just wrote, or undefined.
+ * The J number and the R number for an order we just wrote, or nothing.
  *
  * Swallows its own failure on purpose. This runs immediately after a successful
  * POST /orders, so a throw here would land in the caller's catch and report an
  * order that exists as an order that errored — and the next run would try to
  * create it again.
  */
-async function readJobId(order_id: number, deps: PipelineDeps): Promise<number | undefined> {
+async function readIdentifiers(
+  order_id: number,
+  deps: PipelineDeps
+): Promise<{ job_id?: number; order_number?: string }> {
   try {
-    return await deps.executor.jobIdForOrder?.(order_id);
+    return (await deps.executor.identifiersForOrder?.(order_id)) ?? {};
   } catch {
-    return undefined;
+    return {};
   }
 }
 
@@ -443,9 +450,10 @@ async function tryReplace(
 
     if (res.created) {
       const old = order_id;
+      const ids = await readIdentifiers(res.created.id, deps);
       next.onsinch_order_id = res.created.id;
-      next.onsinch_order_number = res.created.number;
-      next.onsinch_job_id = await readJobId(res.created.id, deps);
+      next.onsinch_order_number = res.created.number ?? ids.order_number;
+      next.onsinch_job_id = ids.job_id;
       next.last_ordered_hash = hashOrder(intended.desired);
       next.last_ordered_teams_hash = teamsHash;
       next.status = "ordered";
@@ -521,9 +529,10 @@ async function executeOrder(
   try {
     if (intended.kind === "create") {
       const created = await executor.createOrder(intended.desired);
+      const ids = await readIdentifiers(created.id, deps);
       next.onsinch_order_id = created.id;
-      next.onsinch_order_number = created.number;
-      next.onsinch_job_id = await readJobId(created.id, deps);
+      next.onsinch_order_number = created.number ?? ids.order_number;
+      next.onsinch_job_id = ids.job_id;
       next.last_ordered_hash = hashOrder(intended.desired);
       next.last_ordered_teams_hash = hashOrder(intended.desired.slot_teams);
       next.status = "ordered";

@@ -51,7 +51,7 @@ import { buildOrderBody } from "./format";
 
 export interface ReplaceResult {
   /** Set when the replacement was created. */
-  created?: { id: number; number: string };
+  created?: { id: number; number?: string };
   /** Set when we declined to touch anything, with the reason for a human. */
   refused?: string;
   /** True when the old order was deleted during THIS call. */

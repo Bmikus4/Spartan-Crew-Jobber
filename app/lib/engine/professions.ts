@@ -64,6 +64,41 @@ export function normProf(s?: string | null): string {
     .trim();
 }
 
+/**
+ * The same words with plurals folded, so a cue written in the singular answers for the
+ * plural clients actually type.
+ *
+ * The cues are singular and the containment pass rescued most plurals by accident: a
+ * request for "carpenters" or "drivers" resolves because the tenant's own name is
+ * inside the word. Where the client's word for a role is NOT the tenant's word, nothing
+ * rescued it, and the cue is the only thing that knew the role at all:
+ *
+ *     chippies      -> Crew    (should be Carpenter 3)
+ *     chiefs        -> Crew    (should be Crew Chief 36)
+ *     forklifts     -> Crew    (should be Counterbalance 11)
+ *     telehandlers  -> Crew    (should be Telehandler 4)
+ *
+ * "chiefs" is the one that costs money twice: the chief is booked as general labour,
+ * and then the band reads a team with no chief in it and carves another one out.
+ *
+ * Word by word rather than by regex, and "ss" is left alone, because "boss" folded to
+ * "bos" would break the chief cue this exists to protect. Three letters or fewer are
+ * left alone too — there is no plural worth recovering there and "3as" is not "3a".
+ */
+function singularise(t: string): string {
+  return t
+    .split(" ")
+    .map((w) => {
+      if (w.length > 4 && w.endsWith("ies")) return w.slice(0, -3) + "y";
+      // "bosses" -> "boss". Narrow on purpose: a general "es" rule would fold
+      // "premises" and "expenses" into words that are not words.
+      if (w.length > 4 && w.endsWith("sses")) return w.slice(0, -2);
+      if (w.length <= 3 || w.endsWith("ss") || !w.endsWith("s")) return w;
+      return w.slice(0, -1);
+    })
+    .join(" ");
+}
+
 /** The tenant's name, cleaned for display without being normalised to death. */
 export function cleanName(s?: string | null): string {
   return String(s ?? "")
@@ -210,12 +245,17 @@ export function resolveProfession(
     .filter((c) => c.span > 0)
     .sort((a, b) => b.span - a.span);
 
+  // The written words first, then the same words with plurals folded. Order matters
+  // only in that an exact wording is never reinterpreted to reach the folded pass.
   let cue: { id: number; span: number } | null = null;
-  for (const [re, id] of CUES) {
-    const m = re.exec(t);
-    if (!m) continue;
-    cue = { id, span: m[0].length };
-    break;
+  for (const candidate of [t, singularise(t)]) {
+    for (const [re, id] of CUES) {
+      const m = re.exec(candidate);
+      if (!m) continue;
+      cue = { id, span: m[0].length };
+      break;
+    }
+    if (cue) break;
   }
 
   /**

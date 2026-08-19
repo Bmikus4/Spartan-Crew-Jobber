@@ -172,5 +172,33 @@ console.log("\n[12] composed onto a real order");
     String(settled.order?.slot_teams[0].profession_id));
 }
 
+// ---------------------------------------------------------------------------
+// A cue written in the singular has to answer for the plural clients type.
+//
+// The containment pass rescued the plurals where the client's word IS the tenant's
+// word — "carpenters" contains "Carpenter" — and rescued nothing where it is not.
+// Every wording below reached general Crew until the folding pass existed, and the
+// chief is the one that cost twice: booked as labour, and then the band carved a
+// second chief out of the team it was supposed to be leading.
+{
+  const id = (hint: string) => resolveProfession(hint, PROFESSION_LIST, {}).id;
+
+  ok(id("chippies") === 3, "chippies -> Carpenter", String(id("chippies")));
+  ok(id("chiefs") === 36, "chiefs -> Crew Chief", String(id("chiefs")));
+  ok(id("crew chiefs") === 36, "crew chiefs -> Crew Chief", String(id("crew chiefs")));
+  ok(id("forklifts") === 11, "forklifts -> Counterbalance", String(id("forklifts")));
+  ok(id("telehandlers") === 4, "telehandlers -> Telehandler U<9M", String(id("telehandlers")));
+
+  // Folding must not reach further than it was asked to.
+  ok(id("gang boss") === 36, "boss is not folded to 'bos'", String(id("gang boss")));
+  ok(id("riggers") === 1, "a role the tenant does not have still resolves down to Crew", String(id("riggers")));
+  ok(id("PASMA") === 6, "a name ending in a vowel is untouched", String(id("PASMA")));
+  ok(id("IPAF 3a/3b") === 5, "a class code is untouched", String(id("IPAF 3a/3b")));
+  // Q10 stands whatever the wording does: 55 is unreachable.
+  for (const w of ["boss", "bosses", "crew boss", "crew bosses", "gang bosses"]) {
+    ok(id(w) !== 55, `"${w}" never reaches Crew Boss 55`, String(id(w)));
+  }
+}
+
 console.log(fails ? `\n${fails} FAILED\n` : "\nALL PASS\n");
 process.exit(fails ? 1 : 0);
