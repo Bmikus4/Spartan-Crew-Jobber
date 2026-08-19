@@ -241,7 +241,22 @@ export function placeContext(p: PlaceCandidate): number {
 
 export function matchPlace(locationText: string | undefined, places: PlaceCandidate[]): number | null {
   const t = normAddr(locationText);
-  if (!t || t.length < 4) return null;
+  if (!t) return null;
+
+  /**
+   * The four-character floor stops a three-letter fragment sweeping every address
+   * that happens to contain it, and it is load-bearing — but it ran BEFORE any
+   * matching, so "RAH", "V&A", "TGH", "RAA" and "CBC" resolved to nothing, and
+   * nothing is what provisions a duplicate. That is the mechanism that produced
+   * the 3,000 context-free rows.
+   *
+   * An EXACT alias match cannot be the collision the floor exists to prevent:
+   * across the live tenant only five places carry an alias shorter than four
+   * characters, and NO alias shorter than six is held by more than one place, so
+   * there is nothing to be ambiguous with. Below the floor that match, and only
+   * that match, is allowed to run.
+   */
+  const belowFloor = t.length < 4;
 
   /**
    * Retired venues are skipped. 12 of the 6,847 live places are inactive —
@@ -268,13 +283,15 @@ export function matchPlace(locationText: string | undefined, places: PlaceCandid
    * was made picks the shell every time. How much the record knows is the question,
    * and the tier only separates rows that know the same amount.
    */
-  let best: { tier: number; ctx: number; id: number } | null = null;
+  let best: { tier: number; ctx: number; id: number; known: number } | null = null;
   const consider = (p: PlaceCandidate, tier: number) => {
+    const known = placeContext(p);
     const cand = {
       tier,
       // An active row beats an inactive one before richness is even read.
-      ctx: (anyActive && p.active !== false ? 1000 : 0) + placeContext(p),
+      ctx: (anyActive && p.active !== false ? 1000 : 0) + known,
       id: p.id,
+      known,
     };
     if (
       !best ||
@@ -287,6 +304,9 @@ export function matchPlace(locationText: string | undefined, places: PlaceCandid
   };
 
   for (const p of places) {
+    const alias0 = normAddr(p.alias);
+    if (belowFloor) { if (alias0 && alias0 === t) consider(p, 0); continue; }
+
     const name = normAddr(p.name);
     if (name && name === t) { consider(p, 0); continue; }
     /**
@@ -317,7 +337,61 @@ export function matchPlace(locationText: string | undefined, places: PlaceCandid
     // Containment on the alias too, held to the same length floor as the name so a
     // three-letter alias cannot sweep every address that happens to contain it.
     if (alias && alias.length >= 6 && t.includes(alias)) { consider(p, 2); continue; }
+    /**
+     * A short alias may lead the text — "RAH, Kensington Gore" — but only when
+     * everything after it is this record's OWN address. Spelled out that text
+     * resolved to nothing, because a record with no street number cannot claim a
+     * job on "Kensington Gore" either.
+     *
+     * The remainder is the whole guard. Measured over the tenant's 2,432 distinct
+     * venue texts, a bare leading-token rule moved four of them, and two were
+     * wrong in the way that matters: "V&A East Storehouse" and "V&A East Museum"
+     * are buildings in Stratford, and they resolved onto the South Kensington
+     * museum because "v a" leads both and the museum knows more. What follows a
+     * short form is either its address or a DIFFERENT VENUE, and only the first
+     * of those is safe to fold in.
+     */
+    if (alias && alias.length < 6 && t.startsWith(alias + " ")) {
+      const rest = t.slice(alias.length + 1);
+      const known = normAddr([p.address, p.city, p.zip].filter(Boolean).join(" "));
+      if (known && rest.split(" ").every((w) => known.includes(w))) { consider(p, 2); continue; }
+    }
   }
+
+  /**
+   * REVERSE containment: the record's name begins with the client's whole text.
+   *
+   * Every tier above asks whether the EMAIL contains the RECORD's name, which is
+   * the right question when the client writes an address and the record holds a
+   * name. It is the wrong question when the client abbreviates: "ExCeL" does not
+   * contain "ExCel London", so row 49 — the only one of 803 carrying the address,
+   * postcode and coordinates — never matched at all, and the answer was one of the
+   * ten address-less rows named exactly "Excel" that earlier clients' texts made.
+   *
+   * Only rows that actually know something are read, and they must agree on one
+   * name. "excel " leads to "excel london" alone. "olympia " leads to both
+   * "Olympia London" and "Olympia West", which are different buildings, so this
+   * declines and the answer stays whatever the exact tiers found. Sending crew to
+   * the wrong building is worse than provisioning a duplicate row, so a first word
+   * two venues share is never guessed between.
+   *
+   * The context-free shells are deliberately ignored here rather than counted as
+   * disagreement: 632 of them begin with "excel" because they were made from the
+   * full address, and they are the same venue as 49.
+   *
+   * LAST RESORT, and that is not a nicety. It runs only when every tier above
+   * found nothing or found a shell, because a longer name is a longer name and not
+   * a better record: promoting on richness moved "The Oval" onto "The Oval Open
+   * Space" and "Needle & Thread" onto its head office, over exact-name rows that
+   * already carried an address. An exact match on an informative row is the answer.
+   */
+  if (!belowFloor && t.length >= 5 && (!best || (best as { known: number }).known < 3) ) {
+    const informative = places.filter((p) => placeContext(p) >= 3 && normAddr(p.name).startsWith(t + " "));
+    if (informative.length && new Set(informative.map((p) => normAddr(p.name))).size === 1) {
+      for (const p of informative) consider(p, 3);
+    }
+  }
+
   return best ? (best as { id: number }).id : null;
 }
 
