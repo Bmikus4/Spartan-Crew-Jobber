@@ -23,3 +23,7 @@ n8n/*.local.json
 # (The one pre-existing snapshot below predates that node and is clean.)
 n8n/backups/*.json
 !n8n/backups/bookings-CPIRu7CpezvKjU8d.backup.json
+
+# session scratch: debug probes plus cached client corpora (emails, places,
+# rate pairs). Same reason data/ is ignored — regenerable, and it is client data.
+.tmp-data/
