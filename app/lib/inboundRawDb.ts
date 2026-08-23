@@ -96,11 +96,23 @@ export async function captureInboundRaw(payload: unknown, source = "n8n"): Promi
     // Messages FIRST. A crash between the two loses a dedup record — harmless, because
     // claimMessage and the UNIQUE key both still catch the re-delivery — and never loses mail.
     const msgs = await storeThreadMessages(payload);
+    const extracted = messagesFromPayload(payload);
+
+    // THE FALLBACK THAT KEEPS THE NO-DATA-LOSS PROMISE.
+    //
+    // The envelope is the payload minus `messages`, which is the right split only when the
+    // messages were understood. A payload that carries mail under a thread-id key we do not
+    // recognise extracts to nothing AND has its `messages` stripped by envelopeOf — so the
+    // mail would vanish, which is precisely the case this route's "store it so the contract
+    // can be aligned" branch exists to catch. When nothing was extracted, the whole payload
+    // is kept verbatim instead. Rare by construction, so it costs nothing in the normal case.
+    const unparsed = extracted.length === 0 && payload != null;
     const rows = (await sql`
-      INSERT INTO inbound_raw (dedup_key, source, thread_id, message_id, message_ids, envelope)
+      INSERT INTO inbound_raw (dedup_key, source, thread_id, message_id, message_ids, envelope, payload)
       VALUES (${dedup_key}, ${source}, ${thread_id}, ${message_id},
-              ${messagesFromPayload(payload).map((m) => m.message_id)},
-              ${JSON.stringify(envelopeOf(payload))})
+              ${extracted.map((m) => m.message_id)},
+              ${JSON.stringify(envelopeOf(payload))},
+              ${unparsed ? JSON.stringify(payload) : null})
       ON CONFLICT (dedup_key) DO NOTHING
       RETURNING id`) as { id: number }[];
     return { ok: true, captured: rows.length > 0, dedup_key, thread_id, message_id,

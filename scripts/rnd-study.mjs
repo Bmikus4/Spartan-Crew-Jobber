@@ -10,6 +10,7 @@
 // ============================================================================
 import { readFileSync } from "node:fs";
 import { neon } from "@neondatabase/serverless";
+import { corpusStats, latencySummary } from "./_corpusStats.mjs";
 
 const ROOT = new URL("..", import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1");
 const env = readFileSync(`${ROOT}/.env.local`, "utf8");
@@ -17,32 +18,17 @@ const g = (k) => (env.match(new RegExp("^" + k + "=(.*)$", "m")) || [])[1];
 const sql = neon(g("DATABASE_URL").replace(/^"|"$/g, ""));
 
 // ---------------------------------------------------------------------------------------
-// NOT YET PORTED TO THE ON-DISK CORPUS.
+// THE MAIL COMES FROM DISK, THE HEADERS AND LABELS FROM POSTGRES.
 //
-// The mail moved out of sweep_threads.payload into data/corpus/sweep-threads.jsonl
-// (scripts/export-sweep-corpus.mjs). Every other corpus script reads the file now; this one
-// still asks Postgres, through nine aggregates including a self-join reply-latency
-// calculation and a correlated sender-history EXISTS. Those are worth porting carefully
-// rather than quickly, because a mistake here does not throw — it prints a different
-// number and reads exactly like a finding.
+// sweep_threads.payload was emptied when the corpus moved to
+// data/corpus/sweep-threads.jsonl (scripts/export-sweep-corpus.mjs). Eight aggregates here
+// read it — including a self-join reply-latency calculation and a correlated sender-history
+// EXISTS — and they all derive from the same three facts about each message, so they are
+// served by one pass in scripts/_corpusStats.mjs rather than eight table scans.
 //
-// So this refuses to run rather than reporting on an empty column. Everything it measures
-// is in the JSONL file; porting it is the remaining work.
-{
-  const [{ n }] = await sql`SELECT count(*)::int n FROM sweep_threads WHERE payload IS NOT NULL`;
-  if (n === 0) {
-    console.error(
-      [
-        "",
-        "rnd-study still reads sweep_threads.payload, which is now empty.",
-        "The corpus lives in data/corpus/sweep-threads.jsonl — see scripts/_corpus.mjs.",
-        "Refusing to run rather than report zeroes as findings.",
-        "",
-      ].join("\n")
-    );
-    process.exit(1);
-  }
-}
+// The header columns (first_date, last_date, message_count) and sweep_labels are still in
+// Postgres, so every query that only needs those is unchanged.
+
 // These are LABEL KEYS, not the runtime model: sweep_labels rows are tagged with the
 // model that produced them, and the study's figures were computed from the opus-4.8
 // run. They stay pinned so the published numbers remain reproducible after the engine
@@ -53,6 +39,11 @@ const AS_JSON = process.argv.includes("--json");
 
 const out = {};
 const say = (...a) => { if (!AS_JSON) console.log(...a); };
+
+// Loaded after `say` so the progress line can use it. One pass, ~196 MB off disk, no
+// database transfer — the eight aggregates it feeds used to be eight scans of the table.
+const STATS = await corpusStats();
+say(`corpus: ${STATS.messages} messages read from disk`);
 
 // ---------------------------------------------------------------- 1. the corpus
 {
@@ -80,33 +71,25 @@ const say = (...a) => { if (!AS_JSON) console.log(...a); };
 // ---------------------------------------------------------------- 2. who writes in
 {
   const MACHINE = /(no-?reply|noreply|do-?not-?reply|mailer-daemon|postmaster|notification|@sinch\.cz)/i;
-  const senders = await sql`
-    SELECT lower(m.v->>'from') AS addr, COUNT(*)::int n
-    FROM sweep_threads t, jsonb_array_elements(t.payload->'messages') AS m(v)
-    WHERE COALESCE((m.v->>'is_from_spartan')::bool, false) = false
-      AND m.v->>'from' <> ''
-    GROUP BY 1 ORDER BY n DESC LIMIT 25`;
-  const [reach] = await sql`
-    SELECT COUNT(DISTINCT lower(m.v->>'from'))::int distinct_senders
-    FROM sweep_threads t, jsonb_array_elements(t.payload->'messages') AS m(v)
-    WHERE COALESCE((m.v->>'is_from_spartan')::bool, false) = false AND m.v->>'from' <> ''`;
-  const domains = await sql`
-    SELECT split_part(lower(m.v->>'from'), '@', 2) AS domain, COUNT(DISTINCT t.thread_id)::int threads
-    FROM sweep_threads t, jsonb_array_elements(t.payload->'messages') AS m(v)
-    WHERE COALESCE((m.v->>'is_from_spartan')::bool, false) = false AND m.v->>'from' LIKE '%@%'
-    GROUP BY 1 ORDER BY threads DESC LIMIT 20`;
+  // Four aggregates that were four table scans; all of them come off the single corpus
+  // pass now. ORDER BY n DESC LIMIT 25 and LIMIT 20 are preserved exactly.
+  const senders = [...STATS.msgCountByAddr]
+    .map(([addr, n]) => ({ addr, n }))
+    .sort((a, b) => b.n - a.n)
+    .slice(0, 25);
+  const reach = { distinct_senders: STATS.msgCountByAddr.size };
+  const domains = [...STATS.threadsByDomain]
+    .map(([domain, s]) => ({ domain, threads: s.size }))
+    .sort((a, b) => b.threads - a.threads)
+    .slice(0, 20);
   // How much of the year's mail comes from senders we have seen before?
-  const [repeat] = await sql`
-    WITH s AS (
-      SELECT lower(m.v->>'from') addr, COUNT(DISTINCT t.thread_id)::int threads
-      FROM sweep_threads t, jsonb_array_elements(t.payload->'messages') AS m(v)
-      WHERE COALESCE((m.v->>'is_from_spartan')::bool, false) = false AND m.v->>'from' <> ''
-      GROUP BY 1)
-    SELECT SUM(threads) FILTER (WHERE threads > 1)::int repeat_threads,
-           SUM(threads)::int total_threads,
-           COUNT(*) FILTER (WHERE threads > 1)::int repeat_senders,
-           COUNT(*)::int senders
-    FROM s`;
+  const perSender = [...STATS.threadsByAddr].map(([, s]) => s.size);
+  const repeat = {
+    repeat_threads: perSender.filter((t) => t > 1).reduce((a, b) => a + b, 0),
+    total_threads: perSender.reduce((a, b) => a + b, 0),
+    repeat_senders: perSender.filter((t) => t > 1).length,
+    senders: perSender.length,
+  };
   const human = senders.filter((r) => !MACHINE.test(String(r.addr)));
   const machine = senders.filter((r) => MACHINE.test(String(r.addr)));
   out.senders = { top: human, machine, distinct: reach.distinct_senders, domains, repeat };
@@ -295,11 +278,11 @@ const say = (...a) => { if (!AS_JSON) console.log(...a); };
 
 // ---------------------------------------------------------------- 10. who does the talking
 {
-  const [split] = await sql`
-    SELECT COUNT(*)::int messages,
-      COUNT(*) FILTER (WHERE (m.v->>'is_from_spartan')::bool)::int from_spartan,
-      COUNT(*) FILTER (WHERE NOT COALESCE((m.v->>'is_from_spartan')::bool, false))::int from_client
-    FROM sweep_threads t, jsonb_array_elements(t.payload->'messages') AS m(v)`;
+  const split = {
+    messages: STATS.messages,
+    from_spartan: STATS.fromSpartan,
+    from_client: STATS.fromClient,
+  };
   out.talk = split;
   say(`
 === 10. WHO DOES THE TALKING ===`);
@@ -310,26 +293,9 @@ const say = (...a) => { if (!AS_JSON) console.log(...a); };
 {
   // Time from a client's message to Spartan's next message in the same thread. This is
   // the human cost the tool is meant to remove, so it bounds the prize.
-  const [lat] = await sql`
-    WITH msgs AS (
-      SELECT t.thread_id,
-             (m.v->>'date_iso')::timestamptz AS at,
-             COALESCE((m.v->>'is_from_spartan')::bool, false) AS spartan
-      FROM sweep_threads t, jsonb_array_elements(t.payload->'messages') AS m(v)
-      WHERE m.v->>'date_iso' <> ''
-    ), pairs AS (
-      SELECT c.thread_id, c.at AS asked,
-             MIN(s.at) AS answered
-      FROM msgs c JOIN msgs s ON s.thread_id = c.thread_id AND s.spartan AND s.at > c.at
-      WHERE NOT c.spartan
-      GROUP BY 1, 2
-    )
-    SELECT COUNT(*)::int pairs,
-      ROUND(AVG(EXTRACT(EPOCH FROM (answered - asked))/60))::int mean_minutes,
-      ROUND(PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY EXTRACT(EPOCH FROM (answered - asked))/60))::int median_minutes,
-      COUNT(*) FILTER (WHERE answered - asked < INTERVAL '15 minutes')::int within_15m,
-      COUNT(*) FILTER (WHERE answered - asked > INTERVAL '4 hours')::int over_4h
-    FROM pairs`;
+  // Was a self-join of the message set against itself. The corpus pass already paired each
+  // client message with the next Spartan message in its thread; this is the aggregate.
+  const lat = latencySummary(STATS.latencyMinutes);
   out.latency = lat;
   say(`
 === 11. REPLY LATENCY (client message -> Spartan reply) ===`);
@@ -341,20 +307,37 @@ const say = (...a) => { if (!AS_JSON) console.log(...a); };
   // The venue/company gaps are only fillable if the same sender has written before AND
   // an earlier thread of theirs names a venue. This measures the ceiling of that idea
   // rather than assuming it.
-  const [hist] = await sql`
-    WITH sender AS (
-      SELECT t.thread_id, lower(m.v->>'from') AS addr, t.first_date
-      FROM sweep_threads t, jsonb_array_elements(t.payload->'messages') AS m(v)
-      WHERE NOT COALESCE((m.v->>'is_from_spartan')::bool, false) AND m.v->>'from' <> ''
-    ), labelled AS (
-      SELECT l.thread_id, l.location_text, l.company_name
-      FROM sweep_labels l WHERE l.model = ${MODEL} AND l.error IS NULL
-    )
-    SELECT
-      COUNT(DISTINCT lb.thread_id) FILTER (WHERE (lb.location_text IS NULL OR lb.location_text = ''))::int missing_venue,
-      COUNT(DISTINCT lb.thread_id) FILTER (WHERE (lb.location_text IS NULL OR lb.location_text = '')
-                         AND EXISTS (SELECT 1 FROM sender s2 WHERE s2.addr = s.addr AND s2.thread_id <> s.thread_id))::int missing_venue_with_history
-    FROM labelled lb JOIN sender s ON s.thread_id = lb.thread_id`;
+  // The labels stay in SQL; the sender side comes from the corpus pass.
+  //
+  // The original was `labelled JOIN sender` — one row per (labelled thread x each client
+  // message on it) — with COUNT(DISTINCT thread_id) collapsing the fan-out. So a thread
+  // counts once if it is missing a venue, and counts in the second column if ANY of its
+  // senders has also written on some other thread. Reproduced exactly: DISTINCT over
+  // threads, and `.some(...)` over that thread's senders.
+  const labelRows = await sql`
+    SELECT l.thread_id, l.location_text, l.company_name
+    FROM sweep_labels l WHERE l.model = ${MODEL} AND l.error IS NULL`;
+  // thread_id -> the non-Spartan senders seen on it, inverted from threadsByAddr.
+  const sendersOfThread = new Map();
+  for (const [addr, tids] of STATS.threadsByAddr) {
+    for (const tid of tids) {
+      if (!sendersOfThread.has(tid)) sendersOfThread.set(tid, []);
+      sendersOfThread.get(tid).push(addr);
+    }
+  }
+  const seenMissing = new Set(), seenWithHistory = new Set();
+  for (const lb of labelRows) {
+    const addrs = sendersOfThread.get(lb.thread_id);
+    if (!addrs) continue;                       // the JOIN dropped threads with no sender
+    if (lb.location_text) continue;             // NULL or '' == missing a venue
+    seenMissing.add(lb.thread_id);
+    const hasHistory = addrs.some((a) => {
+      const tids = STATS.threadsByAddr.get(a);
+      return tids && [...tids].some((t) => t !== lb.thread_id);
+    });
+    if (hasHistory) seenWithHistory.add(lb.thread_id);
+  }
+  const hist = { missing_venue: seenMissing.size, missing_venue_with_history: seenWithHistory.size };
   out.history = hist;
   say(`
 === 12. WHAT A SENDER'S OWN HISTORY COULD FILL ===`);
@@ -367,11 +350,12 @@ const say = (...a) => { if (!AS_JSON) console.log(...a); };
     FROM sweep_labels WHERE error IS NULL`;
   const [tot] = await sql`SELECT COUNT(*)::int n FROM sweep_threads`;
   // What the reasoner actually sends is message text, not the stored JSON blob.
-  const rows = await sql`
-    SELECT t.thread_id,
-      SUM(length(COALESCE(m.v->>'body','')) + length(COALESCE(m.v->>'subject','')) + 120)::int chars
-    FROM sweep_threads t, jsonb_array_elements(t.payload->'messages') AS m(v)
-    GROUP BY 1`;
+  // GROUP BY thread, summing body + subject + 120 per message — from the corpus pass. The
+  // SQL's implicit lateral join dropped threads with no messages; charsByThread records 0
+  // for those, so they are filtered out here to keep meanChars comparable.
+  const rows = [...STATS.charsByThread]
+    .filter(([, chars]) => chars > 0)
+    .map(([thread_id, chars]) => ({ thread_id, chars }));
   const CAP = 12000;
   const chars = rows.map((r) => r.chars);
   const sum = (a) => a.reduce((x, y) => x + y, 0);

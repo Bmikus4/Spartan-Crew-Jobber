@@ -38,7 +38,7 @@ export async function POST(request: Request): Promise<Response> {
       ok: true,
       captured: cap.captured,
       stored: true,
-      note: "payload stored in inbound_raw for contract alignment (not the { thread_id, messages[] } shape)",
+      note: "payload kept verbatim in inbound_raw for contract alignment (not the { thread_id, messages[] } shape)",
       dedup_key: cap.dedup_key,
     });
   }

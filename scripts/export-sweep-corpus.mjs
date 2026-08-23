@@ -11,22 +11,66 @@
 //
 //   node scripts/export-sweep-corpus.mjs             # export + verify, changes no table
 //   node scripts/export-sweep-corpus.mjs --reclaim   # ...then empty payload and VACUUM
+//   node scripts/export-sweep-corpus.mjs --force     # re-export even if the file is complete
 import { neon } from "@neondatabase/serverless";
-import { createWriteStream, mkdirSync } from "node:fs";
+import { createWriteStream, mkdirSync, existsSync } from "node:fs";
 import { loadEnv, requireEnv } from "./_env.mjs";
 import { corpusPath, readCorpus } from "./_corpus.mjs";
 
 loadEnv();
 const sql = neon(requireEnv("DATABASE_URL"));
 const RECLAIM = process.argv.includes("--reclaim");
+const FORCE = process.argv.includes("--force");
 const OUT = corpusPath();
 
 const [{ n, bytes }] = await sql`
   SELECT count(*)::int n, pg_size_pretty(pg_total_relation_size('sweep_threads')) bytes
   FROM sweep_threads`;
-console.log(`exporting ${n} thread(s); table is ${bytes}`);
 
-mkdirSync(new URL("../data/corpus/", import.meta.url), { recursive: true });
+// EVERY EXPORT COSTS 196 MB OF EGRESS, AND NEON FREE ALLOWS 5 GB A MONTH.
+//
+// This is not a theoretical limit. Running this three times in one session — export,
+// re-verify, then --reclaim — plus the backfills, put the Spartan project over its transfer
+// quota on 2026-08-23 and the database began refusing every connection with HTTP 402. The
+// storage problem this script solves is worth 68 MB; the transfer it spends solving it is
+// worth ten times that. So it refuses to re-export a corpus it already holds.
+//
+// The check is one COUNT, not a read of the table.
+let skipExport = false;
+if (existsSync(OUT)) {
+  let lines = 0;
+  for await (const _ of readCorpus()) lines++;
+  if (lines === n && !FORCE) {
+    console.log(`${OUT} already holds all ${n} thread(s) — nothing to export.`);
+    console.log("Pass --force to re-export (costs ~196 MB of the monthly transfer allowance).");
+    if (!RECLAIM) process.exit(0);
+    console.log("Continuing to --reclaim against the existing file.");
+    skipExport = true;
+  } else if (lines !== n) {
+    console.log(`file holds ${lines} of ${n} thread(s) — re-exporting`);
+  }
+}
+
+// AND NEVER EXPORT AN ALREADY-EMPTIED TABLE OVER A GOOD FILE.
+//
+// After --reclaim the rows are still there and still counted; only `payload` is null. A
+// re-export would therefore look completely normal, write 5,835 lines with "payload": null
+// over the only copy of the mail, and verify clean — the corpus would be gone and nothing
+// would have complained. --force is not a way past this one.
+if (!skipExport) {
+  const [{ withPayload }] = await sql`
+    SELECT count(*)::int "withPayload" FROM sweep_threads WHERE payload IS NOT NULL`;
+  if (withPayload === 0 && n > 0) {
+    console.error(
+      `\nsweep_threads holds ${n} row(s) and NONE carry a payload — already reclaimed.\n` +
+      `Exporting now would overwrite ${OUT} with empty records and destroy the corpus.\n` +
+      `Refusing. If the file is genuinely lost, re-sweep the mailbox: npm run gmail:sweep\n`
+    );
+    process.exit(1);
+  }
+  console.log(`exporting ${n} thread(s); table is ${bytes}`);
+
+  mkdirSync(new URL("../data/corpus/", import.meta.url), { recursive: true });
 const out = createWriteStream(OUT, { encoding: "utf8" });
 // Paged, and small pages: a page of 200 swept threads is a few MB and the Neon HTTP driver
 // refuses any single response over 64 MB.
@@ -43,8 +87,9 @@ for (let offset = 0; ; offset += PAGE) {
   }
   process.stdout.write(`\r  ${written}/${n}`);
 }
-await new Promise((res) => out.end(res));
-console.log(`\nwrote ${written} line(s) to ${OUT}`);
+  await new Promise((res) => out.end(res));
+  console.log(`\nwrote ${written} line(s) to ${OUT}`);
+}
 
 // Verify the file against the table before anything is cleared.
 // Read back through the SAME reader the corpus scripts use, so the verification proves the
