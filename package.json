@@ -56,7 +56,8 @@
     "corpus:export": "node scripts/export-sweep-corpus.mjs",
     "backfill:messages": "node scripts/backfill-thread-messages.mjs",
     "backfill:envelope": "node scripts/backfill-envelope.mjs",
-    "db:reclaim": "node scripts/db-reclaim.mjs"
+    "db:reclaim": "node scripts/db-reclaim.mjs",
+    "verify:e2e": "node scripts/verify-intake-e2e.mjs"
   },
   "dependencies": {
     "@neondatabase/serverless": "^0.10.4",
