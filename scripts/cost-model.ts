@@ -23,6 +23,7 @@
 //   npx tsx scripts/cost-model.ts --limit 500   # fewer threads, same arithmetic
 // ============================================================================
 import { neon } from "@neondatabase/serverless";
+import { readCorpus } from "./_corpus.mjs";
 import { readFileSync } from "node:fs";
 import { normalizeThread } from "../app/lib/engine/normalize";
 import { CLASSIFY_SYSTEM, EXTRACT_SYSTEM } from "../app/lib/engine/prompts";
@@ -85,16 +86,13 @@ const acc = {
   msgsRead_v0: 0, msgsRead_v2: 0,
 };
 
-const PAGE = 250;
-for (let offset = 0; ; offset += PAGE) {
-  if (LIMIT && offset >= LIMIT) break;
-  const take = LIMIT ? Math.min(PAGE, LIMIT - offset) : PAGE;
-  const rows = (await sql`
-    SELECT thread_id, payload FROM sweep_threads
-    ORDER BY thread_id LIMIT ${take} OFFSET ${offset}`) as { thread_id: string; payload: { messages?: unknown[] } }[];
-  if (!rows.length) break;
-
-  for (const row of rows) {
+// The corpus is on disk now (scripts/export-sweep-corpus.mjs). The file is written in
+// ORDER BY thread_id, so the iteration order is the one the paged query produced and any
+// LIMIT sampling stays representative.
+{
+  let seen = 0;
+  for await (const row of readCorpus()) {
+    if (LIMIT && seen++ >= LIMIT) break;
     const msgs = (row.payload?.messages ?? []) as ThreadMessage[];
     if (!msgs.length) continue;
     acc.threads++;
@@ -138,9 +136,9 @@ for (let offset = 0; ; offset += PAGE) {
     }
     if (!hadClientEvent) acc.threadsNoClientEvent++;
     else if (!readAtLeastOnce) acc.threadsAllGated++;
+    // Progress every 250 threads, as the paged read used to report per page.
+    if (acc.threads % 250 === 0) say(`  … ${acc.threads} threads, ${acc.events} events`);
   }
-  if (!LIMIT && rows.length < PAGE) break;
-  say(`  … ${acc.threads} threads, ${acc.events} events`);
 }
 
 // ------------------------------------------------------------------ pricing

@@ -84,6 +84,20 @@ export interface SweptThread {
  * by default so an interrupted pass resumes instead of paying for the same threads
  * twice — a full pass is thousands of model calls and real money.
  */
+/**
+ * Attach message bodies from the on-disk corpus. The sampling, the label join and the
+ * ORDER BY all stay in SQL — sweep_labels and the sweep_threads HEADER columns are still in
+ * Postgres. Only the mail moved. See scripts/export-sweep-corpus.mjs.
+ */
+async function withPayload(rows: unknown[]): Promise<SweptThread[]> {
+  const { corpusByThreadId } = await import("../../scripts/_corpus.mjs");
+  const corpus = await corpusByThreadId();
+  return (rows as SweptThread[]).map((r) => ({
+    ...r,
+    payload: corpus.get(r.thread_id)?.payload ?? { messages: [] },
+  }));
+}
+
 export async function unlabelledThreads(model: string, limit: number, random = false, sameAs?: string): Promise<SweptThread[]> {
   const sql = await ensure();
   // sameAs: only threads already labelled by ANOTHER model. Re-labelling after a
@@ -91,31 +105,31 @@ export async function unlabelledThreads(model: string, limit: number, random = f
   // numbers describe two different samples and prove nothing.
   if (sameAs) {
     const rows = await sql`
-      SELECT t.thread_id, t.subject, t.message_count, t.first_date, t.last_date, t.payload
+      SELECT t.thread_id, t.subject, t.message_count, t.first_date, t.last_date
       FROM sweep_threads t
       JOIN sweep_labels prev ON prev.thread_id = t.thread_id AND prev.model = ${sameAs}
       LEFT JOIN sweep_labels cur ON cur.thread_id = t.thread_id AND cur.model = ${model}
       WHERE cur.thread_id IS NULL
       ORDER BY t.last_date DESC NULLS LAST LIMIT ${limit}`;
-    return rows as unknown as SweptThread[];
+    return withPayload(rows);
   }
   // Random, when asked: newest-first is a recency sample, and a rate measured on it
   // describes last month rather than the year. md5 of the id is a stable shuffle, so
   // a resumed pass keeps drawing from the same order instead of re-sampling.
   const rows = random
     ? await sql`
-        SELECT t.thread_id, t.subject, t.message_count, t.first_date, t.last_date, t.payload
+        SELECT t.thread_id, t.subject, t.message_count, t.first_date, t.last_date
         FROM sweep_threads t
         LEFT JOIN sweep_labels l ON l.thread_id = t.thread_id AND l.model = ${model}
         WHERE l.thread_id IS NULL
         ORDER BY md5(t.thread_id) LIMIT ${limit}`
     : await sql`
-        SELECT t.thread_id, t.subject, t.message_count, t.first_date, t.last_date, t.payload
+        SELECT t.thread_id, t.subject, t.message_count, t.first_date, t.last_date
         FROM sweep_threads t
         LEFT JOIN sweep_labels l ON l.thread_id = t.thread_id AND l.model = ${model}
         WHERE l.thread_id IS NULL
         ORDER BY t.last_date DESC NULLS LAST LIMIT ${limit}`;
-  return rows as unknown as SweptThread[];
+  return withPayload(rows);
 }
 
 export interface WorkBlock {

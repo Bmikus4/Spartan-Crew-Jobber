@@ -14,6 +14,7 @@
 //   npx tsx scripts/triage-study.ts --json
 // ============================================================================
 import { neon } from "@neondatabase/serverless";
+import { readCorpus } from "./_corpus.mjs";
 import { readFileSync } from "node:fs";
 import { isMachineSender, isAutoReply, isFromSpartan } from "../app/lib/engine/normalize";
 import { triage } from "../app/lib/engine/triage";
@@ -39,12 +40,19 @@ async function main() {
   // ---------------------------------------------------------- sender concentration
   // The load-bearing question for a sender-first design: how much traffic comes from
   // addresses already seen? If it is most of it, identity decides more than content does.
-  const senders = (await sql`
-    SELECT lower(msg->>'from') AS addr, COUNT(DISTINCT t.thread_id)::int AS threads
-    FROM sweep_threads t, jsonb_array_elements(t.payload->'messages') AS msg
-    WHERE COALESCE((msg->>'is_from_spartan')::bool, false) = false
-      AND COALESCE(msg->>'from','') <> ''
-    GROUP BY 1`) as Array<{ addr: string; threads: number }>;
+  // Was a jsonb_array_elements aggregate over sweep_threads; the mail is on disk now, so
+  // the same tally is one pass over the file. COUNT(DISTINCT thread_id) becomes a Set.
+  const senderThreads = new Map<string, Set<string>>();
+  for await (const row of readCorpus()) {
+    for (const m of (row.payload?.messages ?? []) as Array<Record<string, unknown>>) {
+      if (m?.is_from_spartan === true) continue;
+      const addr = String(m?.from ?? "").toLowerCase();
+      if (!addr) continue;
+      if (!senderThreads.has(addr)) senderThreads.set(addr, new Set());
+      senderThreads.get(addr)!.add(row.thread_id);
+    }
+  }
+  const senders = [...senderThreads].map(([addr, s]) => ({ addr, threads: s.size }));
 
   const human = senders.filter((s) => !isMachineSender(s.addr) && !isFromSpartan(s.addr));
   const totalAppear = human.reduce((n, s) => n + s.threads, 0);
@@ -82,17 +90,13 @@ async function main() {
     if (sub) unmatched.set(sub, (unmatched.get(sub) ?? 0) + 1);
   };
 
-  // Paged: all 27,830 bodies in one response exceeds Neon's 64MB cap.
-  const PAGE = 300;
-  for (let offset = 0; ; offset += PAGE) {
-    const page = (await sql`
-      SELECT msg AS m
-      FROM (SELECT payload FROM sweep_threads ORDER BY thread_id LIMIT ${PAGE} OFFSET ${offset}) t,
-           jsonb_array_elements(t.payload->'messages') AS msg`) as Array<{ m: Msg }>;
-    if (!page.length) break;
-    for (const r of page) tallyOne(r.m || {});
-    say(`  … ${tally.total} messages scanned`);
-    if (page.length < PAGE) break;   // a short page means the threads ran out
+
+  // One pass over the on-disk corpus instead of paging jsonb_array_elements.
+  {
+    for await (const row of readCorpus()) {
+      for (const m of (row.payload?.messages ?? []) as Msg[]) tallyOne(m || {});
+      if (tally.total % 5000 < 30) say(`  … ${tally.total} messages scanned`);
+    }
   }
 
   out.currentRules = tally;
@@ -111,22 +115,18 @@ async function main() {
   // code does rather than what the tiers were meant to do.
   const tiers = new Map<string, number>();
   let admitted = 0;
-  for (let offset = 0; ; offset += PAGE) {
-    const page = (await sql`
-      SELECT msg AS m
-      FROM (SELECT payload FROM sweep_threads ORDER BY thread_id LIMIT ${PAGE} OFFSET ${offset}) t,
-           jsonb_array_elements(t.payload->'messages') AS msg`) as Array<{ m: Msg }>;
-    if (!page.length) break;
-    for (const r of page) {
-      const m = r.m || {};
-      const t = await triage({
-        from: String(m.from ?? ""), subject: String(m.subject ?? ""),
-        body: String(m.body ?? ""), is_from_spartan: m.is_from_spartan,
-      });
-      tiers.set(t.tier, (tiers.get(t.tier) ?? 0) + 1);
-      if (t.verdict === "admit") admitted++;
+  // One pass over the on-disk corpus, in the same thread_id order the paged query used.
+  {
+    for await (const row of readCorpus()) {
+      for (const m of ((row.payload?.messages ?? []) as Msg[])) {
+        const t = await triage({
+          from: String(m?.from ?? ""), subject: String(m?.subject ?? ""),
+          body: String(m?.body ?? ""), is_from_spartan: m?.is_from_spartan,
+        });
+        tiers.set(t.tier, (tiers.get(t.tier) ?? 0) + 1);
+        if (t.verdict === "admit") admitted++;
+      }
     }
-    if (page.length < PAGE) break;
   }
   out.triageTiers = Object.fromEntries(tiers);
   out.triageAdmitted = admitted;

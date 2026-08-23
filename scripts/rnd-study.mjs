@@ -15,6 +15,34 @@ const ROOT = new URL("..", import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "
 const env = readFileSync(`${ROOT}/.env.local`, "utf8");
 const g = (k) => (env.match(new RegExp("^" + k + "=(.*)$", "m")) || [])[1];
 const sql = neon(g("DATABASE_URL").replace(/^"|"$/g, ""));
+
+// ---------------------------------------------------------------------------------------
+// NOT YET PORTED TO THE ON-DISK CORPUS.
+//
+// The mail moved out of sweep_threads.payload into data/corpus/sweep-threads.jsonl
+// (scripts/export-sweep-corpus.mjs). Every other corpus script reads the file now; this one
+// still asks Postgres, through nine aggregates including a self-join reply-latency
+// calculation and a correlated sender-history EXISTS. Those are worth porting carefully
+// rather than quickly, because a mistake here does not throw — it prints a different
+// number and reads exactly like a finding.
+//
+// So this refuses to run rather than reporting on an empty column. Everything it measures
+// is in the JSONL file; porting it is the remaining work.
+{
+  const [{ n }] = await sql`SELECT count(*)::int n FROM sweep_threads WHERE payload IS NOT NULL`;
+  if (n === 0) {
+    console.error(
+      [
+        "",
+        "rnd-study still reads sweep_threads.payload, which is now empty.",
+        "The corpus lives in data/corpus/sweep-threads.jsonl — see scripts/_corpus.mjs.",
+        "Refusing to run rather than report zeroes as findings.",
+        "",
+      ].join("\n")
+    );
+    process.exit(1);
+  }
+}
 // These are LABEL KEYS, not the runtime model: sweep_labels rows are tagged with the
 // model that produced them, and the study's figures were computed from the opus-4.8
 // run. They stay pinned so the published numbers remain reproducible after the engine

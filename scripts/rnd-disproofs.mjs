@@ -35,6 +35,7 @@
 import { readFileSync, writeFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { neon } from "@neondatabase/serverless";
+import { readCorpus } from "./_corpus.mjs";
 import { loadEnv, onsinchGet, requireEnv, ROOT_DIR } from "./_env.mjs";
 
 loadEnv();
@@ -231,20 +232,21 @@ function venueOf(name) {
   for (let i = 0; i < shuffled.length && probe.length < SAMPLE; i += step) probe.push(shuffled[i]);
 
   let found = 0, unique = 0;
-  const CONC = 8;
-  let cursor = 0;
-  await Promise.all(Array.from({ length: CONC }, async () => {
-    for (;;) {
-      const i = cursor++;
-      if (i >= probe.length) return;
-      const r = probe[i];
-      const [c] = await sql`
-        SELECT COUNT(*)::int n FROM sweep_threads WHERE payload::text ILIKE ${"%" + r + "%"}`;
-      if (c.n > 0) found++;
-      if (c.n === 1) unique++;
-      if (!AS_JSON && i && i % 100 === 0) say(`  … ${i}/${probe.length} references probed`);
+  // One pass over the on-disk corpus for ALL probes, instead of a full-corpus ILIKE each.
+  // The mail moved out of Postgres (scripts/export-sweep-corpus.mjs); this both restores the
+  // measurement and makes it cheap, since the old version scanned 55 MB of JSONB per probe.
+  {
+    const needles = probe.map((r) => String(r).toLowerCase());
+    const hits = new Array(needles.length).fill(0);
+    let scanned = 0;
+    for await (const row of readCorpus()) {
+      const hay = JSON.stringify(row.payload).toLowerCase();
+      for (let i = 0; i < needles.length; i++) if (hay.includes(needles[i])) hits[i]++;
+      if (!AS_JSON && ++scanned % 1000 === 0) say(`  … ${scanned} threads scanned for ${probe.length} references`);
     }
-  }));
+    found = hits.filter((h) => h > 0).length;
+    unique = hits.filter((h) => h === 1).length;
+  }
 
   const availability = probe.length ? found / probe.length : 0;
   out.referenceJoin = {

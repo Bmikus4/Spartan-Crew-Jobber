@@ -19,6 +19,7 @@
 //   npx tsx scripts/triage-falsify.ts
 // ============================================================================
 import { neon } from "@neondatabase/serverless";
+import { corpusByThreadId, readCorpus } from "./_corpus.mjs";
 import { readFileSync } from "node:fs";
 import { normalizeThread } from "../app/lib/engine/normalize";
 import { triage } from "../app/lib/engine/triage";
@@ -34,13 +35,17 @@ const STRUCTURAL = new Set(["own-mail", "machine-sender", "no-content", "auto-re
 
 async function main() {
   // ------------------------------------------------ 1. skips vs the model's own labels
-  const labelled = (await sql`
-    SELECT l.thread_id, l.classification, l.crew_peak, t.payload
+  // The label join stays in SQL; only the mail comes from disk.
+  const corpus = await corpusByThreadId();
+  const labelRows = (await sql`
+    SELECT l.thread_id, l.classification, l.crew_peak
     FROM sweep_labels l JOIN sweep_threads t ON t.thread_id = l.thread_id
     WHERE l.error IS NULL`) as Array<{
       thread_id: string; classification: string | null; crew_peak: number | null;
-      payload: { messages?: unknown[] };
     }>;
+  const labelled = labelRows.map((r) => ({
+    ...r, payload: (corpus.get(r.thread_id)?.payload ?? { messages: [] }) as { messages?: unknown[] },
+  }));
 
   const res = { checked: 0, jobs: 0, jobsSkipped: 0, nonJobs: 0, nonJobsSkipped: 0 };
   const misses: string[] = [];
@@ -81,11 +86,14 @@ async function main() {
 
   // ------------------------------------- 2. skips on threads that became REAL orders
   // Independent of the model: these jobs demonstrably happened, whatever anything thought.
-  const ordered = (await sql`
-    SELECT t.thread_id, t.payload
-    FROM sweep_threads t
-    JOIN tickets k ON k.thread_id = t.thread_id
-    WHERE k.onsinch_order_id IS NOT NULL`) as Array<{ thread_id: string; payload: { messages?: unknown[] } }>;
+  // The one query that spanned the corpus and production. tickets is still in Postgres and
+  // the corpus is not, so it is two reads and a Set rather than a join.
+  const orderedIds = (await sql`
+    SELECT k.thread_id FROM tickets k WHERE k.onsinch_order_id IS NOT NULL`) as Array<{ thread_id: string }>;
+  const ordered = orderedIds
+    .map((r) => corpus.get(r.thread_id))
+    .filter(Boolean)
+    .map((r: any) => ({ thread_id: r.thread_id as string, payload: r.payload as { messages?: unknown[] } }));
 
   let orderSkips = 0;
   for (const row of ordered) {
@@ -105,24 +113,19 @@ async function main() {
 
   // ----------------------------------------------------- 3. how much is a JUDGEMENT
   const tiers = new Map<string, number>();
-  const PAGE = 300;
+  // One pass over the on-disk corpus, in the same thread_id order the paged query used.
   let total = 0;
-  for (let offset = 0; ; offset += PAGE) {
-    const page = (await sql`
-      SELECT msg AS m
-      FROM (SELECT payload FROM sweep_threads ORDER BY thread_id LIMIT ${PAGE} OFFSET ${offset}) t,
-           jsonb_array_elements(t.payload->'messages') AS msg`) as Array<{ m: ThreadMessage }>;
-    if (!page.length) break;
-    for (const r of page) {
-      const m = r.m || ({} as ThreadMessage);
+  {
+    for await (const row of readCorpus()) {
+      for (const m of ((row.payload?.messages ?? []) as ThreadMessage[])) {
       total++;
       const t = await triage({
         from: String(m.from ?? ""), subject: String(m.subject ?? ""),
         body: String(m.body ?? ""), is_from_spartan: m.is_from_spartan,
       });
       if (t.verdict === "skip") tiers.set(t.tier, (tiers.get(t.tier) ?? 0) + 1);
+      }
     }
-    if (page.length < PAGE) break;
   }
   let structural = 0, judgement = 0;
   for (const [tier, n] of tiers) { if (STRUCTURAL.has(tier)) structural += n; else judgement += n; }

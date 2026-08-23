@@ -16,6 +16,7 @@
 //   npx tsx scripts/parser-coverage.ts --show 15    # print contradictions to read by hand
 // ============================================================================
 import { neon } from "@neondatabase/serverless";
+import { readCorpus, corpusByThreadId } from "./_corpus.mjs";
 import { readFileSync } from "node:fs";
 import { normalizeThread } from "../app/lib/engine/normalize";
 import { parseTimes, parseCrew, parseDates, reconcileRequests } from "../app/lib/engine/parseWork";
@@ -37,14 +38,9 @@ async function main() {
     withCrewAndDate: 0, complete: 0, multiCrew: 0,
   };
 
-  const PAGE = 250;
-  for (let offset = 0; ; offset += PAGE) {
-    const rows = (await sql`
-      SELECT thread_id, payload FROM sweep_threads
-      ORDER BY thread_id LIMIT ${PAGE} OFFSET ${offset}`) as { thread_id: string; payload: { messages?: unknown[] } }[];
-    if (!rows.length) break;
-
-    for (const row of rows) {
+  // The corpus is on disk now (scripts/export-sweep-corpus.mjs), in ORDER BY thread_id.
+  {
+    for await (const row of readCorpus()) {
       const msgs = (row.payload?.messages ?? []) as ThreadMessage[];
       if (!msgs.length) continue;
       let latest: ThreadMessage;
@@ -65,23 +61,26 @@ async function main() {
       if (times?.end) cov.withEndTime++;
       if (crews.length && dates.length) cov.withCrewAndDate++;
       if (crews.length === 1 && dates.length === 1 && times?.start && times?.end) cov.complete++;
+      // Progress every 250 threads, as the paged read used to report per page.
+      if (cov.threads % 250 === 0) say(`  … ${cov.threads} threads read`);
     }
-    if (rows.length < PAGE) break;
-    say(`  … ${cov.threads} threads read`);
   }
 
   // ------------------------------------------- 2. against the model's own labels
   // sweep_labels holds what the engine's brain made of these threads. Comparing the
   // parser to it is the only comparison available without paying for a fresh pass.
-  const labelled = (await sql`
-    SELECT l.thread_id, l.blocks, l.crew_peak, l.company_name, l.location_text, t.payload
+  // The label join stays in SQL — sweep_labels and the sweep_threads HEADER columns are
+  // both still in Postgres. Only the message bodies come from disk.
+  const labelRows = (await sql`
+    SELECT l.thread_id, l.blocks, l.crew_peak, l.company_name, l.location_text
     FROM sweep_labels l
     JOIN sweep_threads t ON t.thread_id = l.thread_id
     WHERE l.error IS NULL AND jsonb_array_length(l.blocks) > 0`) as Array<{
       thread_id: string; blocks: Array<{ beginning?: string; end?: string; size?: number }>;
       crew_peak: number | null; company_name: string | null; location_text: string | null;
-      payload: { messages?: unknown[] };
     }>;
+  const corpus = await corpusByThreadId();
+  const labelled = labelRows.map((r) => ({ ...r, payload: corpus.get(r.thread_id)?.payload ?? { messages: [] } }));
 
   // The clean signal, separated from the noise. A contradiction where the model said
   // exactly 18:00 and the text states a different finish is the DEFAULT overriding a

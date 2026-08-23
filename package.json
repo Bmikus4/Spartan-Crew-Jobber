@@ -48,7 +48,15 @@
     "test:tier": "tsx test/tiering.ts",
     "test:replace": "tsx test/replaceOrder.ts",
     "test:balance": "tsx test/keyBalance.ts",
-    "test:triage": "tsx test/triage.ts"
+    "test:triage": "tsx test/triage.ts",
+    "test:messages": "tsx test/threadMessages.ts",
+    "test:opsread": "tsx test/opsScriptsReadMessages.ts",
+    "test:archive": "tsx test/bodyArchive.ts",
+    "archive:bodies": "node scripts/archive-thread-bodies.mjs",
+    "corpus:export": "node scripts/export-sweep-corpus.mjs",
+    "backfill:messages": "node scripts/backfill-thread-messages.mjs",
+    "backfill:envelope": "node scripts/backfill-envelope.mjs",
+    "db:reclaim": "node scripts/db-reclaim.mjs"
   },
   "dependencies": {
     "@neondatabase/serverless": "^0.10.4",
