@@ -10,6 +10,7 @@
 // three separate lookups to notice.
 import { loadEnv, requireEnv } from "./_env.mjs";
 import { neon } from "@neondatabase/serverless";
+import { payloadFor } from "./_thread.mjs";
 
 loadEnv();
 const sql = neon(requireEnv("DATABASE_URL"));
@@ -22,7 +23,7 @@ if (!Number.isInteger(since)) {
 }
 
 const rows = await sql`
-  SELECT id, thread_id, received_at, payload
+  SELECT id, thread_id, received_at, payload, envelope
   FROM inbound_raw WHERE id > ${since} ORDER BY id`;
 
 if (!rows.length) {
@@ -34,7 +35,9 @@ if (!rows.length) {
 console.log(`${rows.length} new inbound row(s) since ${since}\n`);
 
 for (const r of rows) {
-  const p = r.payload || {};
+  // payload is null on rows captured after the restructure; the messages come from
+  // thread_messages and the n8n verdict from the envelope. See scripts/_thread.mjs.
+  const p = (await payloadFor(sql, r.thread_id, r.payload, r.envelope)) || {};
   const n8n = p.n8n || {};
   const msgs = p.messages || [];
   const latest = msgs[msgs.length - 1] || {};

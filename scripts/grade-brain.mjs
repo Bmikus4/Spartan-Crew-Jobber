@@ -13,6 +13,7 @@
 //   node scripts/grade-brain.mjs
 import { loadEnv, requireEnv } from "./_env.mjs";
 import { neon } from "@neondatabase/serverless";
+import { payloadFor } from "./_thread.mjs";
 
 loadEnv();
 const sql = neon(requireEnv("DATABASE_URL"));
@@ -35,7 +36,7 @@ function parseVerdict(v) {
   };
 }
 
-const raw = await sql`SELECT thread_id, payload, received_at FROM inbound_raw ORDER BY id`;
+const raw = await sql`SELECT thread_id, payload, envelope, received_at FROM inbound_raw ORDER BY id`;
 const states = await sql`SELECT thread_id, state FROM conversation_state`;
 const byThread = new Map(states.map((r) => [r.thread_id, r.state]));
 
@@ -46,8 +47,9 @@ for (const r of raw) latest.set(r.thread_id, r);
 const SPARTAN = /@spartancrew\.co\.uk/i;
 const matrix = new Map();
 const rows = [];
+// payload is null after the restructure; payloadFor rebuilds it. See scripts/_thread.mjs.
 for (const [tid, r] of latest) {
-  const p = r.payload || {};
+  const p = (await payloadFor(sql, tid, r.payload, r.envelope)) || {};
   const v = parseVerdict(p?.n8n?.verdict);
   const s = byThread.get(tid);
   const msgs = Array.isArray(p.messages) ? p.messages : [];

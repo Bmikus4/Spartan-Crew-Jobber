@@ -4,11 +4,16 @@
 // N most recent threads. Run: node scripts/survey-inbound.mjs [N]
 import { loadEnv, requireEnv } from "./_env.mjs";
 import { neon } from "@neondatabase/serverless";
+import { payloadFor } from "./_thread.mjs";
 loadEnv();
 const sql = neon(requireEnv("DATABASE_URL"));
 const DEEP = Number(process.argv[2] || 4);
 
-const rows = await sql`SELECT id, thread_id, received_at, payload FROM inbound_raw ORDER BY id ASC`;
+// No `payload` here. Selecting every payload at once returns more than the Neon HTTP
+// driver will carry in one response (64 MB, HTTP 507). The envelope carries everything the
+// shape survey and the tallies need; only the full-text section below wants the mail, and
+// it fetches per thread.
+const rows = await sql`SELECT id, thread_id, received_at, envelope FROM inbound_raw ORDER BY id ASC`;
 console.log(`inbound_raw: ${rows.length} rows`);
 
 const keyCount = new Map();
@@ -20,7 +25,11 @@ const walk = (o, p = "") => {
     if (v && typeof v === "object" && !Array.isArray(v) && path.split(".").length < 3) walk(v, path);
   }
 };
-for (const r of rows) walk(r.payload);
+// Shape reporting is about the WRAPPER n8n sends, not the mail. Walking a reconstructed
+// payload would report thread_messages' own column names as if n8n had sent them, which is
+// the opposite of what this survey is for. Every row carries an envelope — backfill-envelope
+// gave one to the rows captured before the restructure — so both eras report the same shape.
+for (const r of rows) walk(r.envelope ?? {});
 console.log("\n=== payload key shape (count of rows carrying it) ===");
 for (const [k, n] of [...keyCount].sort((a, b) => b[1] - a[1])) console.log(`  ${String(n).padStart(4)}  ${k}`);
 
@@ -43,7 +52,7 @@ const field = (verdict, name) => {
 console.log(`\n=== ${byThread.size} threads ===`);
 for (const [tid, rs] of byThread) {
   const last = rs[rs.length - 1];
-  const n8n = last.payload?.n8n || {};
+  const n8n = last.envelope?.n8n || {};
   const st = state.get(tid) || {};
   console.log(
     `\n${tid}  msgs=${rs.length}  ${new Date(last.received_at).toISOString().slice(0, 16)}` +
@@ -62,13 +71,13 @@ const tally = (label, pairs) => {
   console.log(`\n=== ${label} ===`);
   for (const [k, n] of [...m].sort((a, b) => b[1] - a[1])) console.log(`  ${String(n).padStart(4)}  ${k}`);
 };
-const senders = rows.map((r) => field(r.payload?.n8n?.verdict, "from").toLowerCase() || "(none)");
+const senders = rows.map((r) => field(r.envelope?.n8n?.verdict, "from").toLowerCase() || "(none)");
 tally("messages by sender", senders);
 tally("messages by sender domain", senders.map((s) => s.split("@")[1] || "(none)"));
 tally(
   "messages by n8n verdict",
   rows.map((r) => {
-    const v = r.payload?.n8n?.verdict;
+    const v = r.envelope?.n8n?.verdict;
     const own = field(v, "from").toLowerCase().endsWith("@spartancrew.co.uk");
     return `is_job=${field(v, "is_job") || "?"} ${own ? "(our own outbound)" : "(inbound)"}`;
   }),
@@ -80,7 +89,8 @@ for (const [tid, rs] of [...byThread].slice(-DEEP)) {
   console.log(`\n${"=".repeat(78)}\nTHREAD ${tid}  (${rs.length} inbound rows)`);
   const seen = new Set();
   for (const r of rs) {
-    const p = r.payload || {};
+    // Full text DOES need the mail, so this one rebuilds. See scripts/_thread.mjs.
+    const p = (await payloadFor(sql, r.thread_id, null, r.envelope)) || {};
     const n8n = p.n8n || {};
     const hist = n8n.history_text || p.history_text || [];
     const msgs = p.messages || [];

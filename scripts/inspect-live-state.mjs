@@ -6,15 +6,16 @@
 //   node scripts/inspect-live-state.mjs --payload <inbound_raw id>
 import { loadEnv, requireEnv } from "./_env.mjs";
 import { neon } from "@neondatabase/serverless";
+import { payloadFor } from "./_thread.mjs";
 loadEnv();
 const sql = neon(requireEnv("DATABASE_URL"));
 const argv = process.argv.slice(2);
 const PAYLOAD_ID = argv.indexOf("--payload") !== -1 ? argv[argv.indexOf("--payload") + 1] : null;
 
 if (PAYLOAD_ID) {
-  const [row] = await sql`SELECT id, thread_id, payload FROM inbound_raw WHERE id = ${Number(PAYLOAD_ID)}`;
+  const [row] = await sql`SELECT id, thread_id, payload, envelope FROM inbound_raw WHERE id = ${Number(PAYLOAD_ID)}`;
   if (!row) { console.error("no such inbound_raw id"); process.exit(1); }
-  console.log(JSON.stringify(row.payload, null, 2));
+  console.log(JSON.stringify(await payloadFor(sql, row.thread_id, row.payload, row.envelope), null, 2));
   process.exit(0);
 }
 
@@ -32,8 +33,10 @@ for (const r of await sql`SELECT thread_id, status, needs_human, onsinch_order_i
 }
 
 console.log("\n\n=== inbound_raw: what n8n sent, and what the engine could see ===");
-for (const r of await sql`SELECT id, thread_id, payload, received_at FROM inbound_raw ORDER BY id DESC LIMIT 8`) {
-  const p = r.payload || {};
+// payload is null after the restructure; payloadFor rebuilds it from thread_messages
+// plus the envelope. See scripts/_thread.mjs.
+for (const r of await sql`SELECT id, thread_id, payload, envelope, received_at FROM inbound_raw ORDER BY id DESC LIMIT 8`) {
+  const p = (await payloadFor(sql, r.thread_id, r.payload, r.envelope)) || {};
   const msgs = Array.isArray(p.messages) ? p.messages : [];
   const verdict = p.n8n?.verdict?.content || "";
   const isJob = /is_job:\s*(\w+)/.exec(verdict)?.[1];

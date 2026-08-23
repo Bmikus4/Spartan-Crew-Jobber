@@ -16,6 +16,7 @@
 // ============================================================================
 import { loadEnv, requireEnv } from "./_env.mjs";
 import { neon } from "@neondatabase/serverless";
+import { payloadFor } from "./_thread.mjs";
 import { coerceThread } from "../app/lib/engine/intake";
 import { isMachineMessage, selectLatest } from "../app/lib/engine/normalize";
 import { NeonStateStore } from "../app/lib/stateDb";
@@ -28,10 +29,11 @@ const APPLY = process.argv.includes("--apply");
 
 async function main() {
   const store = new NeonStateStore();
-const raw = await sql`SELECT thread_id, payload FROM inbound_raw ORDER BY id`;
+const raw = await sql`SELECT thread_id, payload, envelope FROM inbound_raw ORDER BY id`;
 const byThread = new Map<string, any[]>();
 for (const r of raw as any[]) {
-  const t = coerceThread(r.payload);
+  // payload is null after the restructure; see scripts/_thread.mjs.
+  const t = coerceThread(await payloadFor(sql, r.thread_id, r.payload, r.envelope));
   if (!t) continue;
   byThread.set(t.thread_id, [...(byThread.get(t.thread_id) ?? []), ...t.messages]);
 }

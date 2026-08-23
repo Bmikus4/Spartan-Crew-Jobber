@@ -18,6 +18,7 @@
 //   npx tsx scripts/preview-reply.ts --any          # include not-a-job threads
 // ============================================================================
 import { neon } from "@neondatabase/serverless";
+import { payloadFor } from "./_thread.mjs";
 import { loadEnv, requireEnv } from "./_env.mjs";
 import { createOpenRouterReasoner } from "../app/lib/engine/reason";
 import { normalizeThread } from "../app/lib/engine/normalize";
@@ -44,14 +45,14 @@ async function main() {
   // Neon's tagged template interpolates VALUES, not SQL, so the filter is two
   // separate queries rather than a fragment spliced into one.
   const rows = ONLY
-    ? await sql`SELECT thread_id, payload, NULL AS classification FROM inbound_raw WHERE thread_id = ${ONLY} ORDER BY received_at DESC LIMIT 1`
+    ? await sql`SELECT thread_id, payload, envelope, NULL AS classification FROM inbound_raw WHERE thread_id = ${ONLY} ORDER BY received_at DESC LIMIT 1`
     : ANY
       ? await sql`
-          SELECT DISTINCT ON (r.thread_id) r.thread_id, r.payload, t.classification
+          SELECT DISTINCT ON (r.thread_id) r.thread_id, r.payload, r.envelope, t.classification
           FROM inbound_raw r JOIN tickets t ON t.thread_id = r.thread_id
           ORDER BY r.thread_id, r.received_at DESC`
       : await sql`
-          SELECT DISTINCT ON (r.thread_id) r.thread_id, r.payload, t.classification
+          SELECT DISTINCT ON (r.thread_id) r.thread_id, r.payload, r.envelope, t.classification
           FROM inbound_raw r JOIN tickets t ON t.thread_id = r.thread_id
           WHERE t.classification IN ('new-job','update')
           ORDER BY r.thread_id, r.received_at DESC`;
@@ -60,7 +61,8 @@ async function main() {
   console.log(`previewing ${pick.length} thread(s). No draft is created and nothing is sent.\n`);
 
   for (const row of pick) {
-    const thread = coerceThread(row.payload);
+    // payload is null after the restructure; see scripts/_thread.mjs.
+    const thread = coerceThread(await payloadFor(sql, row.thread_id as string, row.payload, row.envelope));
     if (!thread) { console.log(`${row.thread_id}: payload did not satisfy the intake contract`); continue; }
     const { latest, history } = normalizeThread(thread);
     const cls = (row.classification as Classification) ?? "new-job";

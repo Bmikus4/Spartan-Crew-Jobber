@@ -39,9 +39,12 @@ function summaryOf(verdict) {
 }
 
 // Latest stored payload per thread carries the most recent verdict.
-const raw = await sql`SELECT thread_id, payload FROM inbound_raw ORDER BY id`;
+// The gate reason lives in n8n's verdict, which is in the envelope on rows captured after
+// the restructure and inside the payload on rows captured before it. Neither needs the
+// message bodies, so this reads no mail at all.
+const raw = await sql`SELECT thread_id, envelope, payload FROM inbound_raw ORDER BY id`;
 const latest = new Map();
-for (const r of raw) latest.set(r.thread_id, r.payload);
+for (const r of raw) latest.set(r.thread_id, r.envelope ?? r.payload);
 
 const blank = await sql`
   SELECT thread_id, classification, status FROM tickets

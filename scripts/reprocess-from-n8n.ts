@@ -166,16 +166,21 @@ function hasSenders(payload: any): boolean {
 async function threadsFromRaw(): Promise<Map<string, any>> {
   const { neon } = await import("@neondatabase/serverless");
   const sql = neon(requireEnv("DATABASE_URL"));
+  const { payloadFor } = await import("./_thread.mjs");
   const rows = (await sql`
-    SELECT thread_id, payload, received_at FROM inbound_raw
+    SELECT thread_id, payload, envelope, received_at FROM inbound_raw
     WHERE thread_id IS NOT NULL
-    ORDER BY received_at ASC`) as Array<{ thread_id: string; payload: any; received_at: string }>;
+    ORDER BY received_at ASC`) as Array<{ thread_id: string; payload: any; envelope: any; received_at: string }>;
 
   // Newest payload wins per thread: it carries the most complete message list.
   const byThread = new Map<string, any>();
   let refused = 0;
   for (const r of rows) {
-    const payload = r.payload?.messages ? r.payload : r.payload?.body ?? r.payload;
+    // Rows captured after the restructure carry no payload; the thread is rebuilt from
+    // thread_messages, where each message is stored once. The rebuilt thread is always the
+    // COMPLETE thread, so the "newest wins" rule below simply keeps agreeing with itself.
+    const stored = await payloadFor(sql, r.thread_id, r.payload, r.envelope);
+    const payload = stored?.messages ? stored : stored?.body ?? stored;
     if (!payload?.messages?.length) continue;
     // The date was a PROXY for this. Payloads written before 2026-08-04 went through
     // the Gmail node's flattened headers and can carry blank senders, and a payload
