@@ -1,0 +1,18 @@
+# What must never be uploaded to a build.
+#
+# The CLI does not apply .gitignore the way the git integration does, so
+# `vercel --prod` was packing data/, which holds a 188 MB corpus of the client's
+# own mail (data/corpus/sweep-threads.jsonl). It failed with "File size limit
+# exceeded (100 MB)" — which is the good outcome; the bad one is the version of
+# that file small enough to succeed, quietly shipping client correspondence into a
+# deployment that does not need it. Nothing here is read at runtime: the engine
+# reads its data from Neon and OnSinch.
+data/
+.tmp-data/
+n8n/backups/
+sim/
+test/
+scripts/
+docs/
+fleet/
+*.log
