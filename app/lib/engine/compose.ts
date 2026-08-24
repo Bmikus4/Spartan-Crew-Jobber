@@ -70,7 +70,8 @@ function siteKey(t: DesiredSlotTeam): string {
 }
 
 /**
- * MINIMUM CALL-OUT and LONG SHIFTS — the two rules docs/ORDER-RULES.md left open.
+ * MINIMUM CALL-OUT and LONG SHIFTS — the two rules the original hand-written spec
+ * left open, and which the corpus rather than the spec settled.
  *
  * Both are answered the same way, and the answer is "the engine books what was
  * asked", because the corpus says so. Over 684 stated blocks in the swept threads:

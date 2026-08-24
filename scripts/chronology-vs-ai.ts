@@ -5,7 +5,7 @@
 // it reads .tmp-data/labelled-corpus.json (npx tsx scripts/pull-labelled-corpus.ts)
 // and calls no model.
 //
-// THE CHRONOLOGY RULE, as docs/ORDER-RULES.md states it: "the oldest message in
+// THE CHRONOLOGY RULE, as the original hand-written spec stated it: "the oldest message in
 // the thread is the creation event; every later message, the current one included,
 // is a modification." As a classifier that is one line — a thread of one message is
 // a new job, a thread of more is an update — so it can be scored directly against
