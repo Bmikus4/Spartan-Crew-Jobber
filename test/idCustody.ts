@@ -12,6 +12,8 @@
 import { readFileSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
+import { buildOrderBody } from "../app/lib/engine/format";
+import type { DesiredOrder } from "../app/lib/engine/types";
 
 let fails = 0;
 const ok = (cond: boolean, label: string, extra = "") => {
@@ -30,6 +32,21 @@ async function main() {
     /last_ordered_team_ids:\s*prior\?\.last_ordered_team_ids/.test(compiler),
     "compile() carries last_ordered_team_ids forward from prior state"
   );
+
+  const shell: DesiredOrder = {
+    name: "X @ Y", company_id: 515, user_id: 1591, request_approval: true,
+    provisional: true, quote: false, pricelist_category_id: 122,
+    job_name: "X @ Y", slot_teams: [],
+  };
+
+  console.log("\nthe blockless order body");
+  const body = buildOrderBody(shell)[0] as any;
+  // OMITTING the key is a 400 ("Please fill the SlotTeam for this Order"); an EMPTY
+  // ARRAY is a 201. The difference is the whole two-phase create, so it is pinned.
+  ok("SlotTeam" in body, "SlotTeam is present as a key");
+  ok(Array.isArray(body.SlotTeam) && body.SlotTeam.length === 0, "and it is an empty array",
+     JSON.stringify(body.SlotTeam));
+  ok(body.Job && body.Job.pricelist_category_id === 122, "the Job and its rate card still ride along");
 }
 
 main().then(() => {
