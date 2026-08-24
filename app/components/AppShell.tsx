@@ -11,6 +11,7 @@ import DashboardScreen from "./DashboardScreen";
 import JobsScreen from "./JobsScreen";
 import SettingsScreen from "./SettingsScreen";
 import LoginScreen from "./LoginScreen";
+import OnboardingFlow from "./onboarding/OnboardingFlow";
 
 type Tool = "dashboard" | "jobs" | "settings";
 
@@ -39,12 +40,23 @@ export default function AppShell() {
     })();
   }, []);
 
+  // ONBOARDING RUNS ONCE PER MOUNT, AND ONLY FOR SOMEBODY SIGNED IN. It is its own
+  // overlay rather than a screen in the shell, because the two gates it carries are
+  // company-level and person-level facts the server owns — see OnboardingFlow.
+  const [onboarded, setOnboarded] = useState(false);
+
   if (auth.loading)
     return <div style={{ height: "100%", display: "grid", placeItems: "center", background: "var(--bg)" }}><span className="crm-shimmer" style={{ color: "var(--text-muted)" }}>Loading…</span></div>;
   if (auth.authRequired && !auth.authenticated) return <LoginScreen />;
+  // Signed in and not yet through the flow: the overlay decides whether anything is
+  // actually outstanding, and lets everybody through when it cannot tell.
+  const gate = auth.authenticated && !onboarded
+    ? <OnboardingFlow onDone={() => setOnboarded(true)} />
+    : null;
 
   return (
     <div style={{ display: "flex", height: "100%", width: "100%", background: "var(--bg)" }}>
+      {gate}
       {/* The rail is flush and unframed; the content window is the only framed thing
           on screen. It used to be a second floating card with its own border, radius
           and inset highlight, competing with the panel that holds the work. */}

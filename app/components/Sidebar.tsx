@@ -21,6 +21,7 @@
 
 import { useEffect, useState } from "react";
 import { BrandMark, BrandWordmark } from "./BrandLogo";
+import RailProfile from "./RailProfile";
 
 interface NavItemConfig {
   id: string;
@@ -219,7 +220,8 @@ export default function Sidebar({ activeTool, onSelectTool, onSettings }: Sideba
       {/* 4px, not 8: the button adds 6 of its own, so the 40px icon box starts at 10
           and ends at 50 in a 60px rail — centred. At 8 it sat 4px right of centre. Any
           change here must move the logo band's left padding by the same amount. */}
-      <div style={{ display: "flex", flexDirection: "column", gap: 2, padding: "0 4px" }}>
+      {/* flex:1 is what pins the profile to the foot of the rail — see RailProfile. */}
+      <div style={{ display: "flex", flexDirection: "column", gap: 2, padding: "0 4px", flex: 1 }}>
         {NAV_ITEMS.map((item) => (
           <div key={item.id} style={{ position: "relative" }}>
             {renderButton(item, {
@@ -229,6 +231,8 @@ export default function Sidebar({ activeTool, onSelectTool, onSettings }: Sideba
           </div>
         ))}
       </div>
+
+      <RailProfile expanded={expanded} />
     </nav>
   );
 }

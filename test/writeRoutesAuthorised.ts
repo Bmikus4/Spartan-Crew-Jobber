@@ -40,8 +40,17 @@ const routes: string[] = [];
 })("app/api");
 
 const WRITES = /export\s+async\s+function\s+(POST|PUT|PATCH|DELETE)\b/;
-/** authorizeAction, or a route that checks a shared secret itself. */
-const AUTHORITY = /authorizeAction|ADMIN_SECRET|WEBHOOK_SECRET|INTERNAL_API_SECRET|safeEqual/;
+/**
+ * authorizeAction, a route that checks a shared secret itself, or a route that DEMANDS A
+ * PERSON — one that opens the session and refuses when there is nobody in it.
+ *
+ * The third kind is stronger than the first here, not weaker, and /api/onboarding has to
+ * be it. authorizeAction accepts the n8n webhook secret and, outside production, a caller
+ * with no credentials at all; either would let something that is not a person record a
+ * terms acceptance, or a profile, IN A NAMED PERSON'S NAME. Every row that route writes is
+ * filed under the caller's own email, so the caller has to be somebody.
+ */
+const AUTHORITY = /authorizeAction|ADMIN_SECRET|WEBHOOK_SECRET|INTERNAL_API_SECRET|safeEqual|getIronSession/;
 
 console.log("\n[1] the sweep found the routes");
 ok(routes.length >= 8, `${routes.length} route files under app/api`, routes.join(" "));
@@ -68,6 +77,19 @@ console.log("\n[3] the settings write in particular");
   // A human on the Settings screen sends a session cookie, not the webhook
   // secret; authorizeAction accepts either, which is why the screen still works.
   ok(/GET/.test(src), "GET is left open — reading settings is not the hole, writing is");
+}
+
+console.log("\n[4] the onboarding write demands a person, not a secret");
+{
+  const src = readFileSync("app/api/onboarding/route.ts", "utf8");
+  ok(/getIronSession/.test(src), "it opens the session");
+  ok(!/authorizeAction/.test(src),
+    "and does NOT use authorizeAction — that also accepts n8n's secret, which must never accept terms on somebody's behalf");
+  const post = src.slice(src.indexOf("export async function POST"));
+  ok(/if \(!email\)/.test(post) && /401/.test(post),
+    "the write refuses when nobody is signed in");
+  ok(post.indexOf("emailFromSession") < post.indexOf("req.json"),
+    "and it establishes WHO is calling before it reads what they asked for");
 }
 
 console.log(fails ? `\n${fails} FAILED\n` : "\nALL PASS\n");

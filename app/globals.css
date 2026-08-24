@@ -241,9 +241,39 @@ input::placeholder, textarea::placeholder { color: var(--text-faint); }
 
 /* Responsive label visibility — a bar that must stay one line on a phone. */
 .only-mobile { display: none; }
+/* ── The sign-in window ──────────────────────────────────────────────────────
+ * THE SIGN-IN CARD IS A WINDOW, not a centred stack of type. It wears the same
+ * 48px header bar every panel in the app has, so the first screen anyone sees is
+ * recognisably the same product as the fifth.
+ *
+ * Padding lives on .login-body, not on the card: with it on the card the header
+ * bar was inset from the border it is supposed to sit against. overflow:hidden is
+ * what keeps the bar's corners inside the card's radius. */
+.login-glass {
+  padding: 0;
+  overflow: hidden;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+}
+.login-header {
+  height: var(--panel-header-height);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 0 var(--panel-pad-x);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.login-body { padding: 40px 56px 44px; }
+
 @media (max-width: 768px) {
   .hide-mobile { display: none; }
   .only-mobile { display: inline; }
+  /* The card's padding is on the body in both layouts; only the amount changes. */
+  .login-body { padding: 30px 28px 34px; }
+  .login-header { padding: 0 18px; }
 }
 
 /* ── A screen loads by drawing itself ────────────────────────────────────────
@@ -251,6 +281,14 @@ input::placeholder, textarea::placeholder { color: var(--text-faint); }
  * MOVES when the data lands. Every screen here used to load as one centred
  * shimmering word, which reflowed the entire layout on arrival — the reading eye
  * has to find its place again every single time. */
+/* The onboarding confirmation tick. Overshoots to 1.15 and settles: a disc that simply
+   appears reads as a page change, not as a save that worked. */
+@keyframes onboardPop {
+  0% { transform: scale(0); }
+  60% { transform: scale(1.15); }
+  100% { transform: scale(1); }
+}
+
 @keyframes skelPulse { 0%, 100% { opacity: 0.45; } 50% { opacity: 0.8; } }
 .skel {
   display: inline-block;
