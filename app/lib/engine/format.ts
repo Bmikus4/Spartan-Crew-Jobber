@@ -146,3 +146,40 @@ export function buildOrderBody(o: DesiredOrder): OnsinchOrderBody[] {
   if (Number.isInteger(o.supervisor_id)) body.Job.supervisor_id = o.supervisor_id;
   return [body];
 }
+
+/** A single slot team, serialised for `POST /slotTeams` on an EXISTING job. */
+export interface OnsinchSlotTeamBody {
+  job_id: number;
+  name: string;
+  profession_id: number;
+  beginning: string;
+  end: string;
+  size: number;
+  place_id: number;
+  description?: string;
+}
+
+/**
+ * Serialise one desired team as a standalone create against an existing job.
+ *
+ * The same field set `buildOrderBody` nests, plus `job_id` — deliberately built from
+ * the same `capSlotTeamName` so a team added by amendment cannot carry a name that
+ * would have been rejected inside a create. The 80-character limit is enforced by
+ * OnSinch on both routes and the failure is a 400 for the whole request.
+ */
+export function buildSlotTeamBody(
+  job_id: number,
+  team: { name: string; profession_id: number; beginning: string; end: string; size: number; place_id: number; description?: string }
+): OnsinchSlotTeamBody {
+  const s = capSlotTeamName(team);
+  return {
+    job_id,
+    name: s.name,
+    profession_id: s.profession_id,
+    beginning: s.beginning,
+    end: s.end,
+    size: s.size,
+    place_id: s.place_id,
+    ...(s.description ? { description: s.description } : {}),
+  };
+}

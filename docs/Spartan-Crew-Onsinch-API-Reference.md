@@ -67,7 +67,8 @@ as `pending_order`, one-click confirm in the dashboard writes it to OnSinch.
 |---|---|---|
 | /orders | GET✓ POST✓ PATCH✓ DELETE✓ | the core resource; DELETE cascades Job+SlotTeams✓ |
 | /jobs | POST, PATCH✓ | no GET — read via `/orders?with=Job`. PATCH: `name, admin_note, supervisor_id, pricelist_category_id`✓ |
-| /slotTeams | POST✓ PATCH✓ | no GET. POST with `job_id` returns the new team id✓ |
+| /slotTeams | POST✓ PATCH✓ | no GET (405 in every spelling✓). POST with `job_id` returns the new team id✓. Ids of NESTED teams are readable from `/timelineAudits`✓ — see §9 |
+| /timelineAudits | GET✓ | the audit log, and the only route to a nested SlotTeam's id. Filter `data[like]=%Order:N%` (`data[cont]` is a 400✓); paths are stored with ESCAPED slashes so a LIKE pattern containing `/` matches nothing✓ |
 | /orders/{id}/attachments, /jobs/{id}/attachments | POST, DELETE | file attach |
 | /orderItems | GET✓ | priced line items + `RateBreakdown` — the rate audit hook (§11) |
 | /companies | GET✓ POST✓ PATCH DELETE | `with=Client`✓ |
@@ -262,10 +263,14 @@ Updates
   → wrong rate card                        → PATCH /jobs [{id, pricelist_category_id}]
   → ADD a crew block                       → POST /slotTeams {job_id,…} (id returned — keep it)
   → CHANGE a block we added via /slotTeams → PATCH /slotTeams [{id,…}]
-  → CHANGE a block created nested in POST /orders (id unknown — API never
-    returns nested team ids and there is no GET /slotTeams):
-      while provisional & unstaffed → DELETE /orders + re-POST (cascade verified, cheap)
-      once staffed                  → needs-human (UI edit; crew signups must survive)
+  → CHANGE a block created nested in POST /orders — THE IDS ARE READABLE, 2026-08-23:
+      GET /timelineAudits?data[like]=%Order:<id>%   -> one row per SlotTeam created,
+      each carrying data.path = "Order:N\/Job:M\/SlotTeam:T". Works for any order, back
+      to 2023, ONLY for orders written by a SERVICE key (creator: null); a person's own
+      API key logs one childless `order_created_via_api` row instead.
+        → PATCH /slotTeams, pairing live[i] to the set last written (amendOrder.ts)
+        → a DROPPED block still needs DELETE /orders + re-POST: a team cannot be removed
+        → shrinking a block with crew signed on: still needs-human, still untested
 ```
 
 **Id custody rule:** the engine must persist every id it learns at write time

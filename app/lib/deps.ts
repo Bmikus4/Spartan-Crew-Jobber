@@ -16,7 +16,8 @@ import { tieredReasoner } from "./engine/tiered";
 import { logKeyBalanceOnce } from "./engine/keyBalance";
 import { buildOrderBody } from "./engine/format";
 import { replaceProvisionalOrder } from "./engine/replaceOrder";
-import type { DesiredOrder } from "./engine/types";
+import { amendOrderInPlace } from "./engine/amendOrder";
+import type { DesiredOrder, DesiredSlotTeam } from "./engine/types";
 import type { Executor, PipelineDeps } from "./engine/pipeline";
 
 /**
@@ -238,6 +239,30 @@ export function executor(client: OnsinchClient): Executor {
       // lambda. Passed rather than imported inside createOrderWithPlace so the write
       // path stays testable with no database.
       return createOrderWithPlace(client, order, recordAlias);
+    },
+    /**
+     * A crew or time change applied to the order that exists, rather than to a
+     * replacement for it. Tried first; see amendOrder.ts.
+     *
+     * DELIBERATELY NOT BEHIND THE KILL SWITCH. `SPARTAN_BLOCK_ORDER_REPLACE=1` exists to
+     * stop this codebase destroying an order, and this path destroys nothing — no
+     * delete, no cascade, the R number unmoved, attachments and ops' hand-typed fields
+     * untouched. Gating it on the same flag would mean that throwing the switch also
+     * stopped every crew change reaching OnSinch, which is the outcome the switch is
+     * there to make safe, not to cause.
+     */
+    async amendOrderInPlace(p: {
+      order_id: number;
+      previous: DesiredSlotTeam[];
+      desired: DesiredOrder;
+      alreadyCreated?: number[];
+      onCreated(team_id: number): Promise<void>;
+    }) {
+      return amendOrderInPlace(
+        client,
+        { order_id: p.order_id, previous: p.previous, desired: p.desired, alreadyCreated: p.alreadyCreated },
+        { onCreated: p.onCreated }
+      );
     },
     /**
      * The crew/time change PATCH cannot carry — the order is deleted and reposted.

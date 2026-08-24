@@ -11,6 +11,7 @@ import type { MetricSink } from "./metrics";
 import type { Actions, ConversationState, DesiredOrder, DesiredSlotTeam, HydratedThread, Settings } from "./types";
 import { findCrossThreadMatches, crossThreadDraft, type ThreadShape, type InternalDraft } from "./crossThread";
 import { assessAmendment } from "./amendment";
+import type { AmendResult } from "./amendOrder";
 
 /**
  * The shape the cross-thread check compares. Built from the state row rather than
@@ -50,8 +51,31 @@ export interface Executor {
    */
   createInternalDraft?(d: InternalDraft): Promise<string | void>;
   /**
+   * Apply a crew or time change to a DRAFT order WITHOUT destroying it: PATCH the crew
+   * blocks that moved, POST the ones that are new (see amendOrder.ts).
+   *
+   * Tried before `replaceOrder` and, unlike it, NOT optional in practice — it destroys
+   * nothing, so it stays available even with the delete kill switch thrown, and a crew
+   * change still reaches OnSinch instead of reaching a note.
+   *
+   * `previous` is the team array last written to the order, in the order it was written.
+   * It is the correspondence for the ids read back from OnSinch and there is no
+   * substitute: nothing in the API returns a live team's size, window or place.
+   *
+   * `onCreated` must have persisted before it returns. `POST /slotTeams` is the one
+   * non-idempotent call on this path.
+   */
+  amendOrderInPlace?(p: {
+    order_id: number;
+    previous: DesiredSlotTeam[];
+    desired: DesiredOrder;
+    alreadyCreated?: number[];
+    onCreated(team_id: number): Promise<void>;
+  }): Promise<AmendResult>;
+  /**
    * Apply a crew or time change to a DRAFT order by deleting it and posting the
-   * corrected one — the only route the API leaves (see replaceOrder.ts).
+   * corrected one — the fallback for the changes PATCH cannot express, chiefly a crew
+   * block that has been dropped (see replaceOrder.ts).
    *
    * Optional so an executor that has no business destroying orders (a test double, a
    * read-only deployment) simply omits it, and the pipeline falls back to patching what
@@ -349,6 +373,154 @@ async function readIdentifiers(
 }
 
 /**
+ * Amend a draft order in place — the first thing tried when a crew or time change needs
+ * to reach OnSinch, and the one that destroys nothing.
+ *
+ * Returns false when it does not apply, and the caller falls through to delete-and-repost
+ * exactly as before. It declines, rather than refuses, whenever the change cannot be
+ * expressed as PATCHes and appends — chiefly a dropped crew block, which OnSinch has no
+ * way to remove — because for those the old path is still the right answer.
+ *
+ * A REFUSAL IS DIFFERENT AND IS FINAL. "The order has been confirmed" and "shrinking a
+ * staffed block may unbook people" are reasons no path may write, so they stop here and
+ * go to a human rather than falling through to a rebuild that would do worse.
+ */
+async function tryAmendInPlace(
+  next: ConversationState,
+  intended: NonNullable<ConversationState["pending_order"]>,
+  deps: PipelineDeps,
+  emit: (type: any, meta?: Record<string, unknown>) => Promise<void>
+): Promise<boolean> {
+  const { executor, store, now, hashOrder } = deps;
+  const order_id = intended.order_id;
+  if (!executor.amendOrderInPlace || !order_id) return false;
+
+  // Resume first: a part-finished amendment outranks any judgement about whether one is
+  // needed, because crew blocks may already have been appended to the order.
+  const resuming = next.order_amend?.order_id === order_id;
+
+  // Otherwise only when the crew or the times actually moved. A follow-up carrying a PO
+  // number must not rewrite the crew blocks of a real order.
+  const teamsHash = hashOrder(intended.desired.slot_teams ?? []);
+  const teamsChanged = !!next.last_ordered_teams_hash && teamsHash !== next.last_ordered_teams_hash;
+  if (!resuming && !teamsChanged) return false;
+
+  /**
+   * The set this engine last wrote, which is what the ids read back from OnSinch
+   * correspond to. Absent on an order the engine did not raise — most often one matched
+   * out of OnSinch history by company and date — and absent is not empty: with nothing
+   * to pair against, the amendment declines and the rebuild path takes it, which is
+   * where an order of unknown provenance belongs.
+   */
+  const previous = next.last_ordered_teams;
+  if (!resuming && !previous?.length) return false;
+
+  try {
+    const res = await executor.amendOrderInPlace({
+      order_id,
+      previous: previous ?? [],
+      desired: intended.desired,
+      alreadyCreated: resuming ? next.order_amend?.created_ids : undefined,
+      async onCreated(team_id) {
+        next.order_amend = {
+          order_id,
+          created_ids: [...(next.order_amend?.created_ids ?? []), team_id],
+          ts: now(),
+        };
+        await store.put(next);
+      },
+    });
+
+    if (res.declined) {
+      // Not our case. Say nothing to anyone and let the rebuild path decide.
+      return false;
+    }
+
+    if (res.refused) {
+      // Final. Nothing was written that matters, and no other path may try.
+      next.status = "needs-info";
+      next.notes = [...next.notes, `crew/time change NOT applied — ${res.refused}`];
+      next.order_action_log = [...next.order_action_log, { ts: now(), kind: "amend-refused", order_id, ok: false, error: res.refused }];
+      next.order_amend = undefined;
+      await emit("order_updated", { order_id, applied: 0, refused: res.refused });
+      return true;
+    }
+
+    if (res.amended) {
+      /**
+       * The order-level fields go through the SAME branch, so one email produces one
+       * complete update. Before this existed a crew change and a PO number in the same
+       * message reached OnSinch as a team rewrite plus a note asking a human to type the
+       * PO in. A failure here is not a failure of the amendment — the crew blocks are
+       * already correct — so it is recorded and not thrown.
+       */
+      let applied: string[] = [];
+      try {
+        applied = (await executor.patchOrder({ order_id, desired: intended.desired })) || [];
+      } catch (err: any) {
+        next.notes = [...next.notes, `order fields not updated on #${order_id} (${String(err?.message ?? err)})`];
+      }
+
+      const crew = (intended.desired.slot_teams ?? []).reduce((n, t) => n + (t.size || 0), 0);
+      next.last_ordered_hash = hashOrder(intended.desired);
+      next.last_ordered_teams_hash = teamsHash;
+      next.last_ordered_teams = intended.desired.slot_teams ?? [];
+      next.onsinch_job_id = res.amended.job_id ?? next.onsinch_job_id;
+      next.status = "ordered";
+      next.pending_order = undefined;
+      next.order_amend = undefined;
+      next.notes = [
+        ...next.notes,
+        `crew/time change applied to order #${order_id} in place — ` +
+          `${res.amended.patched} block(s) corrected` +
+          (res.amended.added.length ? `, ${res.amended.added.length} added` : "") +
+          (applied.length ? `, ${applied.join(", ")} updated` : "") +
+          `; ${crew} crew across ${(intended.desired.slot_teams ?? []).length} block(s)`,
+      ];
+      next.order_action_log = [...next.order_action_log, { ts: now(), kind: "amend", order_id, ok: true }];
+      await emit("order_updated", {
+        order_id,
+        applied: res.amended.patched + res.amended.added.length,
+        in_place: true,
+      });
+      return true;
+    }
+
+    /**
+     * Neither amended, declined nor refused. amendOrderInPlace always sets one, so this
+     * is unreachable — but falling through to the rebuild after an unknown answer would
+     * delete an order that may already have been corrected. An answer this path does not
+     * understand is a failure, and it stops here.
+     */
+    next.status = "error";
+    next.needs_human = true;
+    next.notes = [...next.notes, `in-place amendment of order #${order_id} returned no result — nothing is known to have been applied`];
+    next.order_action_log = [...next.order_action_log, { ts: now(), kind: "amend", order_id, ok: false, error: "no result" }];
+    await store.put(next);
+    await emit("order_error", { error: "amend returned no result", order_id });
+    return true;
+  } catch (err: any) {
+    /**
+     * A throw can leave the order half-corrected: the PATCHes are sent before the
+     * appends, so some blocks may be right and a new one missing. Nothing is lost and
+     * nothing is duplicated — order_amend holds every id already appended, so a retry
+     * finishes the job — but it is not a completed update and is never recorded as one.
+     */
+    next.status = "error";
+    next.needs_human = true;
+    next.notes = [
+      ...next.notes,
+      `in-place amendment of order #${order_id} failed (${String(err?.message ?? err)}). Nothing was deleted; ` +
+        `the order may hold some corrected blocks and be missing a new one. A retry completes it.`,
+    ];
+    next.order_action_log = [...next.order_action_log, { ts: now(), kind: "amend", order_id, ok: false, error: String(err?.message ?? err) }];
+    await store.put(next);
+    await emit("order_error", { error: String(err?.message ?? err), order_id });
+    return true;
+  }
+}
+
+/**
  * Delete-and-repost, when a crew or time change needs to reach a draft order.
  *
  * Returns false when it does not apply, and the caller then patches as before. That
@@ -456,6 +628,7 @@ async function tryReplace(
       next.onsinch_job_id = ids.job_id;
       next.last_ordered_hash = hashOrder(intended.desired);
       next.last_ordered_teams_hash = teamsHash;
+      next.last_ordered_teams = intended.desired.slot_teams ?? [];
       next.status = "ordered";
       next.pending_order = undefined;
       next.order_replace = undefined;
@@ -535,14 +708,22 @@ async function executeOrder(
       next.onsinch_job_id = ids.job_id;
       next.last_ordered_hash = hashOrder(intended.desired);
       next.last_ordered_teams_hash = hashOrder(intended.desired.slot_teams);
+      // The array, not just its fingerprint: an in-place amendment on the NEXT email
+      // pairs the ids OnSinch reads back against exactly this, position by position.
+      next.last_ordered_teams = intended.desired.slot_teams ?? [];
       next.status = "ordered";
       next.pending_order = undefined;
       next.order_action_log = [...next.order_action_log, { ts: now(), kind: "create", order_id: created.id, ok: true }];
       await emit("order_created", { order_id: created.id, size: intended.desired.slot_teams.reduce((n, s) => n + s.size, 0) });
+    } else if (await tryAmendInPlace(next, intended, deps, emit)) {
+      // Handled in place: the crew blocks that moved were PATCHed and the new ones
+      // appended, and the order — its R number, its attachments, anyone signed on to it
+      // — was never destroyed. Returns false when the change cannot be expressed that
+      // way, chiefly a dropped block, and the rebuild below then runs as before.
     } else if (await tryReplace(next, intended, deps, emit)) {
-      // Handled by delete-and-repost: the crew or the times moved, which PATCH cannot
-      // carry. tryReplace returns false when it does not apply, and the patch path below
-      // then runs exactly as it did before.
+      // Handled by delete-and-repost: the fallback for what PATCH cannot carry.
+      // tryReplace returns false when it does not apply, and the patch path below then
+      // runs exactly as it did before.
     } else {
       // An update to an EXISTING order is never fully applied by the API alone:
       // PATCH /orders takes top-level fields only, slot teams created nested in

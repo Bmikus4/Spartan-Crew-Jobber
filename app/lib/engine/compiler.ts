@@ -971,12 +971,20 @@ export async function compile(
      * the replace path was built to end. Every test covering it builds the state by
      * hand and calls the pipeline directly, so all of them passed.
      *
-     * order_replace is the crash-safety marker for a part-finished replace. Dropped, a
-     * resumed run cannot see that the old order is already deleted, and the recovery
-     * that re-posts from the snapshot never happens.
+     * last_ordered_teams is the same fact unhashed — the array the ids read back from
+     * OnSinch correspond to, position by position. Dropped, an in-place amendment has
+     * nothing to pair the live blocks against, declines every time, and every crew
+     * change falls back to deleting the order.
+     *
+     * order_replace and order_amend are the crash-safety markers for a part-finished
+     * replace and a part-finished amendment. Dropped, a resumed run cannot see that the
+     * old order is already deleted, or which crew blocks it has already appended, and it
+     * either never recovers or appends them twice.
      */
     last_ordered_teams_hash: prior?.last_ordered_teams_hash,
+    last_ordered_teams: prior?.last_ordered_teams,
     order_replace: prior?.order_replace,
+    order_amend: prior?.order_amend,
     priority: cls.priority,
     reply_body_html: reply?.html ?? prior?.reply_body_html,
     reply_subject: reply?.subject ?? prior?.reply_subject,

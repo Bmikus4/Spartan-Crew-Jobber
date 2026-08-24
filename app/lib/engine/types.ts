@@ -241,12 +241,44 @@ export interface ConversationState {
     ts: number;
   };
   /**
+   * Progress record for an amendment applied IN PLACE (amendOrder.ts).
+   *
+   * `PATCH /slotTeams` is idempotent, so a crash mid-patch costs nothing and a retry
+   * simply re-sends it. `POST /slotTeams` is not: a retry that re-posts an appended crew
+   * block leaves the order carrying two of it, which is a double booking nothing in the
+   * response would report.
+   *
+   * So every appended team's id is written here BEFORE the next one is sent, and a
+   * resumed run appends only what is missing. Cleared on success.
+   */
+  order_amend?: {
+    order_id: number;
+    /** Slot team ids this engine has appended to the order so far, in order. */
+    created_ids: number[];
+    ts: number;
+  };
+  /**
    * Fingerprint of the slot teams last actually written to OnSinch. This is what
    * distinguishes "the client changed the crew" (needs a replace) from "the client
    * sent a PO number" (a patch will do), so a harmless follow-up never triggers a
    * delete-and-repost of a real order.
    */
   last_ordered_teams_hash?: string;
+  /**
+   * The slot teams themselves, exactly as last written to OnSinch and in the order they
+   * were written.
+   *
+   * The hash above answers "did the crew change"; it cannot answer "which live block is
+   * this one". Amending an order in place needs the second question answered, because
+   * nothing in the OnSinch API returns a live team's size, window or place — the ids come
+   * back in creation order and this array is what they correspond to. See amendOrder.ts.
+   *
+   * Written wherever the hash is written, and CARRIED FORWARD through compile() with it.
+   * A field the pipeline writes after compile() has returned is dropped on the next
+   * email unless compile carries it, which is how the replace path came to be correct
+   * and unreachable for weeks (handoff finding 1).
+   */
+  last_ordered_teams?: DesiredSlotTeam[];
   /**
    * needs-info = the engine did its job but cannot proceed without a human
    *              (no company name in the email, unknown sender, new venue).
@@ -261,7 +293,7 @@ export interface ConversationState {
   notes: string[];
   order_action_log: Array<{
     ts: number;
-    kind: "create" | "patch" | "replace" | "replace-refused";
+    kind: "create" | "patch" | "replace" | "replace-refused" | "amend" | "amend-refused";
     order_id?: number;
     ok: boolean;
     error?: string;

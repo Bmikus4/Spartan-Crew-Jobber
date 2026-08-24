@@ -48,6 +48,7 @@
 import type { OnsinchClient } from "./onsinch";
 import type { DesiredOrder } from "./types";
 import { buildOrderBody } from "./format";
+import { preflightOrder } from "./orderPreflight";
 
 export interface ReplaceResult {
   /** Set when the replacement was created. */
@@ -100,35 +101,18 @@ export async function replaceProvisionalOrder(
     return { deleted: false, created };
   }
 
-  const live = await client.orderById(order_id);
-  if (!live) {
-    // Someone deleted it, or our stored id is stale. Either way there is nothing to
-    // replace, and creating silently could duplicate a job booked elsewhere.
-    return { deleted: false, refused: `order #${order_id} no longer exists in OnSinch — not recreating it blindly` };
-  }
   /**
-   * Still a draft? `provisional` is the flag a human clears when they take the order
-   * on, so losing it means the booking has been confirmed.
+   * Does the order exist, is it still a draft, and is it this client's?
    *
-   * Since custody was dropped (Ben, 2026-08-18 — an amendment rebuilds an ops-raised
-   * draft too), this is the ONLY thing standing between an amendment and a live
-   * booking. It carries the whole guarantee now: a confirmed order is never deleted,
-   * whoever raised it, and the change goes to a human instead.
+   * Shared with the in-place amendment path (orderPreflight.ts). `provisional` is the
+   * flag a human clears when they take the order on, and since custody was dropped as a
+   * gate (Ben, 2026-08-18 — an amendment rebuilds an ops-raised draft too) it is the
+   * ONLY thing standing between an amendment and a live booking. One implementation, so
+   * the two paths cannot drift on the rule that protects a confirmed order.
    */
-  if (live.provisional !== true) {
-    return {
-      deleted: false,
-      refused:
-        `order #${order_id} is no longer provisional (provisional=${String(live.provisional)}, quote=${String(live.quote)}) — ` +
-        `it has been confirmed; crew and times must be changed by hand`,
-    };
-  }
-  if (desired.company_id && live.company_id && Number(live.company_id) !== Number(desired.company_id)) {
-    return {
-      deleted: false,
-      refused: `order #${order_id} belongs to company ${live.company_id}, not ${desired.company_id} — refusing to delete another client's order`,
-    };
-  }
+  const pre = await preflightOrder(client, { order_id, company_id: desired.company_id });
+  if (!pre.live) return { deleted: false, refused: pre.refused };
+  const live = pre.live;
 
   /**
    * IS ANYBODY BOOKED ON IT? This is the gate `provisional` was wrongly carrying.

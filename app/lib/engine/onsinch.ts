@@ -9,7 +9,7 @@
 // The transport is injectable so the compiler can be tested offline.
 // ============================================================================
 import type { PlaceCandidate } from "./types";
-import type { OnsinchOrderBody } from "./format";
+import type { OnsinchOrderBody, OnsinchSlotTeamBody } from "./format";
 
 export type Transport = (
   method: string,
@@ -192,6 +192,164 @@ export class OnsinchClient {
     const r = await this.t("GET", "/attendance" + qs({ limit: 1, with: "Order", Order__id: order_id }));
     const n = r.data?.pagination?.count;
     return Number.isFinite(Number(n)) ? Number(n) : 0;
+  }
+
+  /**
+   * How many crew are signed on to EACH slot team, not just the order.
+   *
+   * The order-level count is enough to refuse a rebuild; it is not enough to amend one.
+   * The one write in this API nobody has tested is shrinking a team that already has
+   * crew on it, and a per-order count cannot tell a shrink of the empty block from a
+   * shrink of the staffed one. `?with=SlotTeam` puts the team on every attendance row,
+   * so the same read that gates the rebuild also says which team each person is on.
+   *
+   * Pages, because an order with 94 people on it exists and page 1 would have quietly
+   * reported the first 100 of them as the whole truth.
+   */
+  async attendanceByTeam(order_id: number): Promise<Map<number, number>> {
+    const rows = await this.listAll("/attendance", { with: "SlotTeam,Order", Order__id: order_id });
+    const out = new Map<number, number>();
+    for (const r of rows) {
+      const st = Array.isArray(r?.SlotTeam) ? r.SlotTeam[0] : r?.SlotTeam;
+      const id = Number(st?.id);
+      if (!Number.isInteger(id)) continue;
+      out.set(id, (out.get(id) ?? 0) + 1);
+    }
+    return out;
+  }
+
+  /**
+   * EVERY SLOT TEAM ID ON AN ORDER, READ BACK. This one call is what makes amending an
+   * order possible at all, and it took until 2026-08-23 to find.
+   *
+   * `POST /orders` returns the order id and nothing else — not the nested job's id, not
+   * its slot teams' — and there is no `GET /slotTeams`. So a team created inside a create
+   * could never be addressed again, and `PATCH /slotTeams`, which works and accepts every
+   * field the engine sets, had nothing to aim at. That is the whole reason a crew change
+   * had to delete the order and post it again.
+   *
+   * The audit log has it. Every create writes rows carrying the full ancestry path:
+   *
+   *   common_create | SlotTeam  {"id":"35499","name":"General",
+   *                              "data":{"path":"Order:13784\/Job:14064\/SlotTeam:35499"}}
+   *
+   * Verified live against orders from three different months, raised both by this engine
+   * (`creator: null`) and by hand in the UI (`creator: <user id>`), back to the tenant's
+   * first order in 2023.
+   *
+   * THREE PROPERTIES OF THE QUERY, each of which cost a probe:
+   *
+   *  - `data[cont]` is a 400. `data[like]` with `%…%` is the operator that works.
+   *  - The path is stored with ESCAPED slashes (`Order:13784\/Job:…`), so a LIKE pattern
+   *    containing `/` matches nothing at all — and answers 200 with an empty list, which
+   *    reads exactly like "this order has no teams". Filter on the order id alone and
+   *    parse the path here.
+   *  - `%Order:138%` also matches orders 1380 and 13800, so every row is re-checked
+   *    against the order id after it comes back. The filter narrows; it does not decide.
+   *
+   * Returns creation order — the order the teams were nested in the create — because that
+   * is the correspondence the amendment relies on. See amendOrder.ts.
+   */
+  async slotTeamsForOrder(order_id: number): Promise<{
+    job_id?: number;
+    order_number?: string;
+    teams: Array<{ id: number; name: string }>;
+    /** What `order_create` said it made. Absent on an order raised in the UI. */
+    created_count?: number;
+  }> {
+    const id = Number(order_id);
+    if (!Number.isInteger(id) || id <= 0)
+      throw new Error(`slotTeamsForOrder: ${order_id} is not an order id`);
+    const rows = await this.listAll("/timelineAudits", { "data[like]": `%Order:${id}%` });
+    const teams: Array<{ id: number; name: string }> = [];
+    const seen = new Set<number>();
+    let job_id: number | undefined;
+    let order_number: string | undefined;
+    let created_count: number | undefined;
+    // Audit ids ascend with time, so creation order is id order. Sorted explicitly: the
+    // pages come back concurrently, and the whole value of this read is the ORDER.
+    for (const row of [...rows].sort((a, b) => Number(a?.id) - Number(b?.id))) {
+      let payload: any;
+      try {
+        payload = typeof row?.data === "string" ? JSON.parse(row.data) : row?.data;
+      } catch {
+        continue; // one unreadable audit row is not a reason to report no teams
+      }
+      const path = String(payload?.data?.path ?? "").replace(/\\\//g, "/");
+      const owner = /^Order:(\d+)(?:\/|$)/.exec(path);
+      if (!owner || Number(owner[1]) !== id) continue; // the LIKE filter's false matches
+      const job = /\/Job:(\d+)/.exec(path);
+      if (job) job_id = Number(job[1]);
+      if (row.action === "order_create") {
+        // The R number is inside `data`, alongside the path — NOT at the top of the
+        // payload, where `id` and `name` are. Read from the wrong level it is silently
+        // undefined, which reads as "this order has no R number".
+        if (payload?.data?.number != null) order_number = String(payload.data.number);
+        if (Number.isInteger(payload?.created?.SlotTeam)) created_count = Number(payload.created.SlotTeam);
+      }
+      /**
+       * Only a SlotTeam's OWN create row counts. A Slot's path also names its team
+       * (`…/SlotTeam:35499/Slot:51890`), so matching on the path alone reports a team
+       * once per person it holds — and the count is what the amendment checks its
+       * correspondence against.
+       */
+      if (row.action !== "common_create" || payload?.model !== "SlotTeam") continue;
+      const own = /\/SlotTeam:(\d+)$/.exec(path);
+      if (!own) continue;
+      const teamId = Number(payload.id ?? own[1]);
+      if (!Number.isInteger(teamId) || seen.has(teamId)) continue;
+      seen.add(teamId);
+      teams.push({ id: teamId, name: String(payload.name ?? "") });
+    }
+    return { job_id, order_number, teams, created_count };
+  }
+
+  /**
+   * POST /slotTeams — add a team to an existing job. Returns the id, which is the only
+   * route by which a team's id is known at the moment it is created.
+   *
+   * Sent ONE AT A TIME on purpose. The array form is accepted, but a create that 400s on
+   * the third team says nothing about the first two, and this runs against an order that
+   * already exists: a partial add has to be knowable rather than inferred, because the
+   * caller has to persist each id before sending the next. See amendOrder.ts.
+   */
+  async createSlotTeam(body: OnsinchSlotTeamBody): Promise<{ id: number }> {
+    const r = await this.t("POST", "/slotTeams", [body]);
+    if (r.status !== 201)
+      throw new Error(
+        `createSlotTeam ${r.status}: ${JSON.stringify(r.data?.validationErrors ?? r.data)}`
+      );
+    const id = Number(r.data?.data?.[0]?.id);
+    if (!Number.isInteger(id))
+      throw new Error(`createSlotTeam: OnSinch returned no id for "${body.name}" — ${JSON.stringify(r.data)}`);
+    return { id };
+  }
+
+  /**
+   * PATCH /slotTeams — 204, no body. Editable: size, beginning, end, profession_id,
+   * place_id, name, description, admin_note, client_note, crewboss_description, hidden,
+   * applicant_size, featured, request_approval.
+   *
+   * `size: 0` is refused (`400 "At least one staff member for the shift is needed"`) and
+   * there is no delete, so a team's floor is 1 and dropping a block cannot be expressed
+   * here at all. Refused before sending rather than after: the 400 arrives once the
+   * earlier patches in the same array have already landed, which is a half-applied
+   * amendment nobody asked for.
+   */
+  async patchSlotTeams(patches: Array<{ id: number } & Record<string, unknown>>) {
+    if (!patches.length) return true;
+    for (const p of patches) {
+      if (!Number.isInteger(Number(p.id)) || Number(p.id) <= 0)
+        throw new Error(`patchSlotTeams: ${JSON.stringify(p)} carries no slot team id`);
+      if (p.size !== undefined && (!Number.isInteger(Number(p.size)) || Number(p.size) < 1))
+        throw new Error(
+          `patchSlotTeams: size ${String(p.size)} on team ${p.id} — OnSinch's floor is 1 and there is no delete`
+        );
+    }
+    const r = await this.t("PATCH", "/slotTeams", patches);
+    if (r.status !== 204 && r.status !== 200)
+      throw new Error(`patchSlotTeams ${r.status}: ${JSON.stringify(r.data?.validationErrors ?? r.data)}`);
+    return true;
   }
 
   /**
