@@ -156,7 +156,6 @@ export default function OnboardingFlow({ onDone }: { onDone: () => void }) {
       {step === "terms" && (
         <Step key="terms">
           <OnboardingCard
-            organisation={org || "Your organisation"}
             title="Welcome to the booking engine"
             description={`Before ${org || "your organisation"} begins, please read how we handle your data. You are accepting this on behalf of your organisation — your colleagues will not be asked again.`}
             buttonText={readTerms ? "Accept and continue" : "Scroll to read"}
@@ -194,7 +193,6 @@ export default function OnboardingFlow({ onDone }: { onDone: () => void }) {
       {step === "profile" && (
         <Step key="profile">
           <OnboardingCard
-            organisation={org || "Your organisation"}
             title="Set up your account"
             description="This is how you will appear to your colleagues on the board."
             buttonText="Finish setup"

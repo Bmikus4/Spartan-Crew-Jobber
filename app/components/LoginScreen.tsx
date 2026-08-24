@@ -81,7 +81,7 @@ export default function LoginScreen() {
             .login-body so this strip can run to the card's edges; a header bar inset by
             56px is a label, not chrome. */}
         <div className="login-header">
-          <SamuraiMark height={24} />
+          <SamuraiMark height={30} />
           {/* The client, not the product. Hidden on a phone, where 320px of card cannot
               hold both. */}
           <span className="eyebrow hide-mobile" style={{ whiteSpace: "nowrap" }}>

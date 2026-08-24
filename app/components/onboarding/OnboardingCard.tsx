@@ -9,10 +9,10 @@ import SamuraiMark from "../SamuraiMark";
 //  - THE HERO IS THE MARK, not a stock banner. A photograph at the top of a first-run
 //    screen is decoration; the mark is the one thing a new person needs to associate with
 //    the tool they are about to be inside.
-//  - THERE IS NO AVATAR UPLOADER. It is replaced by a read-only organisation card: there
-//    is no avatar store and no upload endpoint here, and a button that opens a file picker
-//    leading nowhere is worse than not having it. The organisation is a FACT on this card,
-//    not a field — it comes from the signed-in domain, so the card states it.
+//  - THERE IS NO AVATAR UPLOADER AND NO ORGANISATION CARD. The upload button would open a
+//    file picker leading nowhere; the organisation card said "Your organisation — Spartan
+//    Crew" one line under a heading that had just said the same thing (Ben, 2026-08-24).
+//    A card restating the sentence above it is furniture.
 //  - THE FORM IS OPTIONAL. The same card carries the terms step, which has no input at
 //    all, so children are composed in rather than assumed.
 //
@@ -24,18 +24,12 @@ import SamuraiMark from "../SamuraiMark";
 export interface OnboardingCardProps {
   title: string;
   description: string;
-  /** Shown on the organisation card. */
-  organisation: string;
   buttonText: string;
   onSubmit: () => void;
   isSubmitting?: boolean;
   /** Disables the action — the terms step uses it until the text is read. */
   disabled?: boolean;
   children?: React.ReactNode;
-}
-
-export function initialsOf(name: string): string {
-  return name.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]?.toUpperCase() ?? "").join("");
 }
 
 /** One element of the staggered entrance. `i` is its place in the queue. */
@@ -54,7 +48,7 @@ function Rise({ i, shown, children }: { i: number; shown: boolean; children: Rea
 }
 
 export default function OnboardingCard({
-  title, description, organisation, buttonText, onSubmit,
+  title, description, buttonText, onSubmit,
   isSubmitting = false, disabled = false, children,
 }: OnboardingCardProps) {
   const [shown, setShown] = React.useState(false);
@@ -73,7 +67,7 @@ export default function OnboardingCard({
           display: "flex", alignItems: "center", justifyContent: "center",
           padding: "28px 0", borderBottom: "1px solid var(--border-subtle)",
         }}>
-          <SamuraiMark height={44} />
+          <SamuraiMark height={64} />
         </div>
       </Rise>
 
@@ -86,27 +80,6 @@ export default function OnboardingCard({
             <p style={{ color: "var(--text-muted)", fontSize: 13.5, lineHeight: 1.55, margin: 0 }}>
               {description}
             </p>
-          </div>
-        </Rise>
-
-        <Rise i={2} shown={shown}>
-          <div style={{
-            display: "flex", alignItems: "center", gap: 12, padding: 12,
-            border: "1px solid var(--border)", borderRadius: "var(--radius)",
-            background: "var(--surface-2)",
-          }}>
-            <span style={{
-              width: 40, height: 40, flexShrink: 0, borderRadius: "50%",
-              background: "var(--surface-hover)",
-              display: "inline-flex", alignItems: "center", justifyContent: "center",
-              fontSize: 12, fontWeight: 600, color: "var(--text-muted)",
-            }}>
-              {initialsOf(organisation)}
-            </span>
-            <span style={{ display: "flex", flexDirection: "column", gap: 2, minWidth: 0 }}>
-              <span style={{ fontSize: 13.5, fontWeight: 600, color: "var(--text-primary)" }}>Your organisation</span>
-              <span style={{ fontSize: 12, color: "var(--text-muted)" }}>{organisation}</span>
-            </span>
           </div>
         </Rise>
 
