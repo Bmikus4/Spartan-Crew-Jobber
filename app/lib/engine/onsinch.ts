@@ -353,6 +353,31 @@ export class OnsinchClient {
   }
 
   /**
+   * PATCH /jobs — 204, no body. `pricelist_category_id` is the only rate handle the
+   * API exposes, so this is the sole route by which a wrong rate card on an existing
+   * order can be corrected at all. Verified live: 197 -> 311, read back.
+   *
+   * DELIBERATELY UNCALLED. On an order that already exists the rate card in OnSinch is
+   * the one being invoiced against and ours is inferred from the enquiry text, so the
+   * engine writing it would replace a fact with a guess — silently, since a 204 says
+   * nothing about what the field held before. It exists so a human correcting a known
+   * mistake has a route; giving the pipeline that route is a separate decision.
+   */
+  async patchJob(patches: Array<{ id: number } & Record<string, unknown>>) {
+    if (!patches.length) return true;
+    for (const p of patches) {
+      if (!Number.isInteger(Number(p.id)) || Number(p.id) <= 0)
+        throw new Error(`patchJob: ${JSON.stringify(p)} carries no job id`);
+      if (Object.keys(p).length < 2)
+        throw new Error(`patchJob: job ${p.id} carries no fields to change`);
+    }
+    const r = await this.t("PATCH", "/jobs", patches);
+    if (r.status !== 204 && r.status !== 200)
+      throw new Error(`patchJob ${r.status}: ${JSON.stringify(r.data?.validationErrors ?? r.data)}`);
+    return true;
+  }
+
+  /**
    * DELETE /orders — array of ids at the tag root. Deleting an order cascades to its
    * job and slot teams, which is what makes replace-by-recreate viable at all.
    *

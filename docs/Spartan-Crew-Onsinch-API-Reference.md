@@ -287,16 +287,21 @@ Two viable draft postures — Settings toggle:
 
 ## 10. Gaps this analysis found in the current engine code
 
-- `format.ts`/`types.ts` don't carry `Job.pricelist_category_id`, `quote`,
-  `provisional`, `intern_name`, `specification`, `order_manager_id`, or the
-  extra SlotTeam fields — add.
-- No rate-resolution module — new `rates.ts`: company_id →
-  pricelist_category_id (history majority + seeded lookup + needs-human gate).
-- `onsinch.ts` lacks `/slotTeams` + `/jobs` clients and DELETE /orders; its
-  `patchOrder` alone cannot express slot changes.
-- `user_id` resolution should use `companies?with=Client`, not a global
-  `/users` search.
-- State row should store `job_id` and owned slot-team ids (id custody, §9).
+**All of the gaps listed here as of 2026-07-20 are now closed** — `rates.ts`
+exists, `format.ts`/`types.ts` carry the Job and SlotTeam fields,
+`companies?with=Client` is how `user_id` resolves, `onsinch_job_id` is stored,
+and `onsinch.ts` has the `/slotTeams`, `/jobs` and `DELETE /orders` clients.
+The list is kept only for the one item that was answered by NOT doing it:
+
+- **"State row should store owned slot-team ids (id custody)" was rejected.**
+  It cannot be made to work: OnSinch exposes a slot team's ids only through the
+  audit trail, and only when the create was made with a service key or in the
+  UI — `GET /slotTeams` is 405 and a standalone `POST /slotTeams` logs nothing.
+  So custody of ids is not available to hold. `amendOrder.ts` decides which
+  live block a desired block overwrites **by position** against
+  `last_ordered_teams` instead, and declines when the live count disagrees with
+  it. Anyone re-adding id custody will find it silently empty on every order
+  created with a personal key, which is 4,119 of them.
 
 ## 11. Rate audit hook (read-only, post-hoc)
 
