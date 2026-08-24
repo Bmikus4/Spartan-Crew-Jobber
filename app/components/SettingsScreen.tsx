@@ -224,16 +224,33 @@ export default function SettingsScreen({ signedInAs }: { signedInAs?: string }) 
           blurb={<>The mailbox trigger lives in n8n. It POSTs each hydrated thread to <span className="mono" style={{ color: SUB }}>/api/n8n-inbound</span>; the engine runs here on Vercel. <span className="mono" style={{ color: SUB }}>N8N_WEBHOOK_SECRET</span> locks the endpoint.</>}
         />
 
-        {signedInAs && (
-          <Panel title="Account" blurb={<>Signed in as <b style={{ color: SUB }}>{signedInAs}</b>.</>}>
+        {/* THE ACCOUNT PANEL IS ALWAYS HERE. It used to render only when a session
+            existed, so with AUTH_REQUIRED off — which is how the board runs today —
+            there was no sign-out control anywhere in the app, and looking for one told
+            you the app did not have one. Whether you are signed in is a fact this panel
+            STATES; it is not a reason to hide the panel. */}
+        <Panel
+          title="Account"
+          blurb={signedInAs
+            ? <>Signed in as <b style={{ color: SUB }}>{signedInAs}</b>.</>
+            : <>Not signed in. The board is readable without an account until sign-in is enforced, so signing in is how you get your name on what you approve.</>}
+        >
+          {signedInAs ? (
             <button
               onClick={async () => { try { await fetch("/api/auth", { method: "DELETE" }); } catch {} window.location.href = "/"; }}
               style={{ alignSelf: "flex-start", padding: "11px 22px", borderRadius: "var(--radius)", border: "1px solid var(--danger-border)", background: "var(--danger-subtle)", color: "var(--danger)", fontSize: 14, fontWeight: 600, fontFamily: "inherit", cursor: "pointer" }}
             >
               Sign out
             </button>
-          </Panel>
-        )}
+          ) : (
+            <a
+              href="/api/auth/google"
+              style={{ alignSelf: "flex-start", padding: "11px 22px", borderRadius: "var(--radius)", border: "1px solid var(--accent-border)", background: "var(--accent-subtle)", color: "var(--text-primary)", fontSize: 14, fontWeight: 600, textDecoration: "none" }}
+            >
+              Sign in with Google
+            </a>
+          )}
+        </Panel>
       </div>
     </div>
   );

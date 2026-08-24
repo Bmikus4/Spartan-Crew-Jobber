@@ -11,6 +11,7 @@
 // enquiries that are merely missing a company name.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { noteWords, gateWords, classificationWords, priorityWords } from "../lib/decisionWords";
 
 interface Props { isActive: boolean }
 
@@ -377,16 +378,28 @@ function Detail({ threadId, onBack, onChanged }: { threadId: string; onBack: () 
           )}
         </header>
 
-        <Panel title="AI decision">
-          <Row k="Classification" v={d.classification} />
-          <Row k="Priority" v={d.priority} />
-          <Row k="Client inquiry" v={d.is_client_inquiry ? "yes" : "no"} />
-          <Row k="Gate reason" v={d.gate_reason} />
+        {/* WHAT THE ENGINE DECIDED, in the words the desk uses. It read "AI decision"
+            over a dump of field names and raw engine strings — "not-a-job",
+            "SlotTeam[0] start time not stated", "this message filled company_name,
+            contact_name". Every one of those is a fact somebody has to act on, wrapped
+            in a name they have never seen. decisionWords is the lens; the raw string
+            stays on hover, because the record is the record. */}
+        <Panel title="What the engine decided">
+          {(() => { const c = classificationWords(d.classification); return (
+            <Row k="Decision" v={c.gloss ? `${c.label} — ${c.gloss}` : c.label} />
+          ); })()}
+          <Row k="Urgency" v={priorityWords(d.priority)} />
+          <Row k="From a client" v={d.is_client_inquiry ? "Yes" : "No — not a booking enquiry"} />
+          {!!gateWords(d.gate_reason) && (
+            <Row k="Why" v={<span title={d.gate_reason || undefined}>{gateWords(d.gate_reason)}</span>} />
+          )}
           {!!d.notes?.length && (
-            <div style={{ marginTop: 8 }}>
-              <div style={{ fontSize: 11.5, color: MUT, marginBottom: 4 }}>Notes</div>
+            <div style={{ marginTop: 10 }}>
+              <div style={{ fontSize: 11.5, color: MUT, marginBottom: 4 }}>What it did, and what it assumed</div>
               <ul style={{ margin: 0, paddingLeft: 16, color: SUB, fontSize: 12.5, lineHeight: 1.6 }}>
-                {d.notes.map((n: string, i: number) => <li key={i}>{n}</li>)}
+                {d.notes.map((n: string, i: number) => (
+                  <li key={i} title={n}>{noteWords(n)}</li>
+                ))}
               </ul>
             </div>
           )}
