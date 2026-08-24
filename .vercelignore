@@ -1,18 +1,22 @@
 # What must never be uploaded to a build.
 #
 # The CLI does not apply .gitignore the way the git integration does, so
-# `vercel --prod` was packing data/, which holds a 188 MB corpus of the client's
-# own mail (data/corpus/sweep-threads.jsonl). It failed with "File size limit
-# exceeded (100 MB)" — which is the good outcome; the bad one is the version of
-# that file small enough to succeed, quietly shipping client correspondence into a
-# deployment that does not need it. Nothing here is read at runtime: the engine
-# reads its data from Neon and OnSinch.
+# `vercel --prod` was packing data/, which holds a 188 MB corpus of the client's own
+# mail (data/corpus/sweep-threads.jsonl). It failed with "File size limit exceeded
+# (100 MB)" — which is the good outcome; the bad one is a version of that file small
+# enough to succeed, quietly shipping client correspondence into a deployment.
+#
+# THIS LIST MATCHES WHAT .gitignore ALREADY KEEPS OUT, and nothing more. A first
+# attempt also excluded scripts/, test/, sim/ and docs/ and the build failed on
+# `app/lib/sweepLabelsDb.ts` — it dynamically imports ../../scripts/_corpus.mjs, so
+# scripts/ is reachable from app/ and has to ship. A CLI deploy that excludes more
+# than the git integration does is a deploy that behaves differently from every
+# other deploy, which is worse than a large upload.
+#
+# (Note for later: that same import reads the 188 MB corpus from disk at RUNTIME.
+# The corpus is gitignored, so it has never existed in any deployment — that path
+# throws in production today. Not fixed here; see the health sweep.)
 data/
 .tmp-data/
 n8n/backups/
-sim/
-test/
-scripts/
-docs/
-fleet/
 *.log
