@@ -58,7 +58,16 @@ function tenant() {
       return { status: 200, data: { data: places, pagination: { pageCount: 1 } } };
     }
     if (method === "GET" && path.startsWith("/orders")) {
-      return { status: 200, data: { data: [], pagination: { pageCount: 1 } } };
+      // The create reads the order back for its job id — the blocks are posted against
+      // the job, and POST /orders never returns nested ids (API reference §12).
+      const forId = /\bid=14001\b/.test(path) || path.includes("/14001");
+      return {
+        status: 200,
+        data: {
+          data: forId ? [{ id: 14001, number: "10999", Job: [{ id: 24001 }] }] : [],
+          pagination: { pageCount: 1 },
+        },
+      };
     }
     if (method === "POST" && path === "/companies") {
       const c = { id: nextId++, name: (body as any[])[0].name };
@@ -75,6 +84,10 @@ function tenant() {
     if (method === "POST" && path === "/orders") {
       writes.push("POST /orders");
       return { status: 201, data: { data: [{ id: 14001, number: "10999" }] } };
+    }
+    if (method === "POST" && path === "/slotTeams") {
+      writes.push("POST /slotTeams");
+      return { status: 201, data: { data: [{ id: nextId++ }] } };
     }
     return { status: 200, data: { data: [], pagination: { pageCount: 1 } } };
   };

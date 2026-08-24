@@ -15,6 +15,7 @@ import { fileURLToPath } from "node:url";
 import { buildOrderBody, buildSlotTeamBody } from "../app/lib/engine/format";
 import type { DesiredOrder } from "../app/lib/engine/types";
 import { OnsinchClient, type Transport } from "../app/lib/engine/onsinch";
+import { createOrderWithPlace } from "../app/lib/deps";
 
 let fails = 0;
 const ok = (cond: boolean, label: string, extra = "") => {
@@ -73,6 +74,69 @@ async function main() {
         beginning: "2027-11-10T08:00:00+00:00", end: "2027-11-10T09:00:00+00:00" }));
   } catch (e: any) { threw = String(e?.message ?? e); }
   ok(/no id/i.test(threw), "a 201 with no id throws", threw);
+
+  const order: DesiredOrder = {
+    name: "X @ Y", company_id: 515, user_id: 1591, request_approval: true,
+    provisional: true, quote: false, pricelist_category_id: 122, job_name: "X @ Y",
+    slot_teams: [
+      { name: "build", profession_id: 1, size: 3, place_id: 49,
+        beginning: "2027-11-10T08:00:00+00:00", end: "2027-11-10T14:00:00+00:00" },
+      { name: "derig", profession_id: 1, size: 2, place_id: 49,
+        beginning: "2027-11-10T18:00:00+00:00", end: "2027-11-10T22:00:00+00:00" },
+    ],
+  };
+
+  console.log("");
+  console.log("two-phase create");
+  {
+    const calls: any[] = [];
+    let nextTeam = 700;
+    const tr: Transport = async (method, path, b) => {
+      calls.push({ method, path, body: b });
+      if (method === "POST" && path === "/orders") return { status: 201, data: { data: [{ id: 9001 }] } };
+      if (method === "POST" && path === "/slotTeams") return { status: 201, data: { data: [{ id: ++nextTeam }] } };
+      if (method === "GET" && path.startsWith("/orders"))
+        return { status: 200, data: { data: [{ id: 9001, number: "R1", Job: [{ id: 4001 }] }] } };
+      return { status: 200, data: null };
+    };
+    const res = await createOrderWithPlace(new OnsinchClient(tr), order);
+    ok(res.id === 9001, "returns the order id", String(res.id));
+    ok(res.job_id === 4001, "and the job id", String(res.job_id));
+    ok(JSON.stringify(res.team_ids) === "[701,702]", "and one id per block, in order",
+       JSON.stringify(res.team_ids));
+
+    const orderPost = calls.find((c) => c.method === "POST" && c.path === "/orders");
+    ok(Array.isArray(orderPost.body[0].SlotTeam) && orderPost.body[0].SlotTeam.length === 0,
+       "the order was created with NO nested blocks");
+    ok(calls.filter((c) => c.method === "POST" && c.path === "/slotTeams").length === 2,
+       "and each block was posted separately");
+  }
+
+  console.log("");
+  console.log("a half-built order is rolled back, not returned");
+  {
+    const calls: any[] = [];
+    const tr: Transport = async (method, path) => {
+      calls.push({ method, path });
+      if (method === "POST" && path === "/orders") return { status: 201, data: { data: [{ id: 9002 }] } };
+      if (method === "GET" && path.startsWith("/orders"))
+        return { status: 200, data: { data: [{ id: 9002, number: "R2", Job: [{ id: 4002 }] }] } };
+      // First block lands, second fails.
+      if (method === "POST" && path === "/slotTeams") {
+        const n = calls.filter((c) => c.path === "/slotTeams").length;
+        if (n === 1) return { status: 201, data: { data: [{ id: 801 }] } };
+        return { status: 400, data: { validationErrors: { size: ["nope"] } } };
+      }
+      if (method === "DELETE" && path === "/orders") return { status: 204, data: null };
+      return { status: 200, data: null };
+    };
+    let err = "";
+    try { await createOrderWithPlace(new OnsinchClient(tr), order); }
+    catch (e: any) { err = String(e?.message ?? e); }
+    ok(/could not be given its crew blocks/i.test(err), "it throws rather than returning a partial order", err);
+    ok(calls.some((c) => c.method === "DELETE" && c.path === "/orders"),
+       "and the blockless order was deleted");
+  }
 }
 
 main().then(() => {

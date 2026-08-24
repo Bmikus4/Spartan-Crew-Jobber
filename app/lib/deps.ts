@@ -14,11 +14,30 @@ import { createOpenRouterReasoner, type Reasoner } from "./engine/reason";
 import { guardReasoner } from "./engine/spend";
 import { tieredReasoner } from "./engine/tiered";
 import { logKeyBalanceOnce } from "./engine/keyBalance";
-import { buildOrderBody } from "./engine/format";
+import { buildOrderBody, buildSlotTeamBody } from "./engine/format";
 import { replaceProvisionalOrder } from "./engine/replaceOrder";
 import { amendOrderInPlace } from "./engine/amendOrder";
 import type { DesiredOrder, DesiredSlotTeam } from "./engine/types";
 import type { Executor, PipelineDeps } from "./engine/pipeline";
+
+/**
+ * The job id, which the create does not return. `POST /orders` answers with the order id
+ * alone — nested Job and SlotTeam ids are never in the response — and every block that
+ * follows has to be posted against a job_id, so this read is not optional.
+ */
+async function readOrderIdentifiers(
+  client: OnsinchClient,
+  order_id: number
+): Promise<{ job_id: number; order_number?: string }> {
+  const live: any = await client.orderById(order_id);
+  const o = live?.data ?? live;
+  const job = (Array.isArray(o?.Job) ? o.Job[0] : o?.Job) ?? {};
+  const job_id = Number(job?.id);
+  if (!Number.isInteger(job_id)) {
+    throw new Error(`order #${order_id} was created but its job id could not be read back — cannot post crew blocks`);
+  }
+  return { job_id, order_number: o?.number ? String(o.number) : undefined };
+}
 
 /**
  * Tool 2 write path: create the reference data the order needs but OnSinch does
@@ -78,7 +97,49 @@ export async function createOrderWithPlace(
     }).catch?.((err: unknown) => console.error("[aliases] place record failed", err));
   }
 
-  return client.createOrder(buildOrderBody(o));
+  /**
+   * TWO PHASES, so the engine ends up holding every block's id.
+   *
+   * Nesting the blocks in POST /orders is one call instead of N+1, and it is what this
+   * did until 2026-08-24. The cost was invisible and total: an API create logs ONE
+   * childless audit row, so nested blocks have no readable ids under any key, and the
+   * in-place amendment declined on every order the engine ever made — 43 patches, 0
+   * amendments, every crew change becoming a note asking a human to do it by hand
+   * (API reference §12).
+   *
+   * `POST /slotTeams` returns the id it creates, so the ids are had by CREATING them
+   * rather than by reading them. `SlotTeam: []` is accepted (201); omitting the key is a
+   * 400, which is why the empty array is explicit here and pinned by a test.
+   */
+  const created = await client.createOrder(buildOrderBody({ ...o, slot_teams: [] }));
+  const ids = await readOrderIdentifiers(client, created.id);
+  const team_ids: number[] = [];
+  try {
+    for (const team of o.slot_teams) {
+      const made = await client.createSlotTeam(buildSlotTeamBody(ids.job_id, team));
+      team_ids.push(made.id);
+    }
+  } catch (err) {
+    /**
+     * A blockless order is not a harmless leftover. `happening` defaults to NOW on an
+     * order with no blocks and only corrects once one exists, so what is left behind
+     * reads as a job happening TODAY with no crew on it — in the ops view, next to real
+     * work. Nothing references it yet (no attachments, no crew, no R number in anyone's
+     * paperwork), so deleting it is the cheap and correct move.
+     *
+     * If the rollback itself fails, say both things loudly. Do not swallow the original.
+     */
+    await client.deleteOrders([created.id]).catch((rollback: unknown) =>
+      console.error(
+        `[order] order #${created.id} was created, could not be given its crew blocks, AND could not be deleted — it is dated today with no crew and needs removing by hand`,
+        rollback
+      )
+    );
+    throw new Error(
+      `order #${created.id} could not be given its crew blocks and was rolled back: ${String((err as any)?.message ?? err)}`
+    );
+  }
+  return { id: created.id, number: created.number ?? ids.order_number, job_id: ids.job_id, team_ids };
 }
 import { archiveOrder, recordReplacement } from "./orderArchiveDb";
 import { loadProfessions } from "./professionsDb";

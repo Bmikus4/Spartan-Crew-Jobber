@@ -65,6 +65,12 @@ export const mockTransport: Transport = async (method, path) => {
   // exactly the bugs a fixture exists to catch.
   if (method === "POST" && path === "/orders") return { status: 201, data: { data: [{ id: 9001 }] } };
   if (method === "PATCH" && path === "/orders") return { status: 204, data: null };
+  // The create is two-phase — an empty order, then one block per POST /slotTeams, which
+  // is the only call that ever hands back a block's id (API reference §12). So the
+  // freshly created order has to be readable for its job id, and it is read by id.
+  if (method === "GET" && /[?&]id=9001\b/.test(path))
+    return { status: 200, data: { data: [{ id: 9001, number: "10999", Job: [{ id: 7900 }] }], pagination: { count: 1, pageCount: 1, nextPage: false } } };
+  if (method === "POST" && path === "/slotTeams") return { status: 201, data: { data: [{ id: 35900 }] } };
   if (path.startsWith("/companies"))
     return {
       status: 200,

@@ -180,6 +180,7 @@ export function fixtureTransport(c: SimCase, places: PlaceCandidate[], log: Call
   // Derived from the case id, never random: a simulation whose order ids move
   // between runs cannot be diffed against its own previous run.
   let nextOrderId = 90000 + (parseInt(createHash("md5").update(c.id).digest("hex").slice(0, 6), 16) % 1000);
+  let nextTeamId = 300000;
   const companies =
     c.client === "new"
       ? [{ id: 8801, name: CLIENTS.history.name, invoice_name: CLIENTS.history.name, Client: [{ id: CLIENTS.history.contact_id, email: `bookings@${CLIENTS.history.domain}` }] }]
@@ -215,6 +216,21 @@ export function fixtureTransport(c: SimCase, places: PlaceCandidate[], log: Call
       const id = nextOrderId++;
       log.created.push({ id, body });
       return { status: 201, data: { data: [{ id, number: String(20000 + (id % 1000)) }] } };
+    }
+    /**
+     * The create is two-phase: an empty order, then one block at a time, because a
+     * block's id only ever comes back from POST /slotTeams (API reference §12).
+     *
+     * Each posted block is folded back into the recorded order body, so `log.created`
+     * still means "everything written for this order" and the wire invariant compares
+     * the same quantity it always did. It is one write split across N+1 calls, not a
+     * different write.
+     */
+    if (method === "POST" && path === "/slotTeams") {
+      const last = log.created[log.created.length - 1];
+      const body0 = (last?.body as Array<{ SlotTeam?: unknown[] }> | undefined)?.[0];
+      if (body0) (body0.SlotTeam ??= []).push((body as unknown[])[0]);
+      return { status: 201, data: { data: [{ id: nextTeamId++ }] } };
     }
     if (method === "PATCH" && path === "/orders") {
       log.patched.push(body);
