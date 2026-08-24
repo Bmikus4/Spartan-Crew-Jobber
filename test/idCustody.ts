@@ -12,8 +12,9 @@
 import { readFileSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { buildOrderBody } from "../app/lib/engine/format";
+import { buildOrderBody, buildSlotTeamBody } from "../app/lib/engine/format";
 import type { DesiredOrder } from "../app/lib/engine/types";
+import { OnsinchClient, type Transport } from "../app/lib/engine/onsinch";
 
 let fails = 0;
 const ok = (cond: boolean, label: string, extra = "") => {
@@ -47,6 +48,31 @@ async function main() {
   ok(Array.isArray(body.SlotTeam) && body.SlotTeam.length === 0, "and it is an empty array",
      JSON.stringify(body.SlotTeam));
   ok(body.Job && body.Job.pricelist_category_id === 122, "the Job and its rate card still ride along");
+
+  console.log("\nid comes back from the create");
+  const posted: any[] = [];
+  const t: Transport = async (method, path, b) => {
+    posted.push({ method, path, body: b });
+    if (method === "POST" && path === "/slotTeams") return { status: 201, data: { data: [{ id: 35592 }] } };
+    return { status: 200, data: null };
+  };
+  const c = new OnsinchClient(t);
+  const made = await c.createSlotTeam(buildSlotTeamBody(14111, {
+    name: "build", profession_id: 1, size: 3, place_id: 49,
+    beginning: "2027-11-10T08:00:00+00:00", end: "2027-11-10T14:00:00+00:00",
+  }));
+  ok(made.id === 35592, "createSlotTeam returns the new block's id", String(made.id));
+  ok(posted[0].body[0].job_id === 14111, "and it was posted against the job we named");
+
+  // A create that returns no id must throw rather than hand back a hole: an amendment
+  // storing undefined would later patch nothing and report success.
+  let threw = "";
+  try {
+    await new OnsinchClient(async () => ({ status: 201, data: { data: [{}] } }))
+      .createSlotTeam(buildSlotTeamBody(1, { name: "x", profession_id: 1, size: 1, place_id: 1,
+        beginning: "2027-11-10T08:00:00+00:00", end: "2027-11-10T09:00:00+00:00" }));
+  } catch (e: any) { threw = String(e?.message ?? e); }
+  ok(/no id/i.test(threw), "a 201 with no id throws", threw);
 }
 
 main().then(() => {
