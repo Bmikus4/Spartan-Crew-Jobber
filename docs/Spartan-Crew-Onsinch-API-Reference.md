@@ -300,15 +300,15 @@ exists, `format.ts`/`types.ts` carry the Job and SlotTeam fields,
 and `onsinch.ts` has the `/slotTeams`, `/jobs` and `DELETE /orders` clients.
 The list is kept only for the one item that was answered by NOT doing it:
 
-- **"State row should store owned slot-team ids (id custody)" is OPEN, and the
-  reason it was rejected was wrong.** It was rejected on the grounds that ids
-  cannot be READ — true, but irrelevant: `POST /slotTeams` RETURNS the new
-  block's id, so the engine never has to read one. See §12. `amendOrder.ts`
-  currently decides which
-  live block a desired block overwrites **by position** against
-  `last_ordered_teams` instead, and declines when the live count disagrees with
-  it. Anyone re-adding id custody will find it silently empty on every order
-  created with a personal key, which is 4,119 of them.
+- **"State row should store owned slot-team ids (id custody)" is DONE**
+  (2026-08-24, commits `1058a3a` create / `5e12216` amend / `cf734a1` pipeline).
+  It had been rejected on the grounds that ids cannot be READ — true, but
+  irrelevant: `POST /slotTeams` RETURNS the new block's id, so the engine never
+  has to read one. See §12. The create is now two-phase and `amendOrder.ts`
+  resolves blocks by the stored id. **Position survives only as the fallback**
+  for an order the engine did not raise, where there are no stored ids and the
+  audit read is the only route — and for those orders the read does work, because
+  a UI create logs a child row per block.
 
 ## 11. Rate audit hook (read-only, post-hoc)
 
@@ -366,11 +366,18 @@ Verified 2026-08-24 on TEST company 515 with a PERSON'S key. `SlotTeam: []` is a
 **omitting** `SlotTeam` is a 400 (`"Please fill the SlotTeam for this Order"`), so the
 empty array is required, not merely tolerated.
 
-Consequences if this is adopted: block resolution becomes by stored **id** rather than by
-position, which is strictly safer — position breaks silently the moment a human adds a
-block in the UI. Costs: N+1 calls per create instead of 1, and a new partial-failure
-window (an order can exist holding fewer blocks than intended, with a null job window),
-which needs the persist-intent discipline `replaceOrder` already has.
+**Adopted 2026-08-24.** Block resolution is by stored **id**; position is the fallback for
+UI-raised orders, not the design. Ids are strictly safer: position breaks silently the
+moment a human adds a block in the UI, because that block shifts every later index and the
+overwrite lands on the wrong one, on a 201 that reports success. Costs: N+1 calls per
+create instead of 1, and a partial-failure window — an order can exist holding fewer
+blocks than intended, with a null job window — which `createOrderWithPlace` closes by
+DELETEing the order rather than returning it half-built. `happening` defaults to NOW on a
+blockless order, so the leftover would read as a job happening today with no crew.
+
+Proven end to end by `scripts/verify-custody-live.ts --write`: create, amend, and the job
+window shrinking from 08:00-22:00 to 08:00-20:00 on the amended block — the window being
+the only field derived from the blocks and therefore the only one that cannot lie.
 
 ### What still cannot be done, whatever the key
 

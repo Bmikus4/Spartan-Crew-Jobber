@@ -6,10 +6,15 @@
 // created nested inside `POST /orders` never hand back their ids and there is no
 // `GET /slotTeams`, so there was nothing to aim a PATCH at.
 //
-// `client.slotTeamsForOrder` closed that (see its comment — the ids are in the audit
-// log, for every order, back to 2023). What is left is the harder half: deciding WHICH
-// live team each desired team overwrites, given that nothing in the API returns a live
-// team's current size, window or place. The engine cannot diff. It can only overwrite.
+// Two things closed that, and only the second one covers the engine's own orders.
+// `client.slotTeamsForOrder` reads ids out of the audit log — which works for an order
+// raised in the OnSinch UI and returns NOTHING for one created through the API, since an
+// API create logs a single childless row. So the engine stopped nesting its blocks and
+// posts each one separately, keeping the id `POST /slotTeams` hands back.
+//
+// What is left is the harder half: deciding WHICH live team each desired team overwrites,
+// given that nothing in the API returns a live team's current size, window or place. The
+// engine cannot diff. It can only overwrite.
 //
 // THE ANSWER IS NOT NAMES. A team's name is composed from the client's own words for
 // the work, so an amendment that rewords the task changes it. Matching on the name would
@@ -17,16 +22,23 @@
 // blocks, double the crew, and a 201 that says everything went fine. Names are not
 // unique either — order 13784 carries two teams called "General".
 //
-// THE ANSWER IS POSITION, against the set this engine last wrote. The state row holds
-// the exact `slot_teams` array that was nested in the create, in order, and the audit
-// returns the ids in that same creation order. So live[i] IS previous[i] — a
-// correspondence established by our own write, not inferred from content.
+// THE ANSWER IS THE ID THE ENGINE RECORDED WHEN IT CREATED THE BLOCK. The create posts
+// each block separately and `POST /slotTeams` returns its id, so the state row carries
+// `last_ordered_team_ids` beside `last_ordered_teams` — one id per block, in the order
+// written. Those ids are used directly and the audit read is skipped, which is what makes
+// an engine-raised order amendable at all: for those orders the read returns nothing.
 //
-// Positional overwrite plus append is then TOTAL AND EXACT: patch live[0..M-1] to
-// next[0..M-1], create next[M..], and the resulting team set equals `next` field for
-// field, whatever order the blocks arrived in. A block inserted in the middle shifts
-// what each id holds and changes nothing about the outcome. Ids are not identity here;
-// the set is.
+// POSITION IS THE FALLBACK, NOT THE DESIGN. An order raised in the OnSinch UI, or created
+// before custody existed, has no stored ids; there the audit read applies and live[i] is
+// taken to be previous[i] by creation order. That pairing is exactly what ids exist to
+// avoid: the moment a human adds a block in the UI it shifts every later index and the
+// overwrite lands on the wrong block, on a 201 that reports success. Holding our own ids
+// narrows the amendment to blocks the engine created, so the human's block is invisible
+// to it.
+//
+// Overwrite plus append is TOTAL AND EXACT either way: patch the M blocks we already
+// have, create next[M..], and the resulting team set equals `next` field for field,
+// whatever order the blocks arrived in.
 //
 // It DECLINES rather than guessing whenever that correspondence is not established —
 // ops added a team by hand, the thread inherited an order the engine never raised, a
@@ -62,8 +74,9 @@ export interface AmendmentPlan {
  * What it would take to turn the live teams into `next`. Pure, total, and the only place
  * the correspondence rule lives.
  *
- * `previous` is the team array this engine last wrote to the order; `live` is what the
- * audit read returned, in creation order.
+ * `previous` is the team array this engine last wrote to the order; `live` is the ids
+ * standing against it — the ones recorded at create time where we have them, otherwise
+ * what the audit read returned, in creation order.
  */
 export function planAmendment(
   previous: DesiredSlotTeam[],

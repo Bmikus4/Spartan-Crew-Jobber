@@ -115,10 +115,19 @@ POST a new team, and leave the old one standing — **an order carrying both blo
 the crew, and nothing in the response to say so**. Names are not unique either: order
 13784 carries two teams called "General".
 
-**By position, against the set this engine last wrote.** The state row holds
-`desired_order.slot_teams` — the exact array that was nested in the create, in order — and
-the audit returns the ids in that same creation order. So `live[i]` **is** `previous[i]`,
-established by our own write rather than inferred from content.
+**By the id the engine recorded when it created the block** (id custody, 2026-08-24). The
+state row holds `last_ordered_team_ids` beside `last_ordered_teams`, one id per block in
+the order written, put there by the `POST /slotTeams` that created each one. So the
+amendment addresses `previous[i]` directly and never reads the audit log at all — which is
+what makes an engine-raised order amendable, since for those orders that read returns
+nothing (API reference §12).
+
+**Position is the FALLBACK, not the design.** An order raised in the OnSinch UI, or created
+before custody existed, has no stored ids; there the audit read applies and `live[i]` is
+taken to be `previous[i]`, established by creation order. That pairing is the thing ids
+exist to avoid: **the moment a human adds a block in the UI it shifts every later index and
+the overwrite lands on the wrong block, on a 201 that reports success.** Owning ids means
+the engine can only ever touch blocks it created, so the human's block is invisible to it.
 
     plan(previous, next, live):
       live.length !== previous.length  -> decline: somebody else changed the team set
