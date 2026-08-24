@@ -19,9 +19,14 @@ a PATCH at. Its recommendation was to email OnSinch. Not needed:
                                "data":{"path":"Order:13784/Job:14064/SlotTeam:35499"}}
     common_create  | SlotTeam {"id":"35500","name":"General", …}
 
-Verified live 2026-08-23 against orders from 2026-08-22, 08-20 and 07-30, raised both by
-this engine (`creator: null`) and by hand in the UI (`creator: <user id>`). The job id and
+Verified live 2026-08-23 against orders from 2026-08-22, 08-20 and 07-30. The job id and
 the R number fall out of the same rows.
+
+> **CORRECTION, 2026-08-24.** The orders this was verified against were raised **in the
+> UI**, not by this engine, and `creator: null` does not exist in this tenant at all. The
+> full tree appears for UI creates (`order_create`) and never for API creates
+> (`order_created_via_api`). See §12 of the API reference. Everything below about the
+> QUERY is correct; everything about WHICH ORDERS it works on is not.
 
 Three properties of the query, each of which cost a probe:
 
@@ -41,16 +46,26 @@ is refused, the floor is 1.
 Found the hard way, by running the live verification with the wrong key and getting an
 empty read:
 
-| key | audit rows on a create |
+| how the order was raised | audit rows on a create |
 |---|---|
-| the engine's **service** key (`creator: null`) | `order_create` **plus** a child row per Job, SlotTeam and Slot, each carrying the path — **the ids are readable** |
-| a **person's** API key (ben@… is user 2257) | ONE row, `order_created_via_api`, no children, no ids |
+| **in the OnSinch UI** (`order_create`, 6,786 rows) | **plus** a child row per Job, SlotTeam and Slot, each carrying the path — **the ids are readable** |
+| **through `POST /orders`** (`order_created_via_api`, 4,131 rows) | ONE row, no children, no ids — **under any key** |
 
-Not a change and not a fault: `order_created_via_api` has 4,119 rows going back to
-2026-02-22 and every one is user 2257. The engine writes with the service key, which is
-the column that matters — verified by reading five real engine-raised orders (13784,
-13786, 13788, 13809, 13630) back through the shipped client, ids, job and R number
-recovered on all five.
+> **THIS TABLE USED TO SAY "service key" vs "a person's key". THAT WAS WRONG** and it cost
+> a session. `creator` is never null anywhere in this tenant: 2,400 sampled audit rows,
+> 800 most-recent orders, zero nulls. There is no service key to obtain and no
+> api/integration role among the 17. THE ROUTE DECIDES, NOT THE KEY.
+>
+> The five orders cited as proof — 13784, 13786, 13788, 13809, 13630 — are **not
+> engine-raised**. None appears in the engine's own `order_created` metric events and they
+> carry creators 2620 and 413, people working in the UI. Every genuinely engine-created
+> order (13814, 13807, 13803, 13795, 13793, 13785, 13783, 13779, 13775) reads back **0
+> blocks**. So the in-place path declines on every order this engine has ever made, and
+> **has never once run in production**.
+>
+> The fix needs no vendor involvement: `POST /orders` with `SlotTeam: []` is legal (201),
+> and `POST /slotTeams` RETURNS each block's id. Custody by construction. See §12 of the
+> API reference.
 
 The consequence to hold on to: **`slotTeamsForOrder` returns nothing for an order a
 person created through the API**, and the amendment then declines and the rebuild path

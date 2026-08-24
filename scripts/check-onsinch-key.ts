@@ -1,17 +1,26 @@
 // ============================================================================
-// Is this OnSinch key a SERVICE key or a PERSON'S key?
+// Does a POST /orders create leave slot-team ids behind? (It does not. Ever.)
 // ----------------------------------------------------------------------------
-// It matters more than it sounds. A create made with a service key logs `order_create`
-// plus a child row per Job, SlotTeam and Slot, each carrying its id — which is the only
-// route by which a nested slot team's id is ever readable, and therefore the only reason
-// an order can be amended in place instead of destroyed and rebuilt. A create made with
-// a person's own API key logs ONE childless `order_created_via_api` row: no ids, nothing
-// to amend.
+// THIS FILE USED TO ASK "is this a SERVICE key or a PERSON'S key?" and that question was
+// incoherent, 2026-08-24. It creates through `POST /orders`, and an API create logs ONE
+// childless `order_created_via_api` row **whatever key sent it** — so the old version
+// could only ever answer "a person's key", for every key in existence, and sent a reader
+// off to obtain one that does not exist.
 //
-// There is no endpoint that will tell you which kind you hold — no /apiKeys, /tokens or
-// /integrations — and `GET /users/profile` answers with a user either way. The only way
-// to know is to write one order and read the audit trail back. So that is what this does,
-// on TEST company 515 ("TEST - Eventz", hardcoded), and then deletes it.
+// What actually differs is the ROUTE. Orders raised in the OnSinch UI log `order_create`
+// plus a child row per Job, SlotTeam and Slot, each carrying its id; orders created
+// through the API log one row and no ids. `creator` is never null anywhere in this
+// tenant — 2,400 sampled audit rows, 800 most-recent orders, zero nulls — and there is no
+// api/integration role among the 17. See §12 of docs/Spartan-Crew-Onsinch-API-Reference.md.
+//
+// So this is kept as a DEMONSTRATION of that fact, not a key test: it writes one order,
+// reads the audit trail back, and shows you the childless row. If you are here because
+// an amendment declined, the answer is not a different key — it is that the engine must
+// create each block with `POST /slotTeams`, which RETURNS the id. Custody by
+// construction. `POST /orders` with `SlotTeam: []` is legal (201) precisely so that can
+// be done.
+//
+// Runs on TEST company 515 ("TEST - Eventz", hardcoded), and then deletes the order.
 //
 //   ONSINCH_TEST_KEY=<the key to check> npx tsx scripts/check-onsinch-key.ts
 //
@@ -79,13 +88,20 @@ const DAY = "2027-12-01";
   const del = await call("DELETE", "/orders", [id]);
   console.log(`\n  deleted order #${id} (${del.status})`);
 
-  const service = slotTeamIds > 0;
+  const readable = slotTeamIds > 0;
   console.log(
-    service
-      ? "\n  => SERVICE KEY. Nested slot team ids are readable, so this key can amend orders in place." +
-          (slotIds > 0 ? "\n     Slot ids are recorded too, so it can also run scripts/verify-shrink-staffed.ts." : "")
-      : "\n  => A PERSON'S KEY. Creates log one childless `order_created_via_api` row, so nothing\n" +
-          "     created with it can be amended in place. Not the key the engine should use."
+    readable
+      ? "\n  => Nested slot team ids came back, which contradicts everything measured on\n" +
+          "     2026-08-24. Do not celebrate — re-read §12 of the API reference and work out\n" +
+          "     which assumption changed, because the amendment path depends on this answer." +
+          (slotIds > 0 ? "\n     Slot ids are recorded too, so scripts/verify-shrink-staffed.ts can run." : "")
+      : "\n  => NO IDS, as expected. An API create always logs one childless\n" +
+          "     `order_created_via_api` row — this is the ROUTE, not the key, so no other key\n" +
+          "     will change it and there is no service key to go and get.\n" +
+          "     To amend in place, the engine must create each block via POST /slotTeams and\n" +
+          "     keep the id it returns. See §12 of docs/Spartan-Crew-Onsinch-API-Reference.md."
   );
-  process.exit(service ? 0 : 1);
+  // Exit 0: this is the CORRECT and only outcome for an API create, so a green run means
+  // "measured, as documented". It used to exit 1 here, which read as a fault to fix.
+  process.exit(0);
 })();

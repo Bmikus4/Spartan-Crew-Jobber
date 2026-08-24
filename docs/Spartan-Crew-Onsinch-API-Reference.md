@@ -67,7 +67,7 @@ as `pending_order`, one-click confirm in the dashboard writes it to OnSinch.
 |---|---|---|
 | /orders | GET✓ POST✓ PATCH✓ DELETE✓ | the core resource; DELETE cascades Job+SlotTeams✓ |
 | /jobs | POST, PATCH✓ | no GET — read via `/orders?with=Job`. PATCH: `name, admin_note, supervisor_id, pricelist_category_id`✓ |
-| /slotTeams | POST✓ PATCH✓ | no GET (405 in every spelling✓). POST with `job_id` returns the new team id✓. Ids of NESTED teams are readable from `/timelineAudits`✓ — see §9 |
+| /slotTeams | POST✓ PATCH✓ | no GET (405 in every spelling✓), no DELETE (405✓ / 404✓). POST with `job_id` returns the new team id✓ — **this is the only reliable way to hold an id (§12)**. Ids of NESTED teams are readable from `/timelineAudits` ONLY for UI-raised orders✓; never for `POST /orders` ones — see §12 |
 | /timelineAudits | GET✓ | the audit log, and the only route to a nested SlotTeam's id. Filter `data[like]=%Order:N%` (`data[cont]` is a 400✓); paths are stored with ESCAPED slashes so a LIKE pattern containing `/` matches nothing✓ |
 | /orders/{id}/attachments, /jobs/{id}/attachments | POST, DELETE | file attach |
 | /orderItems | GET✓ | priced line items + `RateBreakdown` — the rate audit hook (§11) |
@@ -134,7 +134,12 @@ Server-derived on create: `number` (auto sequence), `happening` (earliest
 SlotTeam beginning), `status: 0`, `creator/modifier` = key's user. Response:
 `201 {"data":[{"id":N}]}` — **order id only; nested Job/SlotTeam ids are NOT
 returned** (read the job id back via `?id=N&with=Job`; nested slot-team ids
-are unrecoverable — see §9 id-custody note).
+are unrecoverable, under any key — see §12).
+
+`SlotTeam: []` is ACCEPTED (201, job window null)✓ while OMITTING `SlotTeam`
+is a 400. So an order can legally be created with no blocks and have each one
+added by `POST /slotTeams`, which returns its id — the only route to id
+custody (§12).
 
 ### PATCH /orders — top-level only
 `[{"id":N, …}]` → 204✓. Accepted: `name, company_id, user_id, specification,
@@ -265,9 +270,11 @@ Updates
   → CHANGE a block we added via /slotTeams → PATCH /slotTeams [{id,…}]
   → CHANGE a block created nested in POST /orders — THE IDS ARE READABLE, 2026-08-23:
       GET /timelineAudits?data[like]=%Order:<id>%   -> one row per SlotTeam created,
-      each carrying data.path = "Order:N\/Job:M\/SlotTeam:T". Works for any order, back
-      to 2023, ONLY for orders written by a SERVICE key (creator: null); a person's own
-      API key logs one childless `order_created_via_api` row instead.
+      each carrying data.path = "Order:N\/Job:M\/SlotTeam:T". Works back to 2023 but
+      ONLY for orders RAISED IN THE UI (audit action `order_create`, 6,786 rows). An
+      order created through POST /orders logs ONE childless `order_created_via_api`
+      row (4,131 rows) and its nested blocks have no readable ids, ever.
+      THE DISCRIMINATOR IS THE ROUTE, NOT THE KEY — see §12.
         → PATCH /slotTeams, pairing live[i] to the set last written (amendOrder.ts)
         → a DROPPED block still needs DELETE /orders + re-POST: a team cannot be removed
         → shrinking a block with crew signed on: still needs-human, still untested
@@ -293,11 +300,11 @@ exists, `format.ts`/`types.ts` carry the Job and SlotTeam fields,
 and `onsinch.ts` has the `/slotTeams`, `/jobs` and `DELETE /orders` clients.
 The list is kept only for the one item that was answered by NOT doing it:
 
-- **"State row should store owned slot-team ids (id custody)" was rejected.**
-  It cannot be made to work: OnSinch exposes a slot team's ids only through the
-  audit trail, and only when the create was made with a service key or in the
-  UI — `GET /slotTeams` is 405 and a standalone `POST /slotTeams` logs nothing.
-  So custody of ids is not available to hold. `amendOrder.ts` decides which
+- **"State row should store owned slot-team ids (id custody)" is OPEN, and the
+  reason it was rejected was wrong.** It was rejected on the grounds that ids
+  cannot be READ — true, but irrelevant: `POST /slotTeams` RETURNS the new
+  block's id, so the engine never has to read one. See §12. `amendOrder.ts`
+  currently decides which
   live block a desired block overwrites **by position** against
   `last_ordered_teams` instead, and declines when the live count disagrees with
   it. Anyone re-adding id custody will find it silently empty on every order
@@ -315,3 +322,71 @@ The list is kept only for the one item that was answered by NOT doing it:
 - Nightly "rate sanity" job: for invoiced orders, compare unit prices per
   company against their historical norm → flag mis-carded orders.
 - Order `status` observed: `0` active/open, `-2` cancelled (not writable).
+
+## 12. Slot-team id custody — the route decides, not the key (verified 2026-08-24)
+
+**There is no "service key". Do not go looking for one, and do not ask OnSinch for one.**
+The earlier model — a service key logs `creator: null` and a full audit tree, a person's
+key logs one childless row — is wrong. What actually differs is **how the order was
+created**:
+
+| audit action | rows | written by | ids readable? |
+|---|---|---|---|
+| `order_create` | 6,786 | the OnSinch **UI** | **yes** — a `common_create` row per Job, SlotTeam and Slot, each carrying `data.path` |
+| `order_created_via_api` | 4,131 | `POST /orders` | **no** — one row, no children, no ids |
+
+Evidence, all against the live tenant:
+
+- 2,400 sampled audit rows across both actions: **`creator` is NEVER null.** Every
+  `order_created_via_api` row is user 2257; every `order_create` row is a human user id
+  (102, 413, 409, 169, …). `creator: null` has never occurred in this tenant.
+- 0 of the 800 most-recent orders have `creator: null`.
+- The 17 roles are all human job titles — there is no api/integration/service role — and
+  the only non-person account is id 10 `admin@sinch.cz`, OnSinch's own support login.
+- The five orders previously cited as proof that "the engine writes with the service key"
+  (13784, 13786, 13788, 13809, 13630) are **not engine-created**. None appears in the
+  engine's own `order_created` metric events, and they carry creators 2620 and 413 —
+  people, in the UI. Their audit trees were full because of the route, not the key.
+- Conversely every genuinely engine-created order (13814, 13807, 13803, 13795, 13793,
+  13785, 13783, 13779, 13775) returns **0 readable blocks**.
+
+So `slotTeamsForOrder` can never work for an order this engine created, under any key,
+and the in-place amendment path declines on all of them.
+
+### The route that does work: custody by construction
+
+`POST /slotTeams` **returns the created block's id** — `createSlotTeam` already depends
+on this and the live matrix uses it. So the engine does not need to read ids; it needs to
+be the thing that creates each block:
+
+    POST /orders    with SlotTeam: []   -> 201   order + job, window null      <-- LEGAL
+    POST /slotTeams (job_id, …)         -> 201   { id: 35590 }                 <-- id in hand
+
+Verified 2026-08-24 on TEST company 515 with a PERSON'S key. `SlotTeam: []` is accepted;
+**omitting** `SlotTeam` is a 400 (`"Please fill the SlotTeam for this Order"`), so the
+empty array is required, not merely tolerated.
+
+Consequences if this is adopted: block resolution becomes by stored **id** rather than by
+position, which is strictly safer — position breaks silently the moment a human adds a
+block in the UI. Costs: N+1 calls per create instead of 1, and a new partial-failure
+window (an order can exist holding fewer blocks than intended, with a null job window),
+which needs the persist-intent discipline `replaceOrder` already has.
+
+### What still cannot be done, whatever the key
+
+A block cannot be REMOVED. Probed six ways on 2026-08-24, with the Job's
+`min_beginning`/`max_end` as the oracle, since a job's window is derived from its blocks
+and therefore cannot lie about one still existing:
+
+    DELETE /slotTeams [id]              405  method not allowed
+    DELETE /slotTeams/{id}              404  no such route
+    PATCH  {deleted: true}              400  Unknown property "deleted"
+    PATCH  {active: false}              400  Unknown property "active"
+    PATCH  {size: 0}                    400  At least one staff member … is needed
+    PATCH  {size:1, hidden:true, applicant_size:0}
+                                        204  but the window still ends at the block's
+                                             end — the block IS STILL THERE
+
+So dropping a block requires `DELETE /orders` + re-POST, and that is what costs the R
+number. Custody fixes every OTHER amendment shape; it does not fix a drop, and nothing
+will.
