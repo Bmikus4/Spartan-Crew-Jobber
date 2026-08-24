@@ -43,6 +43,8 @@ const argv = process.argv.slice(2);
 const ACTIVATE = argv.includes("--activate");
 const STATUS_ONLY = argv.includes("--status");
 const TEST_ID = argv.includes("--test") ? String(argv[argv.indexOf("--test") + 1] || "") : "";
+/** The ops-email shape: an address and no in_reply_to. Drafts, never sends. */
+const TEST_TO = argv.includes("--test-internal") ? String(argv[argv.indexOf("--test-internal") + 1] || "") : "";
 
 const WF_NAME = "Spartan Engine — Reply Draft";
 const PATH = "spartan-reply-draft";
@@ -86,30 +88,64 @@ if (given !== ${JSON.stringify(SECRET)}) {
   throw new Error('spartan-reply-draft: bad or missing x-webhook-secret');
 }
 const body = req.body || {};
-// in_reply_to is the GMAIL message id the engine acted on. Without it there is no
-// thread to reply into, and a loose draft addressed to nobody is worse than none.
-if (!body.in_reply_to) throw new Error('spartan-reply-draft: in_reply_to (gmail message id) is required');
 if (!body.html) throw new Error('spartan-reply-draft: html is required');
-return [{ json: { in_reply_to: String(body.in_reply_to), subject: body.subject || '', html: body.html } }];
+// TWO KINDS OF CALLER, told apart by which of these is present.
+//   in_reply_to  a GMAIL message id -> reply INTO that client thread
+//   to           an address         -> a fresh, unthreaded draft to ops
+// Neither means a draft addressed to nobody, which is worse than none. Both would
+// be ambiguous about whether the client sees it, so it is refused rather than
+// guessed: the cross-thread email to ops must never land in a client's thread.
+if (!body.in_reply_to && !body.to) {
+  throw new Error('spartan-reply-draft: one of in_reply_to (gmail message id) or to (address) is required');
+}
+if (body.in_reply_to && body.to) {
+  throw new Error('spartan-reply-draft: in_reply_to and to are mutually exclusive — a threaded reply cannot be readdressed');
+}
+return [{ json: {
+  in_reply_to: body.in_reply_to ? String(body.in_reply_to) : '',
+  to: body.to ? String(body.to) : '',
+  subject: body.subject || '',
+  html: body.html,
+} }];
 `.trim();
 
 const MIME_CODE = `
-// Build the RFC-2822 draft from the engine's HTML plus the headers Gmail just gave
-// us. Threading is set from the ORIGINAL message's Message-ID header, not from the
-// Gmail id: In-Reply-To/References are what every other mail client threads on, and
-// threadId is what Gmail itself uses. Both are set.
+// Build the RFC-2822 draft. TWO SHAPES, and which one is decided by whether the
+// header lookup upstream found a message, NOT by re-reading the request:
+//
+//   a client REPLY  — headers present. Threading comes from the ORIGINAL message's
+//     Message-ID header rather than the Gmail id, because In-Reply-To/References
+//     are what every other mail client threads on, and threadId is what Gmail
+//     itself uses. Both are set.
+//   an ops EMAIL    — no headers, because there is no original: the cross-thread
+//     "is this one job or two?" mail carries an address and no in_reply_to. It gets
+//     no In-Reply-To and no threadId, so it CANNOT land in a client's thread. That
+//     is the one way this email could do harm rather than merely fail to arrive.
+//
+// Get Original Headers passes its failures through (onError: continueRegularOutput)
+// so the unthreaded case reaches this node at all. That means a GENUINE Gmail
+// failure on a client reply also arrives here with no headers — and it must not
+// quietly become an unaddressed draft, so with neither headers nor a 'to' this
+// throws. The engine fails closed on a response carrying no draftId.
 const meta = $input.first().json;
 const req = $('Check secret').first().json;
 
 const headers = {};
 for (const hh of (meta.payload && meta.payload.headers) || []) headers[String(hh.name).toLowerCase()] = hh.value;
+const found = Object.keys(headers).length > 0;
 
-const rfcId = headers['message-id'] || '';
-const threadId = meta.threadId;
+if (!found && !req.to) {
+  throw new Error('spartan-reply-draft: message ' + req.in_reply_to + ' returned no headers and no "to" was given — refusing to draft to nobody');
+}
+
 // Reply to whoever asked. Reply-To wins over From when the sender set one.
-const replyTo = headers['reply-to'] || headers['from'] || '';
+const replyTo = found ? (headers['reply-to'] || headers['from'] || '') : req.to;
+if (!replyTo) throw new Error('spartan-reply-draft: no recipient could be determined');
+
+const rfcId = found ? (headers['message-id'] || '') : '';
+const threadId = found ? meta.threadId : null;
 const origSubject = headers['subject'] || '';
-const subject = req.subject || (/^re:/i.test(origSubject) ? origSubject : 'Re: ' + origSubject);
+const subject = req.subject || (found ? (/^re:/i.test(origSubject) ? origSubject : 'Re: ' + origSubject) : '(no subject)');
 
 const htmlBody = '<html><body>' + req.html + '<br>' + ${JSON.stringify(SIGNATURE)} + '</body></html>';
 const lines = ['From: bookings@spartancrew.co.uk', 'To: ' + replyTo, 'Subject: ' + subject];
@@ -186,6 +222,20 @@ const nodes = [
     id: "node-3",
     name: "Get Original Headers",
     credentials: { gmailOAuth2: GMAIL_CRED },
+    /**
+     * A FAILED LOOKUP IS PASSED DOWNSTREAM rather than ending the run, because the
+     * ops email has no original message to look up: it carries an address and no
+     * in_reply_to, so this node requests /messages/ and gets a 404. Ending the run
+     * there is why the cross-thread email to ops has never once arrived.
+     *
+     * The wasted 404 buys the whole feature without a second branch, a second code
+     * node or any rewiring — the shape of edit that has broken this workflow before.
+     * "Build Reply MIME" decides which draft to build from whether headers came
+     * back, and throws when there are neither headers nor a recipient, so a real
+     * Gmail outage on a client reply still fails loudly instead of drafting to
+     * nobody.
+     */
+    onError: "continueRegularOutput",
   },
   {
     parameters: { mode: "runOnceForAllItems", jsCode: MIME_CODE },
@@ -194,6 +244,14 @@ const nodes = [
     position: [660, 0],
     id: "node-4",
     name: "Build Reply MIME",
+    /**
+     * Its refusals answer 401 like the guard's, for the same reason: a throw here
+     * otherwise leaves n8n answering 200 with an EMPTY BODY, which is the shape a
+     * caller cannot tell from success. The engine does check for a draftId and so
+     * fails closed either way, but "refused, and why" is what a human reads when
+     * asking why no draft appeared.
+     */
+    onError: "continueErrorOutput",
   },
   {
     parameters: {
@@ -203,7 +261,10 @@ const nodes = [
       nodeCredentialType: "gmailOAuth2",
       sendBody: true,
       specifyBody: "json",
-      jsonBody: '={{ JSON.stringify({ message: { raw: $json.raw, threadId: $json.threadId } }) }}',
+      // threadId is OMITTED, not sent as null, when there is no thread: Gmail rejects
+      // a null threadId, and the ops email deliberately has none.
+      jsonBody:
+        '={{ JSON.stringify({ message: $json.threadId ? { raw: $json.raw, threadId: $json.threadId } : { raw: $json.raw } }) }}',
       options: {},
     },
     type: "n8n-nodes-base.httpRequest",
@@ -240,7 +301,14 @@ const connections = {
     ],
   },
   "Get Original Headers": { main: [[{ node: "Build Reply MIME", type: "main", index: 0 }]] },
-  "Build Reply MIME": { main: [[{ node: "Create Gmail Draft", type: "main", index: 0 }]] },
+  // Output 1 is the error branch created by onError on "Build Reply MIME", so a
+  // draft it refuses to build answers 401 rather than an empty 200.
+  "Build Reply MIME": {
+    main: [
+      [{ node: "Create Gmail Draft", type: "main", index: 0 }],
+      [{ node: "Refuse", type: "main", index: 0 }],
+    ],
+  },
   "Create Gmail Draft": { main: [[{ node: "Return draftId", type: "main", index: 0 }]] },
 };
 
@@ -256,6 +324,26 @@ if (STATUS_ONLY) {
   console.log(existing ? `installed: ${existing.id}  active=${existing.active}` : "not installed");
   console.log(`webhook: POST ${hookUrl}`);
   process.exit(0);
+}
+
+if (TEST_TO) {
+  const r = await fetch(hookUrl, {
+    method: "POST",
+    headers: { "content-type": "application/json", "x-webhook-secret": SECRET },
+    body: JSON.stringify({
+      to: TEST_TO,
+      subject: "Spartan engine — internal draft connectivity test",
+      html: "<p>This is the ops-email path (no in_reply_to). It is a DRAFT and has not been sent. Safe to delete.</p>",
+    }),
+  });
+  const text = await r.text();
+  console.log(`${r.status} ${text}`);
+  // A 200 carrying no draftId is the failure this whole path exists to stop being
+  // reported as success, so it exits non-zero.
+  let hasId = false;
+  try { hasId = Boolean(JSON.parse(text).draftId); } catch { hasId = false; }
+  if (r.ok && !hasId) console.log("FAILED: 200 with no draftId — the run stopped before Gmail");
+  process.exit(r.ok && hasId ? 0 : 1);
 }
 
 if (TEST_ID) {
