@@ -137,6 +137,26 @@ async function main() {
     ok(calls.some((c) => c.method === "DELETE" && c.path === "/orders"),
        "and the blockless order was deleted");
   }
+
+  console.log("");
+  console.log("the pipeline keeps the ids, and keeps them after an amendment appends one");
+  {
+    const src = readFileSync(join(ROOT, "app/lib/engine/pipeline.ts"), "utf8");
+    ok(/next\.last_ordered_team_ids\s*=\s*created\.team_ids/.test(src),
+       "the create branch stores the ids the create returned");
+    ok(/known:\s*\{[^}]*team_ids:\s*next\.last_ordered_team_ids/s.test(src),
+       "tryAmendInPlace passes the stored ids to amendOrderInPlace");
+    // An appended block's id must join the record, or the NEXT amendment loses custody of
+    // it and silently falls back to the audit read, which is empty.
+    ok(/last_ordered_team_ids\s*=\s*\[[\s\S]*?res\.amended\.added/.test(src),
+       "and an appended block's id is added to the record");
+
+    // The production executor is the seam this all runs through. Dropping `known` there
+    // leaves every test above passing and the live path taking the audit read, which is
+    // empty for every order the engine raises.
+    const deps = readFileSync(join(ROOT, "app/lib/deps.ts"), "utf8");
+    ok(/known:\s*p\.known/.test(deps), "the production executor forwards the stored ids");
+  }
 }
 
 main().then(() => {

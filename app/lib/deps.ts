@@ -317,11 +317,16 @@ export function executor(client: OnsinchClient): Executor {
       previous: DesiredSlotTeam[];
       desired: DesiredOrder;
       alreadyCreated?: number[];
+      known?: { job_id?: number; team_ids?: number[] };
       onCreated(team_id: number): Promise<void>;
     }) {
+      // `known` MUST be forwarded. It is the ids the create recorded, and without them
+      // the amendment falls back to the audit read, which is empty for every order this
+      // engine raises — the whole path would be correct and unreachable in production
+      // while every unit test passed.
       return amendOrderInPlace(
         client,
-        { order_id: p.order_id, previous: p.previous, desired: p.desired, alreadyCreated: p.alreadyCreated },
+        { order_id: p.order_id, previous: p.previous, desired: p.desired, alreadyCreated: p.alreadyCreated, known: p.known },
         { onCreated: p.onCreated }
       );
     },

@@ -35,7 +35,18 @@ function shapeOf(s: ConversationState): ThreadShape {
 /** The side-effecting edges. Injected so the pipeline stays testable. */
 export interface Executor {
   createReplyDraft(a: NonNullable<Actions["createReplyDraft"]>): Promise<string>; // -> draft id
-  createOrder(order: NonNullable<Actions["createOrder"]>): Promise<{ id: number; number?: string }>;
+  createOrder(order: NonNullable<Actions["createOrder"]>): Promise<{
+    id: number;
+    number?: string;
+    /** The job the crew blocks hang off, so an amendment can append to it. */
+    job_id?: number;
+    /**
+     * One slot-team id per block, in the order written. Optional because a test executor
+     * or an older stored order may not have them, and the amendment falls back to the
+     * audit read when they are missing.
+     */
+    team_ids?: number[];
+  }>;
   /**
    * Apply what can safely be applied to an EXISTING order, and report which
    * fields actually went. Returning the applied list is what stops the engine
@@ -70,6 +81,12 @@ export interface Executor {
     previous: DesiredSlotTeam[];
     desired: DesiredOrder;
     alreadyCreated?: number[];
+    /**
+     * What the create recorded: the job id and one slot-team id per block. Where these
+     * are present the amendment addresses the blocks directly and skips the audit read,
+     * which returns nothing for an order created through the API (API reference §12).
+     */
+    known?: { job_id?: number; team_ids?: number[] };
     onCreated(team_id: number): Promise<void>;
   }): Promise<AmendResult>;
   /**
@@ -421,6 +438,7 @@ async function tryAmendInPlace(
       previous: previous ?? [],
       desired: intended.desired,
       alreadyCreated: resuming ? next.order_amend?.created_ids : undefined,
+      known: { job_id: next.onsinch_job_id, team_ids: next.last_ordered_team_ids },
       async onCreated(team_id) {
         next.order_amend = {
           order_id,
@@ -465,6 +483,15 @@ async function tryAmendInPlace(
       next.last_ordered_hash = hashOrder(intended.desired);
       next.last_ordered_teams_hash = teamsHash;
       next.last_ordered_teams = intended.desired.slot_teams ?? [];
+      /**
+       * An APPENDED block's id joins the record. Miss this and the next amendment sees
+       * fewer stored ids than recorded blocks, declines on the mismatch, and the rebuild
+       * destroys an order that was perfectly amendable.
+       */
+      next.last_ordered_team_ids = [
+        ...(next.last_ordered_team_ids ?? []),
+        ...(res.amended.added ?? []),
+      ];
       next.onsinch_job_id = res.amended.job_id ?? next.onsinch_job_id;
       next.status = "ordered";
       next.pending_order = undefined;
@@ -711,6 +738,9 @@ async function executeOrder(
       // The array, not just its fingerprint: an in-place amendment on the NEXT email
       // pairs the ids OnSinch reads back against exactly this, position by position.
       next.last_ordered_teams = intended.desired.slot_teams ?? [];
+      // The ids, beside the blocks they belong to. Without these the amendment on the
+      // next email has nothing to address and declines to the rebuild.
+      next.last_ordered_team_ids = created.team_ids ?? [];
       next.status = "ordered";
       next.pending_order = undefined;
       next.order_action_log = [...next.order_action_log, { ts: now(), kind: "create", order_id: created.id, ok: true }];
