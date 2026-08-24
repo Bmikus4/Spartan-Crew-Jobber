@@ -151,6 +151,16 @@ export async function amendOrderInPlace(
     previous: DesiredSlotTeam[];
     desired: DesiredOrder;
     alreadyCreated?: number[];
+    /**
+     * What the engine recorded when it CREATED this order — the job id and one slot-team
+     * id per block, in the order they were written.
+     *
+     * Present for every order created after id custody shipped. When it is present the
+     * audit read is skipped entirely, because for those orders the read returns nothing:
+     * an API create logs one childless row (reference §12). Absent for UI-raised orders
+     * and for everything created before, which still fall through to the audit read.
+     */
+    known?: { job_id?: number; team_ids?: number[] };
   },
   hooks: AmendHooks
 ): Promise<AmendResult> {
@@ -167,14 +177,51 @@ export async function amendOrderInPlace(
   const pre = await preflightOrder(client, { order_id, company_id: args.desired.company_id });
   if (pre.refused) return { refused: pre.refused };
 
-  const read = await client.slotTeamsForOrder(order_id);
   /**
-   * A resumed run has already appended some of the teams, so the live set is longer
-   * than the one we last wrote by exactly that many. Those are ours and are excluded
-   * before the correspondence is checked — otherwise the retry declines on its own
-   * progress and hands a human an order that is halfway correct.
+   * OUR OWN RECORD OUTRANKS THE AUDIT LOG, because for an engine-created order the audit
+   * log holds nothing to outrank. Where ids were stored at create time they are used
+   * directly; the name comes from `previous`, which is by definition what we wrote.
+   *
+   * This also narrows what an amendment can touch, which is the point. The engine patches
+   * only ids it created, so a block a human added in the OnSinch UI is invisible to it and
+   * cannot be overwritten. Under position-pairing that block shifted every later index and
+   * the overwrite landed on the wrong one, reported as a 201.
    */
-  const live = done.length ? read.teams.filter((t) => !done.includes(t.id)) : read.teams;
+  const stored = args.known?.team_ids;
+  let live: Array<{ id: number; name: string }>;
+  let job_id: number | undefined;
+
+  if (stored && stored.length) {
+    if (stored.length !== previous.length) {
+      // Our own two records disagree. Which id belongs to which block is then a guess,
+      // and a wrong guess silently doubles or misplaces crew, so the rebuild takes it.
+      return {
+        declined:
+          `order #${order_id}: ${stored.length} stored slot-team id(s) for ${previous.length} recorded block(s) — ` +
+          `cannot say which id is which`,
+      };
+    }
+    live = stored.map((id, i) => ({ id, name: capSlotTeamName(previous[i]).name }));
+    job_id = args.known?.job_id;
+    /**
+     * `done` is NOT excluded here, and must not be. It holds ids a previous attempt
+     * APPENDED, which by definition are not in the array recorded at create time — the
+     * pipeline only extends that array once an amendment succeeds. So there is nothing
+     * of `done` in `live` to filter out, and filtering would be a no-op that reads as a
+     * safeguard. The audit-read branch below does need it, because the live read returns
+     * appended blocks too.
+     */
+  } else {
+    const read = await client.slotTeamsForOrder(order_id);
+    /**
+     * A resumed run has already appended some of the teams, so the live set is longer
+     * than the one we last wrote by exactly that many. Those are ours and are excluded
+     * before the correspondence is checked — otherwise the retry declines on its own
+     * progress and hands a human an order that is halfway correct.
+     */
+    live = done.length ? read.teams.filter((t) => !done.includes(t.id)) : read.teams;
+    job_id = read.job_id;
+  }
   const plan = planAmendment(previous, next, live);
   if (plan.declined) return { declined: plan.declined };
 
@@ -182,7 +229,7 @@ export async function amendOrderInPlace(
   if (!plan.patches.length && !stillToCreate.length) {
     // Nothing moved. Reached when a resumed run finds its work already done, and when
     // the only change was an order-level field, which the caller patches separately.
-    return { amended: { order_id, patched: 0, added: [...done], job_id: read.job_id } };
+    return { amended: { order_id, patched: 0, added: [...done], job_id } };
   }
 
   /**
@@ -227,7 +274,6 @@ export async function amendOrderInPlace(
 
   const added: number[] = [...done];
   if (stillToCreate.length) {
-    const job_id = read.job_id;
     if (!Number.isInteger(job_id)) {
       // The patches landed; the appended block did not. Said plainly rather than
       // reported as a completed amendment.
@@ -245,5 +291,5 @@ export async function amendOrderInPlace(
     }
   }
 
-  return { amended: { order_id, patched: plan.patches.length, added, job_id: read.job_id } };
+  return { amended: { order_id, patched: plan.patches.length, added, job_id } };
 }
