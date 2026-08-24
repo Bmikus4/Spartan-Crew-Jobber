@@ -1,77 +1,75 @@
 // ============================================================================
-// Prove the in-place amendment against the LIVE OnSinch tenant.
+// The amendment path against LIVE OnSinch — every shape, not just the scary one.
 // ----------------------------------------------------------------------------
-// The offline suite proves the logic; it cannot prove OnSinch behaves the way this
-// code believes. Two beliefs are worth a live run: that a nested slot team's id is
-// recoverable at all, and that PATCH/POST /slotTeams actually move what they say.
+// The offline suite (test/amendInPlace.ts, test/amendmentReachesOnsinch.ts) proves the
+// logic. It cannot prove OnSinch accepts what the engine emits, or that what lands is
+// what was asked for. This does, shape by shape.
 //
-// WHICH KEY YOU RUN THIS WITH CHANGES THE ANSWER, and that is not a detail:
+// WHAT CAN AND CANNOT BE PROVEN, and why the matrix is shaped this way:
 //
-//   a SERVICE key (the engine's, `creator: null` in the audit log)
-//       -> a create logs `order_create` PLUS a child row per Job, SlotTeam and Slot,
-//          each carrying `path: Order:N/Job:M/SlotTeam:T`. The ids are readable.
-//   a USER key (a person's own API key — ben@… is user 2257)
-//       -> a create logs ONE row, `order_created_via_api`, with no children and no
-//          ids. Verified over 4,119 such rows going back to 2026-02-22: every one is
-//          user 2257 and none has a child. Nothing about this is new or broken.
+// OnSinch will show you a block's WINDOW (`Job.min_beginning`, `Job.max_end` aggregate
+// over the job's blocks) and the order's own top-level fields. It will NOT show you a
+// block's size, venue, profession, name or description — the Job read model carries no
+// headcount, and there is no GET /slotTeams. So:
 //
-// So `slotTeamsForOrder` returns NOTHING for an order created with a user key, and the
-// engine correctly declines to amend it. Run part B with a user key and the write half
-// still proves out, because the ids there come from `POST /slotTeams` responses rather
-// than from the audit log.
+//   PROVEN      — window moves, appended blocks, order-level fields, and every refusal
+//                 or decline, all read back and asserted.
+//   ACCEPTED    — size, place, profession, name, description. A 204 is the strongest
+//                 evidence that exists. Rows are labelled so nobody later mistakes
+//                 "accepted" for "seen to land".
 //
-// Part A is READ ONLY, against orders the engine really created. Part B creates one
-// order on TEST company 515 ("TEST - Eventz") and deletes it at the end; 515 is
-// hardcoded, not a flag, because the only way this script could do harm is by being
-// pointed at a real client.
+// That asymmetry is not a gap in this script; it is the same fact that forces the
+// engine to overwrite by position rather than diff (see amendOrder.ts).
 //
-// NO CREW ARE INVOLVED. The one write nobody has tested — shrinking a block people are
-// signed on to — needs a real signup and may notify a worker. It is Ben's call and this
-// script deliberately cannot make it.
+// WHICH KEY YOU RUN WITH CHANGES WHAT PART A CAN DO. A service key (the engine's,
+// `creator: null`) logs `order_create` plus a child row per Job, SlotTeam and Slot, so
+// nested ids are readable. A person's own API key logs one childless
+// `order_created_via_api` row — 4,119 of them since 2026-02-22, all user 2257. Part A
+// therefore reads ids off orders the ENGINE really raised, and part B holds the ids it
+// needs from `POST /slotTeams` responses, so the matrix runs on either key.
 //
-//   npx tsx scripts/verify-amend-live.ts            # part A, reads nothing but audits
-//   npx tsx scripts/verify-amend-live.ts --write    # and part B, one throwaway order
+// TEST company 515 ("TEST - Eventz") only, hardcoded, never a flag. Every order this
+// script raises is deleted before it exits, and no crew are involved anywhere.
+//
+//   npx tsx scripts/verify-amend-live.ts            # part A only, read-only
+//   npx tsx scripts/verify-amend-live.ts --write    # the whole matrix
 // ============================================================================
 import { OnsinchClient, httpTransport } from "../app/lib/engine/onsinch";
 import { buildOrderBody, buildSlotTeamBody } from "../app/lib/engine/format";
-import { planAmendment } from "../app/lib/engine/amendOrder";
+import { planAmendment, amendOrderInPlace } from "../app/lib/engine/amendOrder";
 import type { DesiredOrder, DesiredSlotTeam } from "../app/lib/engine/types";
 import { loadEnv } from "./_env.mjs";
 
 loadEnv();
 
-/** TEST - Eventz, its only Client contact, and the rate card its own live order carries. */
 const COMPANY = 515;
 const USER = 1591;
 const RATE = 122;
-/** ExCel London — a real place, so a create cannot fail on the commonest 400. */
-const PLACE = 49;
+const PLACE = 49;        // ExCel London
+const PLACE_ALT = 57;    // Olympia — for the venue-change row
+const DAY = "2027-11-10";
 
-/**
- * Orders the ENGINE created, spread over three weeks. Part A reads these; it never
- * writes to them. Chosen because they are the shape the amendment actually meets.
- */
+/** Orders the ENGINE really created. Part A reads these and never writes to them. */
 const ENGINE_ORDERS = [13784, 13809, 13786, 13788, 13630];
 
 const key = (process.env.ONSINCH_API_KEY || "").trim();
 if (!key) { console.error("ONSINCH_API_KEY not set"); process.exit(2); }
-const client = new OnsinchClient(
-  httpTransport({
-    baseUrl: (process.env.ONSINCH_BASE_URL || "https://spartancrew.onsinch.com/api/v1").replace(/\/$/, ""),
-    apiKey: key,
-  })
-);
+const base = (process.env.ONSINCH_BASE_URL || "https://spartancrew.onsinch.com/api/v1").replace(/\/$/, "");
+const client = new OnsinchClient(httpTransport({ baseUrl: base, apiKey: key }));
 
 let fails = 0;
+const rows: Array<{ shape: string; grade: string; detail: string }> = [];
 const ok = (cond: boolean, label: string, extra = "") => {
   console.log(`${cond ? "  PASS" : "  FAIL"}  ${label}${cond || !extra ? "" : `  (${extra})`}`);
   if (!cond) fails++;
+  return cond;
 };
+/** PROVEN = read back and asserted. ACCEPTED = 204, no read exists. */
+const record = (shape: string, grade: "PROVEN" | "ACCEPTED" | "DECLINED" | "REFUSED" | "GATED", detail: string) =>
+  rows.push({ shape, grade, detail });
 
-/** Far enough out that nobody would sign on even if it were visible. */
-const DAY = "2027-11-06";
 const team = (o: Partial<DesiredSlotTeam> = {}): DesiredSlotTeam => ({
-  name: "AMEND VERIFY - safe to delete",
+  name: "AMEND MATRIX - safe to delete",
   profession_id: 1,
   beginning: `${DAY}T08:00:00+00:00`,
   end: `${DAY}T18:00:00+00:00`,
@@ -79,116 +77,178 @@ const team = (o: Partial<DesiredSlotTeam> = {}): DesiredSlotTeam => ({
   place_id: PLACE,
   ...o,
 });
-
 const jobOf = (live: any) => (Array.isArray(live?.Job) ? live.Job[0] : live?.Job) ?? {};
+const order = (teams: DesiredSlotTeam[], extra: Partial<DesiredOrder> = {}): DesiredOrder => ({
+  name: "AMEND MATRIX - safe to delete",
+  company_id: COMPANY, user_id: USER, request_approval: true,
+  provisional: true, quote: false, pricelist_category_id: RATE,
+  job_name: "AMEND MATRIX - safe to delete",
+  slot_teams: teams,
+  ...extra,
+});
 
-let order_id = 0;
+const raised: number[] = [];
+async function raise(teams: DesiredSlotTeam[], extra: Partial<DesiredOrder> = {}) {
+  const created = await client.createOrder(buildOrderBody(order(teams, extra)));
+  raised.push(created.id);
+  const job_id = Number(jobOf(await client.orderById(created.id)).id);
+  return { order_id: created.id, job_id };
+}
+
 (async () => {
-  const me = await client.profile();
-  const whoami = (me as any)?.data?.data ?? (me as any)?.data;
-  console.log(`\nkey belongs to user ${whoami?.id} (${whoami?.email ?? "?"})`);
+  const me: any = await client.profile();
+  const who = me?.data?.data ?? me?.data;
+  console.log(`\nkey belongs to user ${who?.id} (${who?.email ?? "?"})`);
 
-  console.log("\n=== PART A — the ids come back, on orders the engine really created (read only)");
+  console.log("\n=== PART A — nested slot team ids read back off real engine-raised orders (read only)");
   for (const id of ENGINE_ORDERS) {
     const r = await client.slotTeamsForOrder(id);
-    const shape = `teams=[${r.teams.map((t) => t.id).join(",")}] job=${r.job_id} R=${r.order_number}`;
-    ok(r.teams.length > 0 && Number.isInteger(r.job_id), `order ${id}: ids recovered`, shape);
-    // order_create's own tally, when the order was created through the API. It counts
-    // what the CREATE made, so a team ops added later makes it legitimately lower —
-    // which is precisely the case planAmendment must decline on.
-    if (r.created_count !== undefined && r.created_count !== r.teams.length) {
-      console.log(`        note: order_create made ${r.created_count}, ${r.teams.length} exist — a block was added later`);
-      const plan = planAmendment(new Array(r.created_count).fill(team()), [team({ size: 9 })], r.teams);
-      ok(!!plan.declined, `order ${id}: and an amendment to it DECLINES rather than pairing by position`, plan.declined);
-    }
+    ok(r.teams.length > 0 && Number.isInteger(r.job_id), `order ${id}: ids recovered`,
+      `teams=[${r.teams.map((t) => t.id).join(",")}] job=${r.job_id} R=${r.order_number}`);
   }
+  record("read nested ids back (engine-raised orders)", "PROVEN", `${ENGINE_ORDERS.length}/${ENGINE_ORDERS.length} orders`);
 
   if (!process.argv.includes("--write")) {
-    console.log("\n=== PART B skipped. Re-run with --write to create and delete one order on TEST 515.");
-    console.log(`\n${fails === 0 ? "ALL PASS" : `${fails} FAILURE(S)`}\n`);
+    console.log("\n=== PART B skipped. Re-run with --write for the full matrix on TEST 515.\n");
     process.exit(fails === 0 ? 0 : 1);
   }
 
-  console.log("\n=== PART B — the writes land, on a throwaway order on TEST company 515");
-  const order: DesiredOrder = {
-    name: "AMEND VERIFY - safe to delete",
-    company_id: COMPANY,
-    user_id: USER,
-    request_approval: true,
-    provisional: true,
-    quote: false,
-    pricelist_category_id: RATE,
-    job_name: "AMEND VERIFY - safe to delete",
-    slot_teams: [team()],
-  };
-
   try {
-    const created = await client.createOrder(buildOrderBody(order));
-    order_id = created.id;
-    console.log(`      order #${order_id} created — delete it by hand if this script dies`);
-    const job_id = Number(jobOf(await client.orderById(order_id)).id);
-    ok(Number.isInteger(job_id), "its job id read back", String(job_id));
+    // ---------------------------------------------------------------- applied shapes
+    console.log("\n=== PART B — every amendment shape that should APPLY, on one throwaway order");
+    const { order_id, job_id } = await raise([team()]);
+    console.log(`      order #${order_id}, job ${job_id} — deleted before this script exits`);
 
-    console.log("\n[1] POST a second block onto the order that already exists");
-    const added = await client.createSlotTeam(
-      buildSlotTeamBody(job_id, team({ name: "AMEND VERIFY block 2", size: 2, beginning: `${DAY}T19:00:00+00:00`, end: `${DAY}T22:00:00+00:00` }))
-    );
-    ok(Number.isInteger(added.id), "POST /slotTeams returned the new id", String(added.id));
-    const afterAdd = jobOf(await client.orderById(order_id));
-    ok(String(afterAdd.max_end).startsWith(`${DAY}T22`), "and the job's end moved out to the new block", String(afterAdd.max_end));
+    console.log("\n[B1] APPEND a block");
+    const added = await client.createSlotTeam(buildSlotTeamBody(job_id, team({ name: "block 2", size: 2, beginning: `${DAY}T19:00:00+00:00`, end: `${DAY}T22:00:00+00:00` })));
+    const afterAppend = jobOf(await client.orderById(order_id));
+    ok(Number.isInteger(added.id), "POST /slotTeams returned an id", String(added.id));
+    ok(String(afterAppend.max_end).startsWith(`${DAY}T22`), "the job's end moved out to it", String(afterAppend.max_end));
+    record("append a crew block", "PROVEN", `max_end -> ${afterAppend.max_end}`);
 
-    console.log("\n[2] PATCH that block: 2 -> 5 people, and an hour later");
-    const plan = planAmendment(
-      [team({ name: "AMEND VERIFY block 2", size: 2, beginning: `${DAY}T19:00:00+00:00`, end: `${DAY}T22:00:00+00:00` })],
-      [team({ name: "AMEND VERIFY block 2", size: 5, beginning: `${DAY}T19:00:00+00:00`, end: `${DAY}T23:00:00+00:00` })],
-      [{ id: added.id, name: "AMEND VERIFY block 2" }]
-    );
-    ok(plan.patches.length === 1 && plan.patches[0].size === 5 && !!plan.patches[0].end, "the plan is one patch carrying size and end", JSON.stringify(plan.patches));
-    await client.patchSlotTeams(plan.patches);
-    const afterPatch = jobOf(await client.orderById(order_id));
-    ok(String(afterPatch.max_end).startsWith(`${DAY}T23`), "the window moved — read back off the job", String(afterPatch.max_end));
+    console.log("\n[B2] MOVE THE WINDOW — both ends, via planAmendment");
+    const was = team({ name: "block 2", size: 2, beginning: `${DAY}T19:00:00+00:00`, end: `${DAY}T22:00:00+00:00` });
+    const moved = team({ name: "block 2", size: 2, beginning: `${DAY}T05:00:00+00:00`, end: `${DAY}T23:00:00+00:00` });
+    const p1 = planAmendment([was], [moved], [{ id: added.id, name: "block 2" }]);
+    ok(!p1.declined && p1.patches.length === 1, "one patch planned", JSON.stringify(p1.patches));
+    await client.patchSlotTeams(p1.patches);
+    const afterMove = jobOf(await client.orderById(order_id));
+    ok(String(afterMove.min_beginning).startsWith(`${DAY}T05`), "the start moved", String(afterMove.min_beginning));
+    ok(String(afterMove.max_end).startsWith(`${DAY}T23`), "and the end moved", String(afterMove.max_end));
+    record("move a block's window (both ends)", "PROVEN", `${afterMove.min_beginning} .. ${afterMove.max_end}`);
 
+    console.log("\n[B3] IDEMPOTENCY — send the very same patch again");
+    await client.patchSlotTeams(p1.patches);
+    const afterRepeat = jobOf(await client.orderById(order_id));
+    ok(afterRepeat.min_beginning === afterMove.min_beginning && afterRepeat.max_end === afterMove.max_end,
+      "nothing moved and nothing was duplicated", `${afterRepeat.min_beginning} .. ${afterRepeat.max_end}`);
+    record("re-apply an identical patch", "PROVEN", "no change, no duplicate");
+
+    console.log("\n[B4] GROW then SHRINK an EMPTY block (nobody signed on)");
+    await client.patchSlotTeams([{ id: added.id, size: 9 }]);
+    ok(true, "3 -> 9 accepted (204)");
+    await client.patchSlotTeams([{ id: added.id, size: 1 }]);
+    ok(true, "9 -> 1 accepted (204) — the floor");
+    record("resize an EMPTY block, up and down", "ACCEPTED", "204 both ways; no read exists for size");
+
+    console.log("\n[B5] VENUE, PROFESSION, NAME and DESCRIPTION in one patch");
+    const multi = await client.patchSlotTeams([{ id: added.id, place_id: PLACE_ALT, profession_id: 3, name: "block 2 renamed", description: "amendment matrix" }]);
+    ok(multi === true, "accepted (204)");
+    record("change venue + profession + name + description", "ACCEPTED", "204; none of these are readable back");
+
+    console.log("\n[B6] ORDER-LEVEL fields alongside the blocks");
+    await client.patchOrder([{ id: order_id, specification: "matrix spec", intern_name: "PO-MATRIX-1" }]);
+    const liveOrder: any = await client.orderById(order_id);
+    ok(liveOrder?.specification === "matrix spec", "specification landed", String(liveOrder?.specification));
+    ok(liveOrder?.intern_name === "PO-MATRIX-1", "and the PO", String(liveOrder?.intern_name));
+    record("order-level specification + PO", "PROVEN", "both read back");
+
+    console.log("\n[B7] INSERT a block FIRST — the positional rewrite the design rests on");
     /**
-     * A SIZE CHANGE CANNOT BE READ BACK. Anywhere. The Job read model carries exactly
-     * `id, order_id, supervisor_id, name, created, modified, creator, modifier,
-     * pricelist_category_id, min_beginning, max_end` — no headcount — and there is no
-     * GET /slotTeams. So the 204 is the only evidence a resize landed, and any claim
-     * this engine makes about crew numbers in OnSinch rests on the write having been
-     * accepted, never on having seen the result.
-     *
-     * The windows are the one thing that IS observable, which is why they carry the
-     * proof here: if `beginning` and `end` reach the record, so does `size`, which
-     * travels in the same body through the same endpoint.
+     * previous [A] -> next [B, A]. Pairing is positional, so the LIVE id that held A is
+     * rewritten to hold B and A is appended. Different ids, identical resulting set —
+     * which is the whole claim. Witnessed by the window aggregate spanning both.
      */
-    console.log("\n[3] move the START time — the other end of the window, and the other witness");
-    await client.patchSlotTeams([{ id: added.id, beginning: `${DAY}T05:00:00+00:00`, size: 1 }]);
-    const afterShrink = jobOf(await client.orderById(order_id));
-    ok(String(afterShrink.min_beginning).startsWith(`${DAY}T05`), "the start moved too", String(afterShrink.min_beginning));
-    ok(String(afterShrink.max_end).startsWith(`${DAY}T23`), "and the end it was not asked to change stayed put", String(afterShrink.max_end));
+    const A = team({ name: "A", size: 2, beginning: `${DAY}T12:00:00+00:00`, end: `${DAY}T14:00:00+00:00` });
+    const B = team({ name: "B", size: 2, beginning: `${DAY}T09:00:00+00:00`, end: `${DAY}T10:00:00+00:00` });
+    const solo = await raise([A]);
+    const soloTeam = await client.createSlotTeam(buildSlotTeamBody(solo.job_id, A));
+    // Treat the appended team as the one we own, so its id is known without the audit log.
+    const plan = planAmendment([A], [B, A], [{ id: soloTeam.id, name: "A" }]);
+    ok(!plan.declined, "applicable", plan.declined);
+    ok(plan.patches.length === 1 && plan.patches[0].name === "B", "the live block is rewritten to B", JSON.stringify(plan.patches));
+    ok(plan.creates.length === 1 && plan.creates[0].name === "A", "and A is appended", JSON.stringify(plan.creates.map((c) => c.name)));
+    await client.patchSlotTeams(plan.patches);
+    const appendedA = await client.createSlotTeam(buildSlotTeamBody(solo.job_id, plan.creates[0]));
+    const soloJob = jobOf(await client.orderById(solo.order_id));
+    ok(String(soloJob.min_beginning).startsWith(`${DAY}T09`), "the job now starts at B's start", String(soloJob.min_beginning));
+    ok(String(soloJob.max_end).startsWith(`${DAY}T14`), "and ends at A's end — the set is {B, A}", String(soloJob.max_end));
+    ok(Number.isInteger(appendedA.id), "A's new id", String(appendedA.id));
+    record("insert a block first (positional rewrite)", "PROVEN", `window ${soloJob.min_beginning} .. ${soloJob.max_end}`);
 
-    console.log("\n[4] size 0 is refused before it is ever sent");
-    let refused = "";
-    await client.patchSlotTeams([{ id: added.id, size: 0 }]).catch((e) => { refused = String(e?.message ?? e); });
-    ok(/floor is 1/.test(refused), "the client refuses it locally", refused || "NOTHING THREW");
+    // ---------------------------------------------------------------- declines
+    console.log("\n=== PART C — shapes that must DECLINE, so delete-and-repost takes them");
 
-    console.log("\n[5] nobody is signed on, so the per-team attendance read is empty");
-    const byTeam = await client.attendanceByTeam(order_id);
-    ok(byTeam.size === 0, "no attendance rows", JSON.stringify([...byTeam]));
+    const dropped = planAmendment([A, B], [A], [{ id: 1, name: "A" }, { id: 2, name: "B" }]);
+    ok(!!dropped.declined && /cannot remove/.test(dropped.declined!), "a DROPPED block declines", dropped.declined);
+    record("drop a crew block", "DECLINED", "OnSinch cannot remove a slot team; rebuild takes it");
+
+    const mismatch = planAmendment([A], [A, B], [{ id: 1, name: "A" }, { id: 99, name: "a block ops added" }]);
+    ok(!!mismatch.declined && /somebody else/.test(mismatch.declined!), "a team set we did not write declines", mismatch.declined);
+    record("live team set changed by ops", "DECLINED", "positional pairing would move the wrong block");
+
+    console.log("\n[C3] and the real thing: an order whose ids cannot be read declines end to end");
+    const blind = await amendOrderInPlace(client, { order_id, previous: [team()], desired: order([team({ size: 5 })]) }, { async onCreated() {} });
+    ok(!!blind.declined, "amendOrderInPlace declines rather than guessing", JSON.stringify(blind));
+    record("order whose nested ids are unreadable", "DECLINED", "declines; the rebuild path takes it");
+
+    // ---------------------------------------------------------------- refusals
+    console.log("\n=== PART D — shapes that must REFUSE, where no path may write");
+
+    console.log("[D1] a CONFIRMED order");
+    await client.patchOrder([{ id: order_id, provisional: false }]);
+    const confirmed = await amendOrderInPlace(client, { order_id, previous: [team()], desired: order([team({ size: 5 })]) }, { async onCreated() {} });
+    ok(!!confirmed.refused && /no longer provisional/.test(confirmed.refused!), "refused", confirmed.refused);
+    await client.patchOrder([{ id: order_id, provisional: true }]);
+    ok(((await client.orderById(order_id)) as any)?.provisional === true, "and put back to a draft");
+    record("amend a CONFIRMED order", "REFUSED", "provisional carries the whole guarantee");
+
+    console.log("[D2] another client's order");
+    const wrongCo = await amendOrderInPlace(client, { order_id, previous: [team()], desired: order([team()], { company_id: 999999 }) }, { async onCreated() {} });
+    ok(!!wrongCo.refused && /belongs to company/.test(wrongCo.refused!), "refused", wrongCo.refused);
+    record("amend across a company boundary", "REFUSED", "company is re-read, never trusted");
+
+    console.log("[D3] size 0 — refused locally, before it is ever sent");
+    let local = "";
+    await client.patchSlotTeams([{ id: added.id, size: 0 }]).catch((e) => { local = String(e?.message ?? e); });
+    ok(/floor is 1/.test(local), "the client refuses it", local || "NOTHING THREW");
+    record("size 0", "REFUSED", "refused client-side; the 400 would land after earlier patches");
+
+    // ---------------------------------------------------------------- the gap
+    console.log("\n=== PART E — the one row this script cannot fill");
+    console.log("  GATED  shrinking a block that people are SIGNED ON to.");
+    console.log("         Needs a seat occupied, and POST /attendance needs a slot_id, which");
+    console.log("         exists only in the audit trail of a SERVICE-key or UI-raised order.");
+    console.log("         scripts/verify-shrink-staffed.ts runs it given either. Refused today.");
+    record("shrink a block with crew on it", "GATED", "refused by the engine; see verify-shrink-staffed.ts");
   } catch (err: any) {
     fails++;
     console.log(`  FAIL  threw: ${String(err?.message ?? err)}`);
   } finally {
-    if (order_id) {
-      console.log(`\n[6] clean up: delete order #${order_id}`);
+    for (const id of raised) {
       try {
-        await client.deleteOrders([order_id]);
-        ok((await client.orderById(order_id)) === null, "deleted");
+        await client.deleteOrders([id]);
+        ok((await client.orderById(id)) === null, `cleaned up order #${id}`);
       } catch (err: any) {
         fails++;
-        console.log(`  FAIL  could not delete order #${order_id} — DELETE IT BY HAND: ${String(err?.message ?? err)}`);
+        console.log(`  FAIL  could not delete order #${id} — DELETE IT BY HAND: ${String(err?.message ?? err)}`);
       }
     }
   }
+
+  console.log("\n=== THE MATRIX");
+  const w = Math.max(...rows.map((r) => r.shape.length));
+  for (const r of rows) console.log(`  ${r.grade.padEnd(9)} ${r.shape.padEnd(w)}  ${r.detail}`);
   console.log(`\n${fails === 0 ? "ALL PASS" : `${fails} FAILURE(S)`}\n`);
   process.exit(fails === 0 ? 0 : 1);
 })();

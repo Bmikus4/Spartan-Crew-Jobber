@@ -188,12 +188,60 @@ Offline, no network, in `test/`:
 - `test/amendmentReachesOnsinch.ts` — the second email must now reach OnSinch as PATCHes
   with **no DELETE**, and a dropped block must still fall through to replace.
 
-Live: `npx tsx scripts/verify-amend-live.ts --write`. Part A reads the ids back off five
-real engine-raised orders; part B creates one order on TEST company 515, appends a block,
-PATCHes both ends of its window, checks `size: 0` is refused before it is sent, and
-deletes the order. **Ran green 2026-08-23**, and the tenant was checked afterwards for
-orphans — none.
+Live: `npx tsx scripts/verify-amend-live.ts --write` — the amendment matrix, every shape,
+on TEST company 515. **Ran green 2026-08-23**, 15 rows, orders deleted, tenant checked
+afterwards for orphans (none).
 
-Still not proved, and deliberately not: **shrinking a block people are signed on to.** It
-needs a real signup on a real order, which may SMS a worker. The engine refuses it today
-and names the count, so the gap is closed by refusal rather than left open. Ben's call.
+What the matrix can and cannot show is set by OnSinch, not by the script. It will show a
+block's **window** (`Job.min_beginning` / `max_end`) and the order's own fields. It will
+not show a block's size, venue, profession, name or description — no headcount on the Job
+read model, no `GET /slotTeams`. So a row is either PROVEN (read back and asserted) or
+ACCEPTED (a 204, which is the strongest evidence that exists). Labelled, so nobody later
+reads "accepted" as "seen to land". It is the same asymmetry that forces the engine to
+overwrite by position instead of diffing.
+
+| shape | |
+|---|---|
+| read nested ids back, engine-raised orders | PROVEN, 5/5 |
+| append a crew block | PROVEN |
+| move a window, both ends | PROVEN |
+| re-apply an identical patch | PROVEN — no change, no duplicate |
+| **insert a block first** (the positional rewrite) | PROVEN — window spans {B, A} |
+| order-level specification + PO | PROVEN |
+| resize an empty block, up and down | ACCEPTED |
+| venue + profession + name + description in one patch | ACCEPTED |
+| drop a crew block | DECLINED → rebuild |
+| live team set changed by ops | DECLINED → rebuild |
+| order whose nested ids are unreadable | DECLINED → rebuild |
+| amend a CONFIRMED order | REFUSED |
+| amend across a company boundary | REFUSED |
+| `size: 0` | REFUSED client-side |
+| **shrink a block with crew on it** | **GATED** |
+
+The insert-first row is the one that matters most: `previous [A] -> next [B, A]` rewrites
+the live id that held A into B and appends A. Different ids, identical resulting set —
+that is the claim the whole design rests on, and the job's window aggregate witnesses it.
+
+The gated row: **shrinking a block people are signed on to.** `scripts/verify-shrink-staffed.ts`
+runs it, and needs one of two things, because `POST /attendance` wants a `slot_id` and
+slot ids exist only in the audit trail of a service-key or UI-raised order (there is no
+`GET /slots`, no `/positions`, no `/applicants`, and a standalone `POST /slotTeams` logs
+nothing):
+
+- `--order <id>` — an order raised in the OnSinch UI on TEST - Eventz, one block, 3 crew.
+- `ONSINCH_SERVICE_API_KEY` — then it raises and deletes its own order, unattended.
+
+It signs on dummy workers carrying `name` and `surname` ONLY — `POST /workers` requires
+nothing else, so they have no email and no phone and cannot be contacted, and
+`POST /attendance` accepts only `{slot_id, user_id}`, so there is no notify flag to get
+wrong. Two questions, and only the second needs an occupied seat:
+
+1. **Does a shrink destroy slots at all?** Shrink an empty block and grow it back: if the
+   restored seats carry NEW slot ids, the originals were destroyed, and anyone who had
+   been standing in them was detached. Enough to keep the refusal permanently.
+2. **Does it drop the EMPTY seats first?** The one that would unlock the feature — a
+   shrink to no fewer than the number signed on would then be safe. Needs some seats
+   occupied and others not.
+
+Until one of those is answered the engine refuses, names the block and the count, and
+sends the whole amendment to a human.
