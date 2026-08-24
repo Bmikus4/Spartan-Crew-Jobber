@@ -280,6 +280,23 @@ export interface ConversationState {
    */
   last_ordered_teams?: DesiredSlotTeam[];
   /**
+   * The OnSinch slot-team ids of exactly those blocks, in the same order.
+   *
+   * The engine holds these because it CREATED them — `POST /slotTeams` returns the id —
+   * not because it can read them back. It cannot: an order created through the API logs
+   * one childless audit row, so `slotTeamsForOrder` returns nothing for every order this
+   * engine has ever made (API reference §12).
+   *
+   * This is what lets an amendment address a block directly instead of pairing by
+   * position, and pairing by position is fragile in the way that matters: a human adding
+   * a block in the OnSinch UI shifts every later index, and the overwrite lands on the
+   * wrong block on a 201 that says everything is fine.
+   *
+   * ABSENT is meaningful and must stay supported — an order raised in the UI, or created
+   * before this existed, has no stored ids and falls back to the audit read.
+   */
+  last_ordered_team_ids?: number[];
+  /**
    * needs-info = the engine did its job but cannot proceed without a human
    *              (no company name in the email, unknown sender, new venue).
    *              Expected and routine.

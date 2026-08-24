@@ -983,6 +983,7 @@ export async function compile(
      */
     last_ordered_teams_hash: prior?.last_ordered_teams_hash,
     last_ordered_teams: prior?.last_ordered_teams,
+    last_ordered_team_ids: prior?.last_ordered_team_ids,
     order_replace: prior?.order_replace,
     order_amend: prior?.order_amend,
     priority: cls.priority,
