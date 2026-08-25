@@ -1,0 +1,273 @@
+// ============================================================================
+// The corpus study WITH THE MODEL IN THE LOOP. 100 enquiries written like client mail.
+// ----------------------------------------------------------------------------
+//   npx tsx sim/corpus-real.ts --n=3            a pilot, and it costs real money
+//   npx tsx sim/corpus-real.ts --n=100          the study
+//   npx tsx sim/corpus-real.ts --cleanup        delete everything the ledger lists
+//
+// THIS SPENDS MONEY. Priced first with sim/corpus-price.ts, at roughly $0.05 a case on
+// the engine's default model, and guarded here by a hard ceiling that aborts the run
+// rather than discovering the bill afterwards. Ben signed off the figure before it ran.
+//
+// It differs from sim/corpus.ts in exactly one way, and that way is the point: the
+// reasoner is the REAL OpenRouter one, so classification and extraction are under test
+// rather than scripted. Everything downstream — the engine, the executor, the tenant —
+// is the same rig (sim/corpusRig.ts), so the two runs are comparable.
+//
+// THE EMAILS ARE NOT GENERATED FROM THE ANSWER. See sim/randomCases.ts: each case
+// declares the booking a competent human would take, then renders it the way a client
+// types it. The declared truth is what extraction is scored against.
+// ============================================================================
+import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+import { loadEnv, requireEnv, onsinchBase } from "../scripts/_env.mjs";
+import { OnsinchClient, httpTransport, __resetListCache } from "../app/lib/engine/onsinch";
+import { createOpenRouterReasoner } from "../app/lib/engine/reason";
+import { guardReasoner } from "../app/lib/engine/spend";
+import { handleThread } from "../app/lib/engine/pipeline";
+import type { HydratedThread, ThreadMessage } from "../app/lib/engine/types";
+import { buildRig } from "./corpusRig";
+import { bandChiefs } from "./oracle";
+import { loadProfessions } from "./harness";
+import { buildRandomCases, VENUE_FORMAL, type RandomCase, type TruthBlock } from "./randomCases";
+import { COMPANY_NAME, COMPANY_ID, CONTACT } from "./corpusCases";
+
+loadEnv();
+const KEY = requireEnv("ONSINCH_API_KEY");
+const AI_KEY = requireEnv("OPENROUTER_API_KEY");
+const BASE = onsinchBase();
+const MODEL = process.env.SPARTAN_MODEL || "anthropic/claude-opus-4.6";
+
+const argOf = (n: string, d: number) => {
+  const a = process.argv.find((x) => x.startsWith(`--${n}=`));
+  return a ? Number(a.split("=")[1]) : d;
+};
+const N = argOf("n", 100);
+const CONCURRENCY = argOf("concurrency", 3);
+/**
+ * A hard stop, IN DOLLARS, checked between batches. The run aborts rather than
+ * discovering the bill afterwards.
+ *
+ * Distinct from the per-case guard below, whose `limit` counts CALLS, not money — the
+ * first pilot passed dollars into it and every case died after one call. Both exist: the
+ * guard stops one runaway thread, this stops a runaway run.
+ */
+const CEILING = argOf("ceiling", 12);
+/** Calls one case may make: 2 combined + 2 replies, plus headroom for a retry. */
+const CALLS_PER_CASE = argOf("calls", 8);
+const mode = process.argv.includes("--cleanup") ? "cleanup" : process.argv.includes("--keep") ? "keep" : "full";
+
+const OUT = join(import.meta.dirname, "..", ".tmp-data", "corpus-real");
+const LEDGER = join(OUT, "ledger.json");
+const RESULTS = join(OUT, "results.jsonl");
+mkdirSync(OUT, { recursive: true });
+const led: { orders: number[] } = existsSync(LEDGER) ? JSON.parse(readFileSync(LEDGER, "utf8")) : { orders: [] };
+const saveLedger = () => writeFileSync(LEDGER, JSON.stringify(led, null, 2));
+
+// ---------------------------------------------------------------- scoring extraction
+/** Which OnSinch profession family a role SHOULD land in, by name rather than by id. */
+const ROLE_PATTERNS: Record<TruthBlock["role"], RegExp> = {
+  crew: /crew|general|stage|labour/i,
+  carpenter: /carpenter|joiner|chippy/i,
+  rigger: /rigg/i,
+  forklift: /forklift|counterbalance|flt|telehandler/i,
+  ipaf: /ipaf|mewp|cherry/i,
+};
+
+interface Scored {
+  crew_total: boolean;
+  block_count: boolean;
+  date: boolean;
+  times: boolean;
+  venue: boolean;
+  roles: boolean;
+}
+
+function scoreExtraction(c: RandomCase, truth: { blocks: TruthBlock[] }, state: {
+  desired_order?: { slot_teams?: Array<{ size: number; beginning: string; end: string; profession_id: number; place_id: number }> } | null;
+  facts?: { requests?: Array<{ date?: string; start_time?: string; end_time?: string; size?: number }> };
+  place_id?: number;
+}, professionName: (id: number) => string, placeName: (id: number) => string): Scored {
+  const teams = state.desired_order?.slot_teams ?? [];
+  const wanted = truth.blocks.reduce((n, b) => n + b.size, 0);
+  const got = teams.reduce((n, t) => n + t.size, 0);
+  const reqs = state.facts?.requests ?? [];
+
+  // The DATE the client stated, against the date the engine booked. An undated case has
+  // nothing to be right or wrong about, so it scores true and is counted separately.
+  const wantDate = truth.blocks.find((b) => b.date)?.date ?? null;
+  const gotDate = teams[0]?.beginning?.slice(0, 10) ?? reqs.find((r) => r.date)?.date ?? null;
+
+  const wantTimes = truth.blocks.filter((b) => b.start && b.end).length;
+  const gotTimes = teams.filter((t, i) => {
+    const b = truth.blocks[i];
+    if (!b?.start || !b?.end) return false;
+    return t.beginning?.slice(11, 16) === b.start && t.end?.slice(11, 16) === b.end;
+  }).length;
+
+  const wantVenue = VENUE_FORMAL(truth.blocks[0].venue).toLowerCase();
+  const gotVenue = placeName(state.place_id ?? teams[0]?.place_id ?? 0).toLowerCase();
+  // A loose match on purpose: the tenant's rows for one building differ in punctuation
+  // and suffix, and this is asking "did it find the right building", not "did it echo".
+  const venueKey = wantVenue.split(",")[0].replace(/[^a-z0-9 ]/g, "").trim();
+  // AN UNRESOLVED VENUE IS A MISS. The first version tested `venueKey.includes(gotVenue)`
+  // with gotVenue = "", which is true for every string — so every venue the resolver
+  // failed to find scored as found, including "o2 arena" being created as a new place
+  // beside the O2 that already exists.
+  const venueOk = truth.blocks[0].venue === "new"
+    ? /thornbury/i.test(gotVenue)              // the new venue must be the one provisioned
+    : gotVenue !== "" && (gotVenue.includes(venueKey.slice(0, 8)) || venueKey.slice(0, 8).includes(gotVenue.split(",")[0].slice(0, 8)));
+
+  const rolesOk = teams.length > 0 && truth.blocks.every((b, i) => {
+    const t = teams[i];
+    if (!t) return false;
+    return ROLE_PATTERNS[b.role].test(professionName(t.profession_id));
+  });
+
+  return {
+    crew_total: wanted === got,
+    // CHIEF-AWARE. A block of 10 is composed as 9 crew + 1 chief — two teams for one
+    // requested block — so comparing raw counts marks the carve-out as an error.
+    block_count: teams.length === truth.blocks.reduce((n, b) => n + 1 + (bandChiefs(b.size) > 0 ? 1 : 0), 0)
+      || teams.length === truth.blocks.length,
+    date: wantDate === null ? true : gotDate === wantDate,
+    times: wantTimes === gotTimes,
+    venue: venueOk,
+    roles: rolesOk,
+  };
+}
+
+// ---------------------------------------------------------------- one case
+async function runCase(c: RandomCase, professionName: (id: number) => string, placeName: (id: number) => string) {
+  const t0 = Date.now();
+  let spent = 0;
+  const base = createOpenRouterReasoner({ apiKey: AI_KEY, model: MODEL });
+  const reasoner = guardReasoner(base, { model: MODEL, label: c.id, limit: CALLS_PER_CASE });
+
+  const rig = buildRig({
+    baseUrl: BASE, apiKey: KEY, reasoner,
+    onOrderCreated: (id) => { if (!led.orders.includes(id)) { led.orders.push(id); saveLedger(); } },
+  });
+
+  const m = (id: string, at: string, subject: string, body: string): ThreadMessage => ({
+    message_id: id, from: CONTACT, to: ["bookings@spartancrew.co.uk"],
+    date_iso: at, subject, body, is_from_spartan: false,
+  });
+  const thread = (msgs: ThreadMessage[]): HydratedThread => ({ thread_id: `real-${c.id}`, messages: msgs });
+
+  const row: Record<string, unknown> = { id: c.id, subject: c.subject, body: c.body, truth: c.truth, amendShape: c.amend?.shape ?? null };
+
+  try {
+    const e1 = m("m1", "2026-08-24T09:00:00Z", c.subject, c.body);
+    const s1 = await handleThread(thread([e1]), rig.deps);
+    row.new_ = {
+      classification: s1.classification,
+      status: s1.status,
+      order_id: s1.onsinch_order_id,
+      r: s1.onsinch_order_number,
+      crew: (s1.desired_order?.slot_teams ?? []).reduce((n, t) => n + t.size, 0),
+      teams: (s1.desired_order?.slot_teams ?? []).length,
+      notes: s1.notes,
+      window: await rig.windowOf(s1.onsinch_order_id),
+      score: scoreExtraction(c, c.truth, s1 as never, professionName, placeName),
+      // The extraction itself, so a wrong booking can be traced to what was read rather
+      // than guessed at from the order it produced.
+      facts: (s1 as { facts?: unknown }).facts,
+    };
+
+    if (c.amend) {
+      const s2 = await handleThread(thread([
+        e1,
+        m("m2", "2026-08-24T13:00:00Z", c.amend.subject, c.amend.body),
+      ]), rig.deps);
+      row.amend_ = {
+        classification: s2.classification,
+        status: s2.status,
+        order_id: s2.onsinch_order_id,
+        r: s2.onsinch_order_number,
+        crew: (s2.desired_order?.slot_teams ?? []).reduce((n, t) => n + t.size, 0),
+        path: s2.order_action_log.map((a) => `${a.kind}${a.ok ? "" : "!"}`).join(","),
+        notes: s2.notes,
+        window: await rig.windowOf(s2.onsinch_order_id),
+        r_survived: !!(row.new_ as { r?: string }).r && (row.new_ as { r?: string }).r === s2.onsinch_order_number,
+        score: scoreExtraction(c, c.amend.truth, s2 as never, professionName, placeName),
+      };
+    }
+  } catch (err) {
+    row.error = String((err as Error)?.message ?? err).slice(0, 400);
+  }
+
+  const rep = reasoner.spend();
+  spent = rep.estimatedUsd ?? 0;
+  row.spend = { calls: rep.calls, usd: Number(spent.toFixed(4)) };
+  row.wire = rig.wire;
+  row.ms = Date.now() - t0;
+  appendFileSync(RESULTS, JSON.stringify(row) + "\n");
+  return { spent, ok: !row.error };
+}
+
+// ---------------------------------------------------------------- cleanup
+async function cleanup() {
+  const onsinch = new OnsinchClient(httpTransport({ baseUrl: BASE, apiKey: KEY }));
+  const ids = [...new Set(led.orders)];
+  if (!ids.length) { console.log("ledger clean"); return; }
+  console.log(`cleanup: ${ids.length} order(s)`);
+  const stuck: number[] = [];
+  let gone = 0;
+  for (let i = 0; i < ids.length; i += 20) {
+    await Promise.all(ids.slice(i, i + 20).map(async (id) => {
+      try {
+        if (!(await onsinch.orderById(id))) { gone++; return; }
+        await onsinch.deleteOrders([id]);
+        if (await onsinch.orderById(id)) stuck.push(id); else gone++;
+      } catch { stuck.push(id); }
+    }));
+  }
+  console.log(`  gone ${gone}, still present ${stuck.length}${stuck.length ? " -> " + stuck.join(",") : ""}`);
+  led.orders = stuck; saveLedger();
+}
+
+// ---------------------------------------------------------------- run
+(async () => {
+  __resetListCache();
+  if (mode === "cleanup") { await cleanup(); return; }
+
+  const check = new OnsinchClient(httpTransport({ baseUrl: BASE, apiKey: KEY }));
+  const companies = (await check.allCompanies()) as Array<{ id: number; name?: string }>;
+  const test = companies.find((x) => String(x.name || "").trim() === COMPANY_NAME);
+  if (!test || Number(test.id) !== COMPANY_ID) throw new Error(`refusing: "${COMPANY_NAME}" is not company ${COMPANY_ID}`);
+
+  // Names, so extraction can be scored against what the resolver actually chose rather
+  // than against an id nobody can read.
+  // The same list the engine resolves against — loadProfessions prefers the live pull in
+  // .tmp-data and falls back to the committed list, exactly as the engine does.
+  const profs = loadProfessions();
+  const professionName = (id: number) => String(profs.find((p) => Number(p.id) === Number(id))?.name || `#${id}`);
+  const places = (await check.allPlaces()) as Array<{ id: number; name?: string; address?: string }>;
+  const placeName = (id: number) => {
+    const p = places.find((x) => Number(x.id) === Number(id));
+    return p ? `${p.name || ""} ${p.address || ""}`.trim() : "";
+  };
+
+  const cases = buildRandomCases(N);
+  console.log(`model ${MODEL}`);
+  console.log(`${cases.length} cases, ${cases.filter((c) => c.amend).length} amended, ceiling $${CEILING}`);
+  writeFileSync(RESULTS, "");
+
+  const started = Date.now();
+  let done = 0, failed = 0, usd = 0;
+  for (let i = 0; i < cases.length; i += CONCURRENCY) {
+    const out = await Promise.all(cases.slice(i, i + CONCURRENCY).map((c) =>
+      runCase(c, professionName, placeName).catch(() => ({ spent: 0, ok: false }))));
+    done += out.length;
+    failed += out.filter((o) => !o.ok).length;
+    usd += out.reduce((n, o) => n + o.spent, 0);
+    process.stdout.write(`\r  ${done}/${cases.length}  failed ${failed}  ~$${usd.toFixed(2)}  ${Math.round((Date.now() - started) / 1000)}s   `);
+    // THE CEILING IS CHECKED BETWEEN BATCHES, not only inside the guard: the guard stops
+    // one case's reasoner, and what matters is stopping the RUN.
+    if (usd > CEILING) { console.log(`\nSTOPPED: $${usd.toFixed(2)} exceeds the $${CEILING} ceiling`); break; }
+  }
+  console.log(`\ndone in ${Math.round((Date.now() - started) / 1000)}s, ~$${usd.toFixed(2)} -> ${RESULTS}`);
+  if (mode === "full") await cleanup();
+  else console.log(`--keep: ${led.orders.length} order(s) left`);
+})();
