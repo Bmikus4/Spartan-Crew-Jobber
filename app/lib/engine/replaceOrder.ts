@@ -218,9 +218,18 @@ export function carryForward(
      * would write OnSinch's own emptiness back as though it were ops' intent.
      */
     if (!v) continue;
-    // Only when the engine is not itself setting it: the amendment is the newer truth
-    // for anything it actually read out of the email.
-    if (mine[f] !== undefined && mine[f] !== "") continue;
+    /**
+     * Only when the engine is not itself setting it: the amendment is the newer truth
+     * for anything it actually read out of the email.
+     *
+     * `order_manager_id` is the exception and it goes the other way. The engine
+     * stamps every order it builds with the SamurAI account so an AI-built job can be
+     * told apart, but that is a default, not a reading of the email — and if somebody
+     * at Spartan has taken the job over and put their own name on it, a rebuild that
+     * put SamurAI back would quietly hand it back to nobody.
+     */
+    const liveWins = f === "order_manager_id";
+    if (!liveWins && mine[f] !== undefined && mine[f] !== "") continue;
     add[f] = v;
     carried.push(f);
   }

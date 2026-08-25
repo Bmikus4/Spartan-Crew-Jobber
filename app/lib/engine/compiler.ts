@@ -183,6 +183,30 @@ function firstDate(facts: ConversationFacts): string | undefined {
 const PLACEHOLDER_CONTACT_ID = 2257;
 
 /**
+ * WHO OWNS AN ORDER THIS ENGINE BUILT.
+ *
+ * Spartan could not tell an AI-built job from a hand-built one at a glance. The
+ * order's `creator` was already right — 2257 on every engine order against 2620 or
+ * 413 on a human's — but the name they read in the list is the order's CONTACT, and
+ * on the TEST company that is "Alexa Accs", accounts@spartancrew.co.uk, which the
+ * engine fell back to because the sender is unknown to OnSinch. On a real enquiry
+ * it is the client's own contact. Either way it says nothing about who built it.
+ *
+ * `order_manager_id` is the field for it and it was empty on every order this engine
+ * has ever made. Ben, 2026-08-25: fill it, leave the contact alone.
+ *
+ * The CONTACT is deliberately not touched. It is who the booking is for, and an
+ * order with no client contact cannot be posted at all — the reason
+ * PLACEHOLDER_CONTACT_ID above exists.
+ *
+ * Overridable, because the right answer is a dedicated "SamurAI" login once Spartan
+ * makes one; there is no such user in the tenant today (searched, 25 pages of
+ * /users), so this is Ben's own account, which is also the account the API key
+ * belongs to and therefore already the creator.
+ */
+const ORDER_MANAGER_ID = Number(process.env.SPARTAN_ORDER_MANAGER_ID || PLACEHOLDER_CONTACT_ID);
+
+/**
  * The venue for a job whose venue nobody has said yet. Ben: "for venue, if it
  * doesnt exist in onsinch, then you should also use a placeholder location
  * ('No Location') which you will create."
@@ -906,6 +930,9 @@ export async function compile(
           ? facts.requests.map((r) => r.task).filter(Boolean).join("; ").slice(0, 200) || "Crew request read from the thread"
           : cls.job_summary,
         intern_name: facts.customer_reference,
+        // Stamped on every order the engine builds, so "who built this" is answerable
+        // from the order itself rather than from the API key that happened to post it.
+        order_manager_id: Number.isInteger(ORDER_MANAGER_ID) && ORDER_MANAGER_ID > 0 ? ORDER_MANAGER_ID : undefined,
       });
       composed.warnings.forEach((w) => notes.push(w));
       desired = composed.order;

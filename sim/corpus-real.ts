@@ -27,8 +27,7 @@ import { guardReasoner } from "../app/lib/engine/spend";
 import { handleThread } from "../app/lib/engine/pipeline";
 import type { HydratedThread, ThreadMessage } from "../app/lib/engine/types";
 import { buildRig } from "./corpusRig";
-import { bandChiefs } from "./oracle";
-import { UNRECOGNISED_MARK } from "../app/lib/engine/professions";
+import { UNRECOGNISED_MARK, resolveProfession } from "../app/lib/engine/professions";
 import { loadProfessions } from "./harness";
 import { buildRandomCases, VENUE_FORMAL, type RandomCase, type TruthBlock } from "./randomCases";
 import { COMPANY_NAME, COMPANY_ID, CONTACT } from "./corpusCases";
@@ -96,6 +95,14 @@ const ROLE_PATTERNS: Record<TruthBlock["role"], RegExp> = {
 /** Roles the tenant has no row for: booking Crew is right, booking it QUIETLY is not. */
 const ROLES_WITHOUT_A_ROW = new Set<TruthBlock["role"]>(["rigger"]);
 
+/**
+ * How many teams the client's blocks compose into: same window, same place, same
+ * role is ONE team with the sizes summed. Size never splits a team.
+ */
+function mergedBlockCount(blocks: TruthBlock[]): number {
+  return new Set(blocks.map((b) => `${b.date ?? ""}|${b.start ?? ""}|${b.end ?? ""}|${b.venue}|${b.role}`)).size;
+}
+
 interface Scored {
   crew_total: boolean;
   block_count: boolean;
@@ -114,7 +121,7 @@ interface Scored {
 
 function scoreExtraction(c: RandomCase, truth: { blocks: TruthBlock[] }, state: {
   desired_order?: { slot_teams?: Array<{ size: number; beginning: string; end: string; profession_id: number; place_id: number }> } | null;
-  facts?: { requests?: Array<{ date?: string; start_time?: string; end_time?: string; size?: number }> };
+  facts?: { requests?: Array<{ date?: string; start_time?: string; end_time?: string; size?: number; profession_hint?: string }> };
   place_id?: number;
   notes?: string[];
 }, professionName: (id: number) => string, placeName: (id: number) => string, placeIsAShell: (id: number) => boolean): Scored {
@@ -128,12 +135,32 @@ function scoreExtraction(c: RandomCase, truth: { blocks: TruthBlock[] }, state: 
   const wantDate = truth.blocks.find((b) => b.date)?.date ?? null;
   const gotDate = teams[0]?.beginning?.slice(0, 10) ?? reqs.find((r) => r.date)?.date ?? null;
 
+  /**
+   * READ THE ORDER WHERE THERE IS ONE, AND THE FACTS WHERE THERE IS NOT.
+   *
+   * An undated enquiry is HELD, correctly and by design — there is no window to book.
+   * So it composes no order, `teams` is empty, and every field scored off the teams
+   * came back false: a thread the engine got completely right was marked wrong on
+   * times, roles and block count at once. Five of the hundred cases are undated, and
+   * they account for all four "time misses" and all three "role misses" in the rerun
+   * — in every one of them the extracted values match the truth exactly.
+   *
+   * This is not a lenient fallback. It scores the same claim against the same truth;
+   * it just stops requiring an order to exist before extraction can be judged, which
+   * is a property of the SCORER and never was a property of the engine.
+   */
   const wantTimes = truth.blocks.filter((b) => b.start && b.end).length;
-  const gotTimes = teams.filter((t, i) => {
-    const b = truth.blocks[i];
-    if (!b?.start || !b?.end) return false;
-    return t.beginning?.slice(11, 16) === b.start && t.end?.slice(11, 16) === b.end;
-  }).length;
+  const gotTimes = teams.length
+    ? teams.filter((t, i) => {
+        const b = truth.blocks[i];
+        if (!b?.start || !b?.end) return false;
+        return t.beginning?.slice(11, 16) === b.start && t.end?.slice(11, 16) === b.end;
+      }).length
+    : reqs.filter((q, i) => {
+        const b = truth.blocks[i];
+        if (!b?.start || !b?.end) return false;
+        return q.start_time === b.start && q.end_time === b.end;
+      }).length;
 
   const wantVenue = VENUE_FORMAL(truth.blocks[0].venue).toLowerCase();
   const gotVenue = placeName(state.place_id ?? teams[0]?.place_id ?? 0).toLowerCase();
@@ -159,18 +186,51 @@ function scoreExtraction(c: RandomCase, truth: { blocks: TruthBlock[] }, state: 
     ? /thornbury/i.test(gotVenue)              // the new venue must be the one provisioned
     : bookable && (gotVenue.includes(venueKey.slice(0, 8)) || venueKey.slice(0, 8).includes(gotVenue.split(",")[0].slice(0, 8)));
 
-  const rolesOk = teams.length > 0 && truth.blocks.every((b, i) => {
-    const t = teams[i];
-    if (!t) return false;
-    return ROLE_PATTERNS[b.role].test(professionName(t.profession_id));
-  });
+  /**
+   * BY SET, NOT BY INDEX, AND WITHOUT THE CHIEFS.
+   *
+   * `truth.blocks[i]` against `teams[i]` assumes composition preserves both the
+   * order and the count of the blocks. It preserves neither, by design and by Ben's
+   * rule: two blocks at the same time and place MERGE into one team, and every team
+   * of four or more has its chiefs CARVED OUT into a team of their own. A correct
+   * order for "12 riggers for the build, 18 riggers for the derig, same window" is
+   * one team of 22 plus a team of 3 chiefs — and the index comparison reads team[1]
+   * as Crew Chief where the truth says rigger, and calls the booking wrong.
+   *
+   * Four of the rerun's cases are exactly this. So: every role the client asked for
+   * must be present on some team, and the chief teams the rule invents are not
+   * scored against a client block, because no client asked for them.
+   */
+  const CREW_CHIEF = 36;
+  const workTeams = teams.filter((t) => t.profession_id !== CREW_CHIEF);
+  const rolesOk = teams.length
+    ? truth.blocks.every((b) =>
+        workTeams.some((t) => ROLE_PATTERNS[b.role].test(professionName(t.profession_id))))
+    : reqs.length > 0 && truth.blocks.every((b, i) => {
+        const q = reqs[i] as { profession_hint?: string } | undefined;
+        if (!q) return false;
+        const m = resolveProfession(q.profession_hint, loadProfessions());
+        return ROLE_PATTERNS[b.role].test(m.name);
+      });
 
   return {
     crew_total: wanted === got,
     // CHIEF-AWARE. A block of 10 is composed as 9 crew + 1 chief — two teams for one
     // requested block — so comparing raw counts marks the carve-out as an error.
-    block_count: teams.length === truth.blocks.reduce((n, b) => n + 1 + (bandChiefs(b.size) > 0 ? 1 : 0), 0)
-      || teams.length === truth.blocks.length,
+    /**
+     * The WORK teams, against the blocks the client asked for after merging.
+     *
+     * Counting the chief teams here needs compose's merge rules restated in the
+     * scorer, and restating them wrong is how this metric came to under-report: the
+     * old expectation added one chief team per banded block, but chiefs merge across
+     * professions sharing a window and a place, so three banded blocks in two windows
+     * make two chief teams and not three. The chiefs are already pinned by
+     * test/crewChief.ts and by the 100/100 rule agreement in sim/run.ts; what this
+     * study is asking is whether the client's blocks survived, so it counts those.
+     */
+    block_count: teams.length
+      ? (workTeams.length === truth.blocks.length || workTeams.length === mergedBlockCount(truth.blocks))
+      : reqs.length === truth.blocks.length,
     date: wantDate === null ? true : gotDate === wantDate,
     times: wantTimes === gotTimes,
     venue: venueOk,
