@@ -20,8 +20,15 @@ const AS_JSON = process.argv.includes("--json");
  * run used — which is how the amended truth is recovered without having stored it: the
  * results file kept the original booking and the amendment's SHAPE, and a grow of "+3"
  * needs the case to say what the 3 was added to.
+ *
+ * THE SEED IS READ OFF THE RUN, not assumed. This was hardcoded, so scoring a run
+ * launched with --seed rebuilt a DIFFERENT hundred emails and compared each answer
+ * against somebody else's question: "crew after amendment right" came out 0/44 on a
+ * run in which every amendment was correct. Older result files predate the stamp and
+ * fall back to the default, which is the seed they were run with.
  */
-const cases = new Map(buildRandomCases(100).map((c) => [c.id, c]));
+const SEED = Number(rows[0]?.seed ?? 20260824);
+const cases = new Map(buildRandomCases(rows.length || 100, SEED).map((c) => [c.id, c]));
 
 const pct = (a: number, b: number) => (b ? `${((a / b) * 100).toFixed(0)}% (${a}/${b})` : "n/a");
 const say = (...a: unknown[]) => { if (!AS_JSON) console.log(...a); };

@@ -126,7 +126,7 @@ function scoreExtraction(c: RandomCase, truth: { blocks: TruthBlock[] }, state: 
   facts?: { requests?: Array<{ date?: string; start_time?: string; end_time?: string; size?: number; profession_hint?: string }> };
   place_id?: number;
   notes?: string[];
-}, professionName: (id: number) => string, placeName: (id: number) => string, placeIsAShell: (id: number) => boolean): Scored {
+}, placeName: (id: number) => string, placeIsAShell: (id: number) => boolean): Scored {
   const teams = state.desired_order?.slot_teams ?? [];
   const wanted = truth.blocks.reduce((n, b) => n + b.size, 0);
   const got = teams.reduce((n, t) => n + t.size, 0);
@@ -138,31 +138,30 @@ function scoreExtraction(c: RandomCase, truth: { blocks: TruthBlock[] }, state: 
   const gotDate = teams[0]?.beginning?.slice(0, 10) ?? reqs.find((r) => r.date)?.date ?? null;
 
   /**
-   * READ THE ORDER WHERE THERE IS ONE, AND THE FACTS WHERE THERE IS NOT.
+   * EXTRACTION IS SCORED OFF THE EXTRACTION. This section is headed "what the model
+   * read", and it was reading the composed ORDER instead.
    *
-   * An undated enquiry is HELD, correctly and by design — there is no window to book.
-   * So it composes no order, `teams` is empty, and every field scored off the teams
-   * came back false: a thread the engine got completely right was marked wrong on
-   * times, roles and block count at once. Five of the hundred cases are undated, and
-   * they account for all four "time misses" and all three "role misses" in the rerun
-   * — in every one of them the extracted values match the truth exactly.
+   * The two are not the same and cannot be made the same, because composition is
+   * where Ben's rules live. An undated block composes a team with an EMPTY window —
+   * correctly, there is nothing to book — so every undated case scored zero on
+   * times. Two blocks sharing a window and a place MERGE into one team, and every
+   * team of four or more has its chiefs CARVED OUT into a team of their own, so
+   * `truth.blocks[i]` against `teams[i]` compares a client's block against a chief
+   * nobody asked for. Between them these accounted for every "time miss" and every
+   * "role miss" in both reruns — sixteen cases in which the extracted values match
+   * the truth exactly.
    *
-   * This is not a lenient fallback. It scores the same claim against the same truth;
-   * it just stops requiring an order to exist before extraction can be judged, which
-   * is a property of the SCORER and never was a property of the engine.
+   * Composition is measured, thoroughly, somewhere else: sim/run.ts scores the
+   * composed order against an independently written oracle, 100/100, and the chief
+   * bands are pinned by test/crewChief.ts. Nothing is lost by asking this section
+   * only what it claims to ask.
    */
   const wantTimes = truth.blocks.filter((b) => b.start && b.end).length;
-  const gotTimes = teams.length
-    ? teams.filter((t, i) => {
-        const b = truth.blocks[i];
-        if (!b?.start || !b?.end) return false;
-        return t.beginning?.slice(11, 16) === b.start && t.end?.slice(11, 16) === b.end;
-      }).length
-    : reqs.filter((q, i) => {
-        const b = truth.blocks[i];
-        if (!b?.start || !b?.end) return false;
-        return q.start_time === b.start && q.end_time === b.end;
-      }).length;
+  const gotTimes = reqs.filter((q, i) => {
+    const b = truth.blocks[i];
+    if (!b?.start || !b?.end) return false;
+    return q.start_time === b.start && q.end_time === b.end;
+  }).length;
 
   const wantVenue = VENUE_FORMAL(truth.blocks[0].venue).toLowerCase();
   const gotVenue = placeName(state.place_id ?? teams[0]?.place_id ?? 0).toLowerCase();
@@ -203,24 +202,18 @@ function scoreExtraction(c: RandomCase, truth: { blocks: TruthBlock[] }, state: 
    * must be present on some team, and the chief teams the rule invents are not
    * scored against a client block, because no client asked for them.
    */
-  const CREW_CHIEF = 36;
-  const workTeams = teams.filter((t) => t.profession_id !== CREW_CHIEF);
-  const rolesOk = teams.length
-    ? truth.blocks.every((b) =>
-        workTeams.some((t) => ROLE_PATTERNS[b.role].test(professionName(t.profession_id))))
-    : reqs.length > 0 && truth.blocks.every((b, i) => {
-        const q = reqs[i] as { profession_hint?: string } | undefined;
-        if (!q) return false;
-        const m = resolveProfession(q.profession_hint, loadProfessions());
-        return ROLE_PATTERNS[b.role].test(m.name);
-      });
+  const rolesOk = reqs.length > 0 && truth.blocks.every((b, i) => {
+    const q = reqs[i] as { profession_hint?: string } | undefined;
+    if (!q) return false;
+    return ROLE_PATTERNS[b.role].test(resolveProfession(q.profession_hint, loadProfessions()).name);
+  });
 
   return {
     crew_total: wanted === got,
     // CHIEF-AWARE. A block of 10 is composed as 9 crew + 1 chief — two teams for one
     // requested block — so comparing raw counts marks the carve-out as an error.
     /**
-     * The WORK teams, against the blocks the client asked for after merging.
+     * The blocks the client asked for, after merging.
      *
      * Counting the chief teams here needs compose's merge rules restated in the
      * scorer, and restating them wrong is how this metric came to under-report: the
@@ -230,9 +223,7 @@ function scoreExtraction(c: RandomCase, truth: { blocks: TruthBlock[] }, state: 
      * test/crewChief.ts and by the 100/100 rule agreement in sim/run.ts; what this
      * study is asking is whether the client's blocks survived, so it counts those.
      */
-    block_count: teams.length
-      ? (workTeams.length === truth.blocks.length || workTeams.length === mergedBlockCount(truth.blocks))
-      : reqs.length === truth.blocks.length,
+    block_count: reqs.length === truth.blocks.length || reqs.length === mergedBlockCount(truth.blocks),
     date: wantDate === null ? true : gotDate === wantDate,
     times: wantTimes === gotTimes,
     venue: venueOk,
@@ -243,7 +234,7 @@ function scoreExtraction(c: RandomCase, truth: { blocks: TruthBlock[] }, state: 
 }
 
 // ---------------------------------------------------------------- one case
-async function runCase(c: RandomCase, professionName: (id: number) => string, placeName: (id: number) => string, placeIsAShell: (id: number) => boolean) {
+async function runCase(c: RandomCase, placeName: (id: number) => string, placeIsAShell: (id: number) => boolean) {
   const t0 = Date.now();
   let spent = 0;
   const base = createOpenRouterReasoner({ apiKey: AI_KEY, model: MODEL });
@@ -261,7 +252,12 @@ async function runCase(c: RandomCase, professionName: (id: number) => string, pl
   });
   const thread = (msgs: ThreadMessage[]): HydratedThread => ({ thread_id: `real-${c.id}`, messages: msgs });
 
-  const row: Record<string, unknown> = { id: c.id, subject: c.subject, body: c.body, truth: c.truth, amendShape: c.amend?.shape ?? null };
+  // The SEED travels with the row. corpus-real-report rebuilds the cases to recover
+  // the amendment truth, and it rebuilt them with the DEFAULT seed — so scoring a
+  // --seed run compared its answers against a different hundred emails and reported
+  // "crew after amendment right 0%". A run whose output cannot say which questions
+  // it was asked cannot be scored at all.
+  const row: Record<string, unknown> = { id: c.id, seed: SEED, subject: c.subject, body: c.body, truth: c.truth, amendShape: c.amend?.shape ?? null };
 
   try {
     const e1 = m("m1", "2026-08-24T09:00:00Z", c.subject, c.body);
@@ -275,7 +271,7 @@ async function runCase(c: RandomCase, professionName: (id: number) => string, pl
       teams: (s1.desired_order?.slot_teams ?? []).length,
       notes: s1.notes,
       window: await rig.windowOf(s1.onsinch_order_id),
-      score: scoreExtraction(c, c.truth, s1 as never, professionName, placeName, placeIsAShell),
+      score: scoreExtraction(c, c.truth, s1 as never, placeName, placeIsAShell),
       // The extraction itself, so a wrong booking can be traced to what was read rather
       // than guessed at from the order it produced.
       facts: (s1 as { facts?: unknown }).facts,
@@ -296,7 +292,7 @@ async function runCase(c: RandomCase, professionName: (id: number) => string, pl
         notes: s2.notes,
         window: await rig.windowOf(s2.onsinch_order_id),
         r_survived: !!(row.new_ as { r?: string }).r && (row.new_ as { r?: string }).r === s2.onsinch_order_number,
-        score: scoreExtraction(c, c.amend.truth, s2 as never, professionName, placeName, placeIsAShell),
+        score: scoreExtraction(c, c.amend.truth, s2 as never, placeName, placeIsAShell),
       };
     }
   } catch (err) {
@@ -370,8 +366,6 @@ async function cleanupPlaces(onsinch: OnsinchClient) {
   // than against an id nobody can read.
   // The same list the engine resolves against — loadProfessions prefers the live pull in
   // .tmp-data and falls back to the committed list, exactly as the engine does.
-  const profs = loadProfessions();
-  const professionName = (id: number) => String(profs.find((p) => Number(p.id) === Number(id))?.name || `#${id}`);
   const places = (await check.allPlaces()) as Array<{ id: number; name?: string; address?: string; zip?: string; city?: string }>;
   const placeName = (id: number) => {
     const p = places.find((x) => Number(x.id) === Number(id));
@@ -407,7 +401,7 @@ async function cleanupPlaces(onsinch: OnsinchClient) {
   let done = 0, failed = 0, usd = 0;
   for (let i = 0; i < cases.length; i += CONCURRENCY) {
     const out = await Promise.all(cases.slice(i, i + CONCURRENCY).map((c) =>
-      runCase(c, professionName, placeName, placeIsAShell).catch(() => ({ spent: 0, ok: false }))));
+      runCase(c, placeName, placeIsAShell).catch(() => ({ spent: 0, ok: false }))));
     done += out.length;
     failed += out.filter((o) => !o.ok).length;
     usd += out.reduce((n, o) => n + o.spent, 0);
