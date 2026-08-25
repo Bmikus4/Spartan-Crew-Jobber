@@ -34,7 +34,7 @@ console.log("\n[1] the live case that lost its date (order 13632)");
 {
   const n = jobNameFrom(facts(LONG, "2026-08-04", 2));
   console.log(`      -> ${JSON.stringify(n)}  (${n.length} chars)`);
-  ok(n.length <= 100, "still within the 100-char limit", String(n.length));
+  ok(n.length <= 80, "still within the 80-char limit", String(n.length));
   ok(n.endsWith("2026-08-04"), "ENDS WITH THE FULL DATE (was '...on 2026')");
   ok(n.startsWith("2 at "), "still leads with the crew size");
   ok(/Unit A/.test(n), "keeps the start of the venue");
@@ -61,9 +61,24 @@ console.log("\n[4] a venue long enough to blow the budget on its own");
 {
   const absurd = "A".repeat(300);
   const n = jobNameFrom(facts(absurd, "2026-12-25", 3));
-  ok(n.length <= 100, "capped", String(n.length));
+  ok(n.length <= 80, "capped", String(n.length));
   ok(n.endsWith("2026-12-25"), "date STILL survives a 300-char venue");
   ok(n.startsWith("3 at AAA"), "venue truncated, not the date");
+}
+
+console.log("\n[5] the limit is EIGHTY — 100 was a guess and it 400s on the wire");
+{
+  // The corpus separates this perfectly: of 500 cases, the 100 whose composed Job
+  // name exceeds 80 characters produced all 147 `POST /orders -> 400`, and the 400
+  // whose name fits produced none. An ordinary London address is enough to do it.
+  const excel = "Excel London, Royal Victoria Dock, 1 Western Gateway, London E16 1XL";
+  const n = jobNameFrom(facts(excel, "2026-09-15", 2));
+  ok(n.length <= 80, "the ExCeL address fits", `${n.length}: ${JSON.stringify(n)}`);
+  ok(n.endsWith("on 2026-09-15"), "and still keeps its date");
+  // 81 characters was the reject boundary for the SlotTeam name and it is the same
+  // limit here; the guard is on the number, so a future edit to 100 fails loudly.
+  const long = jobNameFrom(facts("z".repeat(200), "2026-09-15", 40));
+  ok(long.length === 80, "a name budgeted to the limit is exactly 80", String(long.length));
 }
 
 console.log(fails ? `\n${fails} FAILED\n` : "\nALL PASS\n");

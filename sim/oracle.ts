@@ -41,6 +41,21 @@ export function hoursOf(start: string, end: string): number {
   return ((to <= from ? to + 1440 : to) - from) / 60;
 }
 
+/** Ten hours after `start`, wrapping past midnight. */
+export function plus10(start: string): string {
+  const [h, m] = start.split(":").map(Number);
+  const t = (h * 60 + m + 600) % 1440;
+  return `${String(Math.floor(t / 60)).padStart(2, "0")}:${String(t % 60).padStart(2, "0")}`;
+}
+
+/** The calendar day a window ENDS on: the next one when it crosses midnight. */
+export function endDay(date: string, start: string, end: string): string {
+  const [sh, sm] = start.split(":").map(Number);
+  const [eh, em] = end.split(":").map(Number);
+  if (eh * 60 + em > sh * 60 + sm) return date;
+  return new Date(Date.parse(`${date}T00:00:00Z`) + 86400000).toISOString().slice(0, 10);
+}
+
 /** The profession the rules choose for a hint, before rate twins are considered. */
 export function predictProfession(hint?: string): { id: number; family: string } {
   const t = (hint ?? "").toLowerCase();
@@ -113,7 +128,9 @@ export function predictTeams(blocks: SimBlock[], placeOf: (venue?: string) => nu
   // 1. one team per block, defaults applied
   const base = sized.map((b) => {
     const start = b.start || "08:00";
-    const end = b.end || "18:00";
+    // The default finish is 18:00, or ten hours — the length of the 08:00-18:00
+    // default — whenever 18:00 is not after the start.
+    const end = b.end || (start < "18:00" ? "18:00" : plus10(start));
     const stated = !!(b.start && b.end);
     const p = predictProfession(b.prof);
     // A day-rate twin is only reachable on a STATED shift: the 08:00-18:00 default is
@@ -130,7 +147,11 @@ export function predictTeams(blocks: SimBlock[], placeOf: (venue?: string) => nu
       family: p.family,
       size: b.size as number,
       beginning: b.date ? `${b.date}T${start}:00+00:00` : "",
-      end: b.date ? `${b.date}T${end}:00+00:00` : "",
+      // A finish at or before the start is tomorrow's finish. Stated as the RULE
+      // rather than borrowed from compose, which is the point of an oracle — the
+      // two are meant to be able to disagree. They did, for every overnight shift
+      // this engine ever composed, and OnSinch refused all of them.
+      end: b.date ? `${endDay(b.date, start, end)}T${end}:00+00:00` : "",
       tbc: !b.date,
     };
   });

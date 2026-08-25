@@ -112,6 +112,68 @@ function isoDateTime(date: string, time: string): string {
   return `${date}T${time}:00+00:00`;
 }
 
+/** `date` plus n whole days, as YYYY-MM-DD. UTC, so no DST arithmetic. */
+function addDays(date: string, n: number): string {
+  const t = Date.parse(`${date}T00:00:00Z`);
+  if (!Number.isFinite(t)) return date;
+  return new Date(t + n * 86400000).toISOString().slice(0, 10);
+}
+
+/** Minutes past midnight for "HH:MM", or null when it is not a time. */
+function minutesOf(time: string): number | null {
+  const m = /^(\d{1,2}):(\d{2})$/.exec(time);
+  if (!m) return null;
+  return Number(m[1]) * 60 + Number(m[2]);
+}
+
+/**
+ * THE OVERNIGHT ROLL. A finish at or before the start belongs to the NEXT day.
+ *
+ * `prompts.ts` promises the model this happens — "an end earlier than the start is
+ * an overnight shift, record it as given, the roll to the next day happens
+ * downstream" — and downstream it did not. `beginning` and `end` were both stamped
+ * with the same date, so 20:00-02:00 composed as a window running backwards and
+ * OnSinch refused the whole write: `400 {"beginning":["Wrong end time (amount of
+ * hours)"]}`. Every overnight booking this engine has ever made failed on the wire.
+ *
+ * The 500-case corpus counted 222 of them. 148 were a stated overnight shift; the
+ * other 74 were a ZERO-length window, which is the same defect wearing a different
+ * hat — a second block starting at 18:00 with no stated finish took the 18:00
+ * default, so beginning equalled end. `<=` covers both, and it is the same test
+ * `shiftHours` has always used to price them, so the hours a team is billed for and
+ * the window it is booked in can no longer disagree.
+ */
+function composeWindow(date: string, start: string, end: string): { beginning: string; end: string } {
+  const a = minutesOf(start);
+  const b = minutesOf(end);
+  const rolls = a !== null && b !== null && b <= a;
+  return {
+    beginning: isoDateTime(date, start),
+    end: isoDateTime(rolls ? addDays(date, 1) : date, end),
+  };
+}
+
+/**
+ * The finish an email that states none gets. 18:00 for the whole life of this
+ * engine, and it stays 18:00 — except when 18:00 is not after the start, where it
+ * used to compose a zero-length or backwards window and lose the order.
+ *
+ * Ten hours is not invented for the exception: it is the length of the 08:00-18:00
+ * default itself, so the rule is "a default day is ten hours, ending no later than
+ * 18:00" and the old behaviour is the case where those two agree. A stated 18:00
+ * start now books 18:00-04:00 rather than nothing at all, and says so.
+ */
+const DEFAULT_END = "18:00";
+const DEFAULT_DAY_MINUTES = 10 * 60;
+
+function defaultEndFor(start: string): string {
+  const a = minutesOf(start);
+  const d = minutesOf(DEFAULT_END);
+  if (a === null || d === null || d > a) return DEFAULT_END;
+  const t = (a + DEFAULT_DAY_MINUTES) % (24 * 60);
+  return `${String(Math.floor(t / 60)).padStart(2, "0")}:${String(t % 60).padStart(2, "0")}`;
+}
+
 export interface ComposeInput {
   facts: ConversationFacts;
   company_id: number;
@@ -246,10 +308,18 @@ export function composeOrder(inp: ComposeInput): ComposeResult {
     // dropped became a job booked to 18:00 that nobody could tell apart from a job
     // genuinely running to 18:00.
     const start = r.start_time || "08:00";
-    const end = r.end_time || "18:00";
+    const end = r.end_time || defaultEndFor(start);
     if (!r.start_time) warnings.push(`SlotTeam[${i}] start time not stated — defaulted to 08:00`);
-    if (!r.end_time) warnings.push(`SlotTeam[${i}] finish time not stated — defaulted to 18:00`);
+    if (!r.end_time) warnings.push(`SlotTeam[${i}] finish time not stated — defaulted to ${end}`);
     if (!date) warnings.push(`SlotTeam[${i}] has no confirmed date (TBC)`);
+    // Said out loud: a crew booked 20:00-02:00 finishes on a different calendar day
+    // from the one the client named, and ops read the date off the order.
+    {
+      const a = minutesOf(start), b = minutesOf(end);
+      if (date && a !== null && b !== null && b <= a) {
+        warnings.push(`SlotTeam[${i}] runs ${start}-${end} overnight — the finish is booked on ${addDays(date, 1)}`);
+      }
+    }
 
     // Said, never changed — see the note above the bounds.
     if (r.start_time && r.end_time) {
@@ -298,8 +368,7 @@ export function composeOrder(inp: ComposeInput): ComposeResult {
       name: (long ? nameBase.slice(0, room).trimEnd() : nameBase) + suffix,
       ...(long ? { description: nameBase } : {}),
       profession_id,
-      beginning: date ? isoDateTime(date, start) : "",
-      end: date ? isoDateTime(date, end) : "",
+      ...(date ? composeWindow(date, start, end) : { beginning: "", end: "" }),
       size: r.size as number,
       place_id: r.place_id ?? inp.place_id, // MANDATORY on every slot team
     };

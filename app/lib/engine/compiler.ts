@@ -112,8 +112,21 @@ function hash(s: string): string {
   return createHash("sha256").update(s).digest("hex").slice(0, 16);
 }
 
-/** OnSinch caps the Job name; keep it under this. */
-const JOB_NAME_MAX = 100;
+/**
+ * OnSinch caps the Job name at EIGHTY, not a hundred, and rejects the whole order
+ * with it — the same limit and the same whole-request 400 as the SlotTeam name.
+ *
+ * 100 was a guess, and it was wrong in the direction that fails silently in every
+ * test: names between 81 and 100 characters pass every offline check and 400 on the
+ * wire. The 500-case corpus separates it perfectly — of 500 cases, the 100 whose
+ * composed Job name exceeds 80 characters produced all 147 `POST /orders -> 400`
+ * and the 400 whose name fits produced none. No other factor correlates.
+ *
+ * The venue is what pushes it over: "2 at Excel London, Royal Victoria Dock, 1
+ * Western Gateway, London E16 1XL on 2026-09-15" is 87 characters, and that is an
+ * ordinary London address, not a pathological one.
+ */
+const JOB_NAME_MAX = 80;
 
 /**
  * "<size> at <venue> on <date>", capped at JOB_NAME_MAX.
