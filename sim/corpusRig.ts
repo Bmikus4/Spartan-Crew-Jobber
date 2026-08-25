@@ -37,6 +37,17 @@ export function buildRig(opts: {
   apiKey: string;
   reasoner: Reasoner;
   onOrderCreated: (id: number) => void;
+  /**
+   * A venue the run CREATED in the live tenant.
+   *
+   * The study deleted its 101 orders and left five places behind — "O2 Arena",
+   * "The Albert Hall", "ExCeL Docklands" and two Thornburys, each with its own name
+   * as its address and no postcode. They are still in the tenant, and matchPlace now
+   * matches them exactly, so a rerun would score its own residue as a success while
+   * booking crew to a row that does not say where it is. A study that cannot be run
+   * twice without changing what it measures is not a study.
+   */
+  onPlaceCreated?: (id: number) => void;
 }): Rig {
   const wire: string[] = [];
   const logged: Transport = async (m, p, b) => {
@@ -45,6 +56,13 @@ export function buildRig(opts: {
     if (m === "POST" && p === "/orders" && r.status === 201) {
       const id = Number((r.data as { data?: { id?: number }[] })?.data?.[0]?.id);
       if (Number.isInteger(id)) opts.onOrderCreated(id);
+    }
+    // Ledgered FROM THE WIRE, for the same reason the order ids are: an id that only
+    // exists in a variable is an id a crash loses, and a place nobody deletes is a
+    // permanent edit to the tenant made by a test.
+    if (m === "POST" && p === "/places" && r.status === 201) {
+      const id = Number((r.data as { data?: { id?: number }[] })?.data?.[0]?.id);
+      if (Number.isInteger(id)) opts.onPlaceCreated?.(id);
     }
     return r;
   };

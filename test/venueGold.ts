@@ -21,7 +21,7 @@
 // Run: npx tsx test/venueGold.ts
 // ============================================================================
 import { matchPlace } from "../app/lib/engine/resolve";
-import { matchPlaceV2, matchedOnCityAlone } from "../app/lib/engine/venueMatch";
+import { matchPlaceV2, matchedOnCityAlone, isAShell } from "../app/lib/engine/venueMatch";
 import type { PlaceCandidate } from "../app/lib/engine/types";
 
 let fails = 0;
@@ -58,6 +58,16 @@ const PLACES: Row[] = [
   p(1425, "Olympia", null, "Hammersmith Road", "London", "W14 8UX"),
   p(6177, "Royal Albert Hall"),
   p(3001, "The O2"),
+  /**
+   * The study's own residue: five rows it left in the live tenant on 2026-08-24,
+   * each carrying its own name as its address. matchPlace matches them EXACTLY, so
+   * they intercept the venues they are duplicates of and the matcher never reaches
+   * the real row. This is the mechanism that makes a venue score rise as the tenant
+   * gets worse — a miss creates the row that makes the next miss look like a hit.
+   */
+  p(6892, "The Albert Hall", null, "The Albert Hall"),
+  p(6893, "O2 Arena", null, "O2 Arena"),
+  p(6894, "ExCeL Docklands", null, "ExCeL Docklands"),
 
   // -- the traps
   p(823, "O2 Academy Brixton", null, "211 Stockwell Road", "London", "SW9 9SL"),
@@ -98,11 +108,20 @@ const GOLD: Gold[] = [
    * them is that this is a London crew supplier — a fact about the business, not
    * about the text, and not one a matcher can read.
    *
-   * So it provisions, and the ticket names the rows it was choosing between. This
-   * is precisely where an AI escalation step would be pointed if one is ever built:
-   * a short, identified class of genuinely ambiguous venues, not the general case.
+   * What settles it is not the text. It is that the tenant already holds a row
+   * called "The Albert Hall" with no postcode — one of the engine's own shells,
+   * created from a London booking — and having no postcode it cannot contradict
+   * Kensington, so it clusters with the Royal Albert Hall and lends its agreement
+   * to that building. Manchester's row names its city and stays separate.
+   *
+   * That is the tenant's own history acting as evidence, which is the right thing
+   * for it to do, but it is worth saying out loud that this case turns on a row
+   * rather than on the words. Take the shell away and the two are level, the
+   * resolution is `ambiguous`, and the ticket names both — which is also correct,
+   * and is the short identified class an escalation step would be pointed at if one
+   * is ever built.
    */
-  { text: "the albert hall", id: null, why: "Royal Albert Hall (SW7) and Albert Hall Manchester agree equally" },
+  { text: "the albert hall", id: 2, why: "the tenant's own 'The Albert Hall' row clusters with the RAH and settles it" },
 
   // ---- the wordings that already worked, which must keep working
   { text: "The O2", id: 7, why: "exact name" },
@@ -126,6 +145,11 @@ const GOLD: Gold[] = [
   // labelling one of them wrong would be labelling a preference as a defect.
   { text: "Olympia West", id: 57, also: 1002, why: "same site, same postcode; the hall is inside the venue" },
 
+  // ---- THE SHELLS THE ENGINE MADE. A row that says only what the client said is
+  //      set aside so the second pass can find the row that knows where it is.
+  { text: "ExCeL Docklands", id: 49, why: "matchPlace matches shell 6894 exactly; 49 is the building" },
+  { text: "O2 Arena", id: 7, why: "matchPlace matches shell 6893 exactly; 7 is the building" },
+
   // ---- ADVERSARIAL. Each of these has already bitten this codebase.
   { text: "V&A East Storehouse", id: 826, why: "NOT the South Kensington museum" },
   { text: "Westbridge Manor Hall, High Street", id: 2266, why: "a street with no number; Walthamstow Library's address is the two words 'High Street'" },
@@ -141,13 +165,18 @@ const GOLD: Gold[] = [
 // ---------------------------------------------------------------- measure
 /** What the engine actually does: matchPlace first, the second pass only on null. */
 function resolve(text: string): { id: number | null; from: "v1" | "v2" | "none"; ambiguous?: boolean } {
+  // The compiler's own path: matchPlace, minus a city-only answer, minus a shell
+  // (which is set aside so the second pass can look, and used if nothing is better).
   const raw = matchPlace(text, PLACES);
-  // The city-alone guard the compiler applies to matchPlace's own answer.
-  const v1 = raw && !matchedOnCityAlone(text, PLACES.find((q) => q.id === raw)!) ? raw : null;
+  const rawRow = raw ? PLACES.find((q) => q.id === raw)! : undefined;
+  const cityOnly = !!rawRow && matchedOnCityAlone(text, rawRow);
+  const shell = !!rawRow && isAShell(rawRow);
+  const v1 = raw && !cityOnly && !shell ? raw : null;
   if (v1) return { id: v1, from: "v1" };
-  if (raw) return { id: null, from: "none" };
+  if (cityOnly) return { id: null, from: "none" };
   const v2 = matchPlaceV2(text, PLACES);
   if (v2.decision === "match" && v2.place_id) return { id: v2.place_id, from: "v2" };
+  if (raw && shell) return { id: raw, from: "v1" };
   return { id: null, from: "none", ambiguous: v2.decision === "ambiguous" };
 }
 
@@ -213,7 +242,9 @@ console.log("\n[4] the second pass cannot change an answer matchPlace already gi
   // was paid for one wrong booking at a time, and none of it is at risk here.
   const v1Answers = GOLD.filter((g) => {
     const raw = matchPlace(g.text, PLACES);
-    return raw !== null && !matchedOnCityAlone(g.text, PLACES.find((q) => q.id === raw)!);
+    if (raw === null) return false;
+    const row = PLACES.find((q) => q.id === raw)!;
+    return !matchedOnCityAlone(g.text, row) && !isAShell(row);
   });
   const unchanged = v1Answers.every((g) => resolve(g.text).id === matchPlace(g.text, PLACES));
   ok(unchanged, `all ${v1Answers.length} venues matchPlace resolves are untouched`);

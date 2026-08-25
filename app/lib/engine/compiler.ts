@@ -22,7 +22,7 @@ import { triage, decisionBinds, triageModeFromEnv, type TriageMode } from "./tri
 import { composeOrder } from "./compose";
 import { validateOrder } from "./format";
 import { matchCompany, matchCompanyByDomain, matchContact, matchPlace, matchExistingOrder, normName, normAddr } from "./resolve";
-import { matchPlaceV2, matchedOnCityAlone } from "./venueMatch";
+import { matchPlaceV2, matchedOnCityAlone, isAShell } from "./venueMatch";
 import { resolveProfession, normProf, UNRECOGNISED_MARK, type ProfessionRec } from "./professions";
 import { PROFESSION_LIST } from "./professionList";
 import { resolveRateCard } from "./rates";
@@ -343,8 +343,27 @@ async function resolvePlace(
    * Applied HERE rather than inside matchPlace so the scar tissue in that function
    * stays exactly as it was. This drops an answer; it never invents one.
    */
-  const id = v1 && !matchedOnCityAlone(facts.location_text, places.find((q) => q.id === v1)!) ? v1 : null;
-  if (v1 && !id) {
+  const v1Row = v1 ? places.find((q) => q.id === v1) : undefined;
+  /**
+   * A MATCH ON A ROW THE ENGINE ITSELF INVENTED IS NOT A MATCH — not yet.
+   *
+   * A venue miss provisions a place named after the client's own words, and the
+   * next client who writes those words matches it EXACTLY. So the tenant's 3,000
+   * context-free duplicates do not merely clutter it: they intercept the venues
+   * they are duplicates OF, and the matcher stops at the shell without ever
+   * reaching the real row. The study's own five leftover rows do this to three of
+   * the venues it was measuring.
+   *
+   * So a shell is set aside and the second pass gets to look. If it finds a row
+   * that knows where it is, that row wins; if it does not, the shell is used after
+   * all — booking to a poor row is still better than creating a second one.
+   */
+  const v1IsShell = !!v1Row && isAShell(v1Row);
+  // The city guard runs on a shell too: a row whose whole name is "London" is both,
+  // and it must never be booked whichever of the two disqualifies it.
+  const v1IsCityOnly = !!v1Row && matchedOnCityAlone(facts.location_text, v1Row);
+  const id = v1 && !v1IsShell && !v1IsCityOnly ? v1 : null;
+  if (v1 && v1IsCityOnly) {
     // Said out loud: this is a venue the engine had an answer for and refused.
     return {
       provision: { name: locationText.slice(0, 120), country: "GB", address: locationText },
@@ -395,6 +414,12 @@ async function resolvePlace(
         note: `${v2.note} — creating a new venue rather than guessing; pick the right row in OnSinch`,
       };
     }
+  }
+
+  // The second pass found nothing better than the shell matchPlace matched. Use it:
+  // a row that knows too little is still the row this venue already has.
+  if (v1 && v1IsShell && !v1IsCityOnly) {
+    return { id: v1, note: `venue "${locationText}" matched ${v1} "${String(v1Row?.name ?? "").trim()}", a row carrying no address — the tenant has no better record of this venue` };
   }
 
   return {

@@ -145,6 +145,31 @@ function identityTokens(p: PlaceCandidate): string[] {
  * see the difference — this is the guard applied to ITS answer as well as to this
  * file's, which is the only way the defect actually closes.
  */
+/**
+ * A CONTEXT-FREE DUPLICATE — a row that knows only what the client typed.
+ *
+ * About 3,000 of the tenant's 6,864 places are these, and this engine created every
+ * one of them: a venue it failed to match was provisioned with the client's own text
+ * as both its name and its address, no postcode, no coordinates. 632 of them are
+ * ExCeL.
+ *
+ * They are worse than a miss, because they make the NEXT miss look like a success.
+ * "O2 Arena" is now an exact name match — against a row whose address is the words
+ * "O2 Arena" and which cannot tell a driver where to go — so the matcher stops
+ * before it ever reaches the real O2. The study's own residue does this: five rows
+ * it left behind on 2026-08-24 now intercept three of the venues it was measuring.
+ *
+ * Recognising them costs nothing and defuses all 3,000 without deleting anything.
+ */
+export function isAShell(p: PlaceCandidate): boolean {
+  const name = normAddr(p.name);
+  if (!name) return true;
+  // Its address is its own name: nothing was known, so the text was copied twice.
+  if (normAddr(p.address) === name) return true;
+  // Nothing that locates it at all.
+  return !p.zip && !p.city && !p.address;
+}
+
 export function matchedOnCityAlone(text: string | undefined, p: PlaceCandidate): boolean {
   const q = tokenise(text);
   if (!q.strong.length) return true; // nothing identifying was written at all
@@ -348,6 +373,16 @@ export function matchPlaceV2(
     const head = [...group].sort((a, b) => {
       const act = Number(b.evidence.active && anyActive) - Number(a.evidence.active && anyActive);
       if (act) return act;
+      /**
+       * A SHELL NEVER SPEAKS FOR ITS BUILDING while a real row is in the group.
+       * This must outrank even the row the client named, because the shell IS the
+       * row the client named — it was made out of those exact words. "The Albert
+       * Hall" would otherwise resolve to the address-less row the engine created
+       * last month rather than to the Royal Albert Hall standing beside it.
+       */
+      const real = Number(!isAShell(places.find((x) => x.id === b.id)!)) -
+                   Number(!isAShell(places.find((x) => x.id === a.id)!));
+      if (real) return real;
       /**
        * A row CALLED what the client called it speaks for the building before the
        * richest row does. Olympia West (1002) and Olympia London (57) carry the

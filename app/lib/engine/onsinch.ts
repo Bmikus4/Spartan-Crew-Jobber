@@ -397,6 +397,24 @@ export class OnsinchClient {
     return true;
   }
 
+  /**
+   * DELETE /places — ids only, by the same rule as deleteOrders.
+   *
+   * Exists for ONE caller: the corpus harness, undoing the venues its own run
+   * provisioned. The engine itself never deletes a place, and it must not start —
+   * a venue row is shared by every order that ever pointed at it, and there is no
+   * way to know from here which of those still matter.
+   */
+  async deletePlaces(ids: number[]) {
+    const clean = ids.map(Number).filter((n) => Number.isInteger(n) && n > 0);
+    if (!clean.length) throw new Error("deletePlaces called with no valid ids — refusing to send");
+    if (clean.length !== ids.length) throw new Error(`deletePlaces got a non-id in ${JSON.stringify(ids)} — refusing to send`);
+    const r = await this.t("DELETE", "/places", clean);
+    if (r.status !== 200 && r.status !== 204)
+      throw new Error(`deletePlaces ${r.status}: ${JSON.stringify(r.data)}`);
+    return true;
+  }
+
   /** PATCH /orders — array w/ id, returns 204 no body. */
   async patchOrder(patch: Array<{ id: number } & Record<string, unknown>>) {
     const r = await this.t("PATCH", "/orders", patch);

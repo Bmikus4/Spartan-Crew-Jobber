@@ -62,7 +62,8 @@ const OUT = join(import.meta.dirname, "..", ".tmp-data", "corpus-real");
 const LEDGER = join(OUT, "ledger.json");
 const RESULTS = join(OUT, "results.jsonl");
 mkdirSync(OUT, { recursive: true });
-const led: { orders: number[] } = existsSync(LEDGER) ? JSON.parse(readFileSync(LEDGER, "utf8")) : { orders: [] };
+const led: { orders: number[]; places?: number[] } = existsSync(LEDGER) ? JSON.parse(readFileSync(LEDGER, "utf8")) : { orders: [], places: [] };
+led.places = led.places ?? [];
 const saveLedger = () => writeFileSync(LEDGER, JSON.stringify(led, null, 2));
 
 // ---------------------------------------------------------------- scoring extraction
@@ -116,7 +117,7 @@ function scoreExtraction(c: RandomCase, truth: { blocks: TruthBlock[] }, state: 
   facts?: { requests?: Array<{ date?: string; start_time?: string; end_time?: string; size?: number }> };
   place_id?: number;
   notes?: string[];
-}, professionName: (id: number) => string, placeName: (id: number) => string): Scored {
+}, professionName: (id: number) => string, placeName: (id: number) => string, placeIsAShell: (id: number) => boolean): Scored {
   const teams = state.desired_order?.slot_teams ?? [];
   const wanted = truth.blocks.reduce((n, b) => n + b.size, 0);
   const got = teams.reduce((n, t) => n + t.size, 0);
@@ -143,9 +144,20 @@ function scoreExtraction(c: RandomCase, truth: { blocks: TruthBlock[] }, state: 
   // with gotVenue = "", which is true for every string — so every venue the resolver
   // failed to find scored as found, including "o2 arena" being created as a new place
   // beside the O2 that already exists.
+  /**
+   * A ROW THAT DOES NOT SAY WHERE IT IS, IS NOT A RESOLUTION.
+   *
+   * `placeName` renders "<name> <address>", and the shells the engine's own misses
+   * created carry their name as their address and no postcode — "O2 Arena" at "O2
+   * Arena". Matching one of those exactly reads as a success and books crew to a
+   * row nobody can drive to. Left unchecked the venue figure RISES as the tenant
+   * gets worse, because every miss creates the row that makes the next run match.
+   */
+  const resolvedRow = state.place_id ?? teams[0]?.place_id ?? 0;
+  const bookable = gotVenue !== "" && !placeIsAShell(resolvedRow);
   const venueOk = truth.blocks[0].venue === "new"
     ? /thornbury/i.test(gotVenue)              // the new venue must be the one provisioned
-    : gotVenue !== "" && (gotVenue.includes(venueKey.slice(0, 8)) || venueKey.slice(0, 8).includes(gotVenue.split(",")[0].slice(0, 8)));
+    : bookable && (gotVenue.includes(venueKey.slice(0, 8)) || venueKey.slice(0, 8).includes(gotVenue.split(",")[0].slice(0, 8)));
 
   const rolesOk = teams.length > 0 && truth.blocks.every((b, i) => {
     const t = teams[i];
@@ -169,7 +181,7 @@ function scoreExtraction(c: RandomCase, truth: { blocks: TruthBlock[] }, state: 
 }
 
 // ---------------------------------------------------------------- one case
-async function runCase(c: RandomCase, professionName: (id: number) => string, placeName: (id: number) => string) {
+async function runCase(c: RandomCase, professionName: (id: number) => string, placeName: (id: number) => string, placeIsAShell: (id: number) => boolean) {
   const t0 = Date.now();
   let spent = 0;
   const base = createOpenRouterReasoner({ apiKey: AI_KEY, model: MODEL });
@@ -178,6 +190,7 @@ async function runCase(c: RandomCase, professionName: (id: number) => string, pl
   const rig = buildRig({
     baseUrl: BASE, apiKey: KEY, reasoner,
     onOrderCreated: (id) => { if (!led.orders.includes(id)) { led.orders.push(id); saveLedger(); } },
+    onPlaceCreated: (id) => { if (!led.places!.includes(id)) { led.places!.push(id); saveLedger(); } },
   });
 
   const m = (id: string, at: string, subject: string, body: string): ThreadMessage => ({
@@ -200,7 +213,7 @@ async function runCase(c: RandomCase, professionName: (id: number) => string, pl
       teams: (s1.desired_order?.slot_teams ?? []).length,
       notes: s1.notes,
       window: await rig.windowOf(s1.onsinch_order_id),
-      score: scoreExtraction(c, c.truth, s1 as never, professionName, placeName),
+      score: scoreExtraction(c, c.truth, s1 as never, professionName, placeName, placeIsAShell),
       // The extraction itself, so a wrong booking can be traced to what was read rather
       // than guessed at from the order it produced.
       facts: (s1 as { facts?: unknown }).facts,
@@ -221,7 +234,7 @@ async function runCase(c: RandomCase, professionName: (id: number) => string, pl
         notes: s2.notes,
         window: await rig.windowOf(s2.onsinch_order_id),
         r_survived: !!(row.new_ as { r?: string }).r && (row.new_ as { r?: string }).r === s2.onsinch_order_number,
-        score: scoreExtraction(c, c.amend.truth, s2 as never, professionName, placeName),
+        score: scoreExtraction(c, c.amend.truth, s2 as never, professionName, placeName, placeIsAShell),
       };
     }
   } catch (err) {
@@ -256,6 +269,29 @@ async function cleanup() {
   }
   console.log(`  gone ${gone}, still present ${stuck.length}${stuck.length ? " -> " + stuck.join(",") : ""}`);
   led.orders = stuck; saveLedger();
+  await cleanupPlaces(onsinch);
+}
+
+/**
+ * The venues the run provisioned. Deleted AFTER the orders, because a place an
+ * order still points at cannot go.
+ *
+ * This is not tidiness. Every one of these rows is a nickname the resolver missed,
+ * and leaving it behind means the next run matches its own residue exactly — a
+ * venue score that rises because the tenant got worse.
+ */
+async function cleanupPlaces(onsinch: OnsinchClient) {
+  const ids = [...new Set(led.places ?? [])];
+  if (!ids.length) return;
+  console.log(`cleanup: ${ids.length} place(s) this run created`);
+  const stuck: number[] = [];
+  let gone = 0;
+  for (const id of ids) {
+    try { await onsinch.deletePlaces([id]); gone++; }
+    catch { stuck.push(id); }
+  }
+  console.log(`  gone ${gone}, still present ${stuck.length}${stuck.length ? " -> " + stuck.join(",") : ""}`);
+  led.places = stuck; saveLedger();
 }
 
 // ---------------------------------------------------------------- run
@@ -274,10 +310,22 @@ async function cleanup() {
   // .tmp-data and falls back to the committed list, exactly as the engine does.
   const profs = loadProfessions();
   const professionName = (id: number) => String(profs.find((p) => Number(p.id) === Number(id))?.name || `#${id}`);
-  const places = (await check.allPlaces()) as Array<{ id: number; name?: string; address?: string }>;
+  const places = (await check.allPlaces()) as Array<{ id: number; name?: string; address?: string; zip?: string; city?: string }>;
   const placeName = (id: number) => {
     const p = places.find((x) => Number(x.id) === Number(id));
     return p ? `${p.name || ""} ${p.address || ""}`.trim() : "";
+  };
+  /**
+   * A context-free duplicate: a row whose address is its own name, or that has no
+   * postcode and no city. About 3,000 of the tenant's 6,864 rows are these, and
+   * they exist because this engine created them.
+   */
+  const placeIsAShell = (id: number) => {
+    const p = places.find((x) => Number(x.id) === Number(id));
+    if (!p) return true;
+    const norm = (s?: string) => String(s ?? "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+    if (norm(p.address) === norm(p.name)) return true;
+    return !p.zip && !p.city;
   };
 
   const cases = buildRandomCases(N);
@@ -289,7 +337,7 @@ async function cleanup() {
   let done = 0, failed = 0, usd = 0;
   for (let i = 0; i < cases.length; i += CONCURRENCY) {
     const out = await Promise.all(cases.slice(i, i + CONCURRENCY).map((c) =>
-      runCase(c, professionName, placeName).catch(() => ({ spent: 0, ok: false }))));
+      runCase(c, professionName, placeName, placeIsAShell).catch(() => ({ spent: 0, ok: false }))));
     done += out.length;
     failed += out.filter((o) => !o.ok).length;
     usd += out.reduce((n, o) => n + o.spent, 0);
