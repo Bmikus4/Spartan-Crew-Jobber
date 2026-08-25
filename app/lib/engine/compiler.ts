@@ -22,6 +22,7 @@ import { triage, decisionBinds, triageModeFromEnv, type TriageMode } from "./tri
 import { composeOrder } from "./compose";
 import { validateOrder } from "./format";
 import { matchCompany, matchCompanyByDomain, matchContact, matchPlace, matchExistingOrder, normName, normAddr } from "./resolve";
+import { matchPlaceV2, matchedOnCityAlone } from "./venueMatch";
 import { resolveProfession, normProf, UNRECOGNISED_MARK, type ProfessionRec } from "./professions";
 import { PROFESSION_LIST } from "./professionList";
 import { resolveRateCard } from "./rates";
@@ -330,7 +331,26 @@ async function resolvePlace(
   }
 
   const places = await onsinch.allPlaces();
-  const id = matchPlace(locationText, places);
+  const v1 = matchPlace(locationText, places);
+  /**
+   * A MATCH MADE ENTIRELY OUT OF A CITY NAME IS THROWN AWAY.
+   *
+   * matchPlace's containment tiers read the whole record, city included, so "London"
+   * resolves to a row whose entire name is "London" and "Birmingham" resolves to the
+   * NEC — and to several hundred other rows equally well, the winner being whichever
+   * happened to be richest. A city can confirm a building; it cannot identify one.
+   *
+   * Applied HERE rather than inside matchPlace so the scar tissue in that function
+   * stays exactly as it was. This drops an answer; it never invents one.
+   */
+  const id = v1 && !matchedOnCityAlone(facts.location_text, places.find((q) => q.id === v1)!) ? v1 : null;
+  if (v1 && !id) {
+    // Said out loud: this is a venue the engine had an answer for and refused.
+    return {
+      provision: { name: locationText.slice(0, 120), country: "GB", address: locationText },
+      note: `venue "${locationText}" names only a city — creating a new venue rather than booking crew to whichever row in that city happens to be richest`,
+    };
+  }
   if (id) {
     // matchPlace resolves on several rules, only one of which is equality; the others
     // are containment, which is a judgement. Only equality is cached as trusted.
@@ -346,6 +366,37 @@ async function resolvePlace(
         : undefined,
     };
   }
+  /**
+   * SECOND PASS, and it only ever runs where the answer was already going to be a
+   * new duplicate row. matchPlace found nothing, so the alternative to this is
+   * provisioning — the mechanism that gave the tenant 632 ExCeL rows.
+   *
+   * Behind SPARTAN_VENUE_V2=0 because it is new and a venue is the one field that
+   * sends people to a physical address. Nothing it does can change an answer
+   * matchPlace already gives, so turning it off restores the previous behaviour
+   * exactly.
+   *
+   * A `fuzzy` alias, never `exact`: token agreement is a judgement, and only
+   * equality is cached as trusted.
+   */
+  if (!missingVenue && process.env.SPARTAN_VENUE_V2 !== "0") {
+    const v2 = matchPlaceV2(locationText, places);
+    if (v2.decision === "match" && v2.place_id) {
+      await aliasRecord(aliases, { kind: "place", alias_norm: key, entity_id: v2.place_id,
+                                   source: "fuzzy", raw_example: locationText });
+      return { id: v2.place_id, note: v2.note ?? undefined };
+    }
+    // Several plausible buildings and no clear winner. Provisioning is still what
+    // happens — a wrong building is worse than a duplicate row — but the ticket now
+    // names the rows it was choosing between instead of silently creating a 633rd.
+    if (v2.decision === "ambiguous") {
+      return {
+        provision: { name: locationText.slice(0, 120), country: "GB", address: locationText },
+        note: `${v2.note} — creating a new venue rather than guessing; pick the right row in OnSinch`,
+      };
+    }
+  }
+
   return {
     // The placeholder is a NAME, not an address: creating it with address "No Location"
     // would put that string on a real job sheet as if it were somewhere to drive to.
