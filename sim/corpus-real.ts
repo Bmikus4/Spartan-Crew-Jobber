@@ -55,6 +55,8 @@ const CONCURRENCY = argOf("concurrency", 3);
 const CEILING = argOf("ceiling", 12);
 /** Calls one case may make: 2 combined + 2 replies, plus headroom for a retry. */
 const CALLS_PER_CASE = argOf("calls", 8);
+/** The email generator's seed. Default = the study's, so reruns are comparable. */
+const SEED = argOf("seed", 20260824);
 const mode = process.argv.includes("--cleanup") ? "cleanup" : process.argv.includes("--keep") ? "keep" : "full";
 
 const OUT = join(import.meta.dirname, "..", ".tmp-data", "corpus-real");
@@ -388,7 +390,15 @@ async function cleanupPlaces(onsinch: OnsinchClient) {
     return !p.zip && !p.city;
   };
 
-  const cases = buildRandomCases(N);
+  /**
+   * --seed=N draws a DIFFERENT hundred emails.
+   *
+   * The default is the study's seed, so a rerun is a before/after on the same
+   * hundred rather than two different studies. A fresh seed is the other half and
+   * the one most likely to be skipped: fixes measured only against the cases that
+   * found them are fixes that may have been fitted to those phrasings.
+   */
+  const cases = buildRandomCases(N, SEED);
   console.log(`model ${MODEL}`);
   console.log(`${cases.length} cases, ${cases.filter((c) => c.amend).length} amended, ceiling $${CEILING}`);
   writeFileSync(RESULTS, "");

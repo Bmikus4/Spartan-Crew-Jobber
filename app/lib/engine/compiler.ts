@@ -327,7 +327,17 @@ async function resolveContact(
 }
 
 /** place: reuse prior; else exact-match all places; else provision a new one on write. */
-async function resolvePlace(
+/**
+ * Exported for test/venueResolution.ts, which pins the four branches this function
+ * has: matchPlace's answer, a shell set aside, a city-only answer refused, and the
+ * "No Location" placeholder. Nothing outside the compiler calls it.
+ *
+ * The placeholder branch is why: the city-only guard read "No Location" as a city
+ * name — it has no identifying words, by construction — refused the placeholder it
+ * had just found, and provisioned a second one carrying "No Location" as its
+ * address. The whole suite passed, because nothing exercised this function.
+ */
+export async function resolvePlace(
   facts: ConversationFacts,
   prior: ConversationState | undefined,
   onsinch: OnsinchClient,
@@ -382,10 +392,20 @@ async function resolvePlace(
    * that knows where it is, that row wins; if it does not, the shell is used after
    * all — booking to a poor row is still better than creating a second one.
    */
-  const v1IsShell = !!v1Row && isAShell(v1Row);
+  // Named venues only, for the same reason as the city guard below: the "No
+  // Location" placeholder is BY DEFINITION a row with no address, so it is a shell
+  // on every test, and treating it as one sent the no-venue case down the wrong
+  // branch with a note saying the tenant had no better record of a venue nobody
+  // named. The order was right and the ticket was misleading, which is worse than
+  // either being plainly wrong.
+  const v1IsShell = !missingVenue && !!v1Row && isAShell(v1Row);
   // The city guard runs on a shell too: a row whose whole name is "London" is both,
   // and it must never be booked whichever of the two disqualifies it.
-  const v1IsCityOnly = !!v1Row && matchedOnCityAlone(facts.location_text, v1Row);
+  // ONLY when a venue was actually named. With none, `locationText` is the "No
+  // Location" placeholder, which has no identifying words by construction — so the
+  // guard read it as a city-only match, refused the placeholder the engine had just
+  // looked up, and provisioned a SECOND one carrying "No Location" as its address.
+  const v1IsCityOnly = !missingVenue && !!v1Row && matchedOnCityAlone(facts.location_text, v1Row);
   const id = v1 && !v1IsShell && !v1IsCityOnly ? v1 : null;
   if (v1 && v1IsCityOnly) {
     // Said out loud: this is a venue the engine had an answer for and refused.
