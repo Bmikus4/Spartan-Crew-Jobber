@@ -108,20 +108,27 @@ const GOLD: Gold[] = [
    * them is that this is a London crew supplier — a fact about the business, not
    * about the text, and not one a matcher can read.
    *
-   * What settles it is not the text. It is that the tenant already holds a row
-   * called "The Albert Hall" with no postcode — one of the engine's own shells,
-   * created from a London booking — and having no postcode it cannot contradict
-   * Kensington, so it clusters with the Royal Albert Hall and lends its agreement
-   * to that building. Manchester's row names its city and stays separate.
+   * For a while the tenant settled it by accident. It held a shell called "The
+   * Albert Hall" with no postcode, so nothing contradicted Kensington, it clustered
+   * with the Royal Albert Hall and lent its agreement to that building — while
+   * Manchester's row, which names its city, stayed separate. That row was one of the
+   * five the corpus study left behind, deleted on Ben's instruction 2026-08-25, and
+   * with it gone the two are level again.
    *
-   * That is the tenant's own history acting as evidence, which is the right thing
-   * for it to do, but it is worth saying out loud that this case turns on a row
-   * rather than on the words. Take the shell away and the two are level, the
-   * resolution is `ambiguous`, and the ticket names both — which is also correct,
-   * and is the short identified class an escalation step would be pointed at if one
-   * is ever built.
+   * ANY duplicate of the Kensington row does the same job, though, including the
+   * bare "Royal Albert Hall" shell in this fixture — and the tenant holds thousands
+   * of those. So the answer here is 2, and section [6] pins what happens when the
+   * last duplicate goes: `ambiguous`, with the ticket naming both candidates.
+   *
+   * Both are correct and the pair is the point. This case turns on a ROW rather
+   * than on the words, which means it can change when somebody tidies the tenant —
+   * and that is worth a test saying so out loud rather than a number that quietly
+   * moves. It is also the whole identified escalation class: one venue text in a
+   * hundred. The cheap fix is not a model call but a fact the tenant should record
+   * about itself — "the albert hall" as a confirmed alias for place 2 in the
+   * engine's own alias store, which resolves it exactly and for nothing thereafter.
    */
-  { text: "the albert hall", id: 2, why: "the tenant's own 'The Albert Hall' row clusters with the RAH and settles it" },
+  { text: "the albert hall", id: 2, why: "a Kensington duplicate tips it; see [6] for when none is left" },
 
   // ---- the wordings that already worked, which must keep working
   { text: "The O2", id: 7, why: "exact name" },
