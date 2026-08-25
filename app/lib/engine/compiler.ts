@@ -14,6 +14,7 @@ import type {
   ConversationState,
   DesiredOrder,
   HydratedThread,
+  PlaceCandidate,
 } from "./types";
 import { normalizeThread } from "./normalize";
 import { mergeFacts, describeMerge } from "./mergeFacts";
@@ -23,6 +24,8 @@ import { composeOrder } from "./compose";
 import { validateOrder } from "./format";
 import { matchCompany, matchCompanyByDomain, matchContact, matchPlace, matchExistingOrder, normName, normAddr } from "./resolve";
 import { matchPlaceV2, matchedOnCityAlone, isAShell } from "./venueMatch";
+import { buildIndex, searchVenues, type Building } from "./venueSearch";
+import { adjudicateVenue, type VenueJudge } from "./venueAdjudicate";
 import { resolveProfession, normProf, UNRECOGNISED_MARK, type ProfessionRec } from "./professions";
 import { PROFESSION_LIST } from "./professionList";
 import { resolveRateCard } from "./rates";
@@ -78,6 +81,13 @@ export interface CompileDeps {
    * engine must compile with no database. See professionsDb.ts.
    */
   professions?: ProfessionRec[];
+  /**
+   * The model that decides between the alias store's answer and a search of every
+   * venue (Ben, 2026-08-25). Injected for the same reason as everything else here:
+   * the engine must compile with no network. Absent, the venue path takes the
+   * deterministic search result and says so on the ticket.
+   */
+  venueJudge?: VenueJudge | null;
   aliases?: {
     lookup: (kind: AliasKind, aliasNorm: string) => Promise<number | null>;
     record: (a: { kind: AliasKind; alias_norm: string; entity_id: number; source: "exact" | "fuzzy"; raw_example?: string }) => Promise<void>;
@@ -328,6 +338,77 @@ async function resolveContact(
 
 /** place: reuse prior; else exact-match all places; else provision a new one on write. */
 /**
+ * SEARCH EVERY VENUE, THEN ADJUDICATE. Ben's design of 2026-08-25.
+ *
+ * Two independent answers reach a model that can only choose between them: what the
+ * alias store remembered for this exact wording, and what ranking all ~3,000 of the
+ * tenant's buildings on postcode, name, token agreement and edit distance turned up.
+ * Where they agree there is no call. Where they disagree, or where the search alone
+ * is unconvincing, the model decides — and it cannot return an id it was not given.
+ *
+ * Returns null to mean "this path has no opinion", which hands the decision back to
+ * matchPlace and the second pass exactly as before. A new resolver that can only
+ * ever be an improvement is a resolver that can be turned on.
+ */
+const VENUE_INDEX_CACHE = new WeakMap<object, Building[]>();
+function venueIndex(places: PlaceCandidate[]): Building[] {
+  // Keyed on the array the OnSinch client caches, so the collapse runs once per
+  // process rather than once per enquiry. 70ms over 6,859 rows is cheap, and it is
+  // not free enough to pay on every block of every email.
+  const hit = VENUE_INDEX_CACHE.get(places as unknown as object);
+  if (hit) return hit;
+  const built = buildIndex(places);
+  VENUE_INDEX_CACHE.set(places as unknown as object, built);
+  return built;
+}
+
+async function resolveVenueV3(
+  locationText: string,
+  places: PlaceCandidate[],
+  remembered: number | null,
+  deps?: { venueJudge?: VenueJudge | null }
+): Promise<{ id?: number; provision?: DesiredOrder["provision_place"]; note?: string } | null> {
+  const index = venueIndex(places);
+  const { hits, searched } = searchVenues(locationText, index, 8);
+  const rememberedBuilding = remembered
+    ? index.find((b) => b.members.includes(remembered))
+    : undefined;
+
+  // A city name identifies nothing, and this is checked BEFORE the model sees a
+  // shortlist of every venue in that city — a bare "Birmingham" would otherwise be
+  // adjudicated between six real Birmingham venues, and one of them would win.
+  const cityOnly = hits.length > 0 && hits.every((h) =>
+    matchedOnCityAlone(locationText, places.find((p) => p.id === h.building.place_id)!));
+  if (cityOnly) {
+    return {
+      provision: { name: locationText.slice(0, 120), country: "GB", address: locationText },
+      note: `venue "${locationText}" names only a city — creating a new venue rather than booking crew to whichever venue in that city ranks highest`,
+    };
+  }
+  if (!hits.length && !rememberedBuilding) return null;
+
+  const verdict = await adjudicateVenue({
+    text: locationText,
+    remembered: remembered ? { place_id: remembered, source: "exact", building: rememberedBuilding } : null,
+    candidates: hits,
+  }, deps?.venueJudge ?? null);
+
+  if (verdict.decision === "none" || !verdict.place_id) {
+    return {
+      provision: { name: locationText.slice(0, 120), country: "GB", address: locationText },
+      note: `venue "${locationText}" not settled against ${searched} venues (${verdict.how}: ${verdict.reason}) — creating a new venue rather than guessing`,
+    };
+  }
+  const chosen = index.find((b) => b.place_id === verdict.place_id);
+  return {
+    id: verdict.place_id,
+    note: `venue "${locationText}" -> ${verdict.place_id} ${chosen?.name ?? ""} — searched ${searched} venues, ${verdict.how}` +
+      (chosen?.unlocatable ? ", and this row carries no postcode" : "") +
+      (verdict.how === "model" || verdict.how === "model-second-pass" ? `: ${verdict.reason}` : ""),
+  };
+}
+
+/**
  * Exported for test/venueResolution.ts, which pins the four branches this function
  * has: matchPlace's answer, a shell set aside, a city-only answer refused, and the
  * "No Location" placeholder. Nothing outside the compiler calls it.
@@ -341,7 +422,8 @@ export async function resolvePlace(
   facts: ConversationFacts,
   prior: ConversationState | undefined,
   onsinch: OnsinchClient,
-  aliases?: CompileDeps["aliases"]
+  aliases?: CompileDeps["aliases"],
+  deps?: { venueJudge?: VenueJudge | null }
 ): Promise<{ id?: number; provision?: DesiredOrder["provision_place"]; note?: string }> {
   if (prior?.place_id) return { id: prior.place_id };
 
@@ -355,16 +437,33 @@ export async function resolvePlace(
 
   const key = normAddr(locationText);
   const remembered = await aliasLookup(aliases, "place", key);
-  if (remembered) {
-    return {
-      id: remembered,
-      note: missingVenue
-        ? `no venue named — used the "${PLACEHOLDER_PLACE_NAME}" placeholder; set the real venue in OnSinch`
-        : `venue from a name resolved before ("${locationText}")`,
-    };
+  /**
+   * THE ALIAS STORE NO LONGER SHORT-CIRCUITS, and that is Ben's instruction of
+   * 2026-08-25: venue matching must not come only from what was remembered.
+   *
+   * It returned here immediately, so a wording resolved once was resolved that way
+   * forever — including the wordings resolved to a row that cannot say where it is.
+   * The store is now ONE CANDIDATE among the tenant's ~3,000 buildings rather than
+   * the answer, and where it disagrees with a search of all of them, a model is
+   * asked which is right.
+   *
+   * The placeholder keeps its short-circuit. There is nothing to adjudicate about a
+   * venue nobody named.
+   */
+  if (remembered && missingVenue) {
+    return { id: remembered, note: `no venue named — used the "${PLACEHOLDER_PLACE_NAME}" placeholder; set the real venue in OnSinch` };
   }
 
   const places = await onsinch.allPlaces();
+
+  if (!missingVenue && process.env.SPARTAN_VENUE_V3 === "1") {
+    const v3 = await resolveVenueV3(locationText, places, remembered, deps);
+    if (v3) return v3;
+  }
+
+  if (remembered) {
+    return { id: remembered, note: `venue from a name resolved before ("${locationText}")` };
+  }
   const v1 = matchPlace(locationText, places);
   /**
    * A MATCH MADE ENTIRELY OUT OF A CITY NAME IS THROWN AWAY.
@@ -723,7 +822,7 @@ export async function compile(
     if (co.note) notes.push(co.note);
 
     const [pl, us] = await Promise.all([
-      resolvePlace(facts, prior, onsinch, deps.aliases),
+      resolvePlace(facts, prior, onsinch, deps.aliases, deps),
       resolveContact(facts, prior, company_id, onsinch),
     ]);
     place_id = pl.id ?? place_id;

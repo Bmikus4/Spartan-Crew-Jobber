@@ -41,12 +41,12 @@ import { matchPlaceV2, matchedOnCityAlone, isAShell } from "../app/lib/engine/ve
 loadEnv();
 const OUT = path.join(".tmp-data", "place-dedupe");
 fs.mkdirSync(OUT, { recursive: true });
-const places = JSON.parse(fs.readFileSync(path.join(".tmp-data", "places.json"), "utf8"));
+const places: any[] = JSON.parse(fs.readFileSync(path.join(".tmp-data", "places.json"), "utf8"));
 const byId = new Map(places.map((p) => [Number(p.id), p]));
 
-const normAddr = (s) => String(s ?? "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
-const locatable = (p) => !!(p && (p.zip || (p.lat && p.lng)));
-const richness = (p) => [p.address, p.city, p.zip, p.alias, p.lat, p.lng, p.note, p.region].filter(Boolean).length;
+const normAddr = (s: any) => String(s ?? "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+const locatable = (p: any) => !!(p && (p.zip || (p.lat && p.lng)));
+const richness = (p: any) => [p.address, p.city, p.zip, p.alias, p.lat, p.lng, p.note, p.region].filter(Boolean).length;
 
 /** Engine sentinels, looked up BY NAME. Deleting one makes the next enquiry create
  *  another, and every job standing on the old one becomes unexplainable. */
@@ -61,7 +61,7 @@ const SUBVENUE = /\b(hall|unit|suite|floor|level|gate|door|stand|bay|wing|block|
  * rather than imported because resolvePlace also does alias lookups and provisioning;
  * this is the pure matching half, and the four steps are the four the compiler takes.
  */
-function resolve(text, list) {
+function resolve(text: any, list: any[]) {
   const raw = matchPlace(text, list);
   const row = raw ? list.find((p) => Number(p.id) === Number(raw)) : undefined;
   if (raw && !isAShell(row) && !matchedOnCityAlone(text, row)) return { id: raw, how: "matchPlace" };
@@ -73,8 +73,8 @@ function resolve(text, list) {
 }
 
 // ---------------------------------------------------------------- edge-case ledger
-const edge = {};
-const flag = (key, p, why, extra = {}) => {
+const edge: Record<string, any[]> = {};
+const flag = (key: string, p: any, why: string, extra: any = {}) => {
   (edge[key] ??= []).push({ id: Number(p.id), name: String(p.name ?? "").trim(), why, ...extra });
 };
 
@@ -206,7 +206,7 @@ const report = {
   survivorsAbsorbingThem: targets.size,
   rowsKept: keep.size,
   batchProofFailures: batchFailures.length,
-  edgeCases: Object.fromEntries(Object.entries(edge).map(([k, v]) => [k, v.length]).sort((a, b) => b[1] - a[1])),
+  edgeCases: Object.fromEntries(Object.entries(edge).map(([k, v]) => [k, v.length] as [string, number]).sort((a, b) => b[1] - a[1])),
   edgeCaseRowsHeldBack: Object.values(edge).reduce((a, v) => a + v.length, 0),
   biggestAbsorbers: [...targets.entries()].sort((a, b) => b[1] - a[1]).slice(0, 15)
     .map(([id, n]) => ({ id, name: String(byId.get(id)?.name ?? "").trim(), zip: byId.get(id)?.zip ?? null, absorbs: n })),

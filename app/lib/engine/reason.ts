@@ -18,6 +18,7 @@ import type {
 } from "./types";
 import { CLASSIFY_SYSTEM, EXTRACT_SYSTEM, REPLY_SYSTEM } from "./prompts";
 import { renderConversation } from "./renderThread";
+import { ADJUDICATION_SCHEMA } from "./venueAdjudicate";
 
 export interface ClassifyResult {
   classification: Classification;
@@ -401,3 +402,70 @@ const REPLY_SCHEMA = {
     priority: { type: "string", enum: ["low", "medium", "high"] },
   },
 };
+
+/**
+ * A model that answers ONE question: which of these venue records is it.
+ *
+ * Deliberately its own factory rather than a fourth method on Reasoner. The three
+ * Reasoner tasks all read an email; this one reads a shortlist a deterministic
+ * matcher produced and never sees the thread. Keeping it separate means the venue
+ * model can be a different model — it is, by default — without the classifier and
+ * the reply writer moving with it.
+ *
+ * BEN ASKED FOR "gemini 3.5 pro" AND THERE IS NO SUCH MODEL on OpenRouter: the 3.5
+ * family ships flash and flash-lite only, and the newest actual Pro is
+ * gemini-3.1-pro-preview. That is the default, because the standing instruction for
+ * venue resolution is accuracy above cost and time. SPARTAN_VENUE_MODEL overrides it.
+ */
+export function createVenueJudge(cfg: { apiKey: string; model?: string; baseUrl?: string }) {
+  const model = cfg.model ?? process.env.SPARTAN_VENUE_MODEL ?? "google/gemini-3.1-pro-preview";
+  const baseUrl = cfg.baseUrl ?? "https://openrouter.ai/api/v1";
+  // Shorter than the reasoner's 25s: this call sits inside the same n8n invocation as
+  // everything else and it is the LAST thing on the critical path. A venue the
+  // matcher already has a good answer for is not worth a timeout for.
+  const TIMEOUT_MS = Number(process.env.VENUE_TIMEOUT_MS || 15_000);
+
+  return {
+    async adjudicate(system: string, user: string): Promise<unknown> {
+      let res: Response;
+      try {
+        res = await fetch(`${baseUrl}/chat/completions`, {
+          method: "POST",
+          signal: AbortSignal.timeout(TIMEOUT_MS),
+          headers: {
+            Authorization: `Bearer ${cfg.apiKey}`,
+            "Content-Type": "application/json",
+            "HTTP-Referer": "https://spartan-crew-jobber.vercel.app",
+            "X-Title": "Spartan Crew Jobber",
+          },
+          body: JSON.stringify({
+            model,
+            temperature: 0,
+            // The answer is four small fields. The ceiling is here for the same reason
+            // it is on the reasoner: without one OpenRouter reserves the model's whole
+            // context and refuses the request unless the account can cover all of it.
+            max_tokens: Number(process.env.VENUE_MAX_TOKENS || 512),
+            messages: [
+              { role: "system", content: system },
+              { role: "user", content: user },
+            ],
+            tools: [{ type: "function", function: { name: "emit", description: "Return the chosen venue", parameters: ADJUDICATION_SCHEMA } }],
+            tool_choice: { type: "function", function: { name: "emit" } },
+          }),
+        });
+      } catch (err) {
+        const timedOut = (err as Error)?.name === "TimeoutError" || (err as Error)?.name === "AbortError";
+        throw new Error(timedOut ? `venue judge (${model}) timed out after ${TIMEOUT_MS}ms` : `venue judge (${model}) failed: ${(err as Error)?.message}`);
+      }
+      if (!res.ok) {
+        const detail = (await res.text()).slice(0, 300);
+        if (res.status === 401 || res.status === 402 || res.status === 403) throw new ReasonerAuthError(res.status, detail);
+        throw new Error(`venue judge ${res.status}: ${detail}`);
+      }
+      const j = await res.json();
+      const args = j.choices?.[0]?.message?.tool_calls?.[0]?.function?.arguments;
+      if (!args) throw new Error("venue judge returned no tool_call: " + JSON.stringify(j).slice(0, 300));
+      return typeof args === "string" ? JSON.parse(args) : args;
+    },
+  };
+}

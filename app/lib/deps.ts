@@ -10,7 +10,7 @@
 import { createHash } from "node:crypto";
 import { OnsinchClient, httpTransport } from "./engine/onsinch";
 import { normName, normAddr } from "./engine/resolve";
-import { createOpenRouterReasoner, type Reasoner } from "./engine/reason";
+import { createOpenRouterReasoner, createVenueJudge, type Reasoner } from "./engine/reason";
 import { guardReasoner } from "./engine/spend";
 import { tieredReasoner } from "./engine/tiered";
 import { logKeyBalanceOnce } from "./engine/keyBalance";
@@ -461,6 +461,14 @@ export async function buildDeps(): Promise<PipelineDeps> {
     defaultRateCard: settings.default_rate_card,
     seededRateCard: async (companyId: number) => (await getRateCard(companyId))?.card ?? null,
     aliases: { lookup: lookupAlias, record: recordAlias },
+    /**
+     * The venue adjudicator (Ben, 2026-08-25). Only built when there is a key —
+     * absent, the venue path takes the deterministic search result and says so on
+     * the ticket, which is the behaviour every test pins.
+     */
+    venueJudge: process.env.OPENROUTER_API_KEY
+      ? createVenueJudge({ apiKey: process.env.OPENROUTER_API_KEY })
+      : null,
     // Read once per invocation from the Neon cache; the committed list is the floor.
     professions: await loadProfessions(PROFESSION_LIST),
     senderVerdict,
