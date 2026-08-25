@@ -47,6 +47,10 @@ say(`crew total correct .......... ${pct(field("crew_total"), scored.length)}`);
 say(`date correct ................ ${pct(field("date"), scored.length)}`);
 say(`times correct ............... ${pct(field("times"), scored.length)}`);
 say(`roles in the right family ... ${pct(field("roles"), scored.length)}`);
+// Reported beside the role figure and never folded into it. Booking general Crew for
+// a rigger IS the right answer — the tenant has no such row — so the property worth
+// measuring is whether it did so with somebody called.
+say(`unknown trades called a human ${pct(field("role_abstained"), scored.length)}`);
 say(`block count correct ......... ${pct(field("block_count"), scored.length)}`);
 say(`venue matched an EXISTING row ${pct(field("venue"), scored.length)}`);
 
@@ -182,7 +186,8 @@ if (AS_JSON) {
     calls: rows.reduce((n, r) => n + (r.spend?.calls ?? 0), 0),
     extraction: {
       crew_total: field("crew_total"), date: field("date"), times: field("times"),
-      roles: field("roles"), block_count: field("block_count"), venue: field("venue"),
+      roles: field("roles"), role_abstained: field("role_abstained"),
+      block_count: field("block_count"), venue: field("venue"),
       of: scored.length,
     },
     engine: {

@@ -41,7 +41,30 @@ export interface ProfessionMatch {
   why: "alias" | "exact" | "keyword" | "cue" | "default";
   /** True when a day-rate/hourly twin was chosen by shift length rather than said. */
   rateInferred?: boolean;
+  /**
+   * The client named a role, and this resolver did not know it — so the block fell
+   * to general Crew with nothing to say why.
+   *
+   * This is the failure that costs the most and shows the least. An IPAF job staffed
+   * with general crew, a rigger booked as labour, a "teleporter" that is a machine
+   * and not a person: the order composes, validates, writes, and looks exactly like a
+   * correct one. Nothing downstream re-reads the client's word.
+   *
+   * Set ONLY when the hint carried something the GENERIC list does not cover, so
+   * "6 lads" stays silent and "6 riggers" does not. It is a question for a human, not
+   * a refusal: the order is still built, it just arrives with somebody called.
+   */
+  unrecognised?: boolean;
 }
+
+/**
+ * The phrase compiler.ts keys off to call a human for an unknown role.
+ *
+ * Exported rather than typed twice: a note nobody matches is a note nobody reads,
+ * and a sentinel that lives in one file and is re-spelled in another is a fix that
+ * silently stops working the first time somebody improves the wording.
+ */
+export const UNRECOGNISED_MARK = "ROLE NOT RECOGNISED";
 
 /** Never resolvable, whatever a client types. */
 const CREW_BOSS = 55;
@@ -151,16 +174,63 @@ function machineKey(p: ProfessionRec): string {
  * thing for it to resolve to, which is exactly why 55 is unreachable. The bands count
  * chiefs, and a 55 turns up counted as nobody.
  */
+/**
+ * ORDER IS THE RULE HERE, not a detail: the first cue that matches wins, so every
+ * machine has to be asked about before the generic word it happens to contain.
+ * "FLT drivers" resolved to Driver 9 — a van driver sent to run a forklift —
+ * because `driver` sat above the plant cues. Anything naming a machine goes first
+ * and `driver` is last of the vehicle cues.
+ *
+ * The vocabulary is not invented. It is what Spartan's clients actually write, read
+ * off 27,830 real messages in data/corpus/sweep-threads.jsonl: crew chief 1835,
+ * carpenter 682, rigging 413, forklift 380, chippy/chippie 608, ipaf 203, av tech
+ * 164, counterbalance 149, telehandler 144, scissor lift 90, crew boss 84, flt 81,
+ * steward 70, mewp 46, followspot 49, pasma 48, picker 29, cherry picker 25.
+ */
 const CUES: Array<[RegExp, number]> = [
   [/\bcrew chief\b|\bchief\b|\bcrew lead(er)?\b|\bcrew manager\b|\b(gang |crew )?boss\b/, PROFESSION.CREW_CHIEF],
   [/\bcscs\b/, PROFESSION.CSCS],
-  [/\bchippy\b|\bcarpenter\b/, PROFESSION.CARPENTER],
+  [/\bchippy\b|\bcarpenter\b|\bjoiner\b|\bcarps\b/, PROFESSION.CARPENTER],
+  /**
+   * EVERY MEWP IS AN IPAF JOB. A cherry picker, a scissor lift, a boom lift, a
+   * Genie and a "MEWP" are the same machine class under different trade names, and
+   * operating one needs the card. The stored name is "IPAF 3a/3b", which contains
+   * none of those words, so every one of them fell through to Crew — an IPAF job
+   * staffed with general labour cannot legally proceed and the order looked normal.
+   * IPAF 1b is a different card and outranks this by containment, as it should.
+   */
+  [/\bipaf\b|\bmewp\b|cherry ?picker|scissor ?lift|boom lift|spider lift|\bgenie\b/, PROFESSION.IPAF],
+  [/\bpasma\b|tower scaffold/, PROFESSION.PASMA],
+  // "forkie" and "FLT" are what the yard says; neither is in the tenant's name for it.
+  [/\bforklift\b|\bfork lift\b|\bflt\b|\bforkie|\bcounterbalance\b/, 11],
+  // Rough terrain BEFORE telehandler: "rough terrain telehandler" is a different
+  // machine from the U<9M default, and the more specific reading has to be asked
+  // about first or the generic word inside it answers.
+  [/\brough terrain\b|\ball terrain\b/, 17],
+  [/\btelehandler\b|\btele handler\b|\bteleporter\b/, 4],
   [/\bdriver\b|\bdriving\b/, PROFESSION.DRIVER],
   [/\bav\b|\baudio ?visual\b/, PROFESSION.AV],
-  [/\bforklift\b|\bcounterbalance\b/, 11],
-  [/\brough terrain\b|\ball terrain\b/, 17],
-  [/\btelehandler\b/, 4],
 ];
+
+/**
+ * Words that mean "people", and nothing more specific.
+ *
+ * A hint made only of these landing on Crew is the RIGHT answer and must stay
+ * silent. A hint carrying anything else and landing on Crew by default is a role
+ * the resolver did not recognise, and that is a question for a human — see
+ * `unrecognised` on ProfessionMatch.
+ */
+const GENERIC = new Set([
+  "crew", "lad", "lads", "guy", "guys", "hand", "hands", "staff", "people", "person",
+  "body", "bodies", "men", "man", "labour", "labor", "worker", "workers", "team",
+  "personnel", "operative", "operatives", "temp", "temps", "helper", "helpers",
+  "general", "member", "members", "extra", "extras", "cover", "casual", "casuals",
+  // Trade words for untrained manual crew, and common in the real mail: porter 204,
+  // stagehand/stage hand 157, local(s) is what a touring production calls hired crew.
+  "porter", "porters", "stagehand", "stagehands", "stage", "loader", "loaders",
+  "local", "locals", "site", "shift", "call",
+  "x", "and", "or", "for", "the", "a", "of", "plus", "pax",
+]);
 
 /**
  * Q8(b): day rate at 8 hours or more, hourly below. Applied only where the resolved
@@ -196,8 +266,9 @@ export function resolveProfession(
 ): ProfessionMatch {
   const list = professions.filter(bookable);
   const byId = (id: number) => list.find((p) => p.id === id);
+  let flagOut: (m: ProfessionMatch) => ProfessionMatch = (m) => m;
   const out = (p: ProfessionRec | undefined, why: ProfessionMatch["why"]): ProfessionMatch | null =>
-    p ? applyRateForm({ id: p.id, name: cleanName(p.name), why }, list, opts.hours) : null;
+    p ? flagOut(applyRateForm({ id: p.id, name: cleanName(p.name), why }, list, opts.hours)) : null;
 
   // A confirmed alias is the whole answer — that is what the store is for.
   if (opts.aliasId) {
@@ -206,7 +277,18 @@ export function resolveProfession(
   }
 
   const t = normProf(hint);
-  const fallback = (): ProfessionMatch => ({
+  /**
+   * The abstention test, applied to whatever this function is about to return.
+   *
+   * Keyed on the ANSWER being general Crew, not on how it was reached — "rigging
+   * crew" resolves by containment on the stored name "Crew", which is a `keyword`
+   * match and looks like a success. It is the same miss as "rigger", and the client
+   * named a trade in both.
+   */
+  const named = t.split(" ").some((w) => w && !GENERIC.has(w) && !/^\d+$/.test(w));
+  flagOut = (m) =>
+    m.id === PROFESSION.CREW && m.why !== "alias" && named ? { ...m, unrecognised: true } : m;
+  const fallback = (): ProfessionMatch => flagOut({
     id: PROFESSION.CREW,
     name: cleanName(byId(PROFESSION.CREW)?.name) || "Crew",
     why: "default",
@@ -247,28 +329,34 @@ export function resolveProfession(
 
   // The written words first, then the same words with plurals folded. Order matters
   // only in that an exact wording is never reinterpreted to reach the folded pass.
-  let cue: { id: number; span: number } | null = null;
+  let cue: { id: number; span: number; text: string } | null = null;
   for (const candidate of [t, singularise(t)]) {
     for (const [re, id] of CUES) {
       const m = re.exec(candidate);
       if (!m) continue;
-      cue = { id, span: m[0].length };
+      cue = { id, span: m[0].length, text: m[0] };
       break;
     }
     if (cue) break;
   }
 
   /**
-   * A stored name only beats a cue when it explains MORE of what was written. "MCR
-   * Crew Chief" contains the chief cue and must stay 64, because the stored name
-   * covers fourteen characters of the request against the cue's ten. "Crew boss" is
-   * the opposite case: the only stored name inside it is "Crew", four characters,
-   * against the four of "boss" — and booking that as general labour loses the chief
-   * entirely. Ties go to the cue, which exists precisely to override the generic
-   * name it contains.
+   * A stored name only beats a cue when it is a MORE SPECIFIC READING OF THE SAME
+   * WORDS — that is, when the stored name contains the cue's own match. "MCR Crew
+   * Chief" contains the chief cue and must stay 64: same words, more of them. "Crew
+   * boss" is the opposite case — the only stored name inside it is "Crew", which
+   * does not contain "boss" — and booking that as general labour loses the chief
+   * entirely, so the cue wins.
+   *
+   * This was a raw span comparison, and a span comparison reads length for
+   * specificity. It sent "FLT drivers" to Driver 9: the stored name "Driver" is six
+   * characters against the FLT cue's three, so the longer word won and a van driver
+   * was booked to run a forklift. Length is not the question. Whether the two
+   * readings are about the same words is.
    */
   const best = contained[0];
-  if (best && (!cue || best.span > cue.span)) {
+  const storedRefinesCue = !!best && !!cue && normProf(best.p.name).includes(cue.text);
+  if (best && (!cue || storedRefinesCue)) {
     const hit = out(best.p, "keyword");
     if (hit) return hit;
   }
@@ -287,6 +375,7 @@ export function resolveProfession(
 /** The line that goes on the ticket, so an inference is never silent (Q8, Q12). */
 export function professionNote(hint: string | undefined, m: ProfessionMatch): string | null {
   if (m.why === "default" && !hint) return null;
+  if (m.unrecognised) return `${UNRECOGNISED_MARK} — "${hint}" not recognised, booked as general Crew`;
   if (m.why === "default") return `profession not recognised in "${hint}" — booked as Crew`;
   const rate = m.rateInferred ? ", rate form inferred from the shift length" : "";
   return `profession "${hint}" -> ${m.id} ${m.name} (by ${m.why}${rate})`;

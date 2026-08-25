@@ -28,6 +28,7 @@ import { handleThread } from "../app/lib/engine/pipeline";
 import type { HydratedThread, ThreadMessage } from "../app/lib/engine/types";
 import { buildRig } from "./corpusRig";
 import { bandChiefs } from "./oracle";
+import { UNRECOGNISED_MARK } from "../app/lib/engine/professions";
 import { loadProfessions } from "./harness";
 import { buildRandomCases, VENUE_FORMAL, type RandomCase, type TruthBlock } from "./randomCases";
 import { COMPANY_NAME, COMPANY_ID, CONTACT } from "./corpusCases";
@@ -65,14 +66,34 @@ const led: { orders: number[] } = existsSync(LEDGER) ? JSON.parse(readFileSync(L
 const saveLedger = () => writeFileSync(LEDGER, JSON.stringify(led, null, 2));
 
 // ---------------------------------------------------------------- scoring extraction
-/** Which OnSinch profession family a role SHOULD land in, by name rather than by id. */
+/**
+ * Which OnSinch profession a role SHOULD land in — READ OFF THE TENANT'S OWN 43
+ * ROWS, not asserted.
+ *
+ * This ruler was broken and it made the study's headline role figure meaningless.
+ * `rigger: /rigg/i` demanded a Rigger profession and THE TENANT HAS NONE. Roughly
+ * one case in seven drew that role, so for every one of them booking general Crew
+ * was the correct answer and the scorer marked it wrong. 55/100 was therefore
+ * partly a measurement of the scorer.
+ *
+ * A role the tenant does not hold expects Crew — and separately expects the ticket
+ * to CALL A HUMAN, which is the assertion that actually protects anybody: a rigger
+ * silently booked as labour and a rigger booked as labour with somebody called are
+ * the same order and completely different outcomes.
+ */
 const ROLE_PATTERNS: Record<TruthBlock["role"], RegExp> = {
-  crew: /crew|general|stage|labour/i,
-  carpenter: /carpenter|joiner|chippy/i,
-  rigger: /rigg/i,
-  forklift: /forklift|counterbalance|flt|telehandler/i,
-  ipaf: /ipaf|mewp|cherry/i,
+  crew: /^crew$/i,
+  carpenter: /carpenter/i,
+  // No Rigger row exists. Climber 65 is the nearest and whether a rigger books as
+  // one is Ben's call, not the scorer's — so the correct answer is general Crew.
+  rigger: /^crew$/i,
+  // The counterbalance, hourly or day-rate twin. NOT Driver, which is a van driver.
+  forklift: /counterbalance/i,
+  ipaf: /^ipaf 3a\/3b$/i,
 };
+
+/** Roles the tenant has no row for: booking Crew is right, booking it QUIETLY is not. */
+const ROLES_WITHOUT_A_ROW = new Set<TruthBlock["role"]>(["rigger"]);
 
 interface Scored {
   crew_total: boolean;
@@ -81,12 +102,20 @@ interface Scored {
   times: boolean;
   venue: boolean;
   roles: boolean;
+  /**
+   * Every block naming a role the tenant has no row for arrived with a human
+   * called. Reported separately because it is a different property from getting
+   * the profession right: booking Crew for a rigger IS right, and doing it in
+   * silence is the failure. True when there was nothing to abstain on.
+   */
+  role_abstained: boolean;
 }
 
 function scoreExtraction(c: RandomCase, truth: { blocks: TruthBlock[] }, state: {
   desired_order?: { slot_teams?: Array<{ size: number; beginning: string; end: string; profession_id: number; place_id: number }> } | null;
   facts?: { requests?: Array<{ date?: string; start_time?: string; end_time?: string; size?: number }> };
   place_id?: number;
+  notes?: string[];
 }, professionName: (id: number) => string, placeName: (id: number) => string): Scored {
   const teams = state.desired_order?.slot_teams ?? [];
   const wanted = truth.blocks.reduce((n, b) => n + b.size, 0);
@@ -134,6 +163,8 @@ function scoreExtraction(c: RandomCase, truth: { blocks: TruthBlock[] }, state: 
     times: wantTimes === gotTimes,
     venue: venueOk,
     roles: rolesOk,
+    role_abstained: !truth.blocks.some((b) => ROLES_WITHOUT_A_ROW.has(b.role))
+      || (state.notes ?? []).some((n) => n.includes(UNRECOGNISED_MARK)),
   };
 }
 

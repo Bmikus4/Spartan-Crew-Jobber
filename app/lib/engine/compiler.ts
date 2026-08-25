@@ -22,7 +22,7 @@ import { triage, decisionBinds, triageModeFromEnv, type TriageMode } from "./tri
 import { composeOrder } from "./compose";
 import { validateOrder } from "./format";
 import { matchCompany, matchCompanyByDomain, matchContact, matchPlace, matchExistingOrder, normName, normAddr } from "./resolve";
-import { resolveProfession, normProf, type ProfessionRec } from "./professions";
+import { resolveProfession, normProf, UNRECOGNISED_MARK, type ProfessionRec } from "./professions";
 import { PROFESSION_LIST } from "./professionList";
 import { resolveRateCard } from "./rates";
 import type { Reasoner, ReplyContext } from "./reason";
@@ -854,6 +854,20 @@ export async function compile(
       // but a price nobody chose must also SHOW on the board, or the click it is
       // waiting for never comes.
       if (provisionCompany || provisionPlace || user_id === PLACEHOLDER_CONTACT_ID || rateSource === "default") {
+        needs_human = true;
+      }
+
+      /**
+       * A ROLE THE RESOLVER DID NOT KNOW. The single highest-value line in the
+       * profession work: it turns an invisible wrong booking into a visible question.
+       *
+       * Not blocked — the order is still built and still staged. An IPAF job booked
+       * as general crew composes, validates and writes exactly like a correct one,
+       * and nothing downstream ever re-reads the client's word for the role. This is
+       * the only place that can say "somebody look at this" before the crew turn up
+       * without the card.
+       */
+      if (composed.warnings.some((w) => w.includes(UNRECOGNISED_MARK))) {
         needs_human = true;
       }
 

@@ -42,6 +42,9 @@ export type Classification =
 export const PROFESSION = {
   CREW: 1,
   CARPENTER: 3,
+  /** The MEWP card. Every cherry picker, scissor lift, boom lift and Genie is one. */
+  IPAF: 5,
+  PASMA: 6,
   DRIVER: 9,
   AV: 16,
   CSCS: 32,
