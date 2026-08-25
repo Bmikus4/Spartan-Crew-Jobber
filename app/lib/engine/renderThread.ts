@@ -112,6 +112,20 @@ export function renderConversation(
   parts.push(latest.body || "(empty)");
   parts.push("");
   parts.push("--- END CONVERSATION ---");
+  /**
+   * The reference date, said once in plain words at the end where nothing can push
+   * it out of the window.
+   *
+   * Every per-message header already carries a timestamp, but "the model can see
+   * the dates" was an assumption and the corpus study read 19 of 100 work dates a
+   * year early — always by taking the year of the email for a date the client wrote
+   * without one. Whether the model could not find the reference date or found it and
+   * had no rule to apply to it, this line and the FIELD RULE for `date` answer both.
+   * The deterministic roll in parseWork is the authority either way; this is the
+   * cheap half of a fix that is made in two places on purpose.
+   */
+  parts.push("");
+  parts.push(`TODAY, for reading any date the client wrote without a year: ${stamp(latest.date_iso)}`);
 
   return { text: parts.join("\n"), shown: shown.length + 1, droppedSpartan, droppedClient };
 }

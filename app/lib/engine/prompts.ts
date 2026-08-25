@@ -173,7 +173,7 @@ FIELD RULES:
 - location_text: the client-facing DESTINATION where the crew must go — a specific site/venue address (preferred) or a working venue name (e.g. "Olympia London", "NEC Birmingham", "Hall B Loading Bay"). Prefer a full address when present; never combine fragments from different messages; never the sender's office/invoice address or any Spartan Crew address. If none is reliably present, omit it. Write an address on one line ("2 Savoy Place London WC2R 0BL United Kingdom"), never with embedded newlines.
 
 REQUESTS (one entry per DISTINCT work block — a different date, time, crew size, task or venue is a new block):
-- date: the work date, formatted YYYY-MM-DD. Infer the year from surrounding context (thread dates); if a date is TBC/unconfirmed, still record the best available date. If a start OR end date is given but not the other, use the given date for both.
+- date: the work date, formatted YYYY-MM-DD. When the client writes a year, use it exactly, even if it is in the past. When the client writes NO year ("8th March", "22/04"), the date is the NEXT OCCURRENCE after the date of the email you are reading — an email sent in August saying "8th March" means March of the FOLLOWING year, not the March five months gone. Crew is booked ahead; a work date in the past is almost always a year misread. If a date is TBC/unconfirmed, still record the best available date. If a start OR end date is given but not the other, use the given date for both.
 - start_time / end_time: "HH:MM" 24h. READ THESE — do not leave them empty when the email says anything about when the work runs. They are stated in several shapes and all of them count:
   · a range: "09:00 - 16:00", "9am-4pm", "10.00 til 15.30", "23:01 - 05:59" (an end earlier than the start is an overnight shift — record it as given, the roll to the next day happens downstream)
   · an explicit finish: "until 15:30", "till 11pm", "finishing around midnight" ("midnight" → "00:00")
@@ -186,7 +186,7 @@ REQUESTS (one entry per DISTINCT work block — a different date, time, crew siz
 - location_text: ONLY when this block happens somewhere different from the rest of the job — "4 crew at ExCeL, then 2 at Olympia that afternoon". Leave it empty when the whole job is at one venue, which is nearly always: the job's venue belongs in the top-level location_text and repeating it here says the crew move when they do not. A block at a different place is a different working party even at the same time, so this changes how the job is staffed.
 
 DATE FORMAT (CRITICAL): created/observed dates and every request date → YYYY-MM-DD only (no times, timezones, day names, or month names).
-Examples: "Thu, 12 Feb 2026 17:41:53 +0000" → 2026-02-12 · "9th March" → 2026-03-09 · "March 9th" → 2026-03-09.
+Examples: "Thu, 12 Feb 2026 17:41:53 +0000" → 2026-02-12 · "9th March" → 03-09 of whichever year comes NEXT after the email's own date · "March 9th" → the same.
 
 AUTHORITY: the most recent email holds authority over older thread history when they conflict.
 NO GUESSING: if you cannot point to it in the text, do not output it. Do not URL-encode anything.`;

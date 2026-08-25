@@ -71,6 +71,9 @@ console.log("parseWork");
 // ------------------------------------------------------------------- dates
 {
   const d = (t: string) => parseDates(t, REF);
+  // The reference is 2026-08-04, so 12 September is five weeks ahead and the
+  // next-occurrence rule leaves it in the reference's own year. Where it does NOT —
+  // a bare date already well past — is test/dateYear.ts, which owns that rule.
   ok(d("12 September")[0] === "2026-09-12", "dates: '12 September' takes the reference year", d("12 September")[0]);
   ok(d("12th Sept 2027")[0] === "2027-09-12", "dates: an explicit year wins");
   ok(d("12/09/2026")[0] === "2026-09-12", "dates: 12/09 is day-first (UK)", d("12/09/2026")[0]);
@@ -83,9 +86,11 @@ console.log("parseWork");
   const multi = d("get-in 11 Sept, show 12 Sept, get-out 13 Sept");
   ok(multi.length === 3, "dates: three dates are three dates", JSON.stringify(multi));
 
-  // The reason parseDates takes a reference instead of reading the clock.
-  ok(parseDates("12 September", new Date("2025-10-01T00:00:00Z"))[0] === "2025-09-12",
-     "dates: an old thread parses against ITS year, not today's");
+  // The reason parseDates takes a reference instead of reading the clock: a thread
+  // swept from October 2025 must be read against October 2025.
+  ok(parseDates("12 October", new Date("2025-10-01T00:00:00Z"))[0] === "2025-10-12",
+     "dates: an old thread parses against ITS year, not today's",
+     parseDates("12 October", new Date("2025-10-01T00:00:00Z"))[0]);
 }
 
 // --------------------------------------------------------------- reconcile

@@ -156,45 +156,170 @@ const MONTHS: Record<string, number> = {
 };
 
 /**
+ * THE NEXT-OCCURRENCE RULE, and the one business number in this file.
+ *
+ * "8th March" written on 24 August means next March. The engine read it as this
+ * March — a work date five months in the past — on 19 of 100 cases in the corpus
+ * study, and every one of the 19 was this single error: day and month right, year
+ * the year of the email. Nothing anywhere states that a booking cannot be in the
+ * past, so both the model and this parser satisfied "infer the year from
+ * surrounding context" with the wrong answer.
+ *
+ * The rule is not "add a year" — it is "the FIRST occurrence of this day and month
+ * that is not already well past", and it therefore works in both directions. An
+ * email arriving 2 January about "28th December" means the December five days gone,
+ * not the one eleven months out, and reading it as next December is the same class
+ * of error in the opposite direction. Only one rule can be right for both, and this
+ * is it.
+ *
+ * The grace period is where the two meet. Fourteen days is proposed rather than
+ * measured: comfortably longer than any lag between a job and the email chasing it,
+ * far shorter than the months of lead time a real forward booking carries. IT IS A
+ * BUSINESS RULE AND BEN OWNS THE NUMBER; change it here and the tests in
+ * test/dateYear.ts state exactly what moves.
+ *
+ * Applied ONLY where the year was not written down. An explicit year in the past is
+ * a client deliberately referring to last year's job and is left alone.
+ */
+export const YEAR_ROLL_GRACE_DAYS = 14;
+
+/** Whole days from `reference` to the ISO date — negative when it is in the past. */
+function daysFrom(reference: Date, iso: string): number {
+  return Math.round((Date.parse(`${iso}T00:00:00Z`) - Date.UTC(
+    reference.getUTCFullYear(), reference.getUTCMonth(), reference.getUTCDate()
+  )) / 86400000);
+}
+
+/**
+ * Roll a year-inferred date forward to its next occurrence. Returns the date
+ * unchanged when it is not far enough in the past to be a mistake.
+ *
+ * Years, not one year: 29 February only occurs in a leap year, so a bare "29 Feb"
+ * read against 2026 has to climb to 2028 rather than land on a day that does not
+ * exist.
+ */
+export function nextOccurrence(
+  month: number, day: number, reference: Date, graceDays = YEAR_ROLL_GRACE_DAYS
+): string | null {
+  // Start a year BEHIND the reference, so the rule works in both directions: an
+  // email on 2 January saying "28th December" gets the December five days gone, not
+  // the one eleven months out. Climbing to +8 costs nothing and covers 29 February,
+  // which only exists every fourth year and would otherwise be dropped as an
+  // impossible date rather than moved to a year that has one.
+  const from = reference.getUTCFullYear() - 1;
+  for (let y = from; y <= from + 8; y++) {
+    const iso = `${y}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+    const t = new Date(`${iso}T00:00:00Z`);
+    if (t.getUTCDate() !== day || t.getUTCMonth() + 1 !== month) continue;
+    if (daysFrom(reference, iso) >= -graceDays) return iso;
+  }
+  return null;
+}
+
+/** The same rule applied to a date somebody has already put a year on. */
+export function rollYearForward(iso: string, reference: Date, graceDays = YEAR_ROLL_GRACE_DAYS): string {
+  const [, mo, d] = iso.split("-").map(Number);
+  return nextOccurrence(mo, d, reference, graceDays) ?? iso;
+}
+
+export interface ParsedDate {
+  iso: string;
+  /** The year was WRITTEN in the text. False means it was inferred and rolled. */
+  yearStated: boolean;
+}
+
+/**
  * Dates, as YYYY-MM-DD. UK order throughout: 12/09 is 12 September, never 9 December —
  * this mailbox is a London crew supplier and every date in it is written day-first.
  *
- * `reference` supplies the year when the text omits it, and is why this takes a
- * parameter instead of reading the clock: a thread swept from last October must parse
- * against October, not against today, or every undated "12 Sept" lands a year out.
+ * `reference` is the message's own timestamp, not the clock: a thread swept from last
+ * October must parse against October. Where the text writes no year, the date is the
+ * NEXT occurrence from that reference, not the reference's own year — see
+ * rollYearForward.
  */
-export function parseDates(text: string, reference: Date): string[] {
-  const out: string[] = [];
+export function parseDatesDetailed(text: string, reference: Date): ParsedDate[] {
+  const out: ParsedDate[] = [];
   const refYear = reference.getUTCFullYear();
-  const add = (y: number, mo: number, d: number) => {
+  const add = (y: number, mo: number, d: number, yearStated: boolean) => {
     if (mo < 1 || mo > 12 || d < 1 || d > 31) return;
-    const iso = `${y}-${String(mo).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
-    // Reject impossible days (31 February) by round-tripping.
-    const probe = new Date(`${iso}T00:00:00Z`);
-    if (probe.getUTCDate() !== d || probe.getUTCMonth() + 1 !== mo) return;
-    if (!out.includes(iso)) out.push(iso);
+    let iso: string | null;
+    if (yearStated) {
+      iso = `${y}-${String(mo).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+      // Reject impossible days (31 February) by round-tripping.
+      const probe = new Date(`${iso}T00:00:00Z`);
+      if (probe.getUTCDate() !== d || probe.getUTCMonth() + 1 !== mo) return;
+    } else {
+      // The year is the ENGINE's when the client did not write one — and choosing
+      // it is also what makes 29 February survive. Validity used to be checked
+      // against the reference's own year, so a bare "29 Feb" read in 2026 was
+      // rejected as an impossible date and the request lost its date entirely.
+      iso = nextOccurrence(mo, d, reference);
+      if (!iso) return;
+    }
+    if (!out.some((x) => x.iso === iso)) out.push({ iso, yearStated });
   };
 
-  for (const m of text.matchAll(/\b(\d{4})-(\d{2})-(\d{2})\b/g)) add(+m[1], +m[2], +m[3]);
+  /**
+   * Spans an earlier pattern has already claimed. Without this the day-first
+   * pattern reads "03-08" out of the middle of "2027-03-08" and reports a second,
+   * invented date — which is worse than useless, because reconcileRequests only
+   * fills or challenges a request when the text yields EXACTLY ONE date, so an ISO
+   * date in the email silently switched the whole date check off.
+   */
+  const claimed: Array<[number, number]> = [];
+  const free = (m: RegExpMatchArray) => {
+    const a = m.index ?? 0, b = a + m[0].length;
+    if (claimed.some(([x, y]) => a < y && b > x)) return false;
+    claimed.push([a, b]);
+    return true;
+  };
+
+  for (const m of text.matchAll(/\b(\d{4})-(\d{2})-(\d{2})\b/g)) {
+    if (free(m)) add(+m[1], +m[2], +m[3], true);
+  }
 
   // 12/09/2026, 12-09-26, 12.9.2026 — day first.
   for (const m of text.matchAll(/\b(\d{1,2})[/.\-](\d{1,2})(?:[/.\-](\d{2,4}))?\b/g)) {
+    if (!free(m)) continue;
     const d = +m[1], mo = +m[2];
     let y = m[3] ? +m[3] : refYear;
     if (y < 100) y += 2000;
     // Guard the ambiguous pair: 09/12 with no year could be either order. Day-first is
     // the house rule, but a first number above 12 proves it, and that is worth keeping
     // separate from a guess — both are added as day-first, which is the stated rule.
-    add(y, mo, d);
+    add(y, mo, d, !!m[3]);
   }
 
   // "12 September", "12th Sept 2026", "Sat 12 Sep"
   for (const m of text.matchAll(/\b(\d{1,2})(?:st|nd|rd|th)?\s+(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s*(\d{4})?/gi)) {
-    add(m[3] ? +m[3] : refYear, MONTHS[m[2].toLowerCase()], +m[1]);
+    if (!free(m)) continue;
+    add(m[3] ? +m[3] : refYear, MONTHS[m[2].toLowerCase()], +m[1], !!m[3]);
   }
   // "September 12", "Sept 12th 2026"
   for (const m of text.matchAll(/\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s+(\d{1,2})(?:st|nd|rd|th)?\s*(\d{4})?/gi)) {
-    add(m[3] ? +m[3] : refYear, MONTHS[m[1].toLowerCase()], +m[2]);
+    if (!free(m)) continue;
+    add(m[3] ? +m[3] : refYear, MONTHS[m[1].toLowerCase()], +m[2], !!m[3]);
+  }
+  return out;
+}
+
+/** The dates alone, for callers that do not care how the year was arrived at. */
+export function parseDates(text: string, reference: Date): string[] {
+  return parseDatesDetailed(text, reference).map((d) => d.iso);
+}
+
+/**
+ * The (month, day) pairs the text writes with NO year beside them.
+ *
+ * This is how the model's own dates get the same roll. The model returns
+ * "2026-03-08" and nothing in that string says whether the client wrote the year;
+ * the text does. A request date whose month and day appear here bare was inferred,
+ * whoever inferred it, and is subject to the next-occurrence rule.
+ */
+export function bareMonthDays(text: string, reference: Date): Set<string> {
+  const out = new Set<string>();
+  for (const d of parseDatesDetailed(text, reference)) {
+    if (!d.yearStated) out.add(d.iso.slice(5));
   }
   return out;
 }
@@ -206,6 +331,8 @@ export interface Reconciled {
   filled: string[];
   /** Where parser and model disagree — a reason for a human to look, not to overrule. */
   conflicts: string[];
+  /** Dates whose YEAR the next-occurrence rule moved, and what they were. */
+  rolled: string[];
 }
 
 export interface RequestLike {
@@ -232,14 +359,37 @@ export function reconcileRequests(
   requests: RequestLike[],
   reference: Date
 ): { requests: RequestLike[]; report: Reconciled } {
-  const report: Reconciled = { filled: [], conflicts: [] };
+  const report: Reconciled = { filled: [], conflicts: [], rolled: [] };
   const times = parseTimes(text);
   const crews = parseCrew(text);
   const dates = parseDates(text, reference);
+  const bare = bareMonthDays(text, reference);
 
   const singleShift = times && times.start && times.end ? times : null;
   const out = requests.map((r, i) => {
     const next: RequestLike = { ...r };
+
+    /**
+     * THE YEAR IS THE ENGINE'S, NOT THE MODEL'S — the one place this file overrules
+     * rather than reports, and it is narrow on purpose. It never touches the day or
+     * the month the model read; it applies the next-occurrence rule to a year that
+     * was never written down, and it only fires where the TEXT shows that day and
+     * month bare. A client who wrote "8 March 2026" keeps 2026, in the past or not.
+     *
+     * Reporting was not enough. `prompts.ts` tells the model to infer the year from
+     * surrounding context, and the surrounding context is the email's own date, so
+     * 19 of 100 corpus cases were booked in a month five months gone and the note
+     * would have said "DISAGREEMENT" on a thread nobody was reading. A rule that
+     * can be stated in code is not a thing to leave to a prompt.
+     */
+    if (next.date && bare.has(next.date.slice(5))) {
+      const [, mo, d] = next.date.split("-").map(Number);
+      const settled = nextOccurrence(mo, d, reference);
+      if (settled && settled !== next.date) {
+        report.rolled.push(`requests[${i}].date ${next.date} -> ${settled} (no year was written; read as the next occurrence)`);
+        next.date = settled;
+      }
+    }
 
     if (singleShift && requests.length === 1) {
       if (!next.start_time) { next.start_time = singleShift.start; report.filled.push(`requests[${i}].start_time`); }

@@ -591,6 +591,10 @@ export async function compile(
     facts = { ...facts, requests: rec.requests };
     if (rec.report.filled.length) notes.push(`read from the email text: ${rec.report.filled.join(", ")}`);
     for (const c of rec.report.conflicts) notes.push(`DISAGREEMENT — ${c}`);
+    // A rolled year is a date NOBODY wrote down, so it is said on the ticket. It is
+    // the mitigation for the one case the rule gets wrong — a client deliberately
+    // referring to a job months past — and the thing to watch in the first live week.
+    for (const r of rec.report.rolled) notes.push(`rolled the year forward — ${r}`);
 
     // company first (contact resolution needs it)
     const co = await resolveCompany(facts, prior, onsinch, deps.aliases);
