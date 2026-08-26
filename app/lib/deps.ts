@@ -471,6 +471,44 @@ export async function buildDeps(): Promise<PipelineDeps> {
       : null,
     // Read once per invocation from the Neon cache; the committed list is the floor.
     professions: await loadProfessions(PROFESSION_LIST),
+    /**
+     * A job this engine could not book, tagged "Manual" in Gmail so ops see it in the
+     * mailbox they already work from rather than only on a board they have to open.
+     *
+     * Ben, 2026-08-26: "any that cannot be booked should pipe into n8n via webhook and
+     * mark the thread with a tag 'Manual'."
+     *
+     * n8n does the labelling because the mailbox credential lives there and cannot be
+     * read out of it — the public API returns credential metadata only, never the token.
+     * Same shared secret and same failure posture as the draft webhook above.
+     *
+     * NO WEBHOOK MEANS NO TAG, SILENTLY, AND THAT IS THE RIGHT DEFAULT. A preview
+     * deployment and a local run have no business writing labels into the live bookings
+     * mailbox, and the flag is an alert rather than part of the booking — the thread is
+     * on the board with its reason either way.
+     */
+    async flagForManual(a) {
+      const hook = process.env.MANUAL_TAG_WEBHOOK;
+      if (!hook) return;
+      const res = await fetch(hook, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-webhook-secret": process.env.N8N_WEBHOOK_SECRET ?? "",
+        },
+        body: JSON.stringify({ label: "Manual", ...a }),
+      });
+      /**
+       * A 200 WITH AN EMPTY BODY IS A FAILURE HERE, for the reason recorded on the draft
+       * webhook: n8n answers 200 when the workflow throws, which is exactly what a
+       * rejected secret produces. Throwing lets the caller leave `manual_flagged` unset
+       * so the next email retries, instead of recording a tag that was never applied.
+       */
+      const j = (await res.json().catch(() => ({}))) as { ok?: unknown };
+      if (!res.ok || j.ok !== true) {
+        throw new Error(`manual-tag webhook did not confirm (HTTP ${res.status}) ${JSON.stringify(j).slice(0, 160)}`);
+      }
+    },
     senderVerdict,
     recordSender,
     // The permanent record of every order a rebuild destroys, and what replaced it.

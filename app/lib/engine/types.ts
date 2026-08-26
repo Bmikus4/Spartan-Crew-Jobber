@@ -220,6 +220,20 @@ export interface ConversationState {
 
   // control
   needs_human: boolean;              // confidence gate for handsfree
+  /**
+   * The thread currently wears the "Manual" tag in Gmail, because this engine could not
+   * book it (Ben, 2026-08-26).
+   *
+   * Held in state ONLY to make the webhook idempotent. A thread is re-read on every new
+   * message, so without this the tag would be re-posted on every reply — and, worse, a
+   * thread that got booked would keep the tag forever and ops would learn to ignore it.
+   * The flag is what lets the engine say "cleared" exactly once too.
+   *
+   * It is a record of what was SENT, not a source of truth about Gmail. If somebody
+   * removes the label by hand the engine will not put it back, which is correct: a human
+   * taking the tag off is a human saying they have dealt with it.
+   */
+  manual_flagged?: boolean;
   // an order the engine WANTS to write but is holding for human confirm
   // (always set in draft-only mode; this is the dashboard confirm queue).
   pending_order?: {

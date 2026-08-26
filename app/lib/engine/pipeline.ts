@@ -139,6 +139,40 @@ export interface PipelineDeps extends CompileDeps {
   /** Feeds the sender ledger that triage reads. Injected; absent in tests. */
   recordSender?: (a: { addr: string; thread_id: string; wasJob: boolean; subject?: string }) => Promise<void>;
   /**
+   * A JOB THIS ENGINE COULD NOT BOOK, HANDED TO A PERSON.
+   *
+   * Ben, 2026-08-26: "any that cannot be booked should pipe into n8n via webhook and
+   * mark the thread with a tag 'Manual'."
+   *
+   * The engine cannot label a Gmail thread itself — the mailbox credential lives inside
+   * n8n and cannot be read out of it — so this posts and n8n labels. Same shape and same
+   * shared secret as the reply-draft webhook, because a second delivery mechanism is a
+   * second thing to keep working.
+   *
+   * `state` distinguishes the two edges rather than only the bad one. A thread that
+   * needed a human and later gets booked must stop wearing the tag, or the tag decays
+   * into "threads that ever went wrong" — which nobody can work from. Ops act on the
+   * label, so the label has to mean "needs you NOW".
+   *
+   * Optional, and a failure is logged and swallowed. The board already shows the thread;
+   * an undelivered tag means ops find it there instead of in their inbox, which is
+   * slower, not dangerous. Silently failing to BOOK would be dangerous — this is not
+   * that.
+   */
+  flagForManual?: (a: {
+    thread_id: string;
+    state: "manual" | "cleared";
+    /** Why a person is needed, in the words already on the ticket. */
+    reason: string;
+    status: string;
+    subject?: string;
+    /** The order the thread points at, when it has one that simply disagrees. */
+    order_id?: number;
+    /** What the client asked for, so ops can act without opening the board. */
+    crew?: number;
+    dates?: string[];
+  }) => Promise<void>;
+  /**
    * The permanent record of an order about to be deleted, and what replaced it.
    * Injected so the pipeline stays testable with no database. Absent, a rebuild still
    * happens — the archive is how the old numbers stay answerable, not a safety.
@@ -367,7 +401,80 @@ export async function handleThread(
   }
 
   await store.put(next);
+  await flagManualIfNeeded(next, deps);
   return next;
+}
+
+/**
+ * WHAT "CANNOT BE BOOKED" MEANS, stated once so it cannot drift.
+ *
+ * A job the client asked for that is not, right now, correctly in OnSinch. Three shapes
+ * reach it and all three need the same person:
+ *
+ *   error       something threw, or a write was refused outright
+ *   needs-info  the engine held rather than guessed — no date, no rate card, a trade
+ *               nobody recognised, an ambiguity it will not resolve alone
+ *   needs_human an order EXISTS but disagrees with the client's latest email, because
+ *               the change could not be applied — the most easily missed of the three,
+ *               since the board shows an order and everything looks done
+ *
+ * NOT INCLUDED, deliberately: `ignored`. That is a newsletter, an out-of-office, a
+ * machine sender — nothing anyone asked to be booked. Tagging those would put "Manual"
+ * on most of the mailbox within a week and the tag would stop being read, which costs
+ * more than it saves.
+ *
+ * Also not included: a thread with no job in it. `confirmation-only` and `not-a-job` are
+ * answers, not failures.
+ */
+export function cannotBeBooked(s: ConversationState): boolean {
+  const isJob = s.classification === "new-job" || s.classification === "update";
+  if (!isJob) return false;
+  return s.status === "error" || s.status === "needs-info" || s.needs_human === true;
+}
+
+/**
+ * Post the tag, or take it back, exactly once per transition.
+ *
+ * Runs AFTER the state is persisted, so a webhook that hangs or throws can never cost
+ * the record of what the engine decided. The flag is written back on success only — a
+ * failed post leaves `manual_flagged` untouched, so the next email retries it.
+ */
+export async function flagManualIfNeeded(next: ConversationState, deps: PipelineDeps): Promise<void> {
+  if (!deps.flagForManual) return;
+  const should = cannotBeBooked(next);
+  const already = next.manual_flagged === true;
+  if (should === already) return; // no transition, nothing to say
+
+  // The reason ops read is the last thing the engine wrote about the thread, not a
+  // summary invented here — the notes already say why, in the engine's own words.
+  const reason = should
+    ? [...(next.notes ?? [])].reverse().find((n) => n && n.length > 12) ?? `status ${next.status}`
+    : `booked as order #${next.onsinch_order_id ?? "?"}`;
+
+  try {
+    await deps.flagForManual({
+      thread_id: next.thread_id,
+      state: should ? "manual" : "cleared",
+      reason,
+      status: next.status,
+      subject: next.subject,
+      ...(next.onsinch_order_id ? { order_id: next.onsinch_order_id } : {}),
+      ...(next.desired_order
+        ? {
+            crew: (next.desired_order.slot_teams ?? []).reduce((n, t) => n + (t.size || 0), 0),
+            dates: [...new Set((next.desired_order.slot_teams ?? [])
+              .map((t) => String(t.beginning ?? "").slice(0, 10))
+              .filter(Boolean))],
+          }
+        : {}),
+    });
+    next.manual_flagged = should;
+    await deps.store.put(next);
+  } catch (err) {
+    // The thread is already on the board with its reason. An untagged inbox is slower
+    // for ops; a lost booking would be dangerous, and this is not that.
+    console.error("[manual-tag] flag failed", err);
+  }
 }
 
 /**
