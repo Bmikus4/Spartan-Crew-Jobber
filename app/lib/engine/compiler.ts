@@ -151,6 +151,73 @@ const JOB_NAME_MAX = 80;
  * name for, and what the order->thread linkage matches on. The venue tail is the
  * only part that can afford to be lost.
  */
+/**
+ * THE NAME AN ORDER CARRIES IN ONSINCH, WHICH USED TO BE THE EMAIL SUBJECT.
+ *
+ * `orderName` was `latest.subject || requests[0].task || "Spartan Crew job"`, so the
+ * tenant holds bookings called "Re: Visual Elements Sat 29th Aug 2026" (order 14860) and
+ * "Availability?". A subject line is written to be replied to; an order name is read six
+ * weeks later in a list of hundreds, by someone deciding which job to staff.
+ *
+ * Ben, 2026-08-26: "named By AI something realistic and representative of the order,
+ * never say Re: in them, they should be real descriptive titles."
+ *
+ * So the model writes it (see ORDER_TITLE in prompts.ts) and this function is the
+ * guarantee around it — because a prompt cannot be relied on and a booking must never
+ * fail for want of a name. Three lines of defence, in order:
+ *
+ *   1. the model's title, if it gave one and it is not itself a subject line;
+ *   2. a title COMPOSED from the facts, which is deterministic and always available;
+ *   3. the subject with any reply prefix stripped, which is where we started but at
+ *      least never says "Re:".
+ *
+ * The prefix strip is applied to EVERY branch rather than only the fallback: the model
+ * has been told not to emit one, and this is what makes that true instead of hoped for.
+ */
+export function stripReplyPrefix(s: string): string {
+  // Repeated because mail clients stack them: "Re: Fwd: RE: ...".
+  let out = String(s ?? "").trim();
+  for (let i = 0; i < 6; i++) {
+    const next = out.replace(/^\s*(re|fw|fwd|aw|antw|sv|vs|tr)\s*(\[\d+\])?\s*:\s*/i, "");
+    if (next === out) break;
+    out = next;
+  }
+  return out.trim();
+}
+
+export function orderTitle(
+  aiTitle: string | undefined,
+  subject: string | undefined,
+  facts: ConversationFacts
+): string {
+  const clean = (s: string | undefined) => stripReplyPrefix(s ?? "").replace(/\s+/g, " ").trim();
+
+  const ai = clean(aiTitle);
+  // A model that simply echoes the subject has not written a title, it has copied one.
+  // Compared AFTER stripping, so "Re: Crew request" echoing "Crew request" is caught.
+  const echoesSubject = !!ai && !!subject && ai.toLowerCase() === clean(subject).toLowerCase();
+  if (ai.length >= 8 && !echoesSubject) return ai.slice(0, 80);
+
+  // Composed from what the thread actually established. Every part is optional because
+  // an enquiry that names no venue and no date still has to produce an order.
+  const r = facts.requests?.[0];
+  const crew = (facts.requests ?? []).reduce((n, x) => n + (Number(x.size) || 0), 0);
+  const who = facts.company_name?.trim();
+  // "Meridian Exhibitions — 6 crew at ExCeL London on 2027-09-12", not a string of
+  // dashes. The em-dash separates WHO from WHAT once; the rest is a sentence.
+  const what = [
+    crew > 0 ? `${crew} crew` : r?.task?.trim(),
+    facts.location_text?.trim() ? `at ${facts.location_text.trim()}` : "",
+    r?.date ? `on ${r.date}` : "",
+  ].filter(Boolean).join(" ");
+  const bits = [who, what].filter(Boolean);
+  if (bits.length === 2) return bits.join(" — ").slice(0, 80);
+  if (what) return what.slice(0, 80);
+
+  const fromSubject = clean(subject);
+  return (fromSubject || r?.task?.trim() || "Spartan Crew job").slice(0, 80);
+}
+
 export function jobNameFrom(facts: ConversationFacts): string {
   const r = facts.requests[0];
   const size = r?.size ?? "?";
@@ -1094,7 +1161,7 @@ export async function compile(
         user_id,
         place_id: place_id ?? 0, // 0 => created on write from provisionPlace
         pricelist_category_id,
-        orderName: (latest.subject || facts.requests[0]?.task || "Spartan Crew job").slice(0, 80),
+        orderName: orderTitle(cls.order_title, latest.subject, facts),
         jobName: jobNameFrom(facts),
         // The classifier's job_summary is its REASON, and on an overruled thread that
         // reason is a rejection ("N/A - acknowledgement only, no crew request"). Writing

@@ -141,6 +141,27 @@ JOB_SUMMARY:
 - confirmation-only / not-a-job: "N/A - [brief reason]"  e.g. "N/A - status update only, no changes requested".
 Never assume missing data — note it in job_summary instead.
 
+---
+
+ORDER_TITLE — the name this booking carries in OnSinch, read months later in a list of hundreds.
+
+Write it the way a booker would name the job, not the way the email was subject-lined.
+
+- Shape: "[Client or job] — [what the crew are doing] at [venue], [date]". Keep it under 70 characters.
+- Good:  "Meridian Exhibitions — stand build at ExCeL, 12 Sep"
+         "BBC Proms 54 — get-out at Royal Albert Hall, 25 Aug"
+         "Carpenters for Olympia derig, 3–4 Mar"
+- Bad:   "Re: Crew request"        (a reply prefix is not a job title)
+         "Availability?"           (the subject line, not the job)
+         "Crew"                    (true of every order in the tenant)
+
+HARD RULES:
+- NEVER begin with or include "Re:", "RE:", "Fwd:", "FW:" or any reply/forward prefix.
+- Never copy the email subject verbatim. Describe the WORK; the subject describes the conversation.
+- Use only what the thread actually says. If the venue or date is not stated, leave it out rather than inventing one — a title naming the wrong day is worse than a vague one.
+- No quote marks, no trailing full stop, no emoji.
+- For an update, name the JOB, not the change: the title is the booking's name for its whole life, and it is the same booking.
+
 EDGE CASES:
 - "Please could I request a quote for the following local crew? Event: Pop house. 3rd Aug 0900, 10 crew, Black Island Studios" → new-job (a quote request naming crew, dates and venue IS a crew enquiry).
 - "What are your day rates for local crew?" → not-a-job (pricing question with no job attached).
