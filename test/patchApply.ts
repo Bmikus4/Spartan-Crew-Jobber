@@ -40,7 +40,7 @@ const ok = (cond: boolean, label: string, extra = "") => {
 const desired: DesiredOrder = {
   name: "Mini Title Limited @ The Factory Project",
   company_id: 813, user_id: 9001,
-  request_approval: true, provisional: true, quote: true,
+  request_approval: true, 
   pricelist_category_id: 342,
   job_name: "2 at Unit A, The Factory Project on 2026-08-04",
   slot_teams: [

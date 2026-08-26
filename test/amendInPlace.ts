@@ -47,8 +47,7 @@ const order = (teams: DesiredSlotTeam[]): DesiredOrder => ({
   company_id: 42,
   user_id: 7,
   request_approval: true,
-  provisional: true,
-  quote: false,
+  
   pricelist_category_id: 311,
   job_name: "Acme @ Savoy Place",
   slot_teams: teams,
@@ -268,14 +267,25 @@ function rig(opts: { teamIds: number[]; attendance?: Array<{ team: number }>; pr
 
   console.log("\n[7] a confirmed order is never touched, by this path either");
   {
+    // This case used to assert the opposite: `provisional: false` meant CONFIRMED and
+    // the preflight refused. That gate is gone, because orders are now raised in the To
+    // Confirm posture and read back provisional=false from birth (format.ts) — keeping
+    // it would have refused every amendment the engine ever attempted.
+    //
+    // Nothing is lost by dropping it HERE, because amending in place destroys nothing:
+    // it patches a size or a window. The write that CAN hurt somebody is a shrink of a
+    // block people have signed on to, and that is refused on attendance in [5], which
+    // measures the harm directly instead of trusting a flag ops can toggle in the UI.
     const r = rig({ teamIds: [501], provisional: false });
     const res = await amendOrderInPlace(
       r.client,
       { order_id: r.ORDER, previous: [team({ size: 4 })], desired: order([team({ size: 8 })]) },
       r.hooks
     );
-    ok(!!res.refused && /no longer provisional/.test(res.refused), "refused on the shared preflight", res.refused);
-    ok(!r.sent.some((s) => s.method === "PATCH" || s.method === "POST"), "and nothing was sent");
+    ok(!res.refused && !!res.amended, "an order in the To Confirm posture is amended, not refused",
+       res.refused ?? res.declined ?? "");
+    const patch = r.sent.find((s) => s.method === "PATCH");
+    ok(patch?.body[0].size === 8, "and the change reaches the wire", JSON.stringify(patch?.body));
   }
 
   console.log("\n[8] a resumed amendment appends only what is missing");

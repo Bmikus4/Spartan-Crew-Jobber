@@ -39,7 +39,7 @@ const hashOrder = (o: unknown) => createHash("sha256").update(JSON.stringify(o))
 const desired = (size = 4, end = "2026-09-12T16:00:00+01:00"): DesiredOrder => ({
   name: "Event Concept @ Tobacco Dock",
   company_id: 501, user_id: 9001,
-  request_approval: true, provisional: true, quote: true,
+  request_approval: true, 
   pricelist_category_id: 342,
   job_name: `${size} at Tobacco Dock on 2026-09-12`,
   slot_teams: [
@@ -53,7 +53,7 @@ const desired = (size = 4, end = "2026-09-12T16:00:00+01:00"): DesiredOrder => (
  * `liveOrder` is what GET returns; `failCreate` makes the POST throw the way a real
  * validation error or a timeout would.
  */
-function fakeOnsinch(opts: { liveOrder?: Record<string, unknown> | null; failCreate?: boolean } = {}) {
+function fakeOnsinch(opts: { liveOrder?: Record<string, unknown> | null; failCreate?: boolean; attendance?: number } = {}) {
   const calls: string[] = [];
   const live = opts.liveOrder === undefined
     ? { id: 13632, provisional: true, quote: true, company_id: 501, name: "Event Concept @ Tobacco Dock" }
@@ -71,6 +71,12 @@ function fakeOnsinch(opts: { liveOrder?: Record<string, unknown> | null; failCre
       calls.push("POST");
       if (opts.failCreate) throw new Error("createOrder 422: validationErrors");
       return { status: 201, data: { data: [{ id: 14001, number: "10999" }] } };
+    }
+    if (method === "GET" && path.startsWith("/attendance")) {
+      // The gate that replaced `provisional`. Crew signed on is the harm; a flag was
+      // only ever a proxy for it, and one ops toggle in the UI at that.
+      const n = opts.attendance ?? 0;
+      return { status: 200, data: { data: [], pagination: { pageCount: 1, count: n } } };
     }
     return { status: 200, data: { data: [], pagination: { pageCount: 1, count: 0 } } };
   });
@@ -93,9 +99,18 @@ async function main() {
 
 // ------------------------------------------------------------------ refusals
 {
-  const { client, calls } = fakeOnsinch({ liveOrder: { id: 13632, provisional: false, quote: true, company_id: 501 } });
+  // WHAT "CONFIRMED" MEANS NOW. It used to mean `provisional: false`, and that flag
+  // died when orders started being raised in the To Confirm posture (format.ts) — every
+  // order the engine writes now reads back provisional=false, so the old gate would have
+  // refused every amendment it ever attempted.
+  //
+  // Measured 2026-08-25 across 300 live orders: no flag marks a booking as committed.
+  // status=0 with provisional=false — the exact posture the engine now writes — was
+  // staffed in 6 of 8 sampled, and status=-2 in 8 of 8. The only fact that separates a
+  // booking people are relying on from a draft is whether crew are signed on to it.
+  const { client, calls } = fakeOnsinch({ liveOrder: { id: 13632, provisional: false, quote: false, company_id: 501 }, attendance: 3 });
   const r = await replaceProvisionalOrder(client, { weCreatedIt: true, order_id: 13632, desired: desired() }, recordingHooks(calls));
-  ok(!!r.refused && /no longer provisional/.test(r.refused), "a CONFIRMED order is refused, not deleted", r.refused);
+  ok(!!r.refused && /crew signed on/.test(r.refused), "an order with CREW ON IT is refused, not deleted", r.refused);
   ok(!calls.some((c) => c.startsWith("DELETE")), "and nothing was deleted", calls.join(" -> "));
 }
 {
@@ -272,8 +287,9 @@ async function runConfirm(opts: {
   liveOrder?: Record<string, unknown> | null;
   failCreate?: boolean;
   withReplace?: boolean;
+  attendance?: number;
 }) {
-  const { client, calls } = fakeOnsinch({ liveOrder: opts.liveOrder, failCreate: opts.failCreate });
+  const { client, calls } = fakeOnsinch({ liveOrder: opts.liveOrder, failCreate: opts.failCreate, attendance: opts.attendance });
   const store = new InMemoryStore();
   await store.put((opts.state ?? staged()) as never);
   const patched: number[] = [];
@@ -333,7 +349,7 @@ async function runConfirm(opts: {
   // THE INHERITED ORDER. Order dedup links a thread to any existing order for the same
   // company and date, so a thread routinely ends up pointing at one ops raised by hand.
   // The action log holds no create for 13632, which used to stop the deletion outright.
-  // It no longer does: only `provisional` does.
+  // It no longer does: only attendance does.
   const inherited = staged({ order_action_log: [] });
   const { out, calls } = await runConfirm({ state: inherited });
   ok(calls.some((c) => c.startsWith("DELETE")), "an inherited DRAFT is now rebuilt too (Ben, 2026-08-18)", calls.join(" -> "));
@@ -349,9 +365,11 @@ async function runConfirm(opts: {
 }
 
 {
-  // Refused by preflight: the order was approved between staging and confirming.
-  const { out, calls } = await runConfirm({ liveOrder: { id: 13632, provisional: false, quote: true, company_id: 501 } });
-  ok(!calls.some((c) => c.startsWith("DELETE")), "an approved order is not deleted at confirm time", calls.join(" -> "));
+  // Refused: crew signed on between staging and confirming. This used to be modelled
+  // as `provisional: false`, which no longer distinguishes anything — see the note on
+  // the first refusal above.
+  const { out, calls } = await runConfirm({ liveOrder: { id: 13632, provisional: false, quote: false, company_id: 501 }, attendance: 2 });
+  ok(!calls.some((c) => c.startsWith("DELETE")), "an order crew have signed on to is not deleted at confirm time", calls.join(" -> "));
   ok(out?.status === "needs-info", "the thread goes to needs-info", String(out?.status));
   ok(out?.order_action_log.at(-1)?.ok === false, "the log records the refusal, not a success",
      JSON.stringify(out?.order_action_log.at(-1)));

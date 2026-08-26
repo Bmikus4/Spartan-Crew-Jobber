@@ -81,7 +81,7 @@ const jobOf = (live: any) => (Array.isArray(live?.Job) ? live.Job[0] : live?.Job
 const order = (teams: DesiredSlotTeam[], extra: Partial<DesiredOrder> = {}): DesiredOrder => ({
   name: "AMEND MATRIX - safe to delete",
   company_id: COMPANY, user_id: USER, request_approval: true,
-  provisional: true, quote: false, pricelist_category_id: RATE,
+  pricelist_category_id: RATE,
   job_name: "AMEND MATRIX - safe to delete",
   slot_teams: teams,
   ...extra,
@@ -205,13 +205,58 @@ async function raise(teams: DesiredSlotTeam[], extra: Partial<DesiredOrder> = {}
     // ---------------------------------------------------------------- refusals
     console.log("\n=== PART D — shapes that must REFUSE, where no path may write");
 
-    console.log("[D1] a CONFIRMED order");
-    await client.patchOrder([{ id: order_id, provisional: false }]);
-    const confirmed = await amendOrderInPlace(client, { order_id, previous: [team()], desired: order([team({ size: 5 })]) }, { async onCreated() {} });
-    ok(!!confirmed.refused && /no longer provisional/.test(confirmed.refused!), "refused", confirmed.refused);
-    await client.patchOrder([{ id: order_id, provisional: true }]);
-    ok(((await client.orderById(order_id)) as any)?.provisional === true, "and put back to a draft");
-    record("amend a CONFIRMED order", "REFUSED", "provisional carries the whole guarantee");
+    /**
+     * D1 ASSERTS THE OPPOSITE OF WHAT IT USED TO, AND THAT IS THE FIX, NOT A REGRESSION.
+     *
+     * It required `provisional: false` to refuse. Orders are now raised in the To
+     * Confirm posture, which means OnSinch's defaults, which means provisional reads
+     * back FALSE on every order the engine writes (format.ts). The old rule would
+     * therefore have refused every amendment the engine ever attempted — including the
+     * delete-and-repost a dropped block needs.
+     *
+     * The guarantee moved to attendance, which is the harm itself rather than a proxy
+     * for it: measured over 300 live orders on 2026-08-25, no flag separates a committed
+     * booking from a fresh one (status=0 + provisional=false, the engine's own posture,
+     * was staffed in 6 of 8 sampled). That refusal is PART E, and it is still gated.
+     */
+    console.log("[D1] provisional=false — now the posture every order is born in");
+    /**
+     * On its OWN order, not the matrix order. The matrix order has been appended to and
+     * had a block inserted ahead of it by now, so `previous: [team()]` no longer
+     * describes it and the amendment declines on the team-count check instead of
+     * reaching the question being asked. The old assertion never noticed because the
+     * provisional gate short-circuited ahead of that check.
+     */
+    /**
+     * Raised the way the ENGINE raises one — empty SlotTeam, then the block posted
+     * separately — because that is the only create whose block ids are addressable
+     * afterwards (API reference §12). A nested create leaves a childless audit row, so
+     * `slotTeamsForOrder` reads back zero blocks and the amendment declines on the
+     * team-count check before it can answer the question this case asks.
+     */
+    const d1 = await raise([]);
+    const d1Team = await client.createSlotTeam(buildSlotTeamBody(d1.job_id, team()));
+    await client.patchOrder([{ id: d1.order_id, provisional: false }]);
+    /**
+     * `known` is passed because that is what PRODUCTION passes (pipeline.ts): the engine
+     * records each block id as POST /slotTeams returns it, and the audit read is skipped
+     * for orders it created. Measured while writing this: an order created seconds ago
+     * has NO audit rows at all — not its teams, not its job id, not its R number — so a
+     * case that leans on the fallback read is testing the recovery path for UI-raised
+     * orders, not the amendment path a client's follow-up actually takes.
+     */
+    const confirmed = await amendOrderInPlace(
+      client,
+      {
+        order_id: d1.order_id,
+        previous: [team()],
+        desired: order([team({ size: 5 })]),
+        known: { job_id: d1.job_id, team_ids: [d1Team.id] },
+      },
+      { async onCreated() {} }
+    );
+    ok(!confirmed.refused && !!confirmed.amended, "amended, not refused", confirmed.refused ?? confirmed.declined ?? "amended");
+    record("amend an order with provisional=false", "PROVEN", "the To Confirm posture is amendable; attendance is the gate now");
 
     console.log("[D2] another client's order");
     const wrongCo = await amendOrderInPlace(client, { order_id, previous: [team()], desired: order([team()], { company_id: 999999 }) }, { async onCreated() {} });

@@ -29,7 +29,7 @@ const team = (o: Partial<DesiredSlotTeam> = {}): DesiredSlotTeam => ({
 });
 const desiredOf = (teams: DesiredSlotTeam[]): DesiredOrder => ({
   name: "X @ Y", company_id: 515, user_id: 1591, request_approval: true,
-  provisional: true, quote: false, pricelist_category_id: 122, job_name: "X @ Y",
+  pricelist_category_id: 122, job_name: "X @ Y",
   slot_teams: teams,
 });
 const hooks = { onCreated: async () => {} };  // the real AmendHooks member

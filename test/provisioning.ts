@@ -114,8 +114,7 @@ const order = (over: Partial<DesiredOrder> = {}): DesiredOrder => ({
   company_id: 0,
   user_id: 2257,
   request_approval: true,
-  provisional: true,
-  quote: false,
+  
   pricelist_category_id: 342,
   job_name: "4 crew",
   slot_teams: [{ name: "Crew", profession_id: 1, beginning: "2026-09-12T08:00:00+01:00", end: "2026-09-12T18:00:00+01:00", size: 4, place_id: 0 }],

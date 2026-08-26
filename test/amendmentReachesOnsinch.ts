@@ -257,9 +257,20 @@ const thread = (bodies: Array<{ id: string; body: string; at: string }>): Hydrat
       { id: "m2", body: "Actually please make it 6 crew instead.", at: "2026-02-13T09:00:00Z" },
     ]), deps);
 
+    // THE REGRESSION THIS CASE NOW GUARDS, WHICH IS THE OPPOSITE OF THE ONE IT USED TO.
+    //
+    // It used to assert that flipping `provisional` to false sent the amendment to a
+    // human. That flag stopped meaning anything on 2026-08-25: orders are raised in the
+    // To Confirm posture, so provisional=false is the state EVERY order the engine
+    // writes is born in. The old assertion would have made the engine refuse every
+    // amendment it ever attempted — the failure this file exists to catch.
+    //
+    // Nothing is deleted here either way, because the change is a size and amending in
+    // place destroys nothing. Deletion is still refused when crew are signed on: [5],
+    // [7] and [8] below hold that line, on attendance rather than on a flag.
     ok(!deleted.includes(original), "nothing was deleted", `deleted=${JSON.stringify(deleted)}`);
-    ok(second.status === "needs-info", "the thread asks for a human", second.status);
-    ok(second.notes.some((n) => /no longer provisional/.test(n)), "and says the order has been confirmed");
+    ok(second.status !== "needs-info", "provisional=false does NOT send the amendment to a human", second.status);
+    ok(teamWrites.some((w) => w.method === "PATCH"), "the crew change is applied in place", JSON.stringify(teamWrites));
   }
 
   console.log("\n[3] a follow-up that changes no crew must not destroy the order");

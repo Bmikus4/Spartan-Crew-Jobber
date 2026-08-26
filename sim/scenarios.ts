@@ -227,8 +227,8 @@ add({ id: "I-cancellation-flag", label: "the model flags a cancellation — neve
       blocks: [{ ...AM_BASE }], amend: { blocks: [{ ...AM_BASE, size: 8 }], cancellation: true } });
 add({ id: "I-po-only", label: "a PO follow-up must NOT delete the order", tags: ["amendment", "po-only"], client: "history", venue: O2, po: "PO-99123",
       blocks: [{ ...AM_BASE }], amend: { blocks: [{ ...AM_BASE }] } });
-add({ id: "I-confirmed-order", label: "amending a CONFIRMED order — must refuse", tags: ["amendment", "confirmed"], client: "history", venue: O2, orderConfirmed: true,
-      blocks: [{ ...AM_BASE }], amend: { blocks: [{ ...AM_BASE, size: 12 }] } });
+add({ id: "I-confirmed-order", label: "shrinking a block CREW ARE ON — must refuse", tags: ["amendment", "confirmed"], client: "history", venue: O2, orderConfirmed: true,
+      blocks: [{ ...AM_BASE }], amend: { blocks: [{ ...AM_BASE, size: 4 }] } });
 add({ id: "I-add-block", label: "an amendment adds a second window", tags: ["amendment", "add-block"], client: "history", venue: O2,
       blocks: [{ ...AM_BASE }], amend: { blocks: [{ ...AM_BASE }, { size: 4, date: D1, start: "18:00", end: "22:00", task: "Evening derig" }] } });
 add({ id: "I-change-times", label: "an amendment moves the shift", tags: ["amendment", "times"], client: "history", venue: O2,

@@ -2,7 +2,7 @@
 // compose — turn typed facts + resolved ids + rate card into a full DRAFT
 // DesiredOrder. DETERMINISTIC (the LLM already did the reading). Applies
 // Spartan's business rules in code:
-//   - draft posture: provisional + quote + request_approval
+//   - request_approval; provisional/quote left to OnSinch (To Confirm)
 //   - explicit rate card (I1); job summary -> specification; PO -> intern_name
 //   - place_id copied onto every slot team; default 08:00-18:00 when missing
 //   - profession_id mapping (default Crew=1)
@@ -11,7 +11,7 @@
 //     carved OUT of the team so headcount is unchanged (Ben, 2026-08-18)
 // ============================================================================
 import { PROFESSION } from "./types";
-import { DRAFT_POSTURE, SLOT_TEAM_NAME_MAX } from "./format";
+import { SLOT_TEAM_NAME_MAX } from "./format";
 import { resolveProfession, professionNote, type ProfessionRec } from "./professions";
 import { PROFESSION_LIST } from "./professionList";
 import type { ConversationFacts, DesiredOrder, DesiredSlotTeam } from "./types";
@@ -381,7 +381,7 @@ export function composeOrder(inp: ComposeInput): ComposeResult {
     company_id: inp.company_id,
     user_id: inp.user_id,
     request_approval: true,
-    ...DRAFT_POSTURE, // To Confirm, not Price Quotes — see format.ts
+    // provisional/quote are NOT set — OnSinch's defaults are the To Confirm posture.
     pricelist_category_id: inp.pricelist_category_id,
     job_name: inp.jobName,
     slot_teams,

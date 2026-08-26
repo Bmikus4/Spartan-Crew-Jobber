@@ -59,7 +59,7 @@ const NEW = { message_id: "m1", body: "Hi, can I book 4 crew on 9th March at Sav
   // To Confirm, not Price Quotes (Ben, 2026-08-09). test/draftPosture.ts owns the
   // reasoning and the wire-level check; this asserts the end-to-end path carries it.
   // It is what makes writing straight through safe: the human gate is in OnSinch.
-  assert(s.desired_order?.provisional === true && s.desired_order?.quote === false, "draft posture: To Confirm (provisional, not quote)");
+  assert(!("provisional" in (s.desired_order ?? {})) && !("quote" in (s.desired_order ?? {})), "posture left to OnSinch: neither provisional nor quote is set");
   assert(!!s.desired_order?.slot_teams.some((t) => t.profession_id === 36), "crew-chief slot team carved out (4 crew -> 3 + chief)");
   assert(!!s.desired_order?.specification, "job summary emitted to specification");
   assert(s.desired_order?.intern_name === "PO-44821", "customer ref emitted to intern_name");

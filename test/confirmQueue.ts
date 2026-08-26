@@ -92,7 +92,7 @@ async function main() {
       kind: "patch", order_id: 99913632,
       desired: {
         name: "Mini Title Limited @ The Factory Project", company_id: 813, user_id: 1,
-        request_approval: true, provisional: true, quote: true, pricelist_category_id: 342,
+        request_approval: true, pricelist_category_id: 342,
         job_name: "2 at The Factory Project on 2026-08-04",
         slot_teams: [{ name: "Crew", profession_id: 1, beginning: "2026-08-04T08:00:00+01:00", end: "2026-08-04T11:00:00+01:00", size: 2, place_id: 304 }],
       },

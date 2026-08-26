@@ -52,13 +52,24 @@ export async function preflightOrder(
     // change, and creating silently could duplicate a job booked elsewhere.
     return { refused: `order #${order_id} no longer exists in OnSinch — not recreating it blindly` };
   }
-  if (live.provisional !== true) {
-    return {
-      refused:
-        `order #${order_id} is no longer provisional (provisional=${String(live.provisional)}, quote=${String(live.quote)}) — ` +
-        `it has been confirmed; crew and times must be changed by hand`,
-    };
-  }
+  /**
+   * THIS GATE USED TO BE `provisional !== true` AND CANNOT BE ANY MORE.
+   *
+   * Orders are now created in the To Confirm posture, which means OnSinch's own
+   * defaults, which means `provisional` is FALSE on every order this engine raises
+   * (see format.ts). The old gate would therefore refuse every amendment the engine
+   * ever attempted — including the delete-and-repost that a dropped block needs.
+   *
+   * So the gate moves from a flag to the harm it was standing in for. `provisional`
+   * was never the thing that mattered; it was a proxy for "somebody has committed to
+   * this booking". The direct measure of that is whether crew are signed on, and it
+   * is measured per destructive action rather than here: `replaceOrder` refuses to
+   * delete an order with ANY attendance, and `amendOrder` refuses to shrink a block
+   * that has people on it. Both read the live tenant at the moment they act.
+   *
+   * A flag anyone can toggle in the UI was also never a guarantee. Attendance is a
+   * fact about people's shifts, and it is what makes a mistake cost something.
+   */
   if (args.company_id && live.company_id && Number(live.company_id) !== Number(args.company_id)) {
     return {
       refused: `order #${order_id} belongs to company ${live.company_id}, not ${args.company_id} — refusing to delete another client's order`,

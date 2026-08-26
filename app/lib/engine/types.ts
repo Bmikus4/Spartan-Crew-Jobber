@@ -64,15 +64,17 @@ export interface DesiredSlotTeam {
 
 /**
  * The order this conversation wants to create/patch — the full verified OnSinch
- * DRAFT-order shape (provisional + quote posture, explicit rate card).
+ * order shape, with an explicit rate card.
+ *
+ * `provisional` and `quote` are deliberately absent: setting either is what kept
+ * this engine's orders out of To Confirm. See the note in format.ts. They are still
+ * READ off the live order (orderPreflight, replaceOrder) — that is a different type.
  */
 export interface DesiredOrder {
   name: string;
   company_id: number;
   user_id: number;
   request_approval: true;      // hardcoded business rule
-  provisional: boolean;        // THE draft flag
-  quote: boolean;              // draft/quote posture
   pricelist_category_id: number; // THE RATE CARD (I1 — never OnSinch's silent default)
   job_name: string;
   slot_teams: DesiredSlotTeam[];

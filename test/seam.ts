@@ -145,7 +145,7 @@ assert(state.onsinch_order_id != null, "an order was WRITTEN to OnSinch");
 assert(state.status === "ordered", "status ordered", state.status);
 assert(state.pending_order == null, "nothing left holding in the queue");
 assert((state.desired_order?.slot_teams.length ?? 0) > 0, "the order has slot teams");
-assert(state.desired_order?.provisional === true, "provisional -> it IS a To Confirm order");
+assert(!("provisional" in (state.desired_order ?? {})), "provisional is not set -> it IS a To Confirm order");
 
 // ---------------------------------------------------------------- 4. idempotent
 console.log("\n[4] the same payload again changes nothing (exactly-once)");

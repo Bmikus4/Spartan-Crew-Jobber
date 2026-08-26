@@ -181,6 +181,7 @@ export function fixtureTransport(c: SimCase, places: PlaceCandidate[], log: Call
   // between runs cannot be diffed against its own previous run.
   let nextOrderId = 90000 + (parseInt(createHash("md5").update(c.id).digest("hex").slice(0, 6), 16) % 1000);
   let nextTeamId = 300000;
+  const createdTeamIds: number[] = [];
   const companies =
     c.client === "new"
       ? [{ id: 8801, name: CLIENTS.history.name, invoice_name: CLIENTS.history.name, Client: [{ id: CLIENTS.history.contact_id, email: `bookings@${CLIENTS.history.domain}` }] }]
@@ -230,7 +231,9 @@ export function fixtureTransport(c: SimCase, places: PlaceCandidate[], log: Call
       const last = log.created[log.created.length - 1];
       const body0 = (last?.body as Array<{ SlotTeam?: unknown[] }> | undefined)?.[0];
       if (body0) (body0.SlotTeam ??= []).push((body as unknown[])[0]);
-      return { status: 201, data: { data: [{ id: nextTeamId++ }] } };
+      const teamId = nextTeamId++;
+      createdTeamIds.push(teamId);
+      return { status: 201, data: { data: [{ id: teamId }] } };
     }
     if (method === "PATCH" && path === "/orders") {
       log.patched.push(body);
@@ -243,6 +246,23 @@ export function fixtureTransport(c: SimCase, places: PlaceCandidate[], log: Call
     if (method === "POST" && path === "/places") return { status: 201, data: { data: [{ id: 99001 }] } };
     if (method === "POST" && path === "/companies") return { status: 201, data: { data: [{ id: 99002, name: cl.name }] } };
 
+    /**
+     * WHO IS SIGNED ON. This used to be expressed as `provisional: false` on the order
+     * read-back, and that stopped meaning anything on 2026-08-25: orders are now raised
+     * in the To Confirm posture, so provisional is false on every order the engine
+     * writes and cannot separate a committed booking from a fresh one.
+     *
+     * Measured over 300 live orders that day — status=0/provisional=false, the exact
+     * posture the engine now writes, was staffed in 6 of 8 sampled. No flag marks a
+     * booking as committed. Attendance does, so the sim models it the way the engine
+     * reads it: rows carrying their SlotTeam, on the FIRST block.
+     */
+    if (path.startsWith("/attendance")) {
+      if (!c.orderConfirmed) return page([]);
+      const firstTeam = createdTeamIds[0];
+      if (!Number.isInteger(firstTeam)) return page([]);
+      return page([1, 2, 3].map((i) => ({ id: 8000 + i, SlotTeam: { id: firstTeam, name: "General" } })));
+    }
     if (path.startsWith("/places")) return page(places);
     if (path.startsWith("/companies")) return page(companies);
 

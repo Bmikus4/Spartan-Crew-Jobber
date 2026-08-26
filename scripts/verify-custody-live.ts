@@ -36,7 +36,7 @@ const team = (o: Partial<DesiredSlotTeam> = {}): DesiredSlotTeam => ({
 const derig = team({ name: "derig", size: 2, beginning: `${DAY}T18:00:00+00:00`, end: `${DAY}T22:00:00+00:00` });
 const orderOf = (teams: DesiredSlotTeam[]): DesiredOrder => ({
   name: L, company_id: COMPANY, user_id: USER, request_approval: true,
-  provisional: true, quote: false, pricelist_category_id: RATE, job_name: L, slot_teams: teams,
+  pricelist_category_id: RATE, job_name: L, slot_teams: teams,
 });
 const windowOf = async (id: number) => {
   const live: any = await client.orderById(id);

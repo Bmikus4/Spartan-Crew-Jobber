@@ -21,7 +21,7 @@
 // Run: npx tsx test/slotTeamName.ts
 // ============================================================================
 import { composeOrder } from "../app/lib/engine/compose";
-import { buildOrderBody, capSlotTeamName, SLOT_TEAM_NAME_MAX, DRAFT_POSTURE } from "../app/lib/engine/format";
+import { buildOrderBody, capSlotTeamName, SLOT_TEAM_NAME_MAX } from "../app/lib/engine/format";
 import type { ConversationFacts, DesiredOrder } from "../app/lib/engine/types";
 
 let fails = 0;
@@ -100,7 +100,6 @@ console.log("\n[5] THE ONE THAT MATTERS: a staged order composed before the cap"
     company_id: 1,
     user_id: 2257,
     request_approval: true,
-    ...DRAFT_POSTURE,
     pricelist_category_id: 315,
     job_name: "4 at ExCeL London on 2026-09-01",
     slot_teams: [

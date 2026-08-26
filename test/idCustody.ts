@@ -37,7 +37,7 @@ async function main() {
 
   const shell: DesiredOrder = {
     name: "X @ Y", company_id: 515, user_id: 1591, request_approval: true,
-    provisional: true, quote: false, pricelist_category_id: 122,
+    pricelist_category_id: 122,
     job_name: "X @ Y", slot_teams: [],
   };
 
@@ -77,7 +77,7 @@ async function main() {
 
   const order: DesiredOrder = {
     name: "X @ Y", company_id: 515, user_id: 1591, request_approval: true,
-    provisional: true, quote: false, pricelist_category_id: 122, job_name: "X @ Y",
+    pricelist_category_id: 122, job_name: "X @ Y",
     slot_teams: [
       { name: "build", profession_id: 1, size: 3, place_id: 49,
         beginning: "2027-11-10T08:00:00+00:00", end: "2027-11-10T14:00:00+00:00" },

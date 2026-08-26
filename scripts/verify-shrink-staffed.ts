@@ -158,7 +158,7 @@ const attendanceIds: number[] = [];
       const order: DesiredOrder = {
         name: "SHRINK TEST - safe to delete",
         company_id: COMPANY, user_id: USER, request_approval: true,
-        provisional: true, quote: false, pricelist_category_id: RATE,
+        pricelist_category_id: RATE,
         job_name: "SHRINK TEST - safe to delete",
         slot_teams: [{ name: "SHRINK TEST block", profession_id: 1, beginning: `${DAY}T08:00:00+00:00`, end: `${DAY}T18:00:00+00:00`, size: 3, place_id: PLACE }],
       };

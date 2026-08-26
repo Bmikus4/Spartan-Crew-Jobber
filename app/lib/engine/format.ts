@@ -8,23 +8,31 @@
 import type { DesiredOrder } from "./types";
 
 /**
- * The posture every order this engine creates is written in.
+ * WHY `provisional` AND `quote` ARE NOT SENT AT ALL.
  *
- * Ben, 2026-08-09: "Jobs will be added to To Confirm instead of Price Quotes."
- * `quote: true` is what filed them under Price Quotes, so it is now false and
- * `provisional` alone carries the draft — the order lands in the queue Spartan
- * actually works from, awaiting confirmation rather than sitting in a pricing
- * list nobody actions.
+ * They used to be, as `{ provisional: true, quote: false }`, on the reasoning that
+ * `provisional` carried the draft and would land the order in To Confirm. It does the
+ * opposite: an order with `provisional: true` is filed as provisional and never appears
+ * in To Confirm, which is why every order this engine raised was invisible to the people
+ * meant to action it. Ben, 2026-08-25: "im not seeing any jobs appear ... in Orders to
+ * Confirm."
  *
- * DEFINED ONCE BECAUSE TWO PLACES MUST AGREE. compose.ts writes it, and
- * replaceOrder.ts used to read the same two booleans back to decide whether an
- * order was still the engine's to delete. Those had to be edited together and
- * nothing said so; a posture change alone would have made every replacement
- * refuse. replaceOrder no longer identifies our orders by their flags at all
- * (see the custody note there), which is the deeper fix — but the constant stays
- * single-sourced so the write path cannot drift from what the rest assumes.
+ * Settled by measurement rather than inference, which is what the old note here admitted
+ * it could not do. Ben raised order 14868 by hand in the UI and it read back
+ * `provisional: false, quote: false`, with neither field in the create body he sent. Two
+ * orders were then posted to TEST 515 omitting both — 14869 and 14870 — and he confirmed
+ * both appeared in To Confirm.
+ *
+ * So OnSinch's own defaults are the correct posture and the engine must not overwrite
+ * them. This is the one place a silent default is right, and it is the exact opposite of
+ * the rate card (I1), which must always be stated — 14869 was posted without one and
+ * drifted to card 341 rather than the house 315. Omission here, explicitness there; the
+ * difference is that OnSinch's default posture is what Spartan wants and its default rate
+ * card is not.
+ *
+ * `request_approval: true` is unchanged and is not what hid the orders — Ben's own
+ * hand-raised body carries it too.
  */
-export const DRAFT_POSTURE = { provisional: true, quote: false } as const;
 
 /**
  * OnSinch rejects a SlotTeam name over 80 characters, and rejects the WHOLE
@@ -77,8 +85,6 @@ export interface OnsinchOrderBody {
   company_id: number;
   user_id: number;
   request_approval: true;
-  provisional: boolean;
-  quote: boolean;
   specification?: string;
   intern_name?: string;
   order_manager_id?: number;
@@ -124,8 +130,6 @@ export function buildOrderBody(o: DesiredOrder): OnsinchOrderBody[] {
     company_id: o.company_id,
     user_id: o.user_id,
     request_approval: true,
-    provisional: o.provisional,
-    quote: o.quote,
     Job: {
       name: o.job_name,
       pricelist_category_id: o.pricelist_category_id,
