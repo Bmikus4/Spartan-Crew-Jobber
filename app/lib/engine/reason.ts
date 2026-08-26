@@ -25,6 +25,20 @@ export interface ClassifyResult {
   priority: "low" | "medium" | "high";
   job_summary: string;
   /**
+   * The name the order carries in OnSinch, written by the model.
+   *
+   * The order name used to BE the email subject, which is how "Re: Visual Elements Sat
+   * 29th Aug 2026" reached the live tenant (order 14860). A reply prefix is not a job
+   * title, and a subject line is written to be replied to, not to be read in a list of
+   * bookings six weeks later.
+   *
+   * Optional because the model can omit it and a booking must never fail for want of a
+   * name: `orderTitle()` in compiler.ts falls back to a composed one and strips any
+   * reply prefix. Ben, 2026-08-26: "named By AI something realistic and representative
+   * of the order, never say Re: in them".
+   */
+  order_title?: string;
+  /**
    * The client is calling a job off, in whole or in part.
    *
    * A FLAG rather than a fifth value of Classification, deliberately. A cancellation

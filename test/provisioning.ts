@@ -225,9 +225,22 @@ console.log("\n[4] an existing client with an unknown venue and no contact on fi
 
   ok(!!state.desired_order, "an order was composed", JSON.stringify(state.notes));
   ok(!!actions.createOrder || !!state.desired_order, "and it is staged rather than dropped");
-  ok(state.desired_order?.user_id === 2257, "against Ben Mikus as the stand-in contact",
+  /**
+   * Ben Mikus is now the contact on EVERY engine-raised order, not a stand-in reached
+   * when the real one cannot be found (Ben, 2026-08-26). So there is nothing exceptional
+   * to report and the note is gone with the lookup that produced it — it used to end
+   * "add the real contact in OnSinch", which is now advice against the rule.
+   *
+   * The company is still the client's own; only the person is fixed. That asymmetry is
+   * the whole point, so it is asserted rather than assumed.
+   */
+  ok(state.desired_order?.user_id === 2257, "the contact is Ben Mikus",
     String(state.desired_order?.user_id));
-  ok((state.notes ?? []).some((n) => /stand-in/.test(n)), "and says so on the ticket");
+  ok(state.desired_order?.company_id === 126, "and the COMPANY is still the client's own",
+    String(state.desired_order?.company_id));
+  ok(!(state.notes ?? []).some((n) => /stand-in|add the real contact/.test(n)),
+    "with no stand-in note, because this is the rule and not a fallback",
+    JSON.stringify(state.notes));
   ok(!!state.desired_order?.provision_place, "the unknown venue is created on write, not refused",
     JSON.stringify(state.desired_order?.provision_place));
   ok(state.needs_human === true, "a human is still called to check it");

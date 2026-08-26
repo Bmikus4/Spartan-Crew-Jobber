@@ -307,33 +307,40 @@ async function resolveCompany(
   };
 }
 
-/** contact: reuse prior; else exact-match the sender against the company's
- * Client list; else fall back to an existing company contact; else needs-human.
- * (The API cannot create contacts — a genuinely-new person must be added in OnSinch.) */
+/**
+ * THE CONTACT ON EVERY ENGINE-RAISED ORDER IS BEN MIKUS. The COMPANY is still resolved
+ * normally — it is the client's own — but the person the order is raised against is not.
+ *
+ * Ben, 2026-08-26: "the company is fine, keep it, but the specific client/user ID should
+ * always be Ben Mikus."
+ *
+ * This used to hunt for the real client contact: match the sender's email against the
+ * company's Client list, else take whichever contact the company happened to have first,
+ * else fall back to the stand-in. That last-resort fallback is now the only path, and
+ * `user_id` is a constant.
+ *
+ * WHAT IS GIVEN UP, so nobody restores the lookup by accident. The order no longer names
+ * the person who asked for the job, and ops lose that at a glance in the OnSinch list —
+ * which is exactly what prompted the change, because on the test company that contact
+ * reads "Alexa Accs" and told Ben nothing. The client's name and address remain on the
+ * thread and in the order's `specification`, so nothing is lost, only moved.
+ *
+ * WHAT IS GAINED, and it is the larger half. "whichever contact the company had first"
+ * was a guess dressed as data: it put a real, named client employee on a booking they had
+ * never sent, and anything OnSinch sends a client contact would have gone to them. A
+ * constant that is a Spartan person cannot mis-address anybody.
+ *
+ * `prior?.user_id` is deliberately no longer honoured. Threads compiled before this
+ * change carry whatever contact was resolved then, and reusing it would leave the tenant
+ * with two conventions and no way to tell which an order followed.
+ */
 async function resolveContact(
-  facts: ConversationFacts,
-  prior: ConversationState | undefined,
-  company_id: number | undefined,
-  onsinch: OnsinchClient
+  _facts: ConversationFacts,
+  _prior: ConversationState | undefined,
+  _company_id: number | undefined,
+  _onsinch: OnsinchClient
 ): Promise<{ id?: number; note?: string }> {
-  if (prior?.user_id) return { id: prior.user_id };
-  // A company being created has no contacts to look up yet, and the sender cannot be
-  // added as one, so the stand-in is the only way the order exists at all.
-  if (!company_id) {
-    return {
-      id: PLACEHOLDER_CONTACT_ID,
-      note: `no contact on file for ${facts.contact_email ?? "this sender"} — order raised against Ben Mikus as a stand-in; add the real contact in OnSinch`,
-    };
-  }
-  const clients = await onsinch.companyClients(company_id);
-  const exact = matchContact(facts.contact_email, clients);
-  if (exact) return { id: exact };
-  if (clients[0]?.id)
-    return { id: clients[0].id, note: `unknown sender ${facts.contact_email ?? "?"} — used the company's existing contact` };
-  return {
-    id: PLACEHOLDER_CONTACT_ID,
-    note: `new contact ${facts.contact_email ?? "?"} and the company has no contact on file — order raised against Ben Mikus as a stand-in; add the real contact in OnSinch`,
-  };
+  return { id: PLACEHOLDER_CONTACT_ID };
 }
 
 /** place: reuse prior; else exact-match all places; else provision a new one on write. */
@@ -425,7 +432,33 @@ export async function resolvePlace(
   aliases?: CompileDeps["aliases"],
   deps?: { venueJudge?: VenueJudge | null }
 ): Promise<{ id?: number; provision?: DesiredOrder["provision_place"]; note?: string }> {
-  if (prior?.place_id) return { id: prior.place_id };
+  /**
+   * A CLIENT WHO MOVES THE VENUE USED TO BE IGNORED, SILENTLY.
+   *
+   * This was `if (prior?.place_id) return { id: prior.place_id }` — once a thread had a
+   * venue, every later email in it reused that venue and never looked again. It emitted
+   * no note either, so the only trace was the absence of one.
+   *
+   * Caught by the model-in-the-loop study, 2026-08-26: all four venue-change amendments
+   * (R009, R019, R027, R049) reported "this message changed location_text" and then "no
+   * crew or time change in this message — the blocks are unchanged". The client said the
+   * job had moved, the engine agreed the message said so, and the order kept pointing at
+   * the old building. Crew would have been sent to the wrong place.
+   *
+   * The short-circuit is still right when the venue has NOT moved: re-resolving the same
+   * wording on every email in a thread costs a ~3,000-row search and can only return the
+   * same answer. So the test is whether the client's own words changed, compared the way
+   * the alias store compares them — `normAddr`, so "the O2" and "The O2," do not read as
+   * a move.
+   *
+   * An absent `location_text` is NOT a move. A later email that simply does not mention
+   * the venue is the common case, and treating silence as a change would re-resolve the
+   * placeholder over a venue that was correctly resolved from the first email.
+   */
+  const priorText = prior?.facts?.location_text;
+  const venueMoved =
+    !!facts.location_text && normAddr(facts.location_text) !== normAddr(priorText ?? "");
+  if (prior?.place_id && !venueMoved) return { id: prior.place_id };
 
   // No venue named anywhere in the thread. Every slot team still needs a place_id, so
   // the job gets the placeholder venue rather than not existing: "No Location" is
@@ -825,11 +858,33 @@ export async function compile(
       resolvePlace(facts, prior, onsinch, deps.aliases, deps),
       resolveContact(facts, prior, company_id, onsinch),
     ]);
+    const placeBefore = place_id;
     place_id = pl.id ?? place_id;
     provisionPlace = pl.provision;
     user_id = us.id ?? user_id;
     if (pl.note) notes.push(pl.note);
     if (us.note) notes.push(us.note);
+
+    /**
+     * A JOB THAT CHANGES BUILDING SAYS SO ON THE TICKET, WHATEVER DECIDED IT.
+     *
+     * Asserted here rather than inside resolvePlace because that function answers from
+     * six different branches — the alias store, V3's adjudicator, V2's fuzzy match, the
+     * shell fallback, matchPlace, provisioning — and only some of them return a note.
+     * The venue that moved a booking in the study came back from a branch that did not
+     * (`note: v2.note ?? undefined`), so the order relocated in silence.
+     *
+     * The caller is the only place that holds BOTH ids, so it is the only place that can
+     * state the change rather than describe the decision. A first resolution is not a
+     * move and must not be announced as one — `placeBefore` is undefined then.
+     */
+    if (placeBefore && place_id && place_id !== placeBefore) {
+      notes.push(
+        `VENUE MOVED — this thread was booked at place ${placeBefore} and this message moves it to ${place_id}` +
+        (facts.location_text ? ` ("${facts.location_text}")` : "") +
+        `; crew already told the old address must be redirected`
+      );
+    }
 
     /**
      * A block that names its OWN venue — "4 crew at ExCeL, then 2 at Olympia that
