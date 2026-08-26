@@ -22,7 +22,7 @@ import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } fr
 import { join } from "node:path";
 import { loadEnv, requireEnv, onsinchBase } from "../scripts/_env.mjs";
 import { OnsinchClient, httpTransport, __resetListCache } from "../app/lib/engine/onsinch";
-import { createOpenRouterReasoner } from "../app/lib/engine/reason";
+import { createOpenRouterReasoner, createVenueJudge } from "../app/lib/engine/reason";
 import { guardReasoner } from "../app/lib/engine/spend";
 import { handleThread } from "../app/lib/engine/pipeline";
 import type { HydratedThread, ThreadMessage } from "../app/lib/engine/types";
@@ -244,6 +244,13 @@ async function runCase(c: RandomCase, placeName: (id: number) => string, placeIs
     baseUrl: BASE, apiKey: KEY, reasoner,
     onOrderCreated: (id) => { if (!led.orders.includes(id)) { led.orders.push(id); saveLedger(); } },
     onPlaceCreated: (id) => { if (!led.places!.includes(id)) { led.places!.push(id); saveLedger(); } },
+    /**
+     * The venue adjudicator, because this is the run that HAS a key and production
+     * builds one whenever it does (deps.ts). Without it every venue note in the
+     * 2026-08-26 run read "model-unavailable" — all 50 of them — so the study measured
+     * the deterministic search alone while appearing to measure the system.
+     */
+    venueJudge: createVenueJudge({ apiKey: AI_KEY }),
   });
 
   const m = (id: string, at: string, subject: string, body: string): ThreadMessage => ({

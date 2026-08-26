@@ -48,6 +48,12 @@ export function buildRig(opts: {
    * twice without changing what it measures is not a study.
    */
   onPlaceCreated?: (id: number) => void;
+  /**
+   * The venue adjudicator, when the caller has a key for one. Passed through to the
+   * compile deps so the run exercises the SAME venue path production takes; omitted
+   * by the scripted runner, which must stay free and offline.
+   */
+  venueJudge?: PipelineDeps["venueJudge"];
 }): Rig {
   const wire: string[] = [];
   const logged: Transport = async (m, p, b) => {
@@ -115,6 +121,23 @@ export function buildRig(opts: {
     seededRateCard: async () => 315,
     archiveOrder: async () => 1,
     recordReplacement: async () => {},
+    /**
+     * THE VENUE ADJUDICATOR, WHICH THE STUDY WAS MEASURING THE ABSENCE OF.
+     *
+     * Production builds this whenever OPENROUTER_API_KEY is set (deps.ts). This rig
+     * never passed it, so every venue note in the 2026-08-26 run read
+     * "model-unavailable" — all 50 of them — and the study reported the deterministic
+     * spine's accuracy while appearing to report the system's.
+     *
+     * It matters most exactly where the study's misses were: "The O2 North Greenwich"
+     * ranked Peninsula Park above The O2, and "Albert Hall" chose the Manchester one
+     * over the Royal Albert Hall. Both are ambiguities a search cannot settle and the
+     * adjudicator exists to settle.
+     *
+     * Only built when a key is present, matching production's own condition, so the
+     * scripted runner (sim/corpus.ts) — which must stay free and offline — is unchanged.
+     */
+    venueJudge: opts.venueJudge ?? null,
   };
 
   const windowOf = async (id?: number) => {

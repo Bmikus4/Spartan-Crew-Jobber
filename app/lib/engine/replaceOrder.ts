@@ -48,6 +48,7 @@
 import type { OnsinchClient } from "./onsinch";
 import type { DesiredOrder } from "./types";
 import { buildOrderBody } from "./format";
+import { provisionPlaceIfNeeded, missingPlace } from "./provisionPlace";
 import { preflightOrder } from "./orderPreflight";
 
 export interface ReplaceResult {
@@ -166,6 +167,31 @@ export async function replaceProvisionalOrder(
     };
   }
 
+  /**
+   * THE VENUE IS CREATED BEFORE THE DELETE, NOT AFTER IT.
+   *
+   * A composed order whose venue the tenant does not hold carries `place_id: 0` and a
+   * `provision_place`. Only `createOrderWithPlace` ever acted on that, and the rebuild
+   * posts through `client.createOrder` directly — so the zero went to the wire and
+   * OnSinch answered `400 {"place_id":["Fill in correct location"]}` AFTER the original
+   * had already been deleted. Measured 2026-08-26, case R045: "URGENT: draft order
+   * #15494 was DELETED and its replacement failed to post". No booking at all.
+   *
+   * Ordering is the fix, not the provisioning. Everything that can fail now happens
+   * while the original is still standing, so a failure costs an amendment rather than
+   * an order. That is the rule the rest of this function already follows and this one
+   * field escaped.
+   */
+  const prepared = await provisionPlaceIfNeeded(client, carried.desired);
+  if (missingPlace(prepared.desired)) {
+    return {
+      deleted: false,
+      refused:
+        `order #${order_id} cannot be rebuilt: the replacement has no venue and none to create — ` +
+        `refusing to delete an order we could not re-post`,
+    };
+  }
+
   // From here on the order is going away, so the record of it goes down first.
   await hooks.onIntent(live);
   await client.deleteOrders([order_id]);
@@ -173,7 +199,7 @@ export async function replaceProvisionalOrder(
 
   // If this throws, the caller sees the error with deleted:true already persisted, so
   // the retry re-posts rather than deleting a second time.
-  const created = await client.createOrder(buildOrderBody(carried.desired));
+  const created = await client.createOrder(buildOrderBody(prepared.desired));
   return { deleted: true, created, snapshot: live };
 }
 

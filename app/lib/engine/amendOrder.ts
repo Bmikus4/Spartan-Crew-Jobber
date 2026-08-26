@@ -56,6 +56,7 @@ import type { OnsinchClient } from "./onsinch";
 import type { DesiredOrder, DesiredSlotTeam } from "./types";
 import { buildSlotTeamBody, capSlotTeamName } from "./format";
 import { preflightOrder } from "./orderPreflight";
+import { provisionPlaceIfNeeded } from "./provisionPlace";
 
 /** The fields of a slot team the engine sets, and can therefore correct. */
 const TEAM_FIELDS = ["name", "profession_id", "beginning", "end", "size", "place_id", "description"] as const;
@@ -178,6 +179,20 @@ export async function amendOrderInPlace(
   hooks: AmendHooks
 ): Promise<AmendResult> {
   const { order_id, previous } = args;
+  /**
+   * A venue the tenant does not hold is created BEFORE any block is written against it.
+   *
+   * A composed order whose venue is new carries `place_id: 0` and a `provision_place`,
+   * and only `createOrderWithPlace` ever acted on that. This path posts blocks through
+   * `client.createSlotTeam` directly, so the zero reached the wire:
+   * `400 {"place_id":["Fill in correct location"]}` — measured 2026-08-26, case R001,
+   * where the amendment was simply refused and the client's change never landed.
+   *
+   * Reachable on any amendment whose venue re-resolves to something new, which became
+   * more common the same day a client who moves the venue stopped being ignored.
+   */
+  const provisioned = await provisionPlaceIfNeeded(client, args.desired);
+  args = { ...args, desired: provisioned.desired };
   const next = args.desired.slot_teams ?? [];
   const done = args.alreadyCreated ?? [];
 
