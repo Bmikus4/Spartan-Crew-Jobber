@@ -32,7 +32,7 @@ import { handleThread, type Executor, type PipelineDeps } from "../app/lib/engin
 import { DEFAULT_SETTINGS, type ConversationFacts, type HydratedThread, type ThreadMessage } from "../app/lib/engine/types";
 import type { Reasoner } from "../app/lib/engine/reason";
 import { loadProfessions } from "./harness";
-import { buildCases, expected, bodyFor, factsFor, COMPANY_NAME, COMPANY_ID, CONTACT, type Case } from "./corpusCases";
+import { buildCases, buildComplexCases, expected, bodyFor, factsFor, COMPANY_NAME, COMPANY_ID, CONTACT, type Case } from "./corpusCases";
 import { createOrderWithPlace } from "../app/lib/deps";
 
 loadEnv();
@@ -261,8 +261,20 @@ async function cleanup() {
   }
   console.log(`company ${COMPANY_ID} "${COMPANY_NAME}" confirmed`);
 
-  const cases = buildCases(N);
-  console.log(`${cases.length} cases, ${cases.filter((c) => c.amend).length} amended, concurrency ${CONCURRENCY}`);
+  /**
+   * `--complex` appends the many-block cases and the two monsters. They are APPENDED
+   * rather than folded into the grid so the crossed design stays one-factor-at-a-time
+   * and a run of `--n=N` alone is still comparable to every previous run of the same N.
+   */
+  const cases = process.argv.includes("--complex")
+    ? [...buildCases(N), ...buildComplexCases()]
+    : buildCases(N);
+  const complexCount = cases.filter((c) => c.factors.complex).length;
+  console.log(
+    `${cases.length} cases, ${cases.filter((c) => c.amend).length} amended` +
+    (complexCount ? `, ${complexCount} complex (up to ${Math.max(...cases.map((c) => c.blocks.length))} blocks)` : "") +
+    `, concurrency ${CONCURRENCY}`
+  );
   writeFileSync(RESULTS, "");
 
   const started = Date.now();

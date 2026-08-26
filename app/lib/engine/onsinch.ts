@@ -29,7 +29,38 @@ export function httpTransport(cfg: OnsinchConfig): Transport {
   // strips the Gmail label before the engine is reached, that email is simply
   // gone. Better to fail one request loudly and fast.
   const TIMEOUT_MS = Number(process.env.ONSINCH_TIMEOUT_MS || 12_000);
-  return async (method, path, body) => {
+  /**
+   * ONSINCH 500s UNDER CONCURRENT LOAD, AND A 500 USED TO LOSE THE BOOKING.
+   *
+   * Measured 2026-08-25 on TEST 515. 106 cases at concurrency 4: `POST /orders` returned
+   * 500 fifteen times out of 86 creates — 17%. The same cases at concurrency 1: 25 of 25
+   * succeeded, zero 500s. C012, C015, C019, C024 and C028 each failed in the first run
+   * and passed in the second with a byte-identical payload, so it is not the body.
+   *
+   * No factor separated the failures — sizes 2 to 40, every venue, one to three blocks —
+   * and the largest orders in the run (16 blocks, 218 crew) all succeeded. It is load.
+   *
+   * There was no retry anywhere in this client, so each 500 was a silently lost booking:
+   * the thread went to `error` and nothing reached OnSinch. A burst of enquiries arriving
+   * together is exactly when this fires and exactly when it costs most.
+   *
+   * ONLY IDEMPOTENT-ON-FAILURE CALLS ARE RETRIED. A 500 means the server did not tell us
+   * what it did, so a retried POST could double-create. Two facts make it safe here:
+   * `POST /orders` now carries an EMPTY SlotTeam array (id custody), so a duplicate would
+   * be an empty order rather than a duplicate booking; and every duplicate is visible to
+   * the caller's ledger. `POST /slotTeams` is NOT retried — it is the one non-idempotent
+   * call in the engine (see amendOrder.ts) and a retry there appends a second crew block.
+   *
+   * The budget is deliberately small. The whole pipeline runs inside n8n's 60s ceiling
+   * and this transport already has a 12s per-request timeout, so two retries at 400ms and
+   * 1200ms is the most that fits without turning a slow failure into a timeout — which is
+   * the worse failure, because the email's Gmail label is already gone by then.
+   */
+  const RETRY_BACKOFF_MS = [400, 1200];
+  const retriable = (method: string, path: string, status: number) =>
+    status >= 500 && status !== 501 && !(method === "POST" && path.startsWith("/slotTeams"));
+
+  const once = async (method: string, path: string, body: unknown) => {
     let res: Response;
     try {
       res = await fetch(cfg.baseUrl + path, {
@@ -49,6 +80,16 @@ export function httpTransport(cfg: OnsinchConfig): Transport {
     if (res.status === 204) return { status: 204, data: null };
     const text = await res.text();
     return { status: res.status, data: text ? JSON.parse(text) : null };
+  };
+
+  return async (method, path, body) => {
+    let last = await once(method, path, body);
+    for (const wait of RETRY_BACKOFF_MS) {
+      if (!retriable(method, path, last.status)) return last;
+      await new Promise((r) => setTimeout(r, wait));
+      last = await once(method, path, body);
+    }
+    return last;
   };
 }
 

@@ -763,16 +763,51 @@ async function executeOrder(
       const applied = (await executor.patchOrder({ order_id: intended.order_id!, desired: intended.desired })) || [];
       const teams = intended.desired.slot_teams ?? [];
       const crew = teams.reduce((n, s) => n + (s.size || 0), 0);
-      const manual =
-        `crew and times must be applied by hand on OnSinch order #${intended.order_id}` +
-        (teams.length ? ` — this thread asks for ${crew} crew across ${teams.length} block(s)` : "");
+
+      /**
+       * DID THE CREW ACTUALLY CHANGE? Reaching here does not mean it did.
+       *
+       * `tryAmendInPlace` and `tryReplace` both return false when the slot-team hash is
+       * unchanged, so a follow-up that moves only a top-level field — a PO, a revised
+       * summary — lands here having changed no crew at all. This branch used to tell a
+       * human to apply crew and times by hand anyway, and set needs_human on the ticket.
+       *
+       * Measured on the 106-case corpus, 2026-08-25: 9 of 43 amendments took this path
+       * and in every one the composed team set was IDENTICAL before and after — 0 patches
+       * and 0 appends planned. Every one of those was a false alarm asking ops to go and
+       * change nothing.
+       *
+       * That cost is not the noise. It is that a flag which cries wolf nine times in ten
+       * stops being read, and the tenth is the one where the crew really did not land.
+       *
+       * `last_ordered_teams_hash` still holds the PREVIOUS write here — this branch does
+       * not update it until below — so the comparison is valid at this point and would
+       * silently invert if that stopped being true.
+       */
+      const teamsChanged =
+        !next.last_ordered_teams_hash || hashOrder(teams) !== next.last_ordered_teams_hash;
+      const manual = !teamsChanged
+        ? `no crew or time change in this message — the blocks on order #${intended.order_id} are unchanged`
+        : `crew and times must be applied by hand on OnSinch order #${intended.order_id}` +
+          (teams.length ? ` — this thread asks for ${crew} crew across ${teams.length} block(s)` : "");
 
       next.last_ordered_hash = hashOrder(intended.desired);
       next.pending_order = undefined;
-      next.needs_human = true; // always: the crew change cannot be verified as landed
+      // Only when a crew change could NOT be verified as landed. An unchanged team set
+      // has nothing to verify and nothing to hand over.
+      next.needs_human = teamsChanged;
       if (applied.length) {
         next.status = "ordered";
         next.notes = [...next.notes, `updated ${applied.join(", ")} on order #${intended.order_id}; ${manual}`];
+      } else if (!teamsChanged) {
+        /**
+         * Nothing was sent AND nothing had changed. That is not a failed update, it is a
+         * message that asked for nothing — a "thanks, confirmed" with a reworded subject.
+         * Calling it needs-info sends ops to look at an order that already agrees with
+         * the client, which is the same false alarm as the note above wearing a status.
+         */
+        next.status = "ordered";
+        next.notes = [...next.notes, `no change requested — order #${intended.order_id} already matches this thread`];
       } else {
         // Nothing reached OnSinch. Saying "ordered" here is the bug this replaces.
         next.status = "needs-info";
