@@ -24,7 +24,7 @@ import { composeOrder } from "./compose";
 import { validateOrder } from "./format";
 import { matchCompany, matchCompanyByDomain, matchContact, matchPlace, matchExistingOrder, normName, normAddr } from "./resolve";
 import { matchPlaceV2, matchedOnCityAlone, isAShell } from "./venueMatch";
-import { buildIndex, searchVenues, type Building } from "./venueSearch";
+import { buildIndex, searchVenues, applyRuledWording, type Building } from "./venueSearch";
 import { adjudicateVenue, type VenueJudge } from "./venueAdjudicate";
 import { resolveProfession, normProf, UNRECOGNISED_MARK, type ProfessionRec } from "./professions";
 import { PROFESSION_LIST } from "./professionList";
@@ -443,7 +443,16 @@ async function resolveVenueV3(
   deps?: { venueJudge?: VenueJudge | null }
 ): Promise<{ id?: number; provision?: DesiredOrder["provision_place"]; note?: string } | null> {
   const index = venueIndex(places);
-  const { hits, searched } = searchVenues(locationText, index, 8);
+  /**
+   * A wording Spartan has ruled on is rewritten to the venue's real name BEFORE the
+   * search, so the ordinary ranking finds the ordinary answer and the adjudicator is
+   * never asked a question a person has already decided. See RULED_WORDINGS.
+   *
+   * The search text changes; `locationText` does not, because the note and the alias
+   * key must still say what the CLIENT wrote.
+   */
+  const ruled = applyRuledWording(locationText);
+  const { hits, searched } = searchVenues(ruled.text, index, 8);
   const rememberedBuilding = remembered
     ? index.find((b) => b.members.includes(remembered))
     : undefined;
@@ -462,7 +471,11 @@ async function resolveVenueV3(
   if (!hits.length && !rememberedBuilding) return null;
 
   const verdict = await adjudicateVenue({
-    text: locationText,
+    // The RULED text, not the client's, so the adjudicator is shown the same question
+    // the search was asked. Showing it "Albert Hall" while the shortlist came from
+    // "Royal Albert Hall" is how a model gets asked to justify an answer to a different
+    // question, and it is the shape that produces confident nonsense.
+    text: ruled.text,
     remembered: remembered ? { place_id: remembered, source: "exact", building: rememberedBuilding } : null,
     candidates: hits,
   }, deps?.venueJudge ?? null);
@@ -476,7 +489,10 @@ async function resolveVenueV3(
   const chosen = index.find((b) => b.place_id === verdict.place_id);
   return {
     id: verdict.place_id,
-    note: `venue "${locationText}" -> ${verdict.place_id} ${chosen?.name ?? ""} — searched ${searched} venues, ${verdict.how}` +
+    // The ruling is stated first when one applied. An ambiguous name that quietly
+    // resolves is the thing a reader would otherwise have to guess at.
+    note: (ruled.note ? `${ruled.note}. ` : "") +
+      `venue "${locationText}" -> ${verdict.place_id} ${chosen?.name ?? ""} — searched ${searched} venues, ${verdict.how}` +
       (chosen?.unlocatable ? ", and this row carries no postcode" : "") +
       (verdict.how === "model" || verdict.how === "model-second-pass" ? `: ${verdict.reason}` : ""),
   };

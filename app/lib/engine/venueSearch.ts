@@ -31,6 +31,68 @@ import { normAddr } from "./resolve";
 import { tokenise, postcodesIn, isAShell } from "./venueMatch";
 import type { PlaceCandidate } from "./types";
 
+/**
+ * WORDINGS SPARTAN HAS RULED ON, because no amount of searching can settle them.
+ *
+ * A bare "Albert Hall" ranks Manchester's Albert Hall and London's Royal Albert Hall
+ * about equally, and it should: both are real venues with that name in them. The venue
+ * adjudicator did the correct thing and abstained —
+ *
+ *   "could refer to the Royal Albert Hall in London or the Albert Hall in Manchester.
+ *    Without a city or postcode, there is not enough to choose."
+ *
+ * — and abstaining means provisioning a new row, so five of the 50 enquiries in the
+ * 2026-08-26 study created a duplicate Albert Hall. Every venue miss in that study was
+ * this one wording.
+ *
+ * That is not a matching problem, it is a missing business rule: which one does a
+ * Spartan client mean when they do not say. Ben, 2026-08-26: "Albert Hall should default
+ * to Royal Albert Hall."
+ *
+ * DETERMINISTIC AND AHEAD OF THE MODEL, deliberately. A ruling is not something to
+ * re-litigate on every enquiry, and a model asked the same ambiguous question fifty times
+ * will not answer it the same way fifty times. Expanding the text before the search means
+ * the ordinary ranking finds the ordinary answer and the adjudicator is never consulted.
+ *
+ * KEYED ON A NAME, NEVER AN ID. Mapping to place 2 would hard-code one row of one
+ * tenant's data into the engine and break silently the day that row is merged or
+ * replaced. Rewriting the client's words to the venue's real name lets the existing
+ * search do what it already does well.
+ *
+ * SCOPE IS THE WHOLE VALUE OF THIS TABLE. It holds wordings a person has decided, and
+ * nothing else — it is not a place to fix matching that should be fixed in the matcher.
+ * "The NEC" is the other known wording that resolves to nothing today; it is deliberately
+ * absent because nobody has ruled on it, and guessing it here would be exactly the
+ * overreach this comment exists to prevent.
+ */
+const RULED_WORDINGS: Array<{ when: RegExp; means: string; ruling: string }> = [
+  {
+    // Matches "Albert Hall" and "the Albert Hall" but NOT "Royal Albert Hall", which is
+    // already unambiguous, and not "Albert Hall Manchester", where the client said which.
+    when: /^(the\s+)?albert\s+hall$/i,
+    means: "Royal Albert Hall",
+    ruling: "Ben, 2026-08-26",
+  },
+];
+
+/**
+ * Apply Spartan's rulings to the client's wording. Returns the text unchanged when no
+ * ruling covers it, plus a note when one did, so the ticket says a rule was applied
+ * rather than appearing to have matched something it did not.
+ */
+export function applyRuledWording(text: string): { text: string; note?: string } {
+  const t = String(text ?? "").trim();
+  for (const r of RULED_WORDINGS) {
+    if (r.when.test(t)) {
+      return {
+        text: r.means,
+        note: `"${t}" is ambiguous and Spartan has ruled it means ${r.means} (${r.ruling})`,
+      };
+    }
+  }
+  return { text: t };
+}
+
 /** A real building, and every row the tenant holds for it. */
 export interface Building {
   /** The row to actually book: richest active member, coordinates, then oldest id. */
