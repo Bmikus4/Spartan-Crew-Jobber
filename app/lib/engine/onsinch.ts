@@ -543,8 +543,46 @@ export class OnsinchClient {
   }
 
   /** POST /companies — array body, 201 { data:[{id}] }. name is the min field. */
+  /**
+   * CREATING A COMPANY NEEDS SIX FIELDS, AND THIS SENT ONE.
+   *
+   * `POST /companies` answers
+   * `400 {"0":["Missing required properties: address, city, zip, country, email_invoice,
+   * status"]}` to a body carrying only a name — which is all this ever sent. So creating
+   * a client has never worked, on any code path, since the method was written.
+   *
+   * It stayed invisible because a brand-new company always had an assumed rate card, an
+   * assumed rate card always held the booking, and a held booking never reached the
+   * write. Removing that hold on 2026-08-27 made the call happen for the first time, and
+   * two live test enquiries died on it — "Spectra Events Ltd." and "Innovate UK Events",
+   * both otherwise correct.
+   *
+   * THE DEFAULTS ARE FILLED HERE rather than at the call site, so no future caller can
+   * reintroduce a company OnSinch will refuse. A caller that knows better overrides them.
+   *
+   * Established without creating anything, by sending the full field set with a
+   * deliberately invalid `status`: the error moved from "Missing required properties" to
+   * "status: Incorrect type", which proves the rest of the payload was accepted. A
+   * company cannot be deleted through this API, so a probe that created one would have
+   * been permanent.
+   *
+   * WHAT THE BLANKS MEAN. An enquiry gives a client's NAME and rarely their registered
+   * address, so address/city/zip go out empty — accepted, and honest. Inventing a
+   * placeholder address would put fiction on an invoice. `country` is GB because Spartan
+   * books UK crew, `status: 1` is active, and `email_invoice` is the sender's own address
+   * when the caller supplies it, which is the one field here that is real information.
+   */
   async createCompany(company: { name: string } & Record<string, unknown>) {
-    const r = await this.t("POST", "/companies", [company]);
+    const body = {
+      address: "",
+      city: "",
+      zip: "",
+      country: "GB",
+      email_invoice: "",
+      status: 1,
+      ...company,
+    };
+    const r = await this.t("POST", "/companies", [body]);
     if (r.status !== 201)
       throw new Error(
         `createCompany ${r.status}: ${JSON.stringify(r.data?.validationErrors ?? r.data)}`

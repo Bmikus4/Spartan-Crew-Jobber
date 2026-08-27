@@ -97,8 +97,14 @@ export interface DesiredOrder {
    * order rather than a create at compile time because compile() must stay a pure
    * read — it is re-run on every message in a thread, and a create there would make
    * a duplicate company per email.
+   *
+   * `email_invoice` is carried because OnSinch REQUIRES it to create a company at all
+   * (with address, city, zip, country and status — see onsinch.createCompany). It is the
+   * sender's own address, and the only one of the six that is real information rather
+   * than a default: an enquiry gives a client's name and almost never their registered
+   * address, so the rest go out blank rather than invented.
    */
-  provision_company?: { name: string };
+  provision_company?: { name: string; email_invoice?: string };
   /**
    * Where pricelist_category_id came from. "default" means the house standard
    * was applied to a client with no pricing history, and such an order is never

@@ -403,7 +403,12 @@ async function resolveCompany(
   }
 
   return {
-    provision: { name: facts.company_name.slice(0, 120) },
+    provision: {
+      name: facts.company_name.slice(0, 120),
+      // OnSinch will not create a company without it, and the sender's address is the
+      // only invoice contact this thread actually knows.
+      ...(facts.contact_email ? { email_invoice: facts.contact_email } : {}),
+    },
     note: `new company "${facts.company_name}" — will be created in OnSinch on confirm`,
   };
 }
