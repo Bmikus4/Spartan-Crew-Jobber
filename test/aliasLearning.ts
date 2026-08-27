@@ -119,7 +119,7 @@ async function main() {
   ok((await store.lookup("company", normName("Event Concept"))) === 501, "so a later email resolves from memory");
 }
 
-// ------------------------------------ the fallback's guess is recorded but NOT trusted
+// ------------------------------------ the fallback's guess is NOT recorded at all
 {
   const store = makeStore();
   const pulls = { companies: 0 };
@@ -130,11 +130,28 @@ async function main() {
     reasoner: reasonerSaying("Eclipse Presentations"), onsinch: countingOnsinch(pulls),
     now: () => 1, repliesEnabled: false, aliases: store,
   } as never);
+  /**
+   * THIS ASSERTION IS THE INVERSE OF WHAT IT WAS, AND THE INVERSION IS THE FIX.
+   *
+   * It used to require that a bounded-token-fallback match be WRITTEN to the alias store
+   * as `source: "fuzzy"`, on the theory that a fuzzy row is inert until a human blesses
+   * it. The theory did not survive contact: `aliasLookup` is consulted BEFORE the
+   * whole-list match and returns the row whatever its source, so a guess became the
+   * permanent answer for that wording and could never be revisited.
+   *
+   * Live on 2026-08-27: "Event Solutions UK" matched company 502 "Vision Events Solutions
+   * LTD" — a different firm — the alias was written the same second, and the ticket
+   * carried no note at all. The rate card is derived from the matched company's history,
+   * so the next booking for that client would have been priced off somebody else's rates.
+   *
+   * A guess that is used once is a guess. A guess written to the store is a guess
+   * promoted to a fact. So the match is still USED — refusing to book at all would be
+   * worse — but it announces itself on the ticket and is never remembered.
+   */
   const rec = store.recorded.find((r) => r.alias_norm === normName("Eclipse Presentations"));
-  ok(!!rec, "a fallback match is still written down");
-  ok(rec?.source === "fuzzy", "but marked 'fuzzy'", rec?.source);
+  ok(!rec, "a fallback match is NOT written down — a guess must not become the answer", JSON.stringify(rec));
   ok((await store.lookup("company", normName("Eclipse Presentations"))) === null,
-     "and a fuzzy alias does NOT resolve on its own — it waits for a human");
+     "so the next email asks the question again rather than inheriting the guess");
 }
 
 // --------------------------------- a remembered name skips the whole-list pull

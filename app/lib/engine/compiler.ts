@@ -342,15 +342,49 @@ async function resolveCompany(
   const companies = await onsinch.allCompanies();
   const id = matchCompany(facts.company_name, companies);
   if (id) {
-    // How it was matched decides whether it may be trusted next time. An exact hit is a
-    // deterministic answer worth caching; anything the bounded token fallback found is a
-    // judgement, and is only ever recorded for a human to confirm.
-    const wasExact = companies.some(
-      (c) => c.id === id && (normName(c.name) === key || normName(c.invoice_name) === key)
-    );
-    await aliasRecord(aliases, { kind: "company", alias_norm: key, entity_id: id,
-                                 source: wasExact ? "exact" : "fuzzy", raw_example: facts.company_name });
-    return { id };
+    const matched = companies.find((c) => c.id === id);
+    const wasExact = !!matched && (normName(matched.name) === key || normName(matched.invoice_name) === key);
+    if (wasExact) {
+      // A deterministic answer, worth caching: the next thread asking the same question
+      // gets it for free instead of pulling 763 companies again.
+      await aliasRecord(aliases, { kind: "company", alias_norm: key, entity_id: id,
+                                   source: "exact", raw_example: facts.company_name });
+      return { id };
+    }
+    /**
+     * A FUZZY COMPANY MATCH SAYS SO, AND IS NEVER REMEMBERED.
+     *
+     * It used to do neither. The old code recorded every match — exact or not — and
+     * returned `{ id }` with NO note, so a token-overlap guess became the thread's client
+     * in silence and was then cached as the answer for that wording forever. The comment
+     * here already said a fuzzy hit "is only ever recorded for a human to confirm"; there
+     * was nothing for a human to confirm it from.
+     *
+     * Caught by a live test on 2026-08-27. "Event Solutions UK" matched company 502
+     * "Vision Events Solutions LTD" — a different firm — with not one note on the ticket,
+     * while the venue on the same order carried a full explanation of how it resolved.
+     * The alias was written the same second, so every later email from that client would
+     * have gone to the wrong company without the engine reconsidering.
+     *
+     * WHY THAT COSTS MONEY AND NOT JUST TIDINESS. The rate card is derived from the
+     * MATCHED company's order history, so a wrong company silently prices the job off
+     * somebody else's rates and puts it on an invoice. That is the failure I1 exists to
+     * prevent, arriving through a door I1 does not watch — I1 checks whether a card was
+     * assumed, not whether the company it was derived from is the right one.
+     *
+     * Not caching is the important half. A guess that is used once is a guess; a guess
+     * written to the alias store is a guess promoted to a fact, and the store is
+     * consulted BEFORE the whole-list match, so it can never be revisited. This is the
+     * same bug Ben killed for venues on 2026-08-25 — "venue matching must not come only
+     * from what was remembered" — left standing on the company path.
+     */
+    return {
+      id,
+      note:
+        `company "${facts.company_name}" did not match any client exactly — booked against ` +
+        `${id} "${matched?.name ?? "?"}" on a name similarity. CHECK IT: the rate card is ` +
+        `derived from that company's history, so the wrong client here prices the job wrong`,
+    };
   }
   /**
    * The name did not resolve. Ask the sender's domain BEFORE creating a client:
@@ -1242,6 +1276,52 @@ export async function compile(
         needs_human = true;
         blocked = true;
         notes.push("nothing bookable could be built from this thread — see the missing details above");
+      }
+
+      /**
+       * A BOOKING WHOSE WORK HAS ALREADY HAPPENED IS NOT A BOOKING.
+       *
+       * Crew cannot be sent to a day that has gone, so an order dated entirely in the
+       * past is never something to write — and writing it is worse than refusing,
+       * because it succeeds. It reports `ordered`, it is a real row on a real client,
+       * and it is filed where nobody will ever look for it.
+       *
+       * Caught by a live test on 2026-08-27: an enquiry saying "Thu 24 & Fri 25 Oct
+       * 2024" produced order 15573 dated 2024-10-23, twenty-two months back. The engine
+       * said it had booked the job. Ben: "i cant see the jobs inside of onsinch."
+       *
+       * THE YEAR RULE IS RIGHT AND THIS IS NOT A CONTRADICTION OF IT. `parseWork` rolls
+       * a BARE day/month forward to its next occurrence, and deliberately leaves an
+       * EXPLICIT past year alone, because a client can legitimately write "the 3rd of
+       * March 2024" when querying an old invoice. That reasoning holds for reading the
+       * date; it does not extend to booking crew for it. So the date is still read as
+       * written — and then the order is held rather than sent.
+       *
+       * ENTIRELY, not partly. A multi-day job whose load-in has passed but whose show
+       * days have not is a real and ordinary shape mid-job, and it must still book. Only
+       * an order with no future work at all is stopped.
+       *
+       * The grace is a whole day rather than "before now": an order for this morning,
+       * compiled this afternoon, is a real same-day booking that ops still act on.
+       *
+       * THE CLOCK IS THE INJECTED ONE, not Date.now(). Every other time decision in this
+       * file already reads `now()`, and it is why the suite is deterministic: a rule that
+       * compared against the wall clock would make every fixture in the repo rot on a
+       * fixed date, and nine test files went red the moment this was written the other
+       * way. A test that books "12 February" must not start failing on 13 February.
+       */
+      const shiftEnds = (desired?.slot_teams ?? [])
+        .map((t) => Date.parse(t.end || t.beginning || ""))
+        .filter((n) => Number.isFinite(n));
+      if (desired && shiftEnds.length && Math.max(...shiftEnds) < now() - 24 * 60 * 60 * 1000) {
+        const when = new Date(Math.max(...shiftEnds)).toISOString().slice(0, 10);
+        needs_human = true;
+        blocked = true;
+        notes.push(
+          `NOT BOOKED — every shift in this thread has already happened (the last ends ${when}). ` +
+          `Crew cannot be booked for a past date. If the client meant a future year, correct the ` +
+          `date and re-send; the order was deliberately not written because it would be invisible.`
+        );
       }
     } else {
       // No rate card, or nothing dated to build a shift from. Nothing composed, so

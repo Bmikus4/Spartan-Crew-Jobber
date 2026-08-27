@@ -310,7 +310,16 @@ export function buildRig(c: SimCase, professions: ProfessionRec[], places: Place
   const onsinch = new OnsinchClient(fixtureTransport(c, places, log));
   const store = new InMemoryStore();
   const metrics = new InMemoryMetrics();
-  let clock = 1_800_000_000_000;
+  /**
+   * BEFORE THE DATES THE CASES BOOK. The scenarios run on 2026-06-10 onwards, and this
+   * clock stood at 2027-01-15 — seven months AFTER the work it was simulating.
+   *
+   * That was invisible until an order dated entirely in the past stopped being written
+   * (compiler.ts): crew cannot be sent to a day that has gone, so every case in the file
+   * became unbookable at once and rule agreement fell to 9/100. The engine was right and
+   * the rig had been simulating bookings for jobs that had already happened.
+   */
+  let clock = Date.parse("2026-05-01T08:00:00Z");
 
   const executor: Executor = {
     async createReplyDraft() { return "draft-sim"; },

@@ -116,7 +116,19 @@ assert(thread?.messages[0].is_from_spartan === false, "client not flagged as spa
 
 // ---------------------------------------------------------------- 3. pipeline
 console.log("\n[3] the pipeline turns it into a staged draft order");
-let clock = 1_786_000_000_000;
+/**
+ * BEFORE THE JOB THIS THREAD BOOKS, which is what makes it a booking at all.
+ *
+ * The mock reasoner answers 2026-03-09 while the email text says 12 August — the engine
+ * notices and records "DISAGREEMENT ... model 2026-03-09, text 2026-08-12" — and books
+ * the model's date. With the clock at 2026-08-06 that date had already passed, so the
+ * order was correctly refused as unbookable and this seam test failed on a date bug it
+ * was never about.
+ *
+ * The clock moves rather than the mock: the mock is shared, and this file's subject is
+ * the n8n-payload-to-order seam, not date handling.
+ */
+let clock = Date.parse("2026-01-05T09:00:00Z");
 const onsinch = new OnsinchClient(mockTransport);
 const store = new InMemoryStore();
 const executor: Executor = {
