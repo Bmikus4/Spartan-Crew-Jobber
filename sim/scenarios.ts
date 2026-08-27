@@ -202,9 +202,9 @@ add({ id: "G-client-chief-exact", label: "3 crew + 1 chief — nothing to carve"
 // ======================================================= H — client / rate card
 add({ id: "H-history", label: "known client, card from history — writes", tags: ["rate-card", "history"], client: "history", venue: O2,
       blocks: [{ size: 6, date: D1, start: "08:00", end: "16:00", task: "Build" }] });
-add({ id: "H-no-history", label: "known client, no orders — assumed card HOLDS", tags: ["rate-card", "assumed"], client: "nohistory", venue: O2,
+add({ id: "H-no-history", label: "known client, no orders — assumed card BOOKS and flags", tags: ["rate-card", "assumed"], client: "nohistory", venue: O2,
       blocks: [{ size: 6, date: D1, start: "08:00", end: "16:00", task: "Build" }] });
-add({ id: "H-new-company", label: "client not in OnSinch — provisioned, HOLDS", tags: ["rate-card", "new-company"], client: "new", venue: O2,
+add({ id: "H-new-company", label: "client not in OnSinch — provisioned, BOOKS and flags", tags: ["rate-card", "new-company"], client: "new", venue: O2,
       blocks: [{ size: 6, date: D1, start: "08:00", end: "16:00", task: "Build" }] });
 add({ id: "H-new-company-new-venue", label: "new client AND new venue", tags: ["rate-card", "new-company", "venue"], client: "new", venue: NEW_VENUE,
       blocks: [{ size: 6, date: D1, start: "08:00", end: "16:00", task: "Build" }] });

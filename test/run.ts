@@ -5,7 +5,7 @@
 //         (3) a follow-up crew-count change patches the order straight through,
 //         (4) a bare "thanks" -> confirmation-only,
 //         (5) dashboard aggregate reflects the funnel,
-//         (5b) an ASSUMED rate card is the one thing that still stages for a click,
+//         (5b) an ASSUMED rate card is WRITTEN and flagged, never staged,
 //         (6) no mode has to be flipped for any of it.
 // ============================================================================
 import { createHash } from "node:crypto";
@@ -101,11 +101,17 @@ const NEW = { message_id: "m1", body: "Hi, can I book 4 crew on 9th March at Sav
   assert(stats.orders_created === 1 && stats.orders_updated === 1, "1 created, 1 updated, both straight through");
   assert(stats.awaiting_confirmation === 0, "nothing left awaiting confirmation");
 
-  console.log("\n[5b] the ONE gate that survives: an assumed rate card still holds");
+  console.log("\n[5b] an assumed rate card BOOKS the job and calls a human");
   {
     // A client with no order history has no card to derive, so the house standard is
-    // applied — a guess that reaches an invoice. Card 245, OnSinch's silent default,
-    // is Tracy's original wrong-rate failure. Money is worth the click.
+    // applied. That guess reaches an invoice, which is why it is flagged — but it no
+    // longer holds the booking. Ben, 2026-08-27: "as little unnecessary blockers to
+    // creating a job as possible, as long as the actual content of the order can be
+    // created properly." A rate card is not order content; it is Spartan's own number.
+    //
+    // The guess is still guarded, just not by a gate: `needs_human` puts the "Manual"
+    // label on the thread in the bookings mailbox, which is where ops work. Holding the
+    // order used to BE the notification, and that is the only reason it held.
     const noHistory: Transport = async (method, path) =>
       path.startsWith("/orders") && method === "GET"
         ? { status: 200, data: { data: [], pagination: { count: 0, pageCount: 1, nextPage: false } } }
@@ -117,11 +123,11 @@ const NEW = { message_id: "m1", body: "Hi, can I book 4 crew on 9th March at Sav
     };
     const sr = await handleThread({ thread_id: "thread-D", messages: [msg({ message_id: "d1", body: NEW.body })] }, newClientDeps);
     assert(sr.desired_order?.rate_card_source === "default", "the card was assumed");
-    assert(sr.status === "proposed" && !!sr.pending_order, "so it is STAGED, not written");
-    assert(sr.onsinch_order_id === undefined, "and nothing reached OnSinch");
-    assert(sr.notes.some((n) => /rate card was assumed/.test(n)), "the ticket says why it is holding");
-    const confirmed = (await confirmOrder("thread-D", newClientDeps))!;
-    assert(confirmed.onsinch_order_id === 9001, "one click still writes it");
+    assert(sr.status === "ordered" && !sr.pending_order, "so it is WRITTEN, not staged");
+    assert(sr.onsinch_order_id === 9001, "and it reached OnSinch");
+    assert(sr.needs_human === true, "with a human called — what the Manual tag rides on");
+    assert(sr.notes.some((n) => /CHECK THE PRICE — the job is booked/.test(n)),
+      "and the ticket says the price was assumed AND that the job went");
   }
 
   console.log("\n[7] Newest message is our OWN Spartan reply -> act on the client email, never ourselves");

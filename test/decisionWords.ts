@@ -55,10 +55,17 @@ async function main() {
   says("matched existing OnSinch order #13633 (job J13913) (same date) — will update, not create",
     /^Matches order #13633 \(job J13913\) on the same date — that order will be updated rather than a second one raised$/,
     "a dedup match says which order and what will happen to it");
-  says("no pricing history for company 652 — using the standard rate card 315; CHECK IT BEFORE CONFIRMING (I1)",
-    /^No past pricing for this client, so the standard rate card \(315\) was used — check it before confirming$/,
-    "the rate-card warning keeps the instruction and loses the code");
-  ok(!/I1/.test(noteWords("no pricing history for company 652 — using the standard rate card 315; CHECK IT BEFORE CONFIRMING (I1)")),
+  /**
+   * The wording changed with the behaviour on 2026-08-27. An assumed rate card no longer
+   * HOLDS the booking — it is written and flagged — so "check it before confirming" was
+   * telling a human to do something there is no longer a step for. It now says the job is
+   * booked, which is the fact that changes what they do next.
+   */
+  const assumed = "no pricing history for company 652 — using the standard rate card 315; CHECK THE PRICE — the job is booked (I1)";
+  says(assumed,
+    /^No past pricing for this client, so the standard rate card \(315\) was used — the job is booked, check the price$/,
+    "the rate-card warning says the job WENT, and what to check");
+  ok(!/I1/.test(noteWords(assumed)),
     "and the (I1) tag, which means nothing to anybody, is gone");
 
   console.log("");

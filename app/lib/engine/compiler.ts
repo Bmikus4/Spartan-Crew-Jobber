@@ -1138,21 +1138,23 @@ export async function compile(
         if (rate.source === "default") {
           notes.push(
             `no pricing history for company ${company_id} — using the standard rate card ${rate.card}; ` +
-              `CHECK IT BEFORE CONFIRMING (I1)`
+              `CHECK THE PRICE — the job is booked (I1)`
           );
         }
       } else notes.push(`no confident rate card for company ${company_id} — needs a human (I1)`);
     } else if (provisionCompany) {
-      // A company being created has no history by definition, so the standard card
-      // is the only thing that lets its first job exist at all. It is staged, never
-      // written hands-free, and the note says the number was assumed.
+      // A company being created has no history by definition, so the standard card is
+      // the only thing that lets its first job exist at all. It is now WRITTEN rather
+      // than staged (Ben, 2026-08-27 — as few blockers to creating a job as possible),
+      // and the note plus needs_human carry the price to a human through the "Manual"
+      // tag instead of the booking waiting on one.
       const fallback = deps.defaultRateCard;
       if (Number.isInteger(fallback as number) && (fallback as number) > 0) {
         pricelist_category_id = fallback as number;
         rateSource = "default";
         notes.push(
           `"${provisionCompany.name}" is a new client — using the standard rate card ${fallback}; ` +
-            `CHECK IT BEFORE CONFIRMING (I1)`
+            `CHECK THE PRICE — the job is booked (I1)`
         );
       } else {
         notes.push(`"${provisionCompany.name}" is new, so it has no rate card yet — set one when confirming (I1)`);

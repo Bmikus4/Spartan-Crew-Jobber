@@ -242,9 +242,25 @@ export function predict(c: SimCase, placeOf: (venue?: string) => number, which: 
   } else if (which === "amend" && c.amend?.cancellation) {
     outcome = "held";
     reason = "cancellation";
-  } else if (c.client !== "history") {
-    outcome = "held";
-    reason = "assumed-rate";
+  /**
+   * A CLIENT WITH NO PRICING HISTORY IS NO LONGER A HOLD.
+   *
+   * This predicted "held / assumed-rate" for every case whose client was not `history`,
+   * because an order priced from the standard card rather than the client's own history
+   * was staged for a human instead of written.
+   *
+   * Ben overruled that on 2026-08-27: "there are meant to be as little unnecessary
+   * blockers to creating a job as possible, as long as the actual content of the order can
+   * be created properly." A rate card is not order content — it decides what the job is
+   * INVOICED at, and it is Spartan's own number, not something the client supplies.
+   *
+   * The order is written and the thread carries `needs_human`, which now puts the "Manual"
+   * label on it in the bookings mailbox. So the price still gets a person's eyes; the
+   * booking no longer waits for them.
+   *
+   * The rule is gone rather than inverted — nothing about the client's history predicts
+   * the outcome any more, so the case falls through to "written" with everything else.
+   */
   } else if (which === "amend" && c.orderConfirmed) {
     outcome = "refused";
     reason = "confirmed-order";
@@ -335,9 +351,21 @@ export function checkInvariants(
   if (held && state.onsinch_order_id !== undefined && !c.amend)
     push("held-means-unwritten", `pending_order set and onsinch_order_id=${state.onsinch_order_id}`);
 
-  // I12 — an assumed rate card is never written hands-free.
-  if (o?.rate_card_source === "default" && state.status === "ordered" && !state.pending_order)
-    push("assumed-rate-holds", `status=ordered with rate_card_source=default`);
+  /**
+   * I12 — an assumed rate card is written, and a human is called about it.
+   *
+   * This used to assert the opposite: that `rate_card_source === "default"` could never
+   * reach OnSinch hands-free. Ben overruled the hold on 2026-08-27 — a rate card is not
+   * order content, and blocking a whole booking for a number Spartan sets itself was an
+   * unnecessary blocker.
+   *
+   * The invariant does not disappear with the hold, it moves. The thing that must never
+   * happen is an assumed price going out SILENTLY, and that is now what is checked: the
+   * order goes, and `needs_human` must be set so the "Manual" label reaches the mailbox.
+   * Dropping the check entirely would have left the guess unguarded.
+   */
+  if (o?.rate_card_source === "default" && state.status === "ordered" && state.needs_human !== true)
+    push("assumed-rate-flags", `an assumed rate card was written with needs_human=${state.needs_human}`);
 
   // I13 — what went on the wire is what the board shows.
   if (wire.length) {

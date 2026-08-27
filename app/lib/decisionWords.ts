@@ -67,8 +67,8 @@ const RULES: Rule[] = [
   },
   // ---- pricing
   {
-    test: /^no pricing history for company (\d+) — using the standard rate card (\d+); CHECK IT BEFORE CONFIRMING \(I1\)$/i,
-    say: (m) => `No past pricing for this client, so the standard rate card (${m[2]}) was used — check it before confirming`,
+    test: /^no pricing history for company (\d+) — using the standard rate card (\d+); CHECK THE PRICE — the job is booked \(I1\)$/i,
+    say: (m) => `No past pricing for this client, so the standard rate card (${m[2]}) was used — the job is booked, check the price`,
   },
   {
     test: /^"(.+)" is new, so it has no rate card yet — set one when confirming \(I1\)$/i,

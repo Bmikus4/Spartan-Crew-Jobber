@@ -364,21 +364,45 @@ export async function handleThread(
       return next;
     }
 
-    const assumedRate = intended.desired.rate_card_source === "default";
-    if (!assumedRate) {
-      await executeOrder(next, intended, deps, emit);
-    } else {
-      next.notes = [
-        ...next.notes,
-        `held for confirmation: the rate card was assumed, not derived from this client's history`,
-      ];
-      next.pending_order = intended;
-      next.status = "proposed";
-      await emit("order_proposed", {
-        kind: intended.kind,
-        size: intended.desired.slot_teams.reduce((n, s) => n + s.size, 0),
-      });
-    }
+    /**
+     * AN ASSUMED RATE CARD FLAGS THE ORDER; IT NO LONGER HOLDS IT.
+     *
+     * Ben, 2026-08-27: "there are meant to be as little unnecessary blockers to creating
+     * a job as possible, as long as the actual content of the order can be created
+     * properly."
+     *
+     * A rate card is not order content. Everything that decides what crew turn up, when,
+     * and where is fully determined — the card decides what the job is INVOICED at, and
+     * it is Spartan's own number to set, not something the client supplies. Holding the
+     * whole booking for it stopped the wrong thing.
+     *
+     * It held for a real reason, so here is why that reason no longer applies. The
+     * original argument was that an assumed price reaches an invoice, and a human should
+     * see the number once per new client. The objection to it was Ben's own Q1 point: a
+     * gate nobody opens is a drawer, not safety. What was missing was any way for the
+     * flag to reach a person — so holding the order WAS the notification.
+     *
+     * That changed today. `needs_human` now puts the "Manual" label on the thread in the
+     * bookings mailbox (deps.flagForManual), which is where ops actually work. The price
+     * still gets a human's eyes; the booking no longer waits for them.
+     *
+     * Measured cost of the old behaviour, live on 2026-08-27: of four test enquiries with
+     * everything else correct — professions resolved by cue, chief bands right, venues
+     * matched on postcode — two were held solely because the client was new. Nothing was
+     * wrong with either order.
+     *
+     * `rate_card_source` stays on the order, and `needs_human` is set in compile() for
+     * exactly this case, so nothing downstream loses the fact that the number was a
+     * default rather than a derivation.
+     *
+     * WHAT STILL HOLDS, because these are order CONTENT and not a review note:
+     *   - nothing bookable composed (no crew size, no date) — there is no order to write
+     *   - every shift already in the past — crew cannot work a day that has gone
+     *   - a cross-thread twin — the risk is a SECOND order for one job, and crew booked
+     *     twice for it
+     *   - a cancellation — the engine never cancels or shrinks a booking
+     */
+    await executeOrder(next, intended, deps, emit);
   }
 
   // Teach the sender ledger what this thread turned out to be. It is what lets triage

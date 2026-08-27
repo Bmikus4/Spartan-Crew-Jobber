@@ -14,10 +14,16 @@
 // card: 70.3% of all orders and 75.0% of companies' FIRST orders. So three new
 // clients in four are priced right by it.
 //
-// The fourth is what this file is really about. An order priced from the standard
-// rather than from the client's own history is NEVER written hands-free - it is
-// staged for a human even when order_mode is "auto" - because a guessed price on a
-// real booking is the exact failure I1 exists to prevent. Money is worth a click.
+// The fourth is what this file is really about, and the answer changed on 2026-08-27.
+// An order priced from the standard rather than from the client's own history used to be
+// staged for a human rather than written. It is now WRITTEN and FLAGGED. Ben: "there are
+// meant to be as little unnecessary blockers to creating a job as possible, as long as
+// the actual content of the order can be created properly."
+//
+// A rate card is not order content - it decides what the job is INVOICED at, and it is
+// Spartan's own number. The old hold existed because holding the order was the only way a
+// human heard about the guess; `needs_human` now puts the "Manual" label on the thread in
+// the bookings mailbox, so the price still gets checked and the booking does not wait.
 //
 // Run: npx tsx test/defaultRateCard.ts
 // ============================================================================
@@ -85,7 +91,7 @@ console.log("\n[2] a client with no history now gets an order at all");
   ok(state.desired_order?.pricelist_category_id === 315, "on the standard card", String(state.desired_order?.pricelist_category_id));
   ok(state.desired_order?.rate_card_source === "default", "marked as assumed, not derived");
   ok(!!actions.createOrder, "and it is staged");
-  ok((state.notes ?? []).some((n) => /CHECK IT BEFORE CONFIRMING/.test(n)),
+  ok((state.notes ?? []).some((n) => /CHECK THE PRICE — the job is booked/.test(n)),
     "with the check said in words a human will not miss", JSON.stringify(state.notes));
   ok(state.needs_human === true, "and a human is called");
 }
@@ -101,7 +107,7 @@ console.log("\n[3] without the setting, nothing changes - it still holds");
   ok((state.notes ?? []).some((n) => /no confident rate card/.test(n)), "and the old reason is still recorded");
 }
 
-console.log("\n[4] AN ASSUMED PRICE IS NEVER WRITTEN HANDS-FREE");
+console.log("\n[4] AN ASSUMED PRICE IS BOOKED AND FLAGGED, NOT HELD");
 {
   __resetListCache();
   const written: string[] = [];
@@ -119,12 +125,35 @@ console.log("\n[4] AN ASSUMED PRICE IS NEVER WRITTEN HANDS-FREE");
     executor: exec, now: () => 1, hashOrder, repliesEnabled: false, defaultRateCard: 315,
   } as unknown as PipelineDeps;
 
+  /**
+   * THIS BLOCK ASSERTED THE OPPOSITE UNTIL 2026-08-27, AND THE INVERSION IS THE POINT.
+   *
+   * It required that an assumed card be staged rather than written. Ben overruled it:
+   * "there are meant to be as little unnecessary blockers to creating a job as possible,
+   * as long as the actual content of the order can be created properly."
+   *
+   * A rate card is not order content. Everything deciding which crew turn up, when and
+   * where is fully determined; the card decides what the job is INVOICED at, and it is
+   * Spartan's own number, not something the client supplies.
+   *
+   * The old behaviour had a real argument — an assumed price reaches an invoice — and the
+   * answer to it was that holding the order WAS the only way a human heard about it. That
+   * stopped being true the same day: `needs_human` now puts the "Manual" label on the
+   * thread in the bookings mailbox, so the price gets a person's eyes without the booking
+   * waiting for them.
+   *
+   * Measured: of four live test enquiries with everything else correct — professions
+   * resolved by cue, chief bands right, venues matched on postcode — two were held purely
+   * because the client was new. Nothing was wrong with either order.
+   */
   const s = await handleThread(thread("t-auto-assumed"), deps);
-  ok(written.length === 0, "an assumed card is NOT written to OnSinch", JSON.stringify(written));
-  ok(s.status === "proposed", "it was staged for confirmation instead", String(s.status));
-  ok(!!s.pending_order, "the staged order is on the confirm queue");
-  ok((s.notes ?? []).some((n) => /held for confirmation: the rate card was assumed/.test(n)),
-    "and the reason is on the ticket", JSON.stringify(s.notes));
+  ok(written.length === 1, "the order IS written to OnSinch", JSON.stringify(written));
+  ok(written[0] === "create 315", "on the standard card", written[0]);
+  ok(s.status === "ordered", "and the thread reads ordered, not proposed", String(s.status));
+  ok(!s.pending_order, "nothing is left waiting on a click");
+  ok(s.needs_human === true, "but a human is still called — this is what the Manual tag rides on");
+  ok((s.notes ?? []).some((n) => /CHECK THE PRICE — the job is booked/.test(n)),
+    "and the note says the price was assumed AND that the job went", JSON.stringify(s.notes).slice(0, 200));
 }
 
 console.log("\n[5] a DERIVED price still goes hands-free in auto mode");
