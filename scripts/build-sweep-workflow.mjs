@@ -34,7 +34,32 @@ const INGEST_URL = "https://spartan-crew-jobber.vercel.app/api/sweep-ingest";
 // (bgRJXZINuY5e6a3x) is the one the first build script still names, and it was
 // replaced when the bookings credential was re-authorised; borrowing the dead one
 // would fail on the first list. Referenced by id so n8n links it on import.
-const GMAIL_CRED = { id: "LIVJMrWXHhT5lymb", name: "Spartan Crew Bookings 7/29/26" };
+/**
+ * THE MAILBOX CREDENTIAL, IN ONE PLACE, BECAUSE IT EXPIRES.
+ *
+ * An OAuth credential that expires takes the whole intake down — on 2026-08-26 the live
+ * bookings workflow failed 71 times in a row, every five minutes from 08:00, and nothing
+ * was read for six hours. Reconnecting in the n8n UI mints a NEW credential with a NEW
+ * id, and every node still points at the dead one.
+ *
+ * That id was hard-coded in three installers, so a reconnect meant finding all three.
+ * It now comes from the environment, and the default is only a convenience for a fresh
+ * checkout. When it next expires:
+ *
+ *   1. reconnect the credential in n8n (a browser job, and 2FA-gated)
+ *   2. set GMAIL_CRED_ID / GMAIL_CRED_NAME in .env.local to the new one
+ *   3. re-run the installers, and swap-gmail-credential.mjs for the live bookings
+ *      workflow, which has no installer
+ *
+ * The httpRequest nodes are WHY the installers are the route rather than a direct API
+ * edit: n8n accepts a credential change on a native `gmail` node through the public API
+ * and silently keeps the old one on an `httpRequest` node using a predefined credential
+ * type. Measured 2026-08-27 — the bookings workflow took the swap, these three did not.
+ */
+const GMAIL_CRED = {
+  id: process.env.GMAIL_CRED_ID || "hGFZ7vGl625ZeExK",
+  name: process.env.GMAIL_CRED_NAME || "Spartan Crew 8/27/26",
+};
 const WEBHOOK_PATH = "spartan-sweep";
 
 let seq = 0;
