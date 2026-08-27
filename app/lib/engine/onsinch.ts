@@ -164,11 +164,41 @@ export class OnsinchClient {
   }
 
   /** POST /places — must include country (only required field). */
-  async createPlace(place: Partial<PlaceCandidate> & { country: string }) {
-    const r = await this.t("POST", "/places", [place]);
+  /**
+   * A VENUE NEEDS A NAME AND NOTHING ELSE.
+   *
+   * Ben, 2026-08-27: "nothing like creating a new client, or creating a new venue should
+   * be gated on information. At MINIMUM a created location should have a name, and a
+   * created client/member should have a name."
+   *
+   * Measured against the live tenant without creating anything (a poisoned `name` type,
+   * so validation always fails): `POST /places` requires `name` and `country` and nothing
+   * more. Address, city and postcode are optional, so a venue a client named but did not
+   * locate still becomes a row. `country` defaults to GB here so a caller only has to
+   * know the name, which is the whole point of the rule.
+   *
+   * IT USED TO SWALLOW ITS OWN FAILURES. The status code was never checked: a 400 read
+   * `r.data?.data?.[0]` as undefined and returned it, so the caller got no place, no
+   * error, and an order carrying `place_id: undefined`. That is the same silent shape as
+   * the two writes found earlier today — a rebuild that deleted before it could re-post,
+   * and a company create that had never once succeeded. It now throws with whatever
+   * OnSinch said, which is how those two were diagnosable at all.
+   */
+  async createPlace(place: Partial<PlaceCandidate> & { country?: string }) {
+    const body = { country: "GB", ...place };
+    if (!String(body.name ?? "").trim()) {
+      throw new Error("createPlace: a venue must have a name — nothing else is required");
+    }
+    const r = await this.t("POST", "/places", [body]);
+    if (r.status !== 201 && r.status !== 200) {
+      throw new Error(`createPlace ${r.status}: ${JSON.stringify(r.data?.validationErrors ?? r.data)}`);
+    }
     const created = r.data?.data?.[0] as PlaceCandidate;
+    if (!created?.id) {
+      throw new Error(`createPlace: OnSinch returned no id for "${body.name}" — ${JSON.stringify(r.data).slice(0, 200)}`);
+    }
     // Findable immediately, not in five minutes when the cache expires.
-    if (created?.id) cacheAppend("places", { ...place, ...created });
+    cacheAppend("places", { ...body, ...created });
     return created;
   }
 
