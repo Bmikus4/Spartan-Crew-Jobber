@@ -1,5 +1,27 @@
 # Spartan Crew — Jobber. Handoff, 2026-08-28
 
+> **Superseded in four places on 2026-08-28 (later session).** Read this first or you
+> will redo work and act on claims that are no longer true:
+>
+> - **§2 preview deployments are no longer ungated, and the hole was bigger than
+>   recorded.** All three intake routes fail-open when the secret is unset
+>   (`if (!secret) return true`), and the secret is Production-only while the database
+>   variables are not — so a preview URL was an unauthenticated read AND write of the
+>   production database. Both halves now come from `VERCEL_ENV` / the build mode rather
+>   than from an env var, so a new environment cannot reopen it. `test/machineRouteAuth.ts`.
+> - **§3 the write-contract test now exists** — `test/writeContract.ts`. It found two
+>   live instances: `createOrder` and `createCompany` returned `undefined` on a 201 that
+>   carried no id. Both fixed. Its table is checked against the class, so a new
+>   create/patch/delete on `OnsinchClient` fails the suite until it is covered.
+> - **The Manual tag was going onto orders that booked.** 6 of the 8 tagged threads that
+>   had an order were `status: ordered` with a clean write, reasoned "crew-chief rule:
+>   team of 6 -> 5 + 1 chief". `needs_human` carried both "not right" and "right, but
+>   look at it"; the stand-in cases are now `review_only` and are not tagged. The 7
+>   already-mislabelled threads were cleared; 25 remain tagged and all 25 are correct.
+> - Suite is **82/82** (was 80), sim still 100/100. HEAD is past `4e73213`.
+>
+> Everything else below still stands, including all four items in §0.
+
 Repo `D:\Code\SpartanCrew-Enquiry-Engine`, HEAD **`4e73213`**, everything pushed.
 `npx tsc --noEmit` clean, `npx tsx test/all.ts` **80/80**, `npx tsx sim/run.ts` **100/100**.
 Production deploy `k9pvmz7uc` is Ready and carries HEAD.
