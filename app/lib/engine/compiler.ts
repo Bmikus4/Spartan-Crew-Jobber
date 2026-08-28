@@ -920,6 +920,12 @@ export async function compile(
    */
   let needs_human = false;
   /**
+   * A stand-in inside an order that is otherwise fine. Kept apart from needs_human until
+   * the end so that "a person should look" and "the engine could not book this" stay
+   * distinguishable — see review_only in types.ts.
+   */
+  let review_flag = false;
+  /**
    * The order cannot go out as built, and is not staged at all. Reserved for a
    * failed validateOrder — a body OnSinch would reject, or would accept and get
    * wrong.
@@ -1254,8 +1260,21 @@ export async function compile(
       // assumed rate card. The pipeline already refuses to auto-write that order,
       // but a price nobody chose must also SHOW on the board, or the click it is
       // waiting for never comes.
+      /**
+       * A REVIEW NOTE, NOT A FAILURE. Every condition here is a stand-in sitting inside
+       * an order that composes, validates and writes exactly like a correct one. It
+       * still calls a person — but the "Manual" tag in Gmail claims the engine COULD NOT
+       * BOOK the job, and on these it booked it.
+       *
+       * While all four of these HELD, the two claims were the same sentence. Ben's rule
+       * that creating a client or a venue is never gated on information, and the change
+       * that made an assumed rate card book rather than wait, split them apart — and the
+       * tag went on reading the old one, so every new-client booking arrived labelled
+       * unbookable. Recorded separately rather than folded into needs_human, because
+       * needs_human is right: a person should look. It is the mailbox that was wrong.
+       */
       if (provisionCompany || provisionPlace || user_id === PLACEHOLDER_CONTACT_ID || rateSource === "default") {
-        needs_human = true;
+        review_flag = true;
       }
 
       /**
@@ -1409,6 +1428,15 @@ export async function compile(
     actions.none = true;
   }
 
+  /**
+   * Folded in last, so `needs_human` up to this point holds ONLY the reasons that mean
+   * the order is not right. A thread with both a real failure and a stand-in is not a
+   * review — the failure wins, and review_only stays false.
+   */
+  const hard_human = needs_human;
+  if (review_flag) needs_human = true;
+  const review_only = review_flag && !hard_human;
+
   // needs-info, NOT error: nothing failed here, we simply cannot finish without
   // a human. "error" is reserved for an actual failure (see pipeline.ts).
   const status: ConversationState["status"] = needs_human
@@ -1470,6 +1498,7 @@ export async function compile(
     reply_draft_id: prior?.reply_draft_id,
     last_reply_hash: replyHash ?? prior?.last_reply_hash,
     needs_human,
+    review_only,
     status,
     notes,
     order_action_log: prior?.order_action_log ?? [],

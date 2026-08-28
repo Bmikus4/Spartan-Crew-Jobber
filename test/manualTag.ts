@@ -73,6 +73,43 @@ function rig(opts: { fail?: boolean } = {}) {
       "an out-of-office that ERRORED is still not something anyone asked to be booked");
   }
 
+  console.log("\n[2b] AN ORDER THAT BOOKED IS NOT A MANUAL JOB, EVEN WHEN IT WANTS A LOOK");
+  {
+    /**
+     * `needs_human` carries two different claims, and the tag only means one of them:
+     *
+     *   the order is NOT right      an amendment that could not be landed  -> tag
+     *   the order IS right, look     a stand-in inside it — a client created from a
+     *                                name, a venue created from a name, a placeholder
+     *                                contact, an assumed rate card          -> no tag
+     *
+     * The second is the direct consequence of Ben's rule that creating a client or a
+     * venue is never gated on information, and of the change that made an assumed rate
+     * card book rather than hold. Both turned a HOLD into a BOOK that still calls a
+     * person — and because the tag keyed off needs_human alone, every one of those
+     * bookings arrived in the mailbox labelled as unbookable.
+     *
+     * Measured on the live board, 2026-08-28: of 32 threads wearing the tag, 8 had an
+     * order and 6 of those were `status: ordered` with a clean write. The "reason" ops
+     * was shown on them was the last note on the thread — "crew-chief rule: team of 6
+     * -> 5 + 1 chief" — which is not a reason to do anything by hand.
+     *
+     * That is the failure mode the tag was built to avoid: a flag that cries wolf stops
+     * being read, and the one thread that really did lose its crew is in the same pile.
+     */
+    ok(!cannotBeBooked(st({ status: "ordered", needs_human: true, review_only: true, onsinch_order_id: 15577 })),
+      "a booked order carrying a stand-in: reviewed, not tagged");
+    ok(!cannotBeBooked(st({ status: "proposed", needs_human: true, review_only: true })),
+      "and the same order staged for a click");
+    // The distinction has to survive alongside the real one, or it is just an off switch.
+    ok(cannotBeBooked(st({ status: "ordered", needs_human: true, review_only: false, onsinch_order_id: 14866 })),
+      "an amendment that did not land is still tagged");
+    ok(cannotBeBooked(st({ status: "needs-info", needs_human: true, review_only: true })),
+      "and review_only never rescues a thread that HELD — nothing was booked to review");
+    ok(cannotBeBooked(st({ status: "error", needs_human: true, review_only: true })),
+      "nor one that threw");
+  }
+
   console.log("\n[3] it fires once, carrying the engine's own last word");
   {
     const { sent, deps } = rig();

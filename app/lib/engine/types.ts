@@ -227,6 +227,28 @@ export interface ConversationState {
   // control
   needs_human: boolean;              // confidence gate for handsfree
   /**
+   * `needs_human` is set for two different reasons and only one of them is a failure:
+   *
+   *   the order is not right      an amendment that could not be landed, a role nobody
+   *                               recognised, nothing composed at all
+   *   the order is right, look    a stand-in inside an order that wrote cleanly — a
+   *                               client or venue created from a name alone, a
+   *                               placeholder contact, an assumed rate card
+   *
+   * This marks the second. It exists because the "Manual" Gmail tag means "this engine
+   * could not book it", and keying that tag off `needs_human` alone put the label on
+   * every booking that merely wanted a second pair of eyes. Measured 2026-08-28: 6 of
+   * the 8 tagged threads that had an order were `status: ordered` with a clean write.
+   *
+   * It does NOT reduce the thread's visibility anywhere else. The board, the tickets
+   * table and the metrics all still count it as needing a person, which it does. The
+   * only thing it changes is the claim made in the mailbox.
+   *
+   * Set only where the stand-in is discovered, and cleared wherever a real failure is
+   * recorded — a review note must never survive on top of a broken booking.
+   */
+  review_only?: boolean;
+  /**
    * The thread currently wears the "Manual" tag in Gmail, because this engine could not
    * book it (Ben, 2026-08-26).
    *

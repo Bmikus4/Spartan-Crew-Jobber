@@ -453,7 +453,23 @@ export async function handleThread(
 export function cannotBeBooked(s: ConversationState): boolean {
   const isJob = s.classification === "new-job" || s.classification === "update";
   if (!isJob) return false;
-  return s.status === "error" || s.status === "needs-info" || s.needs_human === true;
+  if (s.status === "error" || s.status === "needs-info") return true;
+  /**
+   * `review_only` is the third shape, and it is NOT one of the three above: an order
+   * that wrote cleanly and carries a stand-in somebody should look at — a client or a
+   * venue created from a name alone, a placeholder contact, an assumed rate card.
+   *
+   * Those used to HOLD, and while they held, needs_human and "cannot be booked" were the
+   * same sentence. Ben's rule that creating a client is never gated on information, and
+   * the change that made an assumed rate card book rather than wait, made them different
+   * sentences — and this predicate went on reading the old one. So every new-client
+   * booking landed in the mailbox labelled unbookable, with a reason that read
+   * "crew-chief rule: team of 6 -> 5 + 1 chief".
+   *
+   * The status check stays ABOVE this deliberately: a thread that held or threw has
+   * nothing booked to review, whatever the compiler flagged on the way there.
+   */
+  return s.needs_human === true && s.review_only !== true;
 }
 
 /**
@@ -652,6 +668,9 @@ async function tryAmendInPlace(
      */
     next.status = "error";
     next.needs_human = true;
+    // A real failure, so the compiler's review note does not stand: the order is
+    // not merely worth a look, it is not right. See review_only in types.ts.
+    next.review_only = false;
     next.notes = [...next.notes, `in-place amendment of order #${order_id} returned no result — nothing is known to have been applied`];
     next.order_action_log = [...next.order_action_log, { ts: now(), kind: "amend", order_id, ok: false, error: "no result" }];
     await store.put(next);
@@ -666,6 +685,9 @@ async function tryAmendInPlace(
      */
     next.status = "error";
     next.needs_human = true;
+    // A real failure, so the compiler's review note does not stand: the order is
+    // not merely worth a look, it is not right. See review_only in types.ts.
+    next.review_only = false;
     next.notes = [
       ...next.notes,
       `in-place amendment of order #${order_id} failed (${String(err?.message ?? err)}). Nothing was deleted; ` +
@@ -817,6 +839,9 @@ async function tryReplace(
     const deletedBlind = next.order_replace?.deleted === true;
     next.status = "error";
     next.needs_human = true;
+    // A real failure, so the compiler's review note does not stand: the order is
+    // not merely worth a look, it is not right. See review_only in types.ts.
+    next.review_only = false;
     next.notes = [
       ...next.notes,
       `replace of order #${order_id} returned neither a replacement nor a reason` +
@@ -835,6 +860,9 @@ async function tryReplace(
     const deleted = next.order_replace?.deleted === true;
     next.status = "error";
     next.needs_human = true;
+    // A real failure, so the compiler's review note does not stand: the order is
+    // not merely worth a look, it is not right. See review_only in types.ts.
+    next.review_only = false;
     next.notes = [
       ...next.notes,
       deleted
@@ -927,6 +955,9 @@ async function executeOrder(
       // Only when a crew change could NOT be verified as landed. An unchanged team set
       // has nothing to verify and nothing to hand over.
       next.needs_human = teamsChanged;
+      // Same rule: a crew change that could not be verified as landed is a broken
+      // booking, not a stand-in inside a good one.
+      if (teamsChanged) next.review_only = false;
       if (applied.length) {
         next.status = "ordered";
         next.notes = [...next.notes, `updated ${applied.join(", ")} on order #${intended.order_id}; ${manual}`];
