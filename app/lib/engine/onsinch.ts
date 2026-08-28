@@ -228,7 +228,21 @@ export class OnsinchClient {
       throw new Error(
         `createOrder ${r.status}: ${JSON.stringify(r.data?.validationErrors ?? r.data)}`
       );
-    return r.data.data[0] as { id: number; number?: string };
+    /**
+     * A 201 IS NOT AN ORDER. This used to return `r.data.data[0]` unread, so a 201 that
+     * carried an empty `data` array handed the caller `undefined` and a 201 with no
+     * `data` key at all threw a TypeError naming a property rather than the booking.
+     * Either way the pipeline recorded a success: `undefined` went into the ledger as
+     * the order id, every later amendment matched nothing, and the client was told the
+     * job was booked. An error here is strictly better than a booking that exists only
+     * in our own records.
+     */
+    const created = r.data?.data?.[0] as { id: number; number?: string } | undefined;
+    if (!Number.isInteger(Number(created?.id)))
+      throw new Error(
+        `createOrder: OnSinch returned ${r.status} but no order id — ${JSON.stringify(r.data).slice(0, 200)}`
+      );
+    return created as { id: number; number?: string };
   }
 
   /**
@@ -652,10 +666,20 @@ export class OnsinchClient {
       throw new Error(
         `createCompany ${r.status}: ${JSON.stringify(r.data?.validationErrors ?? r.data)}`
       );
-    const created = r.data.data[0] as { id: number; name?: string };
+    /**
+     * The idless 201 is refused rather than returned. `if (created?.id)` guarded only the
+     * cache write, so a response carrying no id skipped the cache and was handed back
+     * anyway — and the caller went on to book an order against `company_id: undefined`.
+     * A company that cannot be identified was not created, whatever the status line says.
+     */
+    const created = r.data?.data?.[0] as { id: number; name?: string } | undefined;
+    if (!Number.isInteger(Number(created?.id)))
+      throw new Error(
+        `createCompany: OnSinch returned ${r.status} but no company id for "${body.name}" — ${JSON.stringify(r.data).slice(0, 200)}`
+      );
     // Findable immediately: the list this company was judged absent from was pulled
     // before it existed, and would otherwise say so for another five minutes.
-    if (created?.id) cacheAppend("companies", { ...company, ...created });
-    return created;
+    cacheAppend("companies", { ...company, ...created });
+    return created as { id: number; name?: string };
   }
 }
