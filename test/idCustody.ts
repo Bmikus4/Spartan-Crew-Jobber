@@ -87,14 +87,30 @@ async function main() {
   };
 
   console.log("");
-  console.log("two-phase create");
+  console.log("the create carries the crew");
   {
+    /**
+     * THE CREATE POSTS THE SHAPE THE API DOCUMENTS: `Job` with at least one `SlotTeam`.
+     *
+     * This section used to assert the opposite — that the order went out with NO nested
+     * blocks and each block was posted separately — because `POST /slotTeams` returning
+     * an id is the only way to hold one (§12), and holding them is what lets an
+     * amendment patch a block instead of rebuilding the order.
+     *
+     * It bought those ids with the order itself. `SlotTeam: []` is accepted, so it
+     * looked like a valid create and every check here passed, but OnSinch files an order
+     * into ORDERS TO CONFIRM from the crew it was CREATED with, and never revisits it.
+     * Blockless at creation means filed nowhere, permanently — appending the blocks a
+     * second later does not move it. For five days the engine wrote nine correct orders
+     * a day into a place nobody looks while ops re-keyed the same jobs by hand.
+     *
+     * Measured on three orders identical in every readable field: 15603, created with
+     * its crew nested, was in To Confirm; 15602 and 15604, built the old way, were not.
+     */
     const calls: any[] = [];
-    let nextTeam = 700;
     const tr: Transport = async (method, path, b) => {
       calls.push({ method, path, body: b });
       if (method === "POST" && path === "/orders") return { status: 201, data: { data: [{ id: 9001 }] } };
-      if (method === "POST" && path === "/slotTeams") return { status: 201, data: { data: [{ id: ++nextTeam }] } };
       if (method === "GET" && path.startsWith("/orders"))
         return { status: 200, data: { data: [{ id: 9001, number: "R1", Job: [{ id: 4001 }] }] } };
       return { status: 200, data: null };
@@ -102,40 +118,42 @@ async function main() {
     const res = await createOrderWithPlace(new OnsinchClient(tr), order);
     ok(res.id === 9001, "returns the order id", String(res.id));
     ok(res.job_id === 4001, "and the job id", String(res.job_id));
-    ok(JSON.stringify(res.team_ids) === "[701,702]", "and one id per block, in order",
-       JSON.stringify(res.team_ids));
 
     const orderPost = calls.find((c) => c.method === "POST" && c.path === "/orders");
-    ok(Array.isArray(orderPost.body[0].SlotTeam) && orderPost.body[0].SlotTeam.length === 0,
-       "the order was created with NO nested blocks");
-    ok(calls.filter((c) => c.method === "POST" && c.path === "/slotTeams").length === 2,
-       "and each block was posted separately");
+    const nested = orderPost.body[0].SlotTeam;
+    ok(Array.isArray(nested) && nested.length === 2,
+       "the order is created WITH its crew blocks — an empty array is filed nowhere",
+       String(nested?.length));
+    ok(nested[0].size === 3 && nested[1].size === 2, "both blocks, in order");
+    ok(calls.filter((c) => c.method === "POST" && c.path === "/slotTeams").length === 0,
+       "and nothing is appended afterwards");
   }
 
   console.log("");
-  console.log("a half-built order is rolled back, not returned");
+  console.log("the block ids are gone, and that is the known price");
   {
+    /**
+     * Not a regression to fix later — the ids are unobtainable for a nested create and
+     * both routes to them were probed shut on 2026-08-28: `POST /orders` answers
+     * `{"data":[{"id":N}]}` with no child ids, and every `with=SlotTeam` spelling is a
+     * 400. The audit log carries them only for UI-raised orders (§12).
+     *
+     * So the amendment must DEGRADE rather than lie. `amendInPlace` declines with "no
+     * slot team ids could be read back" and the pipeline falls through to the rebuild.
+     * The visible cost is a new R number on a crew change, which ops quote to clients.
+     */
     const calls: any[] = [];
     const tr: Transport = async (method, path) => {
       calls.push({ method, path });
-      if (method === "POST" && path === "/orders") return { status: 201, data: { data: [{ id: 9002 }] } };
+      if (method === "POST" && path === "/orders") return { status: 201, data: { data: [{ id: 9003 }] } };
       if (method === "GET" && path.startsWith("/orders"))
-        return { status: 200, data: { data: [{ id: 9002, number: "R2", Job: [{ id: 4002 }] }] } };
-      // First block lands, second fails.
-      if (method === "POST" && path === "/slotTeams") {
-        const n = calls.filter((c) => c.path === "/slotTeams").length;
-        if (n === 1) return { status: 201, data: { data: [{ id: 801 }] } };
-        return { status: 400, data: { validationErrors: { size: ["nope"] } } };
-      }
-      if (method === "DELETE" && path === "/orders") return { status: 204, data: null };
+        return { status: 200, data: { data: [{ id: 9003, number: "R3", Job: [{ id: 4003 }] }] } };
       return { status: 200, data: null };
     };
-    let err = "";
-    try { await createOrderWithPlace(new OnsinchClient(tr), order); }
-    catch (e: any) { err = String(e?.message ?? e); }
-    ok(/could not be given its crew blocks/i.test(err), "it throws rather than returning a partial order", err);
-    ok(calls.some((c) => c.method === "DELETE" && c.path === "/orders"),
-       "and the blockless order was deleted");
+    const res = await createOrderWithPlace(new OnsinchClient(tr), order);
+    ok(Array.isArray(res.team_ids) && res.team_ids.length === 0,
+       "no block ids are claimed — an invented one would patch the wrong block",
+       JSON.stringify(res.team_ids));
   }
 
   console.log("");

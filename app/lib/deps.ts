@@ -98,48 +98,40 @@ export async function createOrderWithPlace(
   }
 
   /**
-   * TWO PHASES, so the engine ends up holding every block's id.
+   * ONE CALL, CARRYING THE CREW. This is the shape `POST /orders` documents as required:
+   * `name, company_id, user_id`, plus `Job` with AT LEAST ONE `SlotTeam` — refused
+   * otherwise with "Please fill the SlotTeam for this Order" (API reference §4).
    *
-   * Nesting the blocks in POST /orders is one call instead of N+1, and it is what this
-   * did until 2026-08-24. The cost was invisible and total: an API create logs ONE
-   * childless audit row, so nested blocks have no readable ids under any key, and the
-   * in-place amendment declined on every order the engine ever made — 43 patches, 0
-   * amendments, every crew change becoming a note asking a human to do it by hand
-   * (API reference §12).
+   * IT USED TO POST `SlotTeam: []` AND APPEND THE BLOCKS AFTERWARDS, AND THAT COST THE
+   * ENGINE ITS ENTIRE OUTPUT FOR FIVE DAYS. The empty array is accepted — 201, with a
+   * job whose window is null — so it looked like a valid create and every check passed.
+   * It is not one. OnSinch files an order into ORDERS TO CONFIRM at the moment it is
+   * created, from the crew it was created with, and never revisits that. An order built
+   * blockless is therefore filed nowhere, and appending the blocks a second later does
+   * not rescue it: measured 2026-08-28 on three orders that differ in nothing else —
+   * 15603 was created with its crew nested and Ben found it in To Confirm; 15602 and
+   * 15604 were built the old way and he could not see either, though by then all three
+   * read back identical company, job window, rate card and `happening`.
    *
-   * `POST /slotTeams` returns the id it creates, so the ids are had by CREATING them
-   * rather than by reading them. `SlotTeam: []` is accepted (201); omitting the key is a
-   * 400, which is why the empty array is explicit here and pinned by a test.
+   * Nine orders a day were being written correctly into a place nobody looks, while ops
+   * re-keyed the same jobs by hand.
+   *
+   * WHAT THIS GIVES UP, deliberately: the block ids. `POST /slotTeams` returning its id
+   * is the only route to one — an API create logs a single childless audit row, so
+   * nested blocks are unreadable under any key (§12), and neither `POST /orders`'s
+   * response nor any `with=` embed carries them (both probed, 2026-08-28). So the
+   * two-phase create was not wrong about the ids; it was buying them at a price nobody
+   * had measured.
+   *
+   * Amendments degrade rather than break. `amendInPlace` declines with "no slot team ids
+   * could be read back" and the pipeline falls through to the rebuild, which is built,
+   * tested and provisions the venue before deleting. The cost is that a crew change
+   * gives the order a new R number. That is a real cost to ops, and it is smaller than
+   * an order they never see.
    */
-  const created = await client.createOrder(buildOrderBody({ ...o, slot_teams: [] }));
+  const created = await client.createOrder(buildOrderBody(o));
   const ids = await readOrderIdentifiers(client, created.id);
-  const team_ids: number[] = [];
-  try {
-    for (const team of o.slot_teams) {
-      const made = await client.createSlotTeam(buildSlotTeamBody(ids.job_id, team));
-      team_ids.push(made.id);
-    }
-  } catch (err) {
-    /**
-     * A blockless order is not a harmless leftover. `happening` defaults to NOW on an
-     * order with no blocks and only corrects once one exists, so what is left behind
-     * reads as a job happening TODAY with no crew on it — in the ops view, next to real
-     * work. Nothing references it yet (no attachments, no crew, no R number in anyone's
-     * paperwork), so deleting it is the cheap and correct move.
-     *
-     * If the rollback itself fails, say both things loudly. Do not swallow the original.
-     */
-    await client.deleteOrders([created.id]).catch((rollback: unknown) =>
-      console.error(
-        `[order] order #${created.id} was created, could not be given its crew blocks, AND could not be deleted — it is dated today with no crew and needs removing by hand`,
-        rollback
-      )
-    );
-    throw new Error(
-      `order #${created.id} could not be given its crew blocks and was rolled back: ${String((err as any)?.message ?? err)}`
-    );
-  }
-  return { id: created.id, number: created.number ?? ids.order_number, job_id: ids.job_id, team_ids };
+  return { id: created.id, number: created.number ?? ids.order_number, job_id: ids.job_id, team_ids: [] };
 }
 import { archiveOrder, recordReplacement } from "./orderArchiveDb";
 import { loadProfessions } from "./professionsDb";

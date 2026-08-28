@@ -259,8 +259,23 @@ export function fixtureTransport(c: SimCase, places: PlaceCandidate[], log: Call
      */
     if (path.startsWith("/attendance")) {
       if (!c.orderConfirmed) return page([]);
-      const firstTeam = createdTeamIds[0];
-      if (!Number.isInteger(firstTeam)) return page([]);
+      /**
+       * ATTENDANCE BELONGS TO THE ORDER, NOT TO A BLOCK ID THE ENGINE HAPPENS TO HOLD.
+       *
+       * This used to bail out when `createdTeamIds` was empty, which was harmless only
+       * while every order was built block-by-block through `POST /slotTeams`. The
+       * moment the create carried its crew nested — which returns no block ids at all —
+       * every order looked unstaffed, `attendanceCount` answered 0, and the rebuild gate
+       * that exists to stop the engine unbooking people who are signed on opened
+       * silently. The sim reported it as one disagreement: "shrinking a block CREW ARE
+       * ON — must refuse", engine written vs rules refused.
+       *
+       * Production was never wrong here — `attendanceCount(order_id)` asks by ORDER, so
+       * it is indifferent to whether the engine knows any team ids. It was the harness
+       * that could no longer express the hazard, which is the more dangerous failure:
+       * a rig that cannot represent a risk reports it as absent.
+       */
+      const firstTeam = Number.isInteger(createdTeamIds[0]) ? createdTeamIds[0] : 1;
       return page([1, 2, 3].map((i) => ({ id: 8000 + i, SlotTeam: { id: firstTeam, name: "General" } })));
     }
     if (path.startsWith("/places")) return page(places);
