@@ -9,6 +9,7 @@ export const maxDuration = 60;
 // is included so n8n can create the draft. n8n builds the trigger; the
 // automation itself runs here on Vercel.
 
+import { authorizeMachineCall } from "../../lib/apiAuth";
 import { handleThread } from "../../lib/engine/pipeline";
 import { coerceThread } from "../../lib/engine/intake";
 import { buildDeps } from "../../lib/deps";
@@ -21,8 +22,13 @@ function unauthorized(): Response {
 }
 
 export async function POST(request: Request): Promise<Response> {
-  const secret = process.env.N8N_WEBHOOK_SECRET;
-  if (secret && request.headers.get("x-webhook-secret") !== secret) return unauthorized();
+  // `if (secret && header !== secret)` meant an absent secret was an absent gate, and
+  // this route is in the middleware SKIP list so nothing else stands in front of it. A
+  // preview deployment has no secret and the production database, which made every
+  // preview URL an unauthenticated way to inject an enquiry. The shared rule refuses an
+  // unconfigured caller in a production build and keeps the local-dev allowance the
+  // offline harnesses rely on.
+  if (!authorizeMachineCall(request).ok) return unauthorized();
 
   let payload: unknown;
   try { payload = await request.json(); } catch { return Response.json({ ok: false, error: "bad json" }, { status: 400 }); }

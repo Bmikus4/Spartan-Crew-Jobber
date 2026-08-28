@@ -50,7 +50,8 @@ const WRITES = /export\s+async\s+function\s+(POST|PUT|PATCH|DELETE)\b/;
  * terms acceptance, or a profile, IN A NAMED PERSON'S NAME. Every row that route writes is
  * filed under the caller's own email, so the caller has to be somebody.
  */
-const AUTHORITY = /authorizeAction|ADMIN_SECRET|WEBHOOK_SECRET|INTERNAL_API_SECRET|safeEqual|getIronSession/;
+const AUTHORITY =
+  /authorizeAction|authorizeMachineCall|ADMIN_SECRET|WEBHOOK_SECRET|INTERNAL_API_SECRET|safeEqual|getIronSession/;
 
 console.log("\n[1] the sweep found the routes");
 ok(routes.length >= 8, `${routes.length} route files under app/api`, routes.join(" "));

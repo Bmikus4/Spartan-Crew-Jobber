@@ -19,13 +19,12 @@ export const runtime = "nodejs";
 // without revealing either.
 
 import { claimMessage, peekMessage } from "../../lib/messageLedgerDb";
-import { safeEqual } from "../../lib/safeEqual";
+import { authorizeMachineCall } from "../../lib/apiAuth";
 
-function authorized(request: Request): boolean {
-  const secret = (process.env.N8N_WEBHOOK_SECRET || "").trim();
-  if (!secret) return true; // not yet configured — stay open, same as intake
-  return safeEqual(request.headers.get("x-webhook-secret") || "", secret);
-}
+// An unconfigured secret used to mean "allowed". On a preview deployment the secret is
+// absent and the database variables are not, so that branch was an open write path into
+// production data. The shared rule allows an unconfigured caller outside production only.
+const authorized = (request: Request): boolean => authorizeMachineCall(request).ok;
 
 export async function POST(request: Request): Promise<Response> {
   if (!authorized(request)) return Response.json({ ok: false, error: "unauthorized" }, { status: 401 });

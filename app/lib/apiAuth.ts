@@ -81,3 +81,33 @@ export async function authorizeAction(request: Request): Promise<Caller> {
     isProduction: process.env.NODE_ENV === "production",
   });
 }
+
+/**
+ * The same decision for a route that only ever has a MACHINE caller.
+ *
+ * /api/n8n-inbound, /api/dedupe and /api/sweep-ingest sit in the middleware SKIP list,
+ * so the check inside each route is the only gate in front of them — and each had
+ * written that check by hand as `if (!secret) return true`, with the production guard
+ * that decideCaller already had simply missing. On a preview deployment, where
+ * N8N_WEBHOOK_SECRET is not set but the database variables are, that made every preview
+ * URL an unauthenticated write into the production database.
+ *
+ * No session is consulted. A human clicking "confirm" is a legitimate caller of an
+ * action route; nothing in the UI posts an inbound email, so admitting a cookie here
+ * would widen the door for no caller that exists.
+ */
+export function decideMachineCall(i: Omit<CallerInputs, "sessionName" | "sessionEmail">): Caller {
+  return decideCaller({ ...i, sessionName: null, sessionEmail: null });
+}
+
+/** decideMachineCall, reading the presented header and the environment. */
+export function authorizeMachineCall(request: Request): Caller {
+  const secret = (process.env.N8N_WEBHOOK_SECRET || "").trim();
+  const presented = request.headers.get("x-webhook-secret") || "";
+  return decideMachineCall({
+    secretMatches: Boolean(secret && presented && safeEqual(presented, secret)),
+    secretConfigured: Boolean(secret),
+    authRequired: process.env.AUTH_REQUIRED === "true",
+    isProduction: process.env.NODE_ENV === "production",
+  });
+}

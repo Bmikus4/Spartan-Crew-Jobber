@@ -21,7 +21,21 @@ const SKIP = ["/api/auth", "/api/n8n-inbound", "/api/dedupe", "/api/sweep-ingest
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
   if (!pathname.startsWith("/api/")) return NextResponse.next();
-  if (process.env.AUTH_REQUIRED !== "true") return NextResponse.next();
+  /**
+   * A PREVIEW IS NEVER A PLACE TO BE OPEN, WHATEVER THE SWITCH SAYS.
+   *
+   * AUTH_REQUIRED is deliberately off by default so that deploying the lock cannot break
+   * anything — but it is set for Production only, while every STORAGE_ and POSTGRES_
+   * variable is set for Production AND Preview and points at the same database. So a
+   * preview URL served /api/jobs and /api/metrics to anybody who had the link, reading
+   * live client data, and no setting in the project said otherwise.
+   *
+   * Enforced from VERCEL_ENV rather than by adding AUTH_REQUIRED to the Preview
+   * environment, because the env-var fix closes today's hole and leaves the rule wrong:
+   * the next environment somebody creates reopens it, silently, and nothing fails.
+   */
+  const enforced = process.env.AUTH_REQUIRED === "true" || process.env.VERCEL_ENV === "preview";
+  if (!enforced) return NextResponse.next();
   if (SKIP.some((p) => pathname === p || pathname.startsWith(p + "/"))) return NextResponse.next();
 
   // Server-to-server calls carry the internal shared secret instead of a cookie.

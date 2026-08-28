@@ -14,13 +14,12 @@ export const maxDuration = 60;
 // Same N8N_WEBHOOK_SECRET as the other machine routes; env only.
 
 import { storeSweptThread, sweepStats } from "../../lib/sweepDb";
-import { safeEqual } from "../../lib/safeEqual";
+import { authorizeMachineCall } from "../../lib/apiAuth";
 
-function authorized(request: Request): boolean {
-  const secret = (process.env.N8N_WEBHOOK_SECRET || "").trim();
-  if (!secret) return true; // not configured yet — matches the other intake routes
-  return safeEqual(request.headers.get("x-webhook-secret") || "", secret);
-}
+// Was `if (!secret) return true`, which is open on any deployment that lacks the secret
+// but has the database — i.e. every preview. The shared rule keeps the local-dev
+// allowance and drops the production one.
+const authorized = (request: Request): boolean => authorizeMachineCall(request).ok;
 
 export async function POST(request: Request): Promise<Response> {
   if (!authorized(request)) return Response.json({ ok: false, error: "unauthorized" }, { status: 401 });
