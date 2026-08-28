@@ -18,11 +18,17 @@
 // executed. The first was a rebuild that deleted an order before discovering it could not
 // re-post it. A gate does not only stop bad writes; it hides untested ones.
 //
-// THE FIELD SET WAS ESTABLISHED WITHOUT CREATING ANYTHING, by sending the full payload
-// with a deliberately invalid `status`. The error moved from "Missing required
-// properties" to "status: Incorrect type", which proves the rest was accepted — and a
-// company cannot be deleted through this API, so a probe that created one would have been
-// permanent.
+// THE FIELD SET WAS ESTABLISHED IN TWO PASSES, AND THE FIRST WAS WRONG IN A WAY WORTH
+// RECORDING. It poisoned `status` with a string. OnSinch rejects that on a TYPE check and
+// never runs the business-rule stage, so empty address/city/zip looked accepted — they
+// are not ("Fill in company city"), and four more live enquiries died on it.
+//
+// A probe that fails EARLY proves nothing about the stages behind it. The second pass
+// filled every field and malformed only the email, which fails in the SAME stage as the
+// thing under test, and that is what established that "TBC" passes where a blank does not.
+//
+// A company cannot be deleted through this API, so the control that proved the method
+// sound left a real row behind — company 821, "ZZ PROBE DO NOT CREATE".
 //
 // Run: npx tsx test/createCompany.ts
 // ============================================================================
@@ -67,15 +73,30 @@ function fake() {
     ok(b.status === 1, "status 1 is active", String(b.status));
   }
 
-  console.log("\n[2] THE BLANKS ARE BLANK, not invented");
+  console.log("\n[2] UNKNOWN FIELDS ARE MARKED TBC — OnSinch refuses blanks");
   {
-    // An enquiry gives a client's name and almost never their registered address.
-    // A placeholder address would put fiction on an invoice, which is worse than an
-    // empty field somebody can fill in.
+    /**
+     * THIS ASSERTED EMPTY STRINGS, AND EMPTY STRINGS DO NOT WORK.
+     *
+     * The first probe poisoned `status` with a wrong type. OnSinch rejected it on a TYPE
+     * check and never ran the business-rule stage, so blank address/city/zip appeared to
+     * be accepted. Live, with a valid status, the real answer is
+     * {"address":["Fill in address"],"city":["Fill in company city"],...} — and four live
+     * test enquiries died on it after the rate-card hold was lifted.
+     *
+     * The lesson is about probing, not about companies: a request that fails EARLY proves
+     * nothing about the stages behind it. Re-probed with everything filled and only the
+     * email malformed — same stage as the thing under test — "TBC" passes and blanks do
+     * not.
+     *
+     * TBC rather than an invented street, because a fake address on an invoice is far
+     * worse than a field that visibly needs filling in.
+     */
     const { client, sent } = fake();
     await client.createCompany({ name: "Innovate UK Events" });
     const b = sent[0];
-    ok(b.address === "" && b.city === "" && b.zip === "", "address, city and zip go out empty",
+    ok(b.address === "TBC" && b.city === "TBC" && b.zip === "TBC",
+      "address, city and zip are marked TBC, never invented",
       JSON.stringify({ a: b.address, c: b.city, z: b.zip }));
   }
 

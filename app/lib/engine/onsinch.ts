@@ -603,15 +603,50 @@ export class OnsinchClient {
    * when the caller supplies it, which is the one field here that is real information.
    */
   async createCompany(company: { name: string } & Record<string, unknown>) {
+    /**
+     * THE BLANKS HAD TO BECOME PLACEHOLDERS, AND THE FIRST PROBE SAID OTHERWISE.
+     *
+     * OnSinch validates in two stages. A type error stops it before the business rules
+     * run, and the first probe poisoned `status` with a string — so empty address, city
+     * and zip were never actually judged, and "blank is accepted" was a conclusion drawn
+     * from a request that failed earlier for a different reason. Live, with a valid
+     * status, the real answer is:
+     *
+     *   {"address":["Fill in address"],"city":["Fill in company city"],
+     *    "zip":["Fill in company zip"],"email_invoice":["Fill in company email..."]}
+     *
+     * Re-probed with everything filled and only the email malformed, so the failure sits
+     * in the SAME stage as the thing being tested: "TBC" satisfies address, city and zip;
+     * blanks do not; and `email_invoice` must parse as a real address — a placeholder is
+     * rejected outright.
+     *
+     * So "TBC" is not laziness, it is the only thing that both creates the client and
+     * stays visibly unfinished. Ben's rule is that creating a client is never gated on
+     * information beyond a name, and OnSinch will not accept nothing, so the choice is
+     * between a marker a human can search for and inventing an address that reads as
+     * real. A fake street on an invoice is far worse than a field saying TBC.
+     *
+     * `email_invoice` falls back to Spartan's own bookings address when the thread has no
+     * sender — an invoice that lands with Spartan to be corrected beats a client record
+     * that cannot exist. It is the one field here that carries real information whenever
+     * the thread has any.
+     */
     const body = {
-      address: "",
-      city: "",
-      zip: "",
+      address: "TBC",
+      city: "TBC",
+      zip: "TBC",
       country: "GB",
-      email_invoice: "",
+      email_invoice: "bookings@spartancrew.co.uk",
       status: 1,
       ...company,
     };
+    // An empty string from a caller is the same as not knowing, and OnSinch refuses it.
+    for (const k of ["address", "city", "zip"] as const) {
+      if (!String((body as Record<string, unknown>)[k] ?? "").trim()) (body as Record<string, unknown>)[k] = "TBC";
+    }
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(String(body.email_invoice ?? ""))) {
+      body.email_invoice = "bookings@spartancrew.co.uk";
+    }
     const r = await this.t("POST", "/companies", [body]);
     if (r.status !== 201)
       throw new Error(
