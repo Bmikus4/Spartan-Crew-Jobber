@@ -402,7 +402,7 @@ export class OnsinchClient {
    * page 1 returns 2026 and finds nothing. Returns null when no row is found,
    * which means "not recorded", never "no crew".
    */
-  async createAuditFor(order_id: number): Promise<{ teams: number; slots: number } | null> {
+  async readCreateAudit(order_id: number): Promise<{ teams: number; slots: number } | null> {
     const id = Number(order_id);
     if (!Number.isInteger(id) || id <= 0) return null;
     const first = await this.t("GET", "/timelineAudits" + qs({ action: "order_created_via_api", limit: 100, page: 1 }));

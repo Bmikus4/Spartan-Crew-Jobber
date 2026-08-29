@@ -81,9 +81,9 @@ console.log("\n[5] the client reads the row for one order out of the log");
     }
     return { status: 200, data: { data: [], pagination: { pageCount: 1 } } };
   }) as never);
-  const got = await client.createAuditFor(15610);
+  const got = await client.readCreateAudit(15610);
   ok(got?.teams === 6 && got?.slots === 6, "counts read from the payload", JSON.stringify(got));
-  const miss = await client.createAuditFor(99999);
+  const miss = await client.readCreateAudit(99999);
   ok(miss === null, "an order with no row returns null, not zero", JSON.stringify(miss));
 }
 
