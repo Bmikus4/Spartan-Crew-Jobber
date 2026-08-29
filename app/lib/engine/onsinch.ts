@@ -405,7 +405,7 @@ export class OnsinchClient {
   async createAuditFor(order_id: number): Promise<{ teams: number; slots: number } | null> {
     const id = Number(order_id);
     if (!Number.isInteger(id) || id <= 0) return null;
-    const first = await this.t("GET", "/timelineAudits" + qs({ action: "order_created_via_api", limit: 1, page: 1 }));
+    const first = await this.t("GET", "/timelineAudits" + qs({ action: "order_created_via_api", limit: 100, page: 1 }));
     const pageCount = Number(first.data?.pagination?.pageCount);
     const pages = Number.isInteger(pageCount) && pageCount > 0 ? [pageCount, pageCount - 1] : [1];
     for (const page of pages) {

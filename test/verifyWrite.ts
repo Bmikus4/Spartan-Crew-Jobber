@@ -56,6 +56,12 @@ console.log("\n[4] an absent audit row is UNVERIFIED, not failed");
 async function main() {
 console.log("\n[5] the client reads the row for one order out of the log");
 {
+  // 250 rows in the log so limit=1 and limit=100 disagree about pageCount
+  // (250 vs 3) - a probe at the wrong limit lands on a page that does not
+  // exist at the read limit, and the real audit row is never seen. Placing
+  // the matching row on the LAST page at limit=100 means only a probe that
+  // also used limit=100 finds it.
+  const TOTAL = 250;
   const audit = {
     id: 1, action: "order_created_via_api",
     data: JSON.stringify({
@@ -65,8 +71,14 @@ console.log("\n[5] the client reads the row for one order out of the log");
     }),
   };
   const client = new OnsinchClient((async (_m: string, path: string) => {
-    if (path.startsWith("/timelineAudits"))
-      return { status: 200, data: { data: [audit], pagination: { pageCount: 1 } } };
+    if (path.startsWith("/timelineAudits")) {
+      const q = new URL("http://x" + path).searchParams;
+      const limit = Number(q.get("limit")) || 1;
+      const page = Number(q.get("page")) || 1;
+      const pageCount = Math.ceil(TOTAL / limit);
+      const data = page === pageCount ? [audit] : [];
+      return { status: 200, data: { data, pagination: { pageCount } } };
+    }
     return { status: 200, data: { data: [], pagination: { pageCount: 1 } } };
   }) as never);
   const got = await client.createAuditFor(15610);
