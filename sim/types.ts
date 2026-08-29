@@ -21,6 +21,28 @@ export interface SimBlock {
   prof?: string;
   /** YYYY-MM-DD. Omitted = the client said TBC. */
   date?: string;
+  /**
+   * THE WORDS THE CLIENT USED, when they differ from what the model claims.
+   *
+   * `date` is what a perfect extractor reports. These two are not always the same
+   * thing, and the gap between them is where the engine's date rules live: the model
+   * infers a year from the email's own date, and the code overrules it only when the
+   * text shows that day and month with no year. Rendering the body from `date` made
+   * them agree by construction, so the whole reconciliation layer was unreachable from
+   * this rig — the roll fired on 0 of 100 runs.
+   *
+   * Set this to make the client's words disagree with the model's guess on purpose.
+   */
+  textDate?: string;
+  /**
+   * The date the composed block MUST end up carrying, when the point of the case is
+   * the reconciliation rather than the booking outcome.
+   *
+   * Checked as its own invariant rather than through the oracle: the oracle predicts
+   * from the case definition, so a case where the engine correctly CHANGES a date
+   * would read as a disagreement instead of a pass.
+   */
+  expectDate?: string;
   /** HH:MM. Omitted = not stated, so the engine's 08:00 default applies. */
   start?: string;
   /** HH:MM. Omitted = not stated, so the engine's 18:00 default applies. */

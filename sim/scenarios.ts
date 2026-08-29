@@ -283,11 +283,46 @@ add({ id: "K-not-a-job", label: "an invoice chase — not a job", tags: ["shape"
 add({ id: "K-confirmation-only", label: "a bare acknowledgement", tags: ["shape", "confirmation-only"], client: "history", classification: "confirmation-only",
       blocks: [] });
 
+// ==================================================== L — how the client wrote the date
+// THE LAYER THIS RIG COULD NOT SEE. Every case above renders its date from the same
+// field the scripted extractor reports, so the two agreed by construction and the
+// reconciliation layer — the code that decides whether to trust a model's year — was
+// never reached. Measured before these existed: the next-occurrence roll fired on 0 of
+// 100 runs, and the rule that put 26 crew a year early on live order 15611 had no
+// coverage here at all.
+//
+// The rig clock is 2026-05-01, so "12 September" with no year means September 2026.
+// These four cases set the client's words apart from the model's guess on purpose, and
+// assert the DATE rather than the booking outcome, because a case where the engine
+// correctly changes a date would otherwise read as a disagreement with the oracle.
+
+add({ id: "L-year-bare-agrees", label: "bare date, model already right — roll agrees, changes nothing",
+      tags: ["dates", "bare-year"], client: "history", venue: O2,
+      blocks: [{ size: 4, date: "2026-09-12", textDate: "12 September", expectDate: "2026-09-12",
+                 start: "08:00", end: "18:00", task: "Build" }] });
+
+add({ id: "L-year-bare-corrects", label: "bare date, model guessed a year already gone — roll must correct it",
+      tags: ["dates", "bare-year", "correction"], client: "history", venue: O2,
+      blocks: [{ size: 4, date: "2025-09-12", textDate: "12th September", expectDate: "2026-09-12",
+                 start: "08:00", end: "18:00", task: "Build" }] });
+
+add({ id: "L-year-stated-twice", label: "the year is written once and the same date again bare — the stated year wins",
+      tags: ["dates", "stated-year", "regression-15611"], client: "history", venue: O2,
+      // Live shape, order 15611: a summary line carrying the year plus a load-in line
+      // without it. The bare mention used to win and drag the booking back a year.
+      blocks: [{ size: 4, date: "2027-10-12", textDate: "October 12, 2027, load-in from 07:00 on October 12th",
+                 expectDate: "2027-10-12", start: "07:00", end: "18:00", task: "Build" }] });
+
+add({ id: "L-comma-count", label: "a guest count after a comma is not a year",
+      tags: ["dates", "comma-trap"], client: "history", venue: O2,
+      blocks: [{ size: 4, date: "2026-09-12", textDate: "12 September, 1000 guests expected",
+                 expectDate: "2026-09-12", start: "08:00", end: "18:00", task: "Build" }] });
+
 export const SCENARIOS = cases;
 
-if (SCENARIOS.length !== 100) {
+if (SCENARIOS.length !== 104) {
   // A design that quietly drifts off its own cell count is a design nobody can cite.
-  throw new Error(`scenario count is ${SCENARIOS.length}, not 100 — fix the design, not this check`);
+  throw new Error(`scenario count is ${SCENARIOS.length}, not 104 — fix the design, not this check`);
 }
 
 const seen = new Set<string>();

@@ -210,6 +210,38 @@ const CUES: Array<[RegExp, number]> = [
   [/\btelehandler\b|\btele handler\b|\bteleporter\b/, 4],
   [/\bdriver\b|\bdriving\b/, PROFESSION.DRIVER],
   [/\bav\b|\baudio ?visual\b/, PROFESSION.AV],
+
+  /**
+   * THE TRADES THE TENANT ALREADY HAS AND THE RESOLVER WAS MISSING.
+   *
+   * Measured against 910 real client messages (2026-08-29): every one of these landed
+   * on general Crew, which is worse than being flagged — the tenant holds the right
+   * profession, at its own rate, and the booking silently took the general one.
+   *
+   * The tell is that the SAME REQUEST resolved differently depending on the word the
+   * client happened to use: "serving staff" found 31 and "waiters" did not; "bar staff"
+   * found 30 and "bartenders" did not. A client does not know which of their words is
+   * the one in our list.
+   *
+   * Ordered before nothing in particular, except that `door supervisor` must be read as
+   * security rather than as a chief — see the security line below, which sits ahead of
+   * the supervisor cue for that reason.
+   */
+  [/\bdoor ?supervisors?\b|\bsecurity\b|\bsia\b/, PROFESSION.CREW],
+  [/\bsupervisors?\b|\bcharge ?hands?\b/, PROFESSION.CREW_CHIEF],
+  [/\bwait(?:ers?|resses?|ing ?staff)\b|\bserv(?:ers?|ing ?staff)\b/, 31],
+  [/\bbar ?(?:staff|backs?|tenders?|persons?)\b|\bmixologists?\b/, 30],
+  [/\bmarshals?\b|\bstewards?\b/, 52],
+  [/\brope ?access\b|\bclimbers?\b|\birata\b/, 65],
+  /**
+   * NOT CUED, DELIBERATELY. Audio tech (13), Lighting tech (14), Host/Hostess (35) and
+   * Dummy Tech (51) are all DELETED rows in the tenant, and `bookable()` refuses a
+   * retired profession — so a cue pointing at one could never resolve and would only
+   * claim a routing that cannot happen. Those words fall to standard Crew, which is the
+   * right answer for as long as Spartan does not offer the trade.
+   *
+   * If any of them is un-retired in OnSinch, add the cue then; nothing else changes.
+   */
 ];
 
 /**

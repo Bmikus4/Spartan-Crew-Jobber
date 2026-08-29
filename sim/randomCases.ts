@@ -111,6 +111,15 @@ const FILLER = [
 ];
 
 /** Dates the way people type them, not the way ISO does. */
+/** The day and month with NO year, whatever form the summary line used. */
+function bareForm(iso: string): string {
+  const d = new Date(iso + "T00:00:00Z");
+  const FULL = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+  const day = d.getUTCDate();
+  const ord = day % 10 === 1 && day !== 11 ? "st" : day % 10 === 2 && day !== 12 ? "nd" : day % 10 === 3 && day !== 13 ? "rd" : "th";
+  return `${FULL[d.getUTCMonth()]} ${day}${ord}`;
+}
+
 function sayDate(iso: string, r: () => number): string {
   const d = new Date(iso + "T00:00:00Z");
   const day = d.getUTCDate();
@@ -195,6 +204,8 @@ export function buildRandomCases(n: number, seed = 20260824): RandomCase[] {
     }
 
     const po = r() < 0.3 ? `PO-${10000 + Math.floor(r() * 89999)}` : null;
+    // A quarter of enquiries restate the first date bare in a load-in line — see below.
+    const repeatBare = r() < 0.25;
     const spoken = VENUES[venue].spoken[Math.floor(r() * VENUES[venue].spoken.length)];
 
     const lines = blocks.map((b, bi) => {
@@ -222,6 +233,21 @@ export function buildRandomCases(n: number, seed = 20260824): RandomCase[] {
         lines.join("\n"),
         "",
         `Venue is ${spoken}.`,
+        /**
+         * THE SAME DATE, WRITTEN TWICE — ONCE WITH THE YEAR AND ONCE WITHOUT.
+         *
+         * The shape that broke live order 15611: a summary line carrying the year, plus
+         * a load-in sentence naming the same day bare. `bareMonthDays` keyed on MM-DD and
+         * kept every unyeared mention without subtracting the ones that also appeared
+         * with a year, so the bare mention won and dragged the booking back a year — 26
+         * crew called six weeks out for a job that was twelve months away.
+         *
+         * A structured enquiry writes its dates twice as a matter of course, so a corpus
+         * that never repeats one cannot see this at all. One case in four here does.
+         */
+        repeatBare && blocks[0]?.date
+          ? `Load-in from ${blocks[0].start ?? "07:00"} on ${bareForm(blocks[0].date)}.`
+          : "",
         po ? `Our PO is ${po}.` : "",
         !dateStated ? "Date still to be confirmed, will let you know." : "",
       ].filter((x) => x !== "").join("\n"),
