@@ -136,6 +136,28 @@ export interface PipelineDeps extends CompileDeps {
   executor: Executor;
   settings: Settings;
   hashOrder: (o: unknown) => string;
+  /**
+   * THE IDENTITY GATE - the first thing done to every message, before any
+   * inference. Answers both questions from keys: has this exact message been
+   * processed, and has this conversation been seen.
+   *
+   * Optional so every existing test double keeps working, and it FAILS OPEN: a
+   * claim that could not be made (`ok: false`) processes the thread normally,
+   * because a database outage must never drop an enquiry.
+   */
+  claimMessage?: (input: {
+    message_id: string;
+    thread_id?: string;
+    subject?: string;
+    from_address?: string;
+  }) => Promise<{
+    ok: boolean;
+    first_seen: boolean;
+    seen_count: number;
+    thread_first_seen: boolean;
+    thread_message_count: number;
+    degraded?: string;
+  }>;
   /** Feeds the sender ledger that triage reads. Injected; absent in tests. */
   recordSender?: (a: { addr: string; thread_id: string; wasJob: boolean; subject?: string }) => Promise<void>;
   /**
@@ -204,6 +226,39 @@ export async function handleThread(
     metrics.emit({ ts: now(), thread_id: tid, type, meta });
 
   const prior = await store.get(tid);
+
+  /**
+   * IDENTITY BEFORE INFERENCE. The exact same message can never be processed
+   * twice, and that is settled by the message id rather than by anything the
+   * model reads. The fast-path below is a cache check against what we last
+   * stored; this is the durable claim, and it sees a message however it arrived.
+   *
+   * Fails open on purpose. `ok: false` means the ledger could not answer - not
+   * that the message is new - and dropping an enquiry because a database was
+   * unreachable is the worse failure. handleThread is idempotent, so the cost of
+   * processing twice is a wasted model call.
+   */
+  const newest = selectLatest(thread.messages)?.latest;
+  if (deps.claimMessage && newest?.message_id) {
+    const claim = await deps.claimMessage({
+      message_id: newest.message_id,
+      thread_id: tid,
+      subject: newest.subject,
+      from_address: newest.from,
+    }).catch((err) => {
+      console.error("[identity-gate] claim failed, processing anyway", err);
+      return null;
+    });
+    if (claim?.ok && !claim.first_seen) {
+      await emit("duplicate_message", { message_id: newest.message_id, seen_count: claim.seen_count });
+      // handleThread's declared return type is Promise<ConversationState>, not
+      // ConversationState | undefined — widening it is out of scope here, so a
+      // duplicate on a thread with no prior stored state (only reachable if the
+      // ledger and the state store disagree) returns `prior` cast rather than
+      // changing the signature.
+      return prior as ConversationState;
+    }
+  }
 
   // Idempotency fast-path (the "never miss an email" enabler): a re-POST of a
   // thread we've already processed at its CURRENT latest message is a no-op —
