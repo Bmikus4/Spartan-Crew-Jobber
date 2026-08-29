@@ -242,6 +242,13 @@ export function parseDatesDetailed(text: string, reference: Date): ParsedDate[] 
   const refYear = reference.getUTCFullYear();
   const add = (y: number, mo: number, d: number, yearStated: boolean) => {
     if (mo < 1 || mo > 12 || d < 1 || d > 31) return;
+    // The `,?` tolerance below lets a year-shaped 4-digit number ride in after a
+    // comma or a month name - and this mailbox is full of those that are not years:
+    // "12 October, 1000 guests", "5 June, 2500 pax", "3 May, 2000 sqm". A capture
+    // outside a plausible calendar range is not a stated year; fall back to no year
+    // stated so the date still resolves via next-occurrence instead of being
+    // pinned to a bogus year or losing the roll.
+    if (yearStated && (y < 2000 || y > 2100)) yearStated = false;
     let iso: string | null;
     if (yearStated) {
       iso = `${y}-${String(mo).padStart(2, "0")}-${String(d).padStart(2, "0")}`;

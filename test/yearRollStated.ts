@@ -62,5 +62,19 @@ console.log("\n[3] a genuinely bare date still rolls - the rule is not disabled"
   ok(report.rolled.length === 1, "and says so", JSON.stringify(report.rolled));
 }
 
+console.log("\n[4] a 4-digit number after a comma is not a year just because it fits the shape");
+{
+  // "12 October, 1000 guests" - the `,?` tolerance that lets a real trailing year
+  // through also lets a guest count through. 1000 is not a plausible year, so it
+  // must not be recorded as one, and the date must still resolve via the ordinary
+  // bare/next-occurrence path rather than being lost.
+  const guestText = "12 October, 1000 guests expected, please advise on crew.";
+  const bare = bareMonthDays(guestText, REFERENCE);
+  ok(bare.has("10-12"), "10-12 is bare - 1000 is a guest count, not a stated year", JSON.stringify([...bare]));
+  const { requests: out, report } = reconcileRequests(guestText, [{ date: "2025-10-12", size: 4 }], REFERENCE);
+  ok(out[0].date === "2026-10-12", "and it still rolls to the next occurrence", String(out[0].date));
+  ok(report.rolled.length === 1, "and says so", JSON.stringify(report.rolled));
+}
+
 console.log(fails ? `\n${fails} FAILED\n` : "\nALL PASS\n");
 process.exit(fails ? 1 : 0);
