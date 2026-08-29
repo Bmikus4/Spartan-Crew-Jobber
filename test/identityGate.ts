@@ -13,6 +13,14 @@
 // degraded claim processes the thread normally. Losing a booking is worse than
 // processing one twice, and handleThread is idempotent anyway.
 //
+// It also fails OPEN when the claim and the state store disagree. The live n8n
+// workflow (Get IDs1 -> Dedupe Claim -> ... -> POST to Engine) calls /api/dedupe
+// - which calls this SAME claimMessage - for every message before the engine
+// ever runs. So on a brand-new enquiry the gate's own claim is the SECOND claim
+// of that id and legitimately reports first_seen: false, with no state ever
+// stored for the thread. The state store, not the ledger, is the authority on
+// whether we actually produced a result — see case [5].
+//
 // Run: npx tsx test/identityGate.ts
 // ============================================================================
 import { handleThread, type PipelineDeps } from "../app/lib/engine/pipeline";
@@ -36,10 +44,13 @@ const thread = (message_id: string): HydratedThread => ({
 });
 
 /** Records whether compile was reached, without running the real one. */
-function rig(claim: Partial<{ ok: boolean; first_seen: boolean; degraded: string }>) {
+function rig(
+  claim: Partial<{ ok: boolean; first_seen: boolean; degraded: string }>,
+  store: InMemoryStore = new InMemoryStore()
+) {
   let compiled = 0;
   const deps = {
-    store: new InMemoryStore(),
+    store,
     metrics: { emit: async () => {} },
     settings: { order_mode: "draft-only", replies_enabled: false } as never,
     hashOrder: (o: unknown) => JSON.stringify(o),
@@ -69,7 +80,17 @@ function rig(claim: Partial<{ ok: boolean; first_seen: boolean; degraded: string
 (async () => {
   console.log("\n[1] a message already claimed is a no-op");
   {
-    const { deps, reached } = rig({ first_seen: false });
+    // Seeded so this assertion still means "the gate stopped it" rather than
+    // "the state store had nothing to return" — see case [5], which is the
+    // shape that actually reaches production with no prior state.
+    const store = new InMemoryStore();
+    await store.put({
+      thread_id: "T1", subject: "4 crew Tuesday", participants: ["client@eventful.co.uk"],
+      last_message_id: "m1", last_processed_epoch: 0, classification: "job",
+      facts: { requests: [] }, priority: "low", needs_human: false, status: "processed",
+      notes: [], order_action_log: [],
+    } as never);
+    const { deps, reached } = rig({ first_seen: false }, store);
     await handleThread(thread("m1"), deps).catch(() => {});
     ok(reached() === 0, "the engine never reached compile", String(reached()));
   }
@@ -94,6 +115,19 @@ function rig(claim: Partial<{ ok: boolean; first_seen: boolean; degraded: string
     delete (deps as { claimMessage?: unknown }).claimMessage;
     await handleThread(thread("m4"), deps).catch(() => {});
     ok(reached() > 0, "an executor without a claim is not blocked", String(reached()));
+  }
+
+  console.log("\n[5] the LIVE n8n shape - /api/dedupe already claimed this id, no prior state stored");
+  {
+    // Get IDs1 -> Dedupe Claim -> ... -> POST to Engine: n8n calls /api/dedupe
+    // (claimMessage) for every message BEFORE the engine runs at all, so on a
+    // brand-new enquiry the gate's own claim is the SECOND claim of that id and
+    // legitimately reports first_seen: false — with nothing ever stored for the
+    // thread. Without the `prior` guard this must be processed, or intake stops
+    // permanently on the first message of every new thread.
+    const { deps, reached } = rig({ first_seen: false });
+    await handleThread(thread("m5"), deps).catch(() => {});
+    ok(reached() > 0, "reached compile despite first_seen: false, because there was no prior state", String(reached()));
   }
 
   console.log(fails ? `\n${fails} FAILED\n` : "\nALL PASS\n");

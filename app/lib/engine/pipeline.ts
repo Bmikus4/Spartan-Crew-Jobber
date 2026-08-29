@@ -249,14 +249,18 @@ export async function handleThread(
       console.error("[identity-gate] claim failed, processing anyway", err);
       return null;
     });
-    if (claim?.ok && !claim.first_seen) {
+    // `prior` is load-bearing here, not a defensive extra. The live n8n workflow
+    // (Get IDs1 -> Dedupe Claim -> ... -> POST to Engine) calls /api/dedupe, which
+    // calls this SAME claimMessage, for every message before the engine ever runs
+    // - so on a brand-new enquiry the gate's own claim is the SECOND claim of that
+    // id and legitimately reports first_seen: false. The ledger and the state
+    // store can therefore disagree, and the state store is the authority on
+    // whether we have actually produced a result: no stored state means this
+    // thread has never been processed, whatever the ledger says about the
+    // message id, so it must be processed regardless of what the claim reports.
+    if (claim?.ok && !claim.first_seen && prior) {
       await emit("duplicate_message", { message_id: newest.message_id, seen_count: claim.seen_count });
-      // handleThread's declared return type is Promise<ConversationState>, not
-      // ConversationState | undefined — widening it is out of scope here, so a
-      // duplicate on a thread with no prior stored state (only reachable if the
-      // ledger and the state store disagree) returns `prior` cast rather than
-      // changing the signature.
-      return prior as ConversationState;
+      return prior;
     }
   }
 
