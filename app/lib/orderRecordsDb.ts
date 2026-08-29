@@ -110,7 +110,9 @@ export async function recordOrder(rec: OrderRecord): Promise<void> {
               ${rec.block_count}, ${rec.crew_total})
       ON CONFLICT (order_id) DO UPDATE
         SET thread_id = EXCLUDED.thread_id, job_id = EXCLUDED.job_id,
-            order_number = EXCLUDED.order_number, shape_sent = EXCLUDED.shape_sent,
+            order_number = EXCLUDED.order_number, sender_email = EXCLUDED.sender_email,
+            sender_domain = EXCLUDED.sender_domain, company_id = EXCLUDED.company_id,
+            place_id = EXCLUDED.place_id, shape_sent = EXCLUDED.shape_sent,
             block_count = EXCLUDED.block_count, crew_total = EXCLUDED.crew_total`;
   } catch (err) {
     console.error("[order-records] write failed", err);
