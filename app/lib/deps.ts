@@ -41,6 +41,38 @@ async function readOrderIdentifiers(
 }
 
 /**
+ * Post one Gmail label change to the n8n tag workflow.
+ *
+ * Shared by every tag, because the workflow takes the label from the payload and
+ * creates it in the mailbox if it has never seen it — so adding a tag is adding a
+ * string here, never a change to the live n8n.
+ *
+ * NO WEBHOOK MEANS NO TAG, SILENTLY, AND THAT IS THE RIGHT DEFAULT: a preview
+ * deployment and a local run have no business writing labels into the live bookings
+ * mailbox, and a tag is an alert rather than part of the booking.
+ *
+ * A 200 WITH AN EMPTY BODY IS A FAILURE. n8n answers 200 when the workflow throws,
+ * which is exactly what a rejected secret produces. Throwing lets the caller leave its
+ * marker unset so the next email retries, instead of recording a tag never applied.
+ */
+async function postTag(body: Record<string, unknown>): Promise<void> {
+  const hook = process.env.MANUAL_TAG_WEBHOOK;
+  if (!hook) return;
+  const res = await fetch(hook, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      "x-webhook-secret": process.env.N8N_WEBHOOK_SECRET ?? "",
+    },
+    body: JSON.stringify(body),
+  });
+  const j = (await res.json().catch(() => ({}))) as { ok?: unknown };
+  if (!res.ok || j.ok !== true) {
+    throw new Error(`${String(body.label)} tag webhook did not confirm (HTTP ${res.status}) ${JSON.stringify(j).slice(0, 160)}`);
+  }
+}
+
+/**
  * Tool 2 write path: create the reference data the order needs but OnSinch does
  * not yet have — the client company and the venue — then create the order.
  *
@@ -499,26 +531,19 @@ export async function buildDeps(): Promise<PipelineDeps> {
      * on the board with its reason either way.
      */
     async flagForManual(a) {
-      const hook = process.env.MANUAL_TAG_WEBHOOK;
-      if (!hook) return;
-      const res = await fetch(hook, {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-          "x-webhook-secret": process.env.N8N_WEBHOOK_SECRET ?? "",
-        },
-        body: JSON.stringify({ label: "Manual", ...a }),
-      });
-      /**
-       * A 200 WITH AN EMPTY BODY IS A FAILURE HERE, for the reason recorded on the draft
-       * webhook: n8n answers 200 when the workflow throws, which is exactly what a
-       * rejected secret produces. Throwing lets the caller leave `manual_flagged` unset
-       * so the next email retries, instead of recording a tag that was never applied.
-       */
-      const j = (await res.json().catch(() => ({}))) as { ok?: unknown };
-      if (!res.ok || j.ok !== true) {
-        throw new Error(`manual-tag webhook did not confirm (HTTP ${res.status}) ${JSON.stringify(j).slice(0, 160)}`);
-      }
+      return postTag({ label: "Manual", ...a });
+    },
+    /**
+     * A booking exists for this thread, tagged "Order Built" in the same mailbox.
+     *
+     * Ben, 2026-08-29. It goes through the SAME n8n workflow as the Manual tag and
+     * needed no change there: that workflow reads the label out of the payload
+     * (`label: b.label || 'Manual'`) and creates it in the mailbox if it has never seen
+     * it. So a new tag is a new string, not a new workflow — which is the whole point,
+     * because editing the live n8n is the recurring way this system breaks.
+     */
+    async flagOrderBuilt(a) {
+      return postTag(a);
     },
     senderVerdict,
     recordSender,
