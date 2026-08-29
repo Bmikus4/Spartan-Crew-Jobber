@@ -161,7 +161,6 @@ import { getSettings } from "./settingsDb";
 import { getRateCard } from "./rateCardsDb";
 import { lookupAlias, recordAlias } from "./aliasesDb";
 import { senderVerdict, recordSender } from "./senderLedgerDb";
-import { claimMessage } from "./messageLedgerDb";
 
 export const hashOrder = (o: unknown) => createHash("sha256").update(JSON.stringify(o)).digest("hex").slice(0, 16);
 
@@ -462,7 +461,6 @@ export async function buildDeps(): Promise<PipelineDeps> {
     onsinch: client,
     store: new NeonStateStore(),
     metrics: new NeonMetrics(),
-    claimMessage,
     settings,
     repliesEnabled: settings.replies_enabled, // Tool 1: off by default
     // Which threads get one. Forwarded explicitly: this wrapper is hand-written
