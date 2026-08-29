@@ -15,6 +15,7 @@ import { guardReasoner } from "./engine/spend";
 import { tieredReasoner } from "./engine/tiered";
 import { logKeyBalanceOnce } from "./engine/keyBalance";
 import { buildOrderBody, buildSlotTeamBody } from "./engine/format";
+import { recordOrder, buildOrderRecord } from "./orderRecordsDb";
 import { replaceProvisionalOrder } from "./engine/replaceOrder";
 import { amendOrderInPlace } from "./engine/amendOrder";
 import type { DesiredOrder, DesiredSlotTeam } from "./engine/types";
@@ -65,7 +66,8 @@ async function readOrderIdentifiers(
 export async function createOrderWithPlace(
   client: OnsinchClient,
   order: DesiredOrder,
-  remember?: (a: { kind: "company" | "place"; alias_norm: string; entity_id: number; source: "exact"; raw_example?: string }) => Promise<void>
+  remember?: (a: { kind: "company" | "place"; alias_norm: string; entity_id: number; source: "exact"; raw_example?: string }) => Promise<void>,
+  context?: { thread_id: string; sender_email: string | null; sender_domain: string | null }
 ) {
   const o = { ...order };
 
@@ -131,6 +133,23 @@ export async function createOrderWithPlace(
    */
   const created = await client.createOrder(buildOrderBody(o));
   const ids = await readOrderIdentifiers(client, created.id);
+
+  // Same fail-open contract as the alias writes above: this row is a record of
+  // what happened, not a condition of it, so it never blocks or fails the booking.
+  if (context) {
+    const rec = buildOrderRecord({
+      order_id: created.id,
+      thread_id: context.thread_id,
+      job_id: ids.job_id,
+      order_number: created.number ?? ids.order_number ?? null,
+      sender_email: context.sender_email,
+      sender_domain: context.sender_domain,
+      place_id: o.slot_teams[0]?.place_id ?? null,
+      shape_sent: o,
+    });
+    await recordOrder(rec).catch((err: unknown) => console.error("[order-records] record failed", err));
+  }
+
   return { id: created.id, number: created.number ?? ids.order_number, job_id: ids.job_id, team_ids: [] };
 }
 import { archiveOrder, recordReplacement } from "./orderArchiveDb";
