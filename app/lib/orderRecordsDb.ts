@@ -62,9 +62,13 @@ export function buildOrderRecord(input: {
 let _sql: NeonQueryFunction<false, false> | null = null;
 let _ready = false;
 
+function connString(): string {
+  return (process.env.DATABASE_URL || process.env.POSTGRES_URL || process.env.STORAGE_DATABASE_URL || "").trim();
+}
+
 function db(): NeonQueryFunction<false, false> | null {
   if (_sql) return _sql;
-  const url = process.env.DATABASE_URL;
+  const url = connString();
   if (!url) return null;
   _sql = neon(url);
   return _sql;
