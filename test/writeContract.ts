@@ -82,6 +82,14 @@ const CASES: Array<{
   { name: "deletePlaces", yieldsId: false, call: (c) => c.deletePlaces([1]) },
 ];
 
+/**
+ * Named like a write by the prefix convention below but is a GET: it reads OnSinch's own
+ * audit log for what a PAST create produced, and never sends anything itself. The 400/500
+ * throw contract in [2]/[3] describes response handling for a send, which this method has
+ * none of — forcing it into CASES would assert a behaviour it was never meant to have.
+ */
+const READS = new Set(["createAuditFor"]);
+
 (async () => {
   console.log("\n[1] no write method escapes this file");
   {
@@ -92,7 +100,7 @@ const CASES: Array<{
      * guard — but a wrong guard that has to be edited beats a right guard nobody runs.
      */
     const written = Object.getOwnPropertyNames(OnsinchClient.prototype).filter((m) =>
-      /^(create|patch|delete|update|put|post)/.test(m)
+      /^(create|patch|delete|update|put|post)/.test(m) && !READS.has(m)
     );
     const covered = new Set(CASES.map((c) => c.name));
     const uncovered = written.filter((m) => !covered.has(m));

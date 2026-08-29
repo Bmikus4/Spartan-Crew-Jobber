@@ -390,6 +390,43 @@ export class OnsinchClient {
   }
 
   /**
+   * What OnSinch recorded that OUR create actually made.
+   *
+   * `order_created_via_api` is written by OnSinch for every create through this
+   * API and carries `created: { Order, Job, SlotTeam, Slot, Attendance, workers }`.
+   * It is the only external evidence available: /slotTeams has no GET, no `with=`
+   * embed exposes the blocks, and the per-child audit rows exist for UI-raised
+   * orders only.
+   *
+   * Rows sort oldest-first, so the newest creates are on the LAST pages - reading
+   * page 1 returns 2026 and finds nothing. Returns null when no row is found,
+   * which means "not recorded", never "no crew".
+   */
+  async createAuditFor(order_id: number): Promise<{ teams: number; slots: number } | null> {
+    const id = Number(order_id);
+    if (!Number.isInteger(id) || id <= 0) return null;
+    const first = await this.t("GET", "/timelineAudits" + qs({ action: "order_created_via_api", limit: 1, page: 1 }));
+    const pageCount = Number(first.data?.pagination?.pageCount);
+    const pages = Number.isInteger(pageCount) && pageCount > 0 ? [pageCount, pageCount - 1] : [1];
+    for (const page of pages) {
+      if (page < 1) continue;
+      const r = await this.t("GET", "/timelineAudits" + qs({ action: "order_created_via_api", limit: 100, page }));
+      for (const row of (r.data?.data ?? []) as any[]) {
+        let payload: any;
+        try {
+          payload = typeof row?.data === "string" ? JSON.parse(row.data) : row?.data;
+        } catch { continue; }
+        if (Number(payload?.id) !== id) continue;
+        return {
+          teams: Number(payload?.created?.SlotTeam ?? 0),
+          slots: Number(payload?.created?.Slot ?? 0),
+        };
+      }
+    }
+    return null;
+  }
+
+  /**
    * POST /slotTeams — add a team to an existing job. Returns the id, which is the only
    * route by which a team's id is known at the moment it is created.
    *
