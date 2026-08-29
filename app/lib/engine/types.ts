@@ -175,6 +175,16 @@ export interface PlaceCandidate {
 export interface ConversationState {
   thread_id: string;                 // PK
   subject: string;
+  /**
+   * The counterparty's address and organisational domain, recorded separately.
+   *
+   * The domain is the key cross-thread dedup gates on, because the same client
+   * writes from more than one mailbox. It is null for a consumer mailbox and for
+   * a thread carrying no client message - see identity.ts - and in that case the
+   * address is the only key available.
+   */
+  sender_email?: string | null;
+  sender_domain?: string | null;
   participants: string[];
   last_message_id: string;
   last_processed_epoch: number;

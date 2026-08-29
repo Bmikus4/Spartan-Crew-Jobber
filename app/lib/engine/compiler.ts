@@ -31,6 +31,7 @@ import { PROFESSION_LIST } from "./professionList";
 import { resolveRateCard } from "./rates";
 import type { Reasoner, ReplyContext } from "./reason";
 import type { OnsinchClient } from "./onsinch";
+import { counterpartyIdentity } from "./identity";
 
 /** The third alias kind, added for professions — see aliasesDb.ts. */
 type AliasKind = "company" | "place" | "profession";
@@ -740,6 +741,7 @@ export async function compile(
   const { reasoner, onsinch, now } = deps;
   const { latest, history, machine } = normalizeThread(thread);
   const notes: string[] = [];
+  const identity = counterpartyIdentity(thread.messages);
 
   // 0a. Triage, before any model call. The mailbox now delivers everything rather than
   // what a Gmail label selected, so the filtering that used to happen upstream happens
@@ -1500,6 +1502,8 @@ export async function compile(
     needs_human,
     review_only,
     status,
+    sender_email: identity.email,
+    sender_domain: identity.domain,
     notes,
     order_action_log: prior?.order_action_log ?? [],
   };
