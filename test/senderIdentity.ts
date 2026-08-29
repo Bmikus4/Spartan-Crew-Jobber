@@ -78,5 +78,15 @@ console.log("\n[6] addresses are normalised, and rubbish yields nothing");
     "a malformed sender gives no domain");
 }
 
+console.log("\n[7] machine mail is never the counterparty, even when it is newest");
+{
+  const id = counterpartyIdentity([
+    msg("liam.oconnell@eventful.co.uk", "2026-08-27T09:00:00Z"),
+    msg("notifications@onsinch.com", "2026-08-28T10:00:00Z", "Client created new order #15610"),
+  ]);
+  ok(id.domain === "eventful.co.uk", "the earlier real client message wins, not onsinch.com", String(id.domain));
+  ok(id.email === "liam.oconnell@eventful.co.uk", "and its address, not the notifier's", String(id.email));
+}
+
 console.log(fails ? `\n${fails} FAILED\n` : "\nALL PASS\n");
 process.exit(fails ? 1 : 0);

@@ -16,7 +16,7 @@
 //   matching at all. Those threads get no domain and fall back to the address.
 // ============================================================================
 import type { ThreadMessage } from "./types";
-import { isFromSpartan } from "./normalize";
+import { isFromSpartan, isMachineMessage } from "./normalize";
 
 /** Mailbox providers. A shared provider is not a shared organisation. */
 const CONSUMER_DOMAINS = new Set([
@@ -51,6 +51,16 @@ export function organisationalDomain(address: string): string | null {
  * is advisory - the address is checked too, for the reason recorded in
  * normalize.ts: a payload that omits the flag defaults it to false and would
  * otherwise make us our own counterparty.
+ *
+ * Machine mail is excluded the same way selectLatest excludes it: an OnSinch or
+ * HandsHQ notification is not from Spartan, so without this it would be read as
+ * the counterparty and its domain (onsinch.com, handshq.com, ...) recorded as
+ * sender_domain. That column is a cross-thread dedup key, and a shared
+ * notification domain would match every notification-bearing thread to every
+ * other - the exact failure CONSUMER_DOMAINS above already exists to prevent for
+ * mailbox providers. Falls back to the newest client message of any kind only
+ * when the whole thread is machine mail, so a thread never loses its identity
+ * outright.
  */
 export function counterpartyIdentity(
   messages: ThreadMessage[]
@@ -60,7 +70,8 @@ export function counterpartyIdentity(
     .filter((m) => normaliseAddress(String(m.from ?? "")))
     .sort((a, b) => Date.parse(a.date_iso) - Date.parse(b.date_iso));
 
-  const latest = clients[clients.length - 1];
+  const human = clients.filter((m) => !isMachineMessage(m));
+  const latest = human[human.length - 1] ?? clients[clients.length - 1];
   if (!latest) return { email: null, domain: null };
 
   const email = normaliseAddress(String(latest.from));
