@@ -16,7 +16,13 @@ import { safeEqual } from "./app/lib/safeEqual";
 //  - /api/n8n-inbound    authenticated by its own N8N_WEBHOOK_SECRET
 //  - /api/dedupe         same secret; the n8n dedupe claim (replaces Airtable)
 //  - /api/sweep-ingest   same secret; the 12-month historical sweep (test corpus)
-const SKIP = ["/api/auth", "/api/n8n-inbound", "/api/dedupe", "/api/sweep-ingest"];
+//  - /api/health/intake  same secret; the outside watchdog that asks whether anything is
+//    still arriving. It has to answer a caller holding a header rather than a session,
+//    because the whole point of it is that it is asked from OUTSIDE the app -- an engine
+//    that is not running cannot report that it is not running. Read-only: one MAX() over
+//    inbound_raw.received_at, and it refuses an unconfigured caller in production like
+//    every other machine route.
+const SKIP = ["/api/auth", "/api/n8n-inbound", "/api/dedupe", "/api/sweep-ingest", "/api/health"];
 
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;

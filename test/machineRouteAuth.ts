@@ -27,7 +27,7 @@
 //
 // Run: npx tsx test/machineRouteAuth.ts
 // ============================================================================
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync, existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { decideMachineCall } from "../app/lib/apiAuth";
@@ -97,7 +97,25 @@ console.log("\n[5] the fail-open shape is gone from every route, and stays gone"
    * were written. So this reads the route files.
    */
   const HERE = dirname(fileURLToPath(import.meta.url));
-  const ROUTES = ["n8n-inbound", "dedupe", "sweep-ingest"];
+  const ROOT = join(HERE, "..");
+
+  /**
+   * READ OFF middleware.ts, NOT LISTED HERE.
+   *
+   * This was a hand-written list of three, and the fourth skipped route -- /api/health --
+   * was added without it. A list that must be edited by hand to stay complete will not stay
+   * complete, and the cost of it being incomplete is a route that the middleware no longer
+   * guards and nothing else checks. Adding a path to SKIP now adds it here.
+   *
+   * /api/auth is excluded on purpose: it is the SESSION path, the one skipped route with no
+   * machine caller and nothing to check a secret against.
+   */
+  const mw = readFileSync(join(ROOT, "middleware.ts"), "utf8");
+  const skipLine = /const SKIP\s*=\s*\[([^\]]*)\]/.exec(mw)?.[1] ?? "";
+  const ROUTES = [...skipLine.matchAll(/"\/api\/([^"]+)"/g)]
+    .map((m) => m[1])
+    .filter((r) => r !== "auth");
+  ok(ROUTES.length >= 4, `every skipped machine route is checked (${ROUTES.length} found)`, ROUTES.join(", "));
   /**
    * Comments are stripped first. Without that, this file failed on all three routes the
    * moment each one grew a comment SAYING what the removed branch used to be — a guard
@@ -107,12 +125,22 @@ console.log("\n[5] the fail-open shape is gone from every route, and stays gone"
   const codeOnly = (s: string) =>
     s.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:])\/\/.*$/gm, "$1");
   for (const r of ROUTES) {
-    const src = codeOnly(readFileSync(join(HERE, "..", "app", "api", r, "route.ts"), "utf8"));
+    // A skip entry may name a DIRECTORY of routes (/api/health) rather than one route, so
+    // the file is looked for under it. Every route below a skipped prefix is unguarded by
+    // the middleware, so every one of them has to carry its own check.
+    const dir = join(ROOT, "app", "api", ...r.split("/"));
+    const files = existsSync(join(dir, "route.ts"))
+      ? [join(dir, "route.ts")]
+      : readdirSync(dir).map((d) => join(dir, d, "route.ts")).filter((f) => existsSync(f));
+    ok(files.length > 0, `${r}: has at least one route file`);
+    for (const f of files) {
+    const src = codeOnly(readFileSync(f, "utf8"));
     // `if (!secret) return true` and `if (secret && ...)` — both mean "no secret, no gate".
     const failsOpen = /!secret\s*\)\s*return\s+true/.test(src) || /if\s*\(\s*secret\s*&&/.test(src);
     ok(!failsOpen, `${r}: no "unconfigured means allowed" branch`);
     const usesTheRule = /decideMachineCall|authorizeMachineCall/.test(src);
     ok(usesTheRule, `${r}: defers to the shared rule rather than re-deciding`);
+    }
   }
 }
 
