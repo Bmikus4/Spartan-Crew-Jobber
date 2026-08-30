@@ -46,6 +46,7 @@ const STATUS = argv.includes("--status");
 const PRINT = argv.includes("--print");
 
 const WF_NAME = "Spartan Intake Watchdog";
+const SECRET = (process.env.N8N_WEBHOOK_SECRET || "").trim();
 const APP = (process.env.SPARTAN_APP_URL || "https://spartan-crew-jobber.vercel.app").replace(/\/$/, "");
 const TO = process.env.ERROR_ALERT_TO || "ben@samuraisolutions.co.uk, samuraisolutionsofficial@gmail.com";
 
@@ -73,7 +74,11 @@ const nodes = [
       url: `${APP}/api/health/intake`,
       options: { response: { response: { fullResponse: true, neverError: true } }, timeout: 20000 },
       sendHeaders: true,
-      headerParameters: { parameters: [{ name: "x-webhook-secret", value: "={{ $env.SPARTAN_WEBHOOK_SECRET }}" }] },
+      // The secret is INLINED at install time from this machine's environment, not written
+      // into this file. n8n Cloud on this plan gives workflows no $env, so the tag workflow
+      // already holds its copy literally; a second convention would be a second thing to get
+      // wrong. It lives in n8n and in Vercel -- never in git.
+      headerParameters: { parameters: [{ name: "x-webhook-secret", value: SECRET }] },
     },
   },
   {
@@ -159,8 +164,17 @@ const settings = { executionOrder: "v1" };
 const body = { name: WF_NAME, nodes, connections, settings };
 
 if (PRINT) {
-  console.log(JSON.stringify(body, null, 2));
+  // Never print the secret, even in a dry run that goes nowhere.
+  console.log(JSON.stringify(body, null, 2).replace(SECRET || " ", "<secret>"));
   process.exit(0);
+}
+
+if (!SECRET) {
+  console.error(
+    "MISSING ENV: N8N_WEBHOOK_SECRET -- without it every check would 401 and the watchdog " +
+    "would report an outage that is only its own lockout."
+  );
+  process.exit(2);
 }
 
 const BASE = requireEnv("N8N_BASE").replace(/\/$/, "").replace(/\/api\/v1$/, "");
@@ -204,5 +218,5 @@ if (ACTIVATE) {
 }
 
 console.log(`\nasks GET ${APP}/api/health/intake every 15 minutes`);
-console.log("n8n needs SPARTAN_WEBHOOK_SECRET set to the engine's N8N_WEBHOOK_SECRET, or every check 401s");
+console.log("the engine's N8N_WEBHOOK_SECRET was inlined into the request header at install time");
 console.log(`alerts to: ${TO}`);
