@@ -175,6 +175,16 @@ export interface PlaceCandidate {
 export interface ConversationState {
   thread_id: string;                 // PK
   subject: string;
+  /**
+   * The counterparty's address and organisational domain, recorded separately.
+   *
+   * The domain is the key cross-thread dedup gates on, because the same client
+   * writes from more than one mailbox. It is null for a consumer mailbox and for
+   * a thread carrying no client message - see identity.ts - and in that case the
+   * address is the only key available.
+   */
+  sender_email?: string | null;
+  sender_domain?: string | null;
   participants: string[];
   last_message_id: string;
   last_processed_epoch: number;
@@ -262,6 +272,19 @@ export interface ConversationState {
    * taking the tag off is a human saying they have dealt with it.
    */
   manual_flagged?: boolean;
+  /**
+   * The thread currently wears the "Order Built" tag in Gmail, because a booking
+   * exists in OnSinch for this conversation (Ben, 2026-08-29).
+   *
+   * Held for the same reason as `manual_flagged` and nothing more: a thread is re-read
+   * on every new message, so without this the tag would be re-posted on every reply.
+   * It records what was SENT, not what Gmail holds — a human who takes the label off
+   * has taken it off.
+   *
+   * Independent of `manual_flagged` on purpose. "Order Built" says a booking exists;
+   * "Manual" says somebody must act. A job booked on an assumed rate card is both.
+   */
+  built_flagged?: boolean;
   // an order the engine WANTS to write but is holding for human confirm
   // (always set in draft-only mode; this is the dashboard confirm queue).
   pending_order?: {

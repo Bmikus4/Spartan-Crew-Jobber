@@ -15,6 +15,7 @@ import { guardReasoner } from "./engine/spend";
 import { tieredReasoner } from "./engine/tiered";
 import { logKeyBalanceOnce } from "./engine/keyBalance";
 import { buildOrderBody, buildSlotTeamBody } from "./engine/format";
+import { recordOrder, buildOrderRecord } from "./orderRecordsDb";
 import { replaceProvisionalOrder } from "./engine/replaceOrder";
 import { amendOrderInPlace } from "./engine/amendOrder";
 import type { DesiredOrder, DesiredSlotTeam } from "./engine/types";
@@ -37,6 +38,38 @@ async function readOrderIdentifiers(
     throw new Error(`order #${order_id} was created but its job id could not be read back — cannot post crew blocks`);
   }
   return { job_id, order_number: o?.number ? String(o.number) : undefined };
+}
+
+/**
+ * Post one Gmail label change to the n8n tag workflow.
+ *
+ * Shared by every tag, because the workflow takes the label from the payload and
+ * creates it in the mailbox if it has never seen it — so adding a tag is adding a
+ * string here, never a change to the live n8n.
+ *
+ * NO WEBHOOK MEANS NO TAG, SILENTLY, AND THAT IS THE RIGHT DEFAULT: a preview
+ * deployment and a local run have no business writing labels into the live bookings
+ * mailbox, and a tag is an alert rather than part of the booking.
+ *
+ * A 200 WITH AN EMPTY BODY IS A FAILURE. n8n answers 200 when the workflow throws,
+ * which is exactly what a rejected secret produces. Throwing lets the caller leave its
+ * marker unset so the next email retries, instead of recording a tag never applied.
+ */
+async function postTag(body: Record<string, unknown>): Promise<void> {
+  const hook = process.env.MANUAL_TAG_WEBHOOK;
+  if (!hook) return;
+  const res = await fetch(hook, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      "x-webhook-secret": process.env.N8N_WEBHOOK_SECRET ?? "",
+    },
+    body: JSON.stringify(body),
+  });
+  const j = (await res.json().catch(() => ({}))) as { ok?: unknown };
+  if (!res.ok || j.ok !== true) {
+    throw new Error(`${String(body.label)} tag webhook did not confirm (HTTP ${res.status}) ${JSON.stringify(j).slice(0, 160)}`);
+  }
 }
 
 /**
@@ -65,7 +98,8 @@ async function readOrderIdentifiers(
 export async function createOrderWithPlace(
   client: OnsinchClient,
   order: DesiredOrder,
-  remember?: (a: { kind: "company" | "place"; alias_norm: string; entity_id: number; source: "exact"; raw_example?: string }) => Promise<void>
+  remember?: (a: { kind: "company" | "place"; alias_norm: string; entity_id: number; source: "exact"; raw_example?: string }) => Promise<void>,
+  context?: { thread_id: string; sender_email: string | null; sender_domain: string | null }
 ) {
   const o = { ...order };
 
@@ -131,6 +165,23 @@ export async function createOrderWithPlace(
    */
   const created = await client.createOrder(buildOrderBody(o));
   const ids = await readOrderIdentifiers(client, created.id);
+
+  // Same fail-open contract as the alias writes above: this row is a record of
+  // what happened, not a condition of it, so it never blocks or fails the booking.
+  if (context) {
+    const rec = buildOrderRecord({
+      order_id: created.id,
+      thread_id: context.thread_id,
+      job_id: ids.job_id,
+      order_number: created.number ?? ids.order_number ?? null,
+      sender_email: context.sender_email,
+      sender_domain: context.sender_domain,
+      place_id: o.slot_teams[0]?.place_id ?? null,
+      shape_sent: o,
+    });
+    await recordOrder(rec).catch((err: unknown) => console.error("[order-records] record failed", err));
+  }
+
   return { id: created.id, number: created.number ?? ids.order_number, job_id: ids.job_id, team_ids: [] };
 }
 import { archiveOrder, recordReplacement } from "./orderArchiveDb";
@@ -480,26 +531,19 @@ export async function buildDeps(): Promise<PipelineDeps> {
      * on the board with its reason either way.
      */
     async flagForManual(a) {
-      const hook = process.env.MANUAL_TAG_WEBHOOK;
-      if (!hook) return;
-      const res = await fetch(hook, {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-          "x-webhook-secret": process.env.N8N_WEBHOOK_SECRET ?? "",
-        },
-        body: JSON.stringify({ label: "Manual", ...a }),
-      });
-      /**
-       * A 200 WITH AN EMPTY BODY IS A FAILURE HERE, for the reason recorded on the draft
-       * webhook: n8n answers 200 when the workflow throws, which is exactly what a
-       * rejected secret produces. Throwing lets the caller leave `manual_flagged` unset
-       * so the next email retries, instead of recording a tag that was never applied.
-       */
-      const j = (await res.json().catch(() => ({}))) as { ok?: unknown };
-      if (!res.ok || j.ok !== true) {
-        throw new Error(`manual-tag webhook did not confirm (HTTP ${res.status}) ${JSON.stringify(j).slice(0, 160)}`);
-      }
+      return postTag({ label: "Manual", ...a });
+    },
+    /**
+     * A booking exists for this thread, tagged "Order Built" in the same mailbox.
+     *
+     * Ben, 2026-08-29. It goes through the SAME n8n workflow as the Manual tag and
+     * needed no change there: that workflow reads the label out of the payload
+     * (`label: b.label || 'Manual'`) and creates it in the mailbox if it has never seen
+     * it. So a new tag is a new string, not a new workflow — which is the whole point,
+     * because editing the live n8n is the recurring way this system breaks.
+     */
+    async flagOrderBuilt(a) {
+      return postTag(a);
     },
     senderVerdict,
     recordSender,

@@ -139,20 +139,30 @@ export function predictTeams(blocks: SimBlock[], placeOf: (venue?: string) => nu
     // The hand-labelled answer wins outright where the case carries one.
     const profession_id = b.expect_profession ?? (dayRate ? DAY_TWIN[p.id] ?? p.id : p.id);
     const place = placeOf(b.venue);
+    /**
+     * The date the engine will SETTLE on, not the one the model reported.
+     *
+     * A case carrying `expectDate` is a case whose point is that the engine corrects the
+     * year — the next-occurrence rule moving a date the model guessed out of a year
+     * already gone. Predicting from the raw `date` would score that correction as a
+     * disagreement, which is how a rig ends up arguing against the behaviour it exists
+     * to protect.
+     */
+    const day = b.expectDate ?? b.date;
     return {
-      key: `${b.date ?? ""}|${start}|${end}|${place}|${profession_id}`,
-      site: `${b.date ?? ""}|${start}|${end}|${place}`,
+      key: `${day ?? ""}|${start}|${end}|${place}|${profession_id}`,
+      site: `${day ?? ""}|${start}|${end}|${place}`,
       profession_family: p.family + (PLANT_FAMILIES.has(p.family) ? (dayRate ? ":day" : ":hr") : ""),
       profession_id,
       family: p.family,
       size: b.size as number,
-      beginning: b.date ? `${b.date}T${start}:00+00:00` : "",
+      beginning: day ? `${day}T${start}:00+00:00` : "",
       // A finish at or before the start is tomorrow's finish. Stated as the RULE
       // rather than borrowed from compose, which is the point of an oracle — the
       // two are meant to be able to disagree. They did, for every overnight shift
       // this engine ever composed, and OnSinch refused all of them.
-      end: b.date ? `${endDay(b.date, start, end)}T${end}:00+00:00` : "",
-      tbc: !b.date,
+      end: day ? `${endDay(day, start, end)}T${end}:00+00:00` : "",
+      tbc: !day,
     };
   });
 
@@ -290,6 +300,26 @@ export function checkInvariants(
   const push = (rule: string, detail: string) => v.push({ rule, detail });
   const o = state.desired_order;
   const teams: DesiredSlotTeam[] = o?.slot_teams ?? [];
+
+  /**
+   * THE DATE THE CLIENT MEANT, not the one the model guessed.
+   *
+   * Checked here rather than through the oracle's outcome prediction, because the whole
+   * point of these cases is that the engine CHANGES a date — and a changed date read as
+   * an outcome would look like a disagreement instead of the correction it is.
+   *
+   * Only cases that set `expectDate` are checked, so this is silent for the rest.
+   */
+  for (const b of c.blocks) {
+    if (!b.expectDate) continue;
+    const day = b.expectDate;
+    const got = teams.map((t) => String(t.beginning ?? "").slice(0, 10));
+    if (!got.length) {
+      push("date-reconciled", `expected a block on ${day}, but nothing was composed`);
+    } else if (!got.includes(day)) {
+      push("date-reconciled", `expected a block on ${day}, composed ${got.join(", ")}`);
+    }
+  }
 
   if (o) {
     // I1 — a rate card is never absent or zero. OnSinch assigns card 245 silently.

@@ -159,6 +159,22 @@ export interface PipelineDeps extends CompileDeps {
    * slower, not dangerous. Silently failing to BOOK would be dangerous — this is not
    * that.
    */
+  /**
+   * A BOOKING EXISTS FOR THIS THREAD, marked in the mailbox ops work from.
+   *
+   * Posts to the same n8n tag workflow as `flagForManual` — that workflow takes the
+   * label from the payload and creates it if the mailbox has never seen it — so this
+   * needed no change on the n8n side at all.
+   */
+  flagOrderBuilt?: (a: {
+    label: string;
+    thread_id: string;
+    state: "built" | "cleared";
+    reason: string;
+    status: string;
+    subject?: string;
+    order_id?: number;
+  }) => Promise<void>;
   flagForManual?: (a: {
     thread_id: string;
     state: "manual" | "cleared";
@@ -426,6 +442,7 @@ export async function handleThread(
 
   await store.put(next);
   await flagManualIfNeeded(next, deps);
+  await flagBuiltIfNeeded(next, deps);
   return next;
 }
 
@@ -479,6 +496,51 @@ export function cannotBeBooked(s: ConversationState): boolean {
  * the record of what the engine decided. The flag is written back on success only — a
  * failed post leaves `manual_flagged` untouched, so the next email retries it.
  */
+/**
+ * "ORDER BUILT" — the thread says a booking exists.
+ *
+ * Ben, 2026-08-29. The mirror of the Manual tag and deliberately independent of it:
+ * "Order Built" answers "is there an order for this conversation", "Manual" answers
+ * "does somebody have to do something". A job booked on an assumed rate card is both,
+ * and letting either suppress the other would hide whichever ops needed that day.
+ *
+ * It CLEARS when the order stops existing. Order 15572 is why: the client asked for a
+ * change, the engine went to amend, and the order had been deleted in OnSinch by
+ * someone else. A thread still wearing this tag would tell ops a booking exists when
+ * none does, which is the one thing this tag must never say.
+ *
+ * No n8n change was needed to add it. The tag workflow already reads the label from the
+ * payload and finds-or-creates it by name, so a new label is a new string rather than a
+ * new workflow — and editing the live n8n is the recurring way this system breaks.
+ */
+export async function flagBuiltIfNeeded(next: ConversationState, deps: PipelineDeps): Promise<void> {
+  if (!deps.flagOrderBuilt) return;
+  const should = Number.isInteger(Number(next.onsinch_order_id)) && Number(next.onsinch_order_id) > 0;
+  const already = next.built_flagged === true;
+  if (should === already) return; // no transition, nothing to say
+
+  try {
+    await deps.flagOrderBuilt({
+      label: "Order Built",
+      thread_id: next.thread_id,
+      state: should ? "built" : "cleared",
+      reason: should
+        ? `booked as order ${next.onsinch_order_number ? `R${next.onsinch_order_number}` : `#${next.onsinch_order_id}`}`
+        : "the order this thread had no longer exists in OnSinch",
+      status: next.status,
+      subject: next.subject,
+      ...(next.onsinch_order_id ? { order_id: next.onsinch_order_id } : {}),
+    });
+    next.built_flagged = should;
+    await deps.store.put(next);
+  } catch (err) {
+    // Same posture as the Manual tag: the booking is already made and recorded. An
+    // untagged thread is slower for ops; a lost booking would be dangerous, and a
+    // marker set for a tag that never landed would stop it ever being retried.
+    console.error("[order-built-tag] flag failed", err);
+  }
+}
+
 export async function flagManualIfNeeded(next: ConversationState, deps: PipelineDeps): Promise<void> {
   if (!deps.flagForManual) return;
   const should = cannotBeBooked(next);

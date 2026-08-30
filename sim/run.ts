@@ -224,13 +224,47 @@ async function runCase(c: SimCase, professions: ReturnType<typeof loadProfession
   };
 }
 
+/** The same case a number of whole weeks later — ids suffixed so results stay distinct. */
+function shiftWeeks(c: SimCase, weeks: number): SimCase {
+  const move = (iso?: string) =>
+    iso ? new Date(Date.parse(`${iso}T00:00:00Z`) + weeks * 7 * 86400000).toISOString().slice(0, 10) : iso;
+  return {
+    ...c,
+    id: `${c.id}#w${weeks}`,
+    blocks: c.blocks.map((b) => ({ ...b, date: move(b.date), expectDate: move(b.expectDate) })),
+    ...(c.amend ? { amend: { ...c.amend, blocks: c.amend.blocks.map((b) => ({ ...b, date: move(b.date), expectDate: move(b.expectDate) })) } } : {}),
+  };
+}
+
 (async () => {
   const professions = loadProfessions();
   const places = loadPlaces();
   console.log(`tenant fixtures: ${professions.length} professions, ${places.length} places`);
 
   const results: CaseResult[] = [];
-  for (const c of SCENARIOS) {
+  /**
+   * `--n=<N>` runs more than the designed set, by REPEATING it with the calendar moved
+   * forward a week at a time. Volume is not the same as coverage: the 104 cells are
+   * where the answers change, and a thousand random enquiries would be a thousand draws
+   * from the middle. What a larger run buys is repetition under different dates —
+   * weekday drift, month boundaries, a shift that crosses into the next month — on the
+   * same stratified set.
+   *
+   * Cases whose date is written as literal prose (`textDate`) are NOT repeated: their
+   * words say a specific day, and shifting the ISO underneath them would make the text
+   * and the expectation disagree, which is the very bug the L cases exist to catch.
+   */
+  const want = Number((process.argv.find((a) => a.startsWith("--n=")) ?? "").slice(4)) || SCENARIOS.length;
+  const shiftable = SCENARIOS.filter((c) => !c.blocks.some((b) => b.textDate));
+  const plan: SimCase[] = [...SCENARIOS];
+  for (let week = 1; plan.length < want; week++) {
+    for (const c of shiftable) {
+      if (plan.length >= want) break;
+      plan.push(shiftWeeks(c, week));
+    }
+  }
+
+  for (const c of plan) {
     try {
       results.push(await runCase(c, professions, places));
     } catch (err) {
@@ -248,6 +282,10 @@ async function runCase(c: SimCase, professions: ReturnType<typeof loadProfession
   }
 
   const agree = results.filter((r) => r.agrees).length;
+  // Reported beside outcome agreement, never folded into it. A case can reach the right
+  // outcome for the wrong reason, and a headline that prints only the outcome hides it —
+  // which is how this rig reported 100/100 while one case disagreed on why.
+  const reasonAgree = results.filter((r) => r.reason_agrees).length;
   const clean = results.filter((r) => r.violations.length === 0).length;
   const wrote = results.filter((r) => r.order_id !== undefined).length;
   const held = results.filter((r) => r.held).length;
@@ -259,12 +297,13 @@ async function runCase(c: SimCase, professions: ReturnType<typeof loadProfession
     cases: results.length,
     professions: professions.length,
     places: places.length,
-    summary: { agree, clean, wrote, held, idempotent: idem },
+    summary: { agree, reasonAgree, clean, wrote, held, idempotent: idem },
     results,
   }, null, 2));
 
   console.log(`\n  cases            ${results.length}`);
-  console.log(`  rule agreement   ${agree}/${results.length}`);
+  console.log(`  outcome agreement ${agree}/${results.length}`);
+  console.log(`  reason agreement  ${reasonAgree}/${results.length}`);
   console.log(`  invariant-clean  ${clean}/${results.length}`);
   console.log(`  idempotent       ${idem}/${results.length}`);
   console.log(`  wrote an order   ${wrote}`);

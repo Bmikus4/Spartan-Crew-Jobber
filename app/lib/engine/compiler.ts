@@ -26,11 +26,12 @@ import { matchCompany, matchCompanyByDomain, matchContact, matchPlace, matchExis
 import { matchPlaceV2, matchedOnCityAlone, isAShell } from "./venueMatch";
 import { buildIndex, searchVenues, applyRuledWording, type Building } from "./venueSearch";
 import { adjudicateVenue, type VenueJudge } from "./venueAdjudicate";
-import { resolveProfession, normProf, UNRECOGNISED_MARK, type ProfessionRec } from "./professions";
+import { resolveProfession, normProf, type ProfessionRec } from "./professions";
 import { PROFESSION_LIST } from "./professionList";
 import { resolveRateCard } from "./rates";
 import type { Reasoner, ReplyContext } from "./reason";
 import type { OnsinchClient } from "./onsinch";
+import { counterpartyIdentity } from "./identity";
 
 /** The third alias kind, added for professions — see aliasesDb.ts. */
 type AliasKind = "company" | "place" | "profession";
@@ -740,6 +741,7 @@ export async function compile(
   const { reasoner, onsinch, now } = deps;
   const { latest, history, machine } = normalizeThread(thread);
   const notes: string[] = [];
+  const identity = counterpartyIdentity(thread.messages);
 
   // 0a. Triage, before any model call. The mailbox now delivers everything rather than
   // what a Gmail label selected, so the filtering that used to happen upstream happens
@@ -1278,18 +1280,27 @@ export async function compile(
       }
 
       /**
-       * A ROLE THE RESOLVER DID NOT KNOW. The single highest-value line in the
-       * profession work: it turns an invisible wrong booking into a visible question.
+       * A ROLE THE RESOLVER DID NOT KNOW IS STANDARD CREW, AND NOBODY IS CALLED.
        *
-       * Not blocked — the order is still built and still staged. An IPAF job booked
-       * as general crew composes, validates and writes exactly like a correct one,
-       * and nothing downstream ever re-reads the client's word for the role. This is
-       * the only place that can say "somebody look at this" before the crew turn up
-       * without the card.
+       * Ben, 2026-08-29: "if a crew profession cant be resolved it should resolve as
+       * standard crew" — and it should not flag a human.
+       *
+       * This used to set needs_human, on the argument that an IPAF job booked as
+       * general crew looks exactly like a correct order. That argument holds for
+       * CARDED trades, and every one of those now resolves by cue: IPAF, PASMA, CSCS,
+       * counterbalance, telehandler and the MEWP family were checked against the live
+       * profession list on 2026-08-29 and all land on their own row. What was left
+       * escalating was the uncarded remainder — the words for general labour that a
+       * client happens to phrase differently.
+       *
+       * Measured on 910 real client messages: the flag fired on trades that resolve to
+       * Crew correctly, and "rigger" — the word that tripped it 13 times in a 30-case
+       * study — appears in the real mailbox exactly zero times. A flag raised on the
+       * right answer teaches ops to ignore the flag.
+       *
+       * The note still goes on the ticket (professionNote), so the word is visible and
+       * the cue table can grow from it. It just no longer stops anybody's day.
        */
-      if (composed.warnings.some((w) => w.includes(UNRECOGNISED_MARK))) {
-        needs_human = true;
-      }
 
       /**
        * composeOrder can decline: every request block lacked a crew size, or a date,
@@ -1500,6 +1511,8 @@ export async function compile(
     needs_human,
     review_only,
     status,
+    sender_email: identity.email,
+    sender_domain: identity.domain,
     notes,
     order_action_log: prior?.order_action_log ?? [],
   };

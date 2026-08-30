@@ -242,6 +242,13 @@ export function parseDatesDetailed(text: string, reference: Date): ParsedDate[] 
   const refYear = reference.getUTCFullYear();
   const add = (y: number, mo: number, d: number, yearStated: boolean) => {
     if (mo < 1 || mo > 12 || d < 1 || d > 31) return;
+    // The `,?` tolerance below lets a year-shaped 4-digit number ride in after a
+    // comma or a month name - and this mailbox is full of those that are not years:
+    // "12 October, 1000 guests", "5 June, 2500 pax", "3 May, 2000 sqm". A capture
+    // outside a plausible calendar range is not a stated year; fall back to no year
+    // stated so the date still resolves via next-occurrence instead of being
+    // pinned to a bogus year or losing the roll.
+    if (yearStated && (y < 2000 || y > 2100)) yearStated = false;
     let iso: string | null;
     if (yearStated) {
       iso = `${y}-${String(mo).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
@@ -291,12 +298,18 @@ export function parseDatesDetailed(text: string, reference: Date): ParsedDate[] 
   }
 
   // "12 September", "12th Sept 2026", "Sat 12 Sep"
-  for (const m of text.matchAll(/\b(\d{1,2})(?:st|nd|rd|th)?\s+(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s*(\d{4})?/gi)) {
+  //
+  // The year may trail a comma — "October 12, 2027" — which is not whitespace, so
+  // without the optional `,?` the year is never captured and the date is treated
+  // as bare even though the client wrote it. That silent miss, not just the set
+  // arithmetic in bareMonthDays, is what let order 15611's dated summary line
+  // lose its year.
+  for (const m of text.matchAll(/\b(\d{1,2})(?:st|nd|rd|th)?\s+(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?,?\s*(\d{4})?/gi)) {
     if (!free(m)) continue;
     add(m[3] ? +m[3] : refYear, MONTHS[m[2].toLowerCase()], +m[1], !!m[3]);
   }
   // "September 12", "Sept 12th 2026"
-  for (const m of text.matchAll(/\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s+(\d{1,2})(?:st|nd|rd|th)?\s*(\d{4})?/gi)) {
+  for (const m of text.matchAll(/\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s+(\d{1,2})(?:st|nd|rd|th)?,?\s*(\d{4})?/gi)) {
     if (!free(m)) continue;
     add(m[3] ? +m[3] : refYear, MONTHS[m[1].toLowerCase()], +m[2], !!m[3]);
   }
@@ -317,11 +330,26 @@ export function parseDates(text: string, reference: Date): string[] {
  * whoever inferred it, and is subject to the next-occurrence rule.
  */
 export function bareMonthDays(text: string, reference: Date): Set<string> {
-  const out = new Set<string>();
+  const bare = new Set<string>();
+  const stated = new Set<string>();
   for (const d of parseDatesDetailed(text, reference)) {
-    if (!d.yearStated) out.add(d.iso.slice(5));
+    (d.yearStated ? stated : bare).add(d.iso.slice(5));
   }
-  return out;
+  /**
+   * A MONTH-DAY WRITTEN WITH A YEAR ANYWHERE IS NOT BARE, WHEREVER ELSE IT APPEARS.
+   *
+   * Without this subtraction the set is per-OCCURRENCE, and a structured enquiry
+   * states its dates twice: once in a summary line carrying the year, once in a
+   * load-in or load-out sentence without it. The unyeared mention won, so the
+   * next-occurrence rule overruled a year the client had written down - live on
+   * order 15611, where "October 12, 2027" plus "07:00 AM on October 12th" booked
+   * 2026, six weeks out, for a job that is a year later.
+   *
+   * The guarantee this restores is the one stated at the roll site: a client who
+   * writes the year keeps it, in the past or not.
+   */
+  for (const md of stated) bare.delete(md);
+  return bare;
 }
 
 // ---------------------------------------------------------------------------

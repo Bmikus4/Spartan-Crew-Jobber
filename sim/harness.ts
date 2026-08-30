@@ -91,15 +91,55 @@ const timeWords = (b: SimBlock): string => {
  * engine's 08:00 default is never reached. The body and the facts are two views of
  * one declaration, never two sources.
  */
+const MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+
+/**
+ * A DATE THE WAY A CLIENT WRITES IT, NOT THE WAY A DATABASE DOES.
+ *
+ * This used to emit the raw ISO string — "on 2026-09-12". No client has ever written
+ * that, and it made the simulator blind to the entire date layer: an ISO date always
+ * carries its year, so `yearStated` was true on every case, `bareMonthDays` returned
+ * empty, and the next-occurrence roll fired on 0 of 100 runs. The rule that put 26 crew
+ * a year early on a live booking (order 15611) could not be reached by this rig at all.
+ *
+ * The phrasings below are the ones the real mailbox uses, and they are chosen per case
+ * so the mix is deterministic and reproducible rather than random. Style 4 is the exact
+ * shape that broke live: a summary line carrying the year, plus the same date written
+ * bare elsewhere in the message, which is what made the engine overrule a stated year.
+ */
+export function sayDate(iso: string, seed: string, index: number): string {
+  const [y, m, d] = iso.split("-").map(Number);
+  if (!y || !m || !d) return iso;
+  const month = MONTHS[m - 1];
+  let h = index;
+  for (const ch of seed) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+  switch (h % 5) {
+    case 0: return `${d} ${month} ${y}`;              // year stated outright
+    case 1: return `${d} ${month}`;                   // bare — the roll must decide
+    case 2: return `${d}${ordinal(d)} ${month.slice(0, 3)}`; // bare, abbreviated
+    case 3: return `${String(d).padStart(2, "0")}/${String(m).padStart(2, "0")}/${y}`;
+    default: return `${month} ${d}, ${y}`;            // comma before the year
+  }
+}
+
+function ordinal(d: number): string {
+  if (d > 3 && d < 21) return "th";
+  return ["th", "st", "nd", "rd"][d % 10] ?? "th";
+}
+
 export function bodyFor(c: SimCase, blocks: SimBlock[], kind: "new" | "amend"): string {
   if (c.classification === "not-a-job") return "Morning — just chasing the invoice for last month, nothing else needed. Cheers.";
   if (c.classification === "confirmation-only") return "Perfect, thanks for that.";
   const lead = kind === "new"
     ? `Hi, we'd like to book crew for an upcoming job.`
     : `Following up on the below — please update the booking.`;
-  const lines = blocks.map((b) => {
+  const lines = blocks.map((b, i) => {
     const who = b.prof ? `${b.size ?? "some"} x ${b.prof}` : `${b.size ?? "some"} crew`;
-    const when = b.date ? ` on ${b.date}` : ` (date still TBC)`;
+    // `textDate` is the client's own words where the case sets them deliberately
+    // different from what the model reports — see SimBlock.textDate.
+    const when = b.textDate
+      ? ` on ${b.textDate}`
+      : b.date ? ` on ${sayDate(b.date, c.id, i)}` : ` (date still TBC)`;
     const where = b.venue ? ` at ${b.venue}` : "";
     const what = b.task ? ` — ${b.task}` : "";
     return `- ${who}${when}${timeWords(b)}${where}${what}`;
