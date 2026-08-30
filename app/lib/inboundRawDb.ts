@@ -122,3 +122,27 @@ export async function captureInboundRaw(payload: unknown, source = "n8n"): Promi
     return { ok: false, captured: false, dedup_key, thread_id, message_id, messages_stored: 0 };
   }
 }
+
+/**
+ * When anything last arrived, in epoch ms, or null if nothing ever has.
+ *
+ * The engine-side half of the intake watchdog (app/lib/intakeHealth.ts). Deliberately the
+ * cheapest possible question — MAX over an indexed column, no join, no payload — because it is
+ * asked on a schedule forever and must never be a reason the intake is slow.
+ *
+ * A missing connection string returns null, which the caller reads as "never". That is the
+ * right direction: a health check that cannot see the database has not proved health.
+ */
+export async function lastInboundAt(): Promise<number | null> {
+  const sql = db();
+  if (!sql) return null;
+  try {
+    await ensure(sql);
+    const rows = (await sql`SELECT MAX(received_at) AS last FROM inbound_raw`) as { last: string | Date | null }[];
+    const last = rows[0]?.last;
+    return last ? new Date(last).getTime() : null;
+  } catch (err) {
+    console.error("[inbound_raw] last-received read failed", err);
+    return null;
+  }
+}

@@ -16,6 +16,7 @@ import { buildDeps } from "../../lib/deps";
 import { captureInboundRaw } from "../../lib/inboundRawDb";
 import { replyDeliveryForWire } from "../../lib/settingsDb";
 import { upsertTicketFromState } from "../../lib/ticketsDb";
+import { reportError } from "../../lib/errorReport";
 
 function unauthorized(): Response {
   return Response.json({ ok: false, error: "unauthorized" }, { status: 401 });
@@ -77,6 +78,16 @@ export async function POST(request: Request): Promise<Response> {
       notes: state.notes,
     });
   } catch (err) {
+    // ROUTE 3, "the engine threw". Anything escaping handleThread lands here, and until now
+    // it went to Vercel's logs and nowhere else. This is the outermost catch on the only path
+    // the engine runs on, so it is the last chance to tell anyone.
+    void reportError({
+      route: "engine-threw",
+      where: "api/n8n-inbound",
+      what: String((err as Error)?.message ?? err),
+      detail: `thread ${thread.thread_id}
+${String((err as Error)?.stack ?? "").slice(0, 1200)}`,
+    });
     console.error("[n8n-inbound] pipeline failed", err);
     return Response.json({ ok: false, error: String((err as Error)?.message ?? err) }, { status: 500 });
   }

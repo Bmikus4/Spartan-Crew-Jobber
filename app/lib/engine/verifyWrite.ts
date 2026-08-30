@@ -48,3 +48,31 @@ export function verifyCreate(
   }
   return { verified: true };
 }
+
+/**
+ * Route 2 of the error reporter — "a write we cannot confirm" — READY AND INERT.
+ *
+ * verifyCreate compares a create against OnSinch's own audit row. It is tested, and it is
+ * wired to nothing: the only place that could call it is Executor.createOrder, which takes a
+ * DesiredOrder carrying no thread id, and widening that interface belongs to the amendment
+ * plan rather than to error reporting. So the route exists, has one call site, and that call
+ * site has no caller yet.
+ *
+ * Left here rather than left out, because the alternative is a fourth route that gets written
+ * from scratch later by someone who has not read why the other three look the way they do.
+ * DO NOT wire this until the create path can pass a thread id — a verdict with no thread to
+ * name is an email the reader cannot act on.
+ */
+export function reportUnverifiedCreate(
+  verdict: CreateVerdict,
+  ctx: { order_id: number; thread_id?: string },
+  report: typeof import("../errorReport").reportError
+): void {
+  if (verdict.verified) return;
+  void report({
+    route: "write-unconfirmed",
+    where: "engine/verifyCreate",
+    what: verdict.reason ?? "the create could not be confirmed",
+    detail: `order #${ctx.order_id}${ctx.thread_id ? `, thread ${ctx.thread_id}` : ""}`,
+  });
+}

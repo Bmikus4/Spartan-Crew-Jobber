@@ -11,6 +11,7 @@ import type { MetricSink } from "./metrics";
 import type { Actions, ConversationState, DesiredOrder, DesiredSlotTeam, HydratedThread, Settings } from "./types";
 import { findCrossThreadMatches, crossThreadDraft, type ThreadShape, type InternalDraft } from "./crossThread";
 import { assessAmendment } from "./amendment";
+import { reportError } from "../errorReport";
 import type { AmendResult } from "./amendOrder";
 
 /**
@@ -216,8 +217,23 @@ export async function handleThread(
 ): Promise<ConversationState> {
   const { store, metrics, executor, settings, now, hashOrder } = deps;
   const tid = thread.thread_id;
-  const emit = (type: any, meta?: Record<string, unknown>) =>
-    metrics.emit({ ts: now(), thread_id: tid, type, meta });
+  const emit = (type: any, meta?: Record<string, unknown>) => {
+    // ROUTE 1, "a booking was lost", hooked HERE rather than at each failure branch.
+    // Every path in this file that gives up on writing an order ends in emit("order_error")
+    // — there are five of them and more will be added — so reporting at the one shared exit
+    // means a new branch reports itself without anyone remembering to add a line. The same
+    // reasoning made test/all.ts discover its files instead of listing them: a list that has
+    // to be edited by hand to stay complete will not stay complete.
+    if (type === "order_error") {
+      void reportError({
+        route: "booking-lost",
+        where: "pipeline/order_error",
+        what: String(meta?.error ?? "the order could not be written"),
+        detail: `thread ${tid}${meta?.order_id ? `, order #${meta.order_id}` : ""}`,
+      });
+    }
+    return metrics.emit({ ts: now(), thread_id: tid, type, meta });
+  };
 
   const prior = await store.get(tid);
 

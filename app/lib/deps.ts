@@ -20,6 +20,7 @@ import { replaceProvisionalOrder } from "./engine/replaceOrder";
 import { amendOrderInPlace } from "./engine/amendOrder";
 import type { DesiredOrder, DesiredSlotTeam } from "./engine/types";
 import type { Executor, PipelineDeps } from "./engine/pipeline";
+import { reportError } from "./errorReport";
 
 /**
  * The job id, which the create does not return. `POST /orders` answers with the order id
@@ -112,7 +113,12 @@ export async function createOrderWithPlace(
       entity_id: company.id,
       source: "exact",
       raw_example: o.provision_company.name,
-    }).catch?.((err: unknown) => console.error("[aliases] company record failed", err));
+    }).catch?.((err: unknown) => {
+      // "log": the company WAS created and the order proceeds; only the shortcut that finds
+      // it again next time is missing. Counted so a run of these is visible, never emailed.
+      void reportError({ route: "booking-lost", where: "deps/aliases", what: "company alias not recorded", detail: String((err as Error)?.message ?? err), severity: "log" });
+      console.error("[aliases] company record failed", err);
+    });
   }
 
   if (o.provision_place && o.slot_teams.some((s) => !s.place_id)) {
@@ -128,7 +134,10 @@ export async function createOrderWithPlace(
       entity_id: place.id,
       source: "exact",
       raw_example: o.provision_place.name,
-    }).catch?.((err: unknown) => console.error("[aliases] place record failed", err));
+    }).catch?.((err: unknown) => {
+      void reportError({ route: "booking-lost", where: "deps/aliases", what: "place alias not recorded", detail: String((err as Error)?.message ?? err), severity: "log" });
+      console.error("[aliases] place record failed", err);
+    });
   }
 
   /**
@@ -179,7 +188,10 @@ export async function createOrderWithPlace(
       place_id: o.slot_teams[0]?.place_id ?? null,
       shape_sent: o,
     });
-    await recordOrder(rec).catch((err: unknown) => console.error("[order-records] record failed", err));
+    await recordOrder(rec).catch((err: unknown) => {
+    void reportError({ route: "booking-lost", where: "deps/order-records", what: "order record not written", detail: String((err as Error)?.message ?? err), severity: "log" });
+    console.error("[order-records] record failed", err);
+  });
   }
 
   return { id: created.id, number: created.number ?? ids.order_number, job_id: ids.job_id, team_ids: [] };
@@ -292,11 +304,23 @@ export function executor(client: OnsinchClient): Executor {
         });
         const j = (await res.json().catch(() => ({}))) as { draftId?: unknown };
         if (!res.ok || !j.draftId) {
+          void reportError({
+            route: "booking-lost",
+            where: "deps/gmail-draft",
+            what: `the draft webhook did not return a draft id (HTTP ${res.status})`,
+            detail: `A reply was composed and never drafted, so the client is waiting on an email nobody knows was not sent. ${JSON.stringify(j).slice(0, 200)}`,
+          });
           console.error(`[gmail] draft webhook did not return a draft id (HTTP ${res.status})`, JSON.stringify(j).slice(0, 200));
           return "draft-failed";
         }
         return String(j.draftId);
       } catch (err) {
+        void reportError({
+          route: "booking-lost",
+          where: "deps/gmail-draft",
+          what: "the draft webhook failed",
+          detail: String((err as Error)?.message ?? err),
+        });
         console.error("[gmail] draft webhook failed", err);
         return "draft-failed";
       }
@@ -318,6 +342,12 @@ export function executor(client: OnsinchClient): Executor {
     async createInternalDraft(d) {
       const hook = process.env.GMAIL_DRAFT_WEBHOOK;
       if (!hook) {
+        void reportError({
+          route: "booking-lost",
+          where: "deps/cross-thread",
+          what: "no GMAIL_DRAFT_WEBHOOK, so ops were not told about a possible duplicate job",
+          detail: `The order is HELD, which is the safety — but a hold nobody is told about is a hold nobody clears. Subject: ${d.subject}`,
+        });
         console.error("[cross-thread] no GMAIL_DRAFT_WEBHOOK — ops were not emailed:", d.subject);
         return;
       }
