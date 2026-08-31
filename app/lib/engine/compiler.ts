@@ -296,6 +296,42 @@ const ORDER_MANAGER_ID = Number(process.env.SPARTAN_ORDER_MANAGER_ID || PLACEHOL
 const PLACEHOLDER_PLACE_NAME = "No Location";
 
 /**
+ * AN UNRESOLVED VENUE BOOKS THE PLACEHOLDER. IT NEVER CREATES A ROW FROM THE CLIENT'S WORDS.
+ *
+ * Ben, 2026-08-31: "no unresolved venues should create venues." This reverses the venue half
+ * of his 2026-08-09 rule, and it was reversed by measurement. Every job thread the engine had
+ * processed was replayed through the live search index: of 19 venues it provisioned, 7 had a
+ * STRONG existing match it created a duplicate beside, 8 more matched weakly but really were
+ * rows the tenant already held — three ExCeL halls, an Ivy — 2 were not venues at all
+ * ("Various"), and exactly 1 was genuinely new. Eighteen of nineteen grew the tenant for
+ * nothing, which is the mechanism that produced the 632 ExCeLs.
+ *
+ * THE JOB STILL BOOKS. A place_id is mandatory, and an order at "No Location" that a human
+ * fixes beats an enquiry nobody sees. It costs no extra human touches either: provisioning
+ * already raised the review flag, so all 19 were going to a person anyway. What changes is
+ * what they find — a venue to pick, rather than a duplicate to notice.
+ *
+ * The placeholder is the ONE venue this engine may still create: once, on the first enquiry
+ * that needs it, matched by name every time after, so it cannot multiply.
+ */
+function holdAtPlaceholder(places: PlaceCandidate[], why: string): { id?: number; provision?: DesiredOrder["provision_place"]; note: string } {
+  const key = normAddr(PLACEHOLDER_PLACE_NAME);
+  const existing = places.find((p) => normAddr(p.name) === key);
+  if (existing) return { id: existing.id, note: why };
+  return {
+    // A NAME, not an address: creating it with address "No Location" would put that
+    // string on a real job sheet as if it were somewhere to drive to.
+    provision: { name: PLACEHOLDER_PLACE_NAME, country: "GB" },
+    note: why,
+  };
+}
+
+/** What the ticket says when the engine could not settle a venue the client did name. */
+function unsettled(locationText: string, because: string): string {
+  return `venue "${locationText}" ${because} — booked to "${PLACEHOLDER_PLACE_NAME}" rather than creating a new row; set the real venue in OnSinch`;
+}
+
+/**
  * company: reuse prior; else exact-match all companies; else CREATE it.
  *
  * Ben, 2026-08-09: "if company or venue location are not found in the system,
@@ -503,10 +539,7 @@ async function resolveVenueV3(
   const cityOnly = hits.length > 0 && hits.every((h) =>
     matchedOnCityAlone(locationText, places.find((p) => p.id === h.building.place_id)!));
   if (cityOnly) {
-    return {
-      provision: { name: locationText.slice(0, 120), country: "GB", address: locationText },
-      note: `venue "${locationText}" names only a city — creating a new venue rather than booking crew to whichever venue in that city ranks highest`,
-    };
+    return holdAtPlaceholder(places, unsettled(locationText, "names only a city, which identifies no building"));
   }
   if (!hits.length && !rememberedBuilding) return null;
 
@@ -521,10 +554,7 @@ async function resolveVenueV3(
   }, deps?.venueJudge ?? null);
 
   if (verdict.decision === "none" || !verdict.place_id) {
-    return {
-      provision: { name: locationText.slice(0, 120), country: "GB", address: locationText },
-      note: `venue "${locationText}" not settled against ${searched} venues (${verdict.how}: ${verdict.reason}) — creating a new venue rather than guessing`,
-    };
+    return holdAtPlaceholder(places, unsettled(locationText, `was not settled against ${searched} venues (${verdict.how}: ${verdict.reason})`));
   }
   const chosen = index.find((b) => b.place_id === verdict.place_id);
   return {
@@ -664,10 +694,7 @@ export async function resolvePlace(
   const id = v1 && !v1IsShell && !v1IsCityOnly ? v1 : null;
   if (v1 && v1IsCityOnly) {
     // Said out loud: this is a venue the engine had an answer for and refused.
-    return {
-      provision: { name: locationText.slice(0, 120), country: "GB", address: locationText },
-      note: `venue "${locationText}" names only a city — creating a new venue rather than booking crew to whichever row in that city happens to be richest`,
-    };
+    return holdAtPlaceholder(places, unsettled(locationText, "names only a city, which identifies no building"));
   }
   if (id) {
     // matchPlace resolves on several rules, only one of which is equality; the others
@@ -708,10 +735,7 @@ export async function resolvePlace(
     // happens — a wrong building is worse than a duplicate row — but the ticket now
     // names the rows it was choosing between instead of silently creating a 633rd.
     if (v2.decision === "ambiguous") {
-      return {
-        provision: { name: locationText.slice(0, 120), country: "GB", address: locationText },
-        note: `${v2.note} — creating a new venue rather than guessing; pick the right row in OnSinch`,
-      };
+      return holdAtPlaceholder(places, `${v2.note} — booked to "${PLACEHOLDER_PLACE_NAME}" rather than creating a new row; pick the right row in OnSinch`);
     }
   }
 
@@ -721,16 +745,12 @@ export async function resolvePlace(
     return { id: v1, note: `venue "${locationText}" matched ${v1} "${String(v1Row?.name ?? "").trim()}", a row carrying no address — the tenant has no better record of this venue` };
   }
 
-  return {
-    // The placeholder is a NAME, not an address: creating it with address "No Location"
-    // would put that string on a real job sheet as if it were somewhere to drive to.
-    provision: missingVenue
-      ? { name: PLACEHOLDER_PLACE_NAME, country: "GB" }
-      : { name: locationText.slice(0, 120), country: "GB", address: locationText },
-    note: missingVenue
-      ? `no venue named — creating and using the "${PLACEHOLDER_PLACE_NAME}" placeholder; set the real venue in OnSinch`
-      : `new venue "${locationText}" — will be created in OnSinch on confirm`,
-  };
+  return holdAtPlaceholder(
+    places,
+    missingVenue
+      ? `no venue named — using the "${PLACEHOLDER_PLACE_NAME}" placeholder; set the real venue in OnSinch`
+      : unsettled(locationText, "is not a venue this tenant holds"),
+  );
 }
 
 export async function compile(
