@@ -36,9 +36,71 @@ function londonParts(ms: number): { weekday: string; hour: number } {
   return { weekday: String(parts.weekday), hour: parseInt(String(parts.hour), 10) };
 }
 
+/**
+ * England & Wales bank holidays, as London dates.
+ *
+ * THIS EXISTS BECAUSE THE WATCHDOG WAS ABOUT TO BE WRONG ON ITS FIRST HOLIDAY. It was
+ * installed on Sunday 30 August 2026 and the next morning was the summer bank holiday:
+ * no mail was coming, the engine was healthy, and at 08:00 it would have emailed that the
+ * intake had gone quiet. An alarm that is wrong on a public holiday is an alarm somebody
+ * mutes, and a muted alarm is worse than no alarm at all.
+ *
+ * England & Wales, not the union of all four nations. Scotland's 2 January and 30 November
+ * and Northern Ireland's 17 March and 12 July are ordinary working days for a mailbox
+ * answered from London, and suppressing them would blind the watchdog on four real days a
+ * year. The union is one edit away if the business ever answers mail from elsewhere.
+ *
+ * The moveable dates were computed rather than remembered — Good Friday and Easter Monday
+ * from the Gregorian computus, Early May as the first Monday, Spring and Summer as the
+ * last Mondays of May and August. test/intakeHealth.ts re-checks the whole table against
+ * the calendar, because a hand-typed list of dates is exactly the thing that is wrong in
+ * one place and read as right forever.
+ */
+export const BANK_HOLIDAYS: string[] = [
+  // 2026
+  "2026-01-01", "2026-04-03", "2026-04-06", "2026-05-04", "2026-05-25", "2026-08-31",
+  "2026-12-25", "2026-12-28", // Boxing Day falls on a Saturday; substitute Monday
+  // 2027
+  "2027-01-01", "2027-03-26", "2027-03-29", "2027-05-03", "2027-05-31", "2027-08-30",
+  "2027-12-27", "2027-12-28", // Christmas Saturday, Boxing Day Sunday; both substituted
+  // 2028
+  "2028-01-03", // New Year's Day falls on a Saturday; substitute Monday
+  "2028-04-14", "2028-04-17", "2028-05-01", "2028-05-29", "2028-08-28",
+  "2028-12-25", "2028-12-26",
+  // 2029
+  "2029-01-01", "2029-03-30", "2029-04-02", "2029-05-07", "2029-05-28", "2029-08-27",
+  "2029-12-25", "2029-12-26",
+  // 2030
+  "2030-01-01", "2030-04-19", "2030-04-22", "2030-05-06", "2030-05-27", "2030-08-26",
+  "2030-12-25", "2030-12-26",
+];
+
+const HOLIDAYS = new Set(BANK_HOLIDAYS);
+
+/** The last year the table covers. Past it, nothing is suppressed — see intakeHealth. */
+const TABLE_LAST_YEAR = 2030;
+
+/** The London calendar date for an instant, as YYYY-MM-DD. */
+function londonDate(ms: number): string {
+  const f = new Intl.DateTimeFormat("en-CA", {
+    timeZone: ZONE, year: "numeric", month: "2-digit", day: "2-digit",
+  });
+  return f.format(new Date(ms));
+}
+
+export function isBankHoliday(ms: number): boolean {
+  return HOLIDAYS.has(londonDate(ms));
+}
+
+/** Whether this instant is past the end of the hand-maintained table. */
+export function holidayTableStale(ms: number): boolean {
+  return Number(londonDate(ms).slice(0, 4)) > TABLE_LAST_YEAR;
+}
+
 export function withinWorkingHours(ms: number): boolean {
   const { weekday, hour } = londonParts(ms);
   if (weekday === "Sat" || weekday === "Sun") return false;
+  if (isBankHoliday(ms)) return false;
   return hour >= WORK_START_HOUR && hour < WORK_END_HOUR;
 }
 
@@ -46,6 +108,10 @@ export interface IntakeHealth {
   ok: boolean;
   stale: boolean;
   within_working_hours: boolean;
+  /** Quiet because England & Wales are on holiday, rather than because anything broke. */
+  bank_holiday: boolean;
+  /** The holiday table has run out. Nothing is suppressed; somebody should top it up. */
+  holiday_table_stale: boolean;
   /** Whole minutes since the last inbound, or null if there has never been one. */
   minutes_since: number | null;
   last_received_at: string | null;
@@ -85,6 +151,8 @@ export function intakeHealth(
     ok: !stale,
     stale,
     within_working_hours: working,
+    bank_holiday: isBankHoliday(now),
+    holiday_table_stale: holidayTableStale(now),
     minutes_since: minutes,
     last_received_at: lastReceivedAt == null ? null : new Date(lastReceivedAt).toISOString(),
     quiet_minutes: quietMinutes,

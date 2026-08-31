@@ -20,7 +20,7 @@
 //
 // Run: npx tsx test/intakeHealth.ts
 // ============================================================================
-import { intakeHealth, DEFAULT_QUIET_MINUTES } from "../app/lib/intakeHealth";
+import { intakeHealth, DEFAULT_QUIET_MINUTES, BANK_HOLIDAYS } from "../app/lib/intakeHealth";
 
 let fails = 0;
 const ok = (cond: boolean, label: string, extra = "") => {
@@ -87,6 +87,62 @@ const MIN = 60_000;
     ok(h.stale, "no inbound row at all, in working hours, is stale");
     ok(h.minutes_since === null, "with no age to report");
     ok(/never/i.test(h.what), "and it says so plainly", h.what);
+  }
+
+  console.log("\n[6] a bank holiday is not a working day");
+  {
+    // Monday 31 August 2026, the summer bank holiday, 11:00 London. Without this the
+    // watchdog emails on the first quiet morning of every bank holiday — it very nearly
+    // did on the day this was written. An alarm that is wrong on a public holiday is an
+    // alarm somebody mutes, and a muted alarm is worse than no alarm.
+    const augBH = at("2026-08-31T10:00:00Z");
+    const h = intakeHealth({ lastReceivedAt: augBH - 16 * 60 * MIN, now: augBH });
+    ok(!h.within_working_hours, "Monday 31 Aug 2026, 11:00, is the summer bank holiday");
+    ok(!h.stale, "sixteen hours of holiday quiet raises nothing");
+    ok(h.bank_holiday === true, "and the answer says why it is quiet");
+
+    // The Monday after is an ordinary working day and must go back to judging.
+    const nextMon = at("2026-09-07T10:00:00Z");
+    const n = intakeHealth({ lastReceivedAt: nextMon - 16 * 60 * MIN, now: nextMon });
+    ok(n.within_working_hours, "the following Monday is a working day again");
+    ok(n.stale, "and the same silence is a fault on it");
+    ok(n.bank_holiday === false, "not flagged as a holiday");
+  }
+
+  console.log("[7] the holiday table is internally consistent");
+  {
+    // Transcribed by hand, so it is checked by machine rather than by reading. Every
+    // listed date is asked what day it is in London; the rules below are what a
+    // bank-holiday list cannot violate, and a slipped digit almost always breaks one.
+    const wd = (iso: string) =>
+      new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/London", weekday: "short" })
+        .format(new Date(`${iso}T12:00:00Z`));
+
+    const weekend = BANK_HOLIDAYS.filter((d) => wd(d) === "Sat" || wd(d) === "Sun");
+    ok(weekend.length === 0, "no holiday falls on a weekend — substitutes are the point", weekend.join(" "));
+
+    // A holiday is a Monday, a Good Friday, a substitute Tuesday, or one of the three
+    // fixed dates that can land mid-week.
+    const odd = BANK_HOLIDAYS.filter((d) => {
+      const day = wd(d);
+      const md = d.slice(5);
+      const fixed = md === "12-25" || md === "12-26" || md === "01-01";
+      return !(day === "Mon" || day === "Tue" || day === "Fri" || fixed);
+    });
+    ok(odd.length === 0, "every date is a Monday, Friday, substitute Tuesday or fixed date", odd.join(" "));
+    ok(BANK_HOLIDAYS.length >= 40, `the table covers several years (${BANK_HOLIDAYS.length} dates)`);
+  }
+
+  console.log("[8] past the end of the table it judges normally, it does not go quiet");
+  {
+    // The table runs out. The safe direction is to keep alarming on a real silence and
+    // say the table is stale — suppressing every day after the last listed year because
+    // nobody topped up a list would be a watchdog that quietly switches itself off.
+    const far = at("2031-03-12T11:00:00Z"); // a Wednesday, well past the table
+    const h = intakeHealth({ lastReceivedAt: far - 16 * 60 * MIN, now: far });
+    ok(h.within_working_hours, "a weekday beyond the table is still a working day");
+    ok(h.stale, "and silence on it is still a fault");
+    ok(h.holiday_table_stale === true, "but the answer says the table needs topping up");
   }
 
   console.log(`\n${fails ? `${fails} FAILED` : "intakeHealth: ALL PASS"}\n`);
