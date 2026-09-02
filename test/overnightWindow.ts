@@ -88,7 +88,9 @@ console.log("\n[5] a stated start that equals its stated finish is still a 24h s
 console.log("\n[6] the roll crosses a month, a year and a leap day");
 {
   const at = (d: string) => compose({ date: d, start_time: "22:00", end_time: "06:00", size: 1 }).order!.slot_teams[0].end;
-  ok(at("2027-03-31") === "2027-04-01T06:00:00+00:00", "month end", at("2027-03-31"));
+  // 1 April is BST, so the rolled finish carries +01:00 — the roll crossed a month
+  // AND the clock change three days earlier.
+  ok(at("2027-03-31") === "2027-04-01T06:00:00+01:00", "month end, in summer time", at("2027-03-31"));
   ok(at("2027-12-31") === "2028-01-01T06:00:00+00:00", "year end", at("2027-12-31"));
   ok(at("2028-02-28") === "2028-02-29T06:00:00+00:00", "into a leap day", at("2028-02-28"));
   ok(at("2027-02-28") === "2027-03-01T06:00:00+00:00", "past a non-leap February", at("2027-02-28"));

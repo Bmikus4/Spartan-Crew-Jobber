@@ -32,6 +32,35 @@ export function bandChiefs(size: number): number {
 
 const CHIEF_ID = 36;
 
+/**
+ * The offset a London wall clock carries, restated here rather than imported.
+ *
+ * The rule: a client's time is Europe/London, OnSinch stores a true instant, so
+ * the stamp needs +01:00 through British Summer Time and +00:00 outside it. This
+ * is worked out from the IANA zone directly — a different route to the same
+ * answer than compose.ts takes, which is the whole point of an oracle.
+ */
+function londonStamp(day: string, clock: string): string {
+  const pad = (c: string) => {
+    const m = /^(\d{1,2}):(\d{2})$/.exec(c);
+    return m ? `${m[1].padStart(2, "0")}:${m[2]}` : c;
+  };
+  const hm = pad(clock);
+  const offsetAt = (ms: number) => {
+    const name = new Intl.DateTimeFormat("en-GB", {
+      timeZone: "Europe/London", timeZoneName: "shortOffset",
+    }).formatToParts(new Date(ms)).find((p) => p.type === "timeZoneName")?.value ?? "GMT";
+    const m = /GMT([+-]\d{1,2})?/.exec(name);
+    return m?.[1] ? Number(m[1]) * 60 : 0;
+  };
+  const wall = Date.parse(`${day}T${hm}:00Z`);
+  if (!Number.isFinite(wall)) return `${day}T${hm}:00+00:00`;
+  const mins = offsetAt(wall - offsetAt(wall) * 60000);
+  const sign = mins < 0 ? "-" : "+";
+  const abs = Math.abs(mins);
+  return `${day}T${hm}:00${sign}${String(Math.floor(abs / 60)).padStart(2, "0")}:${String(abs % 60).padStart(2, "0")}`;
+}
+
 /** Hours in a window, an end at or before the start being an overnight. */
 export function hoursOf(start: string, end: string): number {
   const [sh, sm] = start.split(":").map(Number);
@@ -156,12 +185,12 @@ export function predictTeams(blocks: SimBlock[], placeOf: (venue?: string) => nu
       profession_id,
       family: p.family,
       size: b.size as number,
-      beginning: day ? `${day}T${start}:00+00:00` : "",
+      beginning: day ? londonStamp(day, start) : "",
       // A finish at or before the start is tomorrow's finish. Stated as the RULE
       // rather than borrowed from compose, which is the point of an oracle — the
       // two are meant to be able to disagree. They did, for every overnight shift
       // this engine ever composed, and OnSinch refused all of them.
-      end: day ? `${endDay(day, start, end)}T${end}:00+00:00` : "",
+      end: day ? londonStamp(endDay(day, start, end), end) : "",
       tbc: !day,
     };
   });

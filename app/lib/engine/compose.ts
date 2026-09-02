@@ -108,8 +108,55 @@ function shiftHours(start: string, end: string): number | undefined {
   return ((to <= from ? to + 24 * 60 : to) - from) / 60;
 }
 
+/**
+ * THE HOUR EVERY SUMMER JOB WAS LATE BY.
+ *
+ * A client writes a wall clock — "09:00–15:00" means nine in the morning where the
+ * crew stands. OnSinch holds true UTC: on the live tenant, human-raised jobs cluster
+ * an hour EARLIER in BST than in GMT (modal start 07:00 vs 08:00, n=1685 orders),
+ * which only happens if the stored instant is UTC and the UI renders London local.
+ *
+ * Stamping the wall clock with a fixed `+00:00` therefore booked every job between
+ * late March and late October one hour late. It was not caught because it was being
+ * repaired by hand: of 21 BST orders this engine wrote, 19 had been edited in the
+ * OnSinch UI after creation, and the edits move the window back exactly one hour.
+ *
+ * So the offset is computed, never assumed. GMT keeps `+00:00` — which is why the
+ * winter orders looked fine and hid this.
+ */
+function londonOffsetMinutes(utcMs: number): number {
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Europe/London", hour12: false,
+    year: "numeric", month: "2-digit", day: "2-digit",
+    hour: "2-digit", minute: "2-digit", second: "2-digit",
+  }).formatToParts(new Date(utcMs));
+  const p: Record<string, string> = {};
+  for (const part of parts) p[part.type] = part.value;
+  const asIfUtc = Date.UTC(
+    Number(p.year), Number(p.month) - 1, Number(p.day),
+    Number(p.hour) % 24, Number(p.minute), Number(p.second),
+  );
+  return (asIfUtc - utcMs) / 60000;
+}
+
 function isoDateTime(date: string, time: string): string {
-  return `${date}T${time}:00+00:00`;
+  // "9:00" reaches here as readily as "09:00" — the model is not asked to pad.
+  const hm = /^(\d{1,2}):(\d{2})$/.exec(time);
+  const clock = hm ? `${hm[1].padStart(2, "0")}:${hm[2]}` : time;
+  const wall = Date.parse(`${date}T${clock}:00Z`);
+  if (!Number.isFinite(wall)) return `${date}T${clock}:00+00:00`;
+  /**
+   * Two passes. The first asks what London's offset is at the wall clock read as
+   * UTC; the second asks it again at the instant that offset implies, which is the
+   * one that matters. A single pass gets the hour after a spring-forward wrong.
+   */
+  const first = londonOffsetMinutes(wall);
+  const mins = londonOffsetMinutes(wall - first * 60000);
+  const sign = mins < 0 ? "-" : "+";
+  const abs = Math.abs(mins);
+  const hh = String(Math.floor(abs / 60)).padStart(2, "0");
+  const mm = String(abs % 60).padStart(2, "0");
+  return `${date}T${clock}:00${sign}${hh}:${mm}`;
 }
 
 /** `date` plus n whole days, as YYYY-MM-DD. UTC, so no DST arithmetic. */
