@@ -357,6 +357,38 @@ input::placeholder, textarea::placeholder { color: var(--text-faint); }
   .metric-strip__cell { padding: 11px 12px 10px; }
 }
 
+/* THE HERO ROW. Ben, 2026-09-02: hours reclaimed goes top-left, ringed. The gate
+   dial rides beside it because both are single readings, and a reading beside a
+   reading is a comparison — which the queue strip and the flow chart below are not.
+
+   The ring column is `auto`, NOT a fraction. .dash-square is aspect-ratio 1/1, so a
+   fractional column would set its width from the row and its height from its width —
+   at hero width that is a 470px circle and 300px of dead card beside it. Sized `auto`
+   it takes its side from the row height the hours card sets, which is the same trick
+   .dash-lower already used. */
+.dash-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(300px, auto);
+  gap: 14px; align-items: stretch;
+}
+/* The square gives up its aspect ratio HERE and only here. aspect-ratio derives a
+   height from a width, so in a stretched row it can resolve TALLER than the row it
+   sits in and overflow it silently — which put the dial's lower edge, and the beam
+   on the card beside it, ten pixels over the strip below. In the hero the row height
+   is the hours card's, and the dial fills whatever that is. */
+.dash-hero .dash-square { aspect-ratio: auto; }
+@media (max-width: 900px) { .dash-hero { grid-template-columns: 1fr; } }
+
+/* The hero's own reading, big enough to be the thing you see first. */
+.dash-hero__value { display: flex; align-items: baseline; gap: 8px; margin: -2px 0 10px; }
+.dash-hero__value b { font-size: 40px; font-weight: 700; line-height: 1; letter-spacing: -0.02em; }
+
+/* The travelling light on the hero card (components/BeamRing.tsx). offset-distance,
+   not a rotation: the card is far wider than it is tall, and a conic gradient turning
+   about its centre would spend most of its 360deg off the visible strip. This walks
+   the card's own outline instead, at one constant speed and brightness. */
+@keyframes beamTravel { from { offset-distance: 0%; } to { offset-distance: 100%; } }
+
 /* The row of cards under the hero: two time series and a dial, same row, same
    height. The dial stays square, so its width follows that shared height. */
 .dash-lower {

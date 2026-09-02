@@ -21,6 +21,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CHART, GridLine, InfoDot, Plot } from "./charts/chartKit";
+import { BeamRing } from "./BeamRing";
 
 interface Props { isActive: boolean }
 
@@ -421,7 +422,7 @@ function GateRing({ m }: { m: Metrics }) {
 // and what a reader wants from it is "how much, by when". Drawn against the model
 // that produced it, which is stated on the card rather than left implicit — the old
 // screen printed "30.7h · from handled email" and never said what an hour was.
-function HoursChart({ m, plotted, minutes }: { m: Metrics; plotted: Metrics["series"]; minutes: number }) {
+function HoursChart({ m, plotted, minutes, ringed }: { m: Metrics; plotted: Metrics["series"]; minutes: number; ringed?: boolean }) {
   const H = 178, L = 44, PAD = 12, base = H - 24;
   const perDay = plotted.map((r) => (Number(r["email_received"] || 0) * minutes) / 60);
   const cum: number[] = [];
@@ -432,6 +433,18 @@ function HoursChart({ m, plotted, minutes }: { m: Metrics; plotted: Metrics["ser
   return (
     <Card title="Hours reclaimed" caption={`${fmt1(last)}h banked`}
       info={`An estimate, not a measurement: every email the engine read is credited ${minutes} minutes of the reading, classifying and typing a person would otherwise have done. The curve is that rate applied to the emails that actually arrived, so it steps up on busy days and is flat when the inbox is quiet.`}>
+      {/* Inside the Card, so it rings the card's own radius. Card is position:
+          relative via .dash-card, which the ring's absolute inset needs. */}
+      {ringed && <BeamRing radius={12} thickness={1.5} duration={6} blob={200} />}
+      {/* The hero states its reading before its curve. A cumulative line already
+          ends at the number, but the label at the line's tip is 12px and set inside
+          the plot — findable, not first. */}
+      {ringed && (
+        <div className="dash-hero__value">
+          <b style={{ color: INK }} className="tnum">{fmt1(last)}h</b>
+          <span style={{ fontSize: 12, color: MUT }}>reclaimed so far</span>
+        </div>
+      )}
       <Plot height={H} glowColor={A} ariaLabel={`${fmt1(last)} hours reclaimed, cumulative`}>
         {({ w, glowId }) => {
           const x = (i: number) => (n <= 1 ? (L + w - PAD) / 2 : L + (i * (w - L - PAD)) / (n - 1));
@@ -476,6 +489,18 @@ function Skeleton() {
         <span className="skel" style={{ height: 22, width: 210 }} />
         <div style={{ marginTop: 8 }}><span className="skel" style={{ height: 12, width: 340 }} /></div>
       </header>
+      {/* The hero comes FIRST here too. This block is the reason the order matters:
+          a skeleton that draws yesterday's layout makes the whole page jump the
+          moment the metrics land, which is the one thing it exists to prevent. */}
+      <section className="dash-hero">
+        {[0, 1].map((i) => (
+          <div key={i} className={i === 1 ? "dash-square" : undefined}
+            style={{ background: "var(--chart-surface)", border: `1px solid ${BORDER}`, borderRadius: "var(--radius-lg)", padding: "14px 16px 22px" }}>
+            <span className="skel" style={{ display: "block", height: 10, width: 118, marginBottom: 14 }} />
+            <span className="skel" style={{ display: "block", height: 178, borderRadius: "var(--radius)" }} />
+          </div>
+        ))}
+      </section>
       {[0, 1].map((s) => (
         <section key={s} style={{ background: "var(--surface)", border: `1px solid ${BORDER}`, borderRadius: "var(--radius-lg)", overflow: "hidden" }}>
           <div style={{ padding: "11px 16px", borderBottom: `1px solid ${BORDER}` }}><span className="skel" style={{ height: 10, width: 92 }} /></div>
@@ -491,15 +516,10 @@ function Skeleton() {
           {s === 1 && <div style={{ padding: 16 }}><span className="skel" style={{ display: "block", height: 240, borderRadius: "var(--radius)" }} /></div>}
         </section>
       ))}
-      <section className="dash-lower">
-        {[0, 1, 2].map((i) => (
-          <div key={i} className={i === 2 ? "dash-square" : undefined}
-            style={{ background: "var(--chart-surface)", border: `1px solid ${BORDER}`, borderRadius: "var(--radius-lg)", padding: "14px 16px 22px" }}>
-            <span className="skel" style={{ display: "block", height: 10, width: 118, marginBottom: 14 }} />
-            <span className="skel" style={{ display: "block", height: 168, borderRadius: "var(--radius)" }} />
-          </div>
-        ))}
-      </section>
+      <div style={{ background: "var(--chart-surface)", border: `1px solid ${BORDER}`, borderRadius: "var(--radius-lg)", padding: "14px 16px 22px" }}>
+        <span className="skel" style={{ display: "block", height: 10, width: 118, marginBottom: 14 }} />
+        <span className="skel" style={{ display: "block", height: 168, borderRadius: "var(--radius)" }} />
+      </div>
     </div>
   );
 }
@@ -572,14 +592,18 @@ export default function DashboardScreen({ isActive, onOpenBoard }: Props & { onO
           </span>
         </header>
 
-        <QueueStrip now={data.now} onOpenBoard={onOpenBoard} />
-        <FlowExplorer m={data} plotted={plotted} />
-
-        <section className="dash-lower">
-          <HoursChart m={data} plotted={plotted} minutes={minutes} />
-          <Funnel m={data} label={windowLabel} />
+        {/* Hours reclaimed is the headline, so it is the first thing on the page and
+            the only card wearing the beam. Ben, 2026-09-02. It used to sit third in
+            the bottom row, below two charts and beside a dial — the number the whole
+            screen exists to report, ranked under the working detail. */}
+        <section className="dash-hero">
+          <HoursChart m={data} plotted={plotted} minutes={minutes} ringed />
           <GateRing m={data} />
         </section>
+
+        <QueueStrip now={data.now} onOpenBoard={onOpenBoard} />
+        <FlowExplorer m={data} plotted={plotted} />
+        <Funnel m={data} label={windowLabel} />
 
         <footer style={{ display: "flex", justifyContent: "center", gap: 18, flexWrap: "wrap", fontSize: 10.5, color: FAINT, letterSpacing: "0.04em", paddingTop: 2 }}>
           {/* A status light that lights. This read var(--accent), which on this
