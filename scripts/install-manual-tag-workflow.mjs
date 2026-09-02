@@ -16,7 +16,13 @@
 //
 // WHAT THE ENGINE SENDS, and why so little:
 //
-//   { label, thread_id, state, reason, status, subject?, order_id?, crew?, dates? }
+//   { label, thread_id, state, reason, status, subject?, order_id?, crew?, dates?, color? }
+//
+// `color` is a Gmail palette pair, applied to the LABEL rather than the thread, and
+// only "Order Updated" sends one (Ben, 2026-09-02: it is to be blue). It rides on the
+// "Create label" node, conditionally — see the note there for why it cannot have a node
+// of its own, and why a payload with no colour must still produce the request that has
+// always worked.
 //
 // `thread_id` is the GMAIL thread id — the same id the engine keys every conversation
 // on, so no lookup is needed to find the thread. `state` is "manual" or "cleared", and
@@ -38,6 +44,8 @@
 //   node scripts/install-manual-tag-workflow.mjs --activate  # + activate (needed)
 //   node scripts/install-manual-tag-workflow.mjs --status
 //   node scripts/install-manual-tag-workflow.mjs --test <gmailThreadId>
+//   node scripts/install-manual-tag-workflow.mjs --test <gmailThreadId> --blue
+//        # posts the real "Order Updated" payload, so the colour path is exercised too
 // ============================================================================
 import { loadEnv, requireEnv } from "./_env.mjs";
 
@@ -99,17 +107,31 @@ if (STATUS_ONLY) {
 }
 
 if (TEST_ID) {
+  // --blue exercises the colour path as well: a different label, so a failed colour
+  // cannot repaint "Manual", and the blue Gmail actually offers rather than a guess.
+  const blue = argv.includes("--blue");
+  const payload = blue
+    ? {
+        label: "Order Updated",
+        color: { backgroundColor: "#4986e7", textColor: "#ffffff" },
+        thread_id: TEST_ID,
+        state: "built",
+        reason: "colour test from the Spartan engine — safe to untag",
+        status: "ordered",
+        subject: "Spartan engine — Order Updated tag colour test",
+      }
+    : {
+        label: "Manual",
+        thread_id: TEST_ID,
+        state: "manual",
+        reason: "connectivity test from the Spartan engine — safe to untag",
+        status: "needs-info",
+        subject: "Spartan engine — Manual tag connectivity test",
+      };
   const r = await fetch(hookUrl, {
     method: "POST",
     headers: { "content-type": "application/json", "x-webhook-secret": SECRET },
-    body: JSON.stringify({
-      label: "Manual",
-      thread_id: TEST_ID,
-      state: "manual",
-      reason: "connectivity test from the Spartan engine — safe to untag",
-      status: "needs-info",
-      subject: "Spartan engine — Manual tag connectivity test",
-    }),
+    body: JSON.stringify(payload),
   });
   const text = await r.text();
   console.log(`${r.status} ${text}`);
@@ -136,6 +158,7 @@ const nodes = [
         `const b = $json.body ?? {};\n` +
         `if (!b.thread_id) throw new Error('no thread_id');\n` +
         `return [{ json: { ...b, label: b.label || 'Manual' } }];`,
+      // `color` rides through untouched when the engine sends one. See "Create label".
     },
   },
   {
@@ -159,13 +182,33 @@ const nodes = [
     },
   },
   {
-    // Runs only when the label does not exist yet, so nobody has to create it by hand.
+    /**
+     * Runs only when the label does not exist yet, so nobody has to create it by hand.
+     *
+     * THE COLOUR IS SET HERE, AND ONLY WHEN THE PAYLOAD CARRIES ONE. Ben, 2026-09-02:
+     * "Order Updated" is to be blue. Colour is a property of the LABEL, not of the
+     * thread, so it cannot ride on the modify call, and it cannot go in a node of its
+     * own either: this workflow's Gmail credential is owned by another n8n user, and
+     * the public API refuses a PUT that ADDS a credentialed node — "You don't have
+     * access to the credentials in the 'Colour label' node" — while leaving the nodes
+     * already in the workflow alone. Adding one costs a browser session Ben has to
+     * run; folding it into a node that already exists costs nothing.
+     *
+     * The conditional spread is what contains the risk. Gmail 400s any pair outside
+     * its fixed palette, and a 400 here loses the label, the tag and the flag — so
+     * "Manual" and "Order Built", which send no colour, produce a request byte-for-byte
+     * identical to the one that has always worked. Only a coloured tag can be broken by
+     * a bad colour, and the engine's posture already covers that: the flag stays unset
+     * and the next email retries.
+     */
     id: "create", name: "Create label", type: "n8n-nodes-base.httpRequest", typeVersion: 4.2, position: [800, 140],
     parameters: {
       url: `${GM}/labels`, method: "POST",
       authentication: "predefinedCredentialType", nodeCredentialType: "gmailOAuth2",
       sendBody: true, specifyBody: "json",
-      jsonBody: `={{ JSON.stringify({ name: $json.label, labelListVisibility: 'labelShow', messageListVisibility: 'show' }) }}`,
+      jsonBody:
+        `={{ JSON.stringify({ name: $json.label, labelListVisibility: 'labelShow',\n` +
+        `      messageListVisibility: 'show', ...($json.color ? { color: $json.color } : {}) }) }}`,
       options: {},
     },
     credentials: { gmailOAuth2: GMAIL_CRED },
@@ -186,25 +229,32 @@ const nodes = [
     },
   },
   {
-    id: "settle", name: "Settle label id", type: "n8n-nodes-base.code", typeVersion: 2, position: [1000, 140],
+    // Both branches converge here, so everything downstream reads ONE shape: the
+    // engine's payload plus a settled label id. The found branch carries `label_id`,
+    // the created branch carries Gmail's `id`.
+    id: "settle", name: "Settle label id", type: "n8n-nodes-base.code", typeVersion: 2, position: [1000, 70],
     parameters: {
       jsCode:
         `const flag = $('Check secret').first().json;\n` +
-        `return [{ json: { ...flag, label_id: $json.id } }];`,
+        `return [{ json: { ...flag, label_id: $json.label_id ?? $json.id } }];`,
     },
   },
   {
-    // One call for both directions: add on "manual", remove on "cleared". A thread that
-    // gets booked must stop wearing the tag or ops learn to ignore it.
-    id: "apply", name: "Tag thread", type: "n8n-nodes-base.httpRequest", typeVersion: 4.2, position: [1220, 0],
+    // One call for both directions: add on "manual"/"built", remove on "cleared". A
+    // thread that gets booked must stop wearing "Manual" or ops learn to ignore it.
+    id: "apply", name: "Tag thread", type: "n8n-nodes-base.httpRequest", typeVersion: 4.2, position: [1280, 0],
     parameters: {
-      url: `=${GM}/threads/{{ $json.thread_id }}/modify`, method: "POST",
+      // Read from "Settle label id" and NOT from $json: the node immediately upstream
+      // is either "Have label?" or "Create label" depending on which branch ran, and
+      // only "Settle label id" holds the engine's payload beside a settled label id.
+      url: `=${GM}/threads/{{ $('Settle label id').first().json.thread_id }}/modify`, method: "POST",
       authentication: "predefinedCredentialType", nodeCredentialType: "gmailOAuth2",
       sendBody: true, specifyBody: "json",
       jsonBody:
-        `={{ JSON.stringify($json.state === 'cleared'\n` +
-        `      ? { removeLabelIds: [$json.label_id] }\n` +
-        `      : { addLabelIds: [$json.label_id] }) }}`,
+        `={{ (() => { const f = $('Settle label id').first().json;\n` +
+        `      return JSON.stringify(f.state === 'cleared'\n` +
+        `        ? { removeLabelIds: [f.label_id] }\n` +
+        `        : { addLabelIds: [f.label_id] }); })() }}`,
       options: {},
     },
     credentials: { gmailOAuth2: GMAIL_CRED },
@@ -224,9 +274,11 @@ const connections = {
   "Check secret":    { main: [[{ node: "List labels",     type: "main", index: 0 }]] },
   "List labels":     { main: [[{ node: "Find or create",  type: "main", index: 0 }]] },
   "Find or create":  { main: [[{ node: "Have label?",     type: "main", index: 0 }]] },
-  // true = we already have the id; false = create it, then settle it.
+  // true = we already have the id; false = create it. BOTH converge on Settle, which is
+  // the one node holding the engine's payload beside a settled label id — so everything
+  // downstream reads one shape whichever way we got here.
   "Have label?":     { main: [
-                        [{ node: "Tag thread",      type: "main", index: 0 }],
+                        [{ node: "Settle label id", type: "main", index: 0 }],
                         [{ node: "Create label",    type: "main", index: 0 }],
                       ] },
   "Create label":    { main: [[{ node: "Settle label id", type: "main", index: 0 }]] },

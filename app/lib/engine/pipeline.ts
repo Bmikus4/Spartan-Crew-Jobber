@@ -131,6 +131,26 @@ export interface Executor {
   identifiersForOrder?(order_id: number): Promise<{ job_id?: number; order_number?: string }>;
 }
 
+/**
+ * One Gmail thread tag, as the n8n tag workflow takes it.
+ *
+ * `label` is a NAME and the workflow finds-or-creates it, so a new tag is a new
+ * string rather than a new workflow — which is the whole reason the tags share one
+ * shape. `color` is a Gmail palette pair and is applied to the LABEL, not the
+ * thread; a colour Gmail rejects must never cost the tag, so the workflow applies
+ * it on a branch that is allowed to fail.
+ */
+export interface ThreadTag {
+  label: string;
+  thread_id: string;
+  state: "built" | "cleared";
+  reason: string;
+  status: string;
+  subject?: string;
+  order_id?: number;
+  color?: { backgroundColor: string; textColor: string };
+}
+
 export interface PipelineDeps extends CompileDeps {
   store: StateStore;
   metrics: MetricSink;
@@ -167,15 +187,17 @@ export interface PipelineDeps extends CompileDeps {
    * label from the payload and creates it if the mailbox has never seen it — so this
    * needed no change on the n8n side at all.
    */
-  flagOrderBuilt?: (a: {
-    label: string;
-    thread_id: string;
-    state: "built" | "cleared";
-    reason: string;
-    status: string;
-    subject?: string;
-    order_id?: number;
-  }) => Promise<void>;
+  flagOrderBuilt?: (a: ThreadTag) => Promise<void>;
+  /**
+   * AN ORDER THAT ALREADY EXISTED HAS CHANGED — the blue "Order Updated" tag.
+   *
+   * Same workflow again, and `color` is the only thing that made it need a change
+   * there: Gmail's modify endpoint takes label IDs, and a label's colour is a
+   * property of the label rather than of the thread, so it is set once when the
+   * label is first resolved. Ben asked for blue specifically, to read apart from
+   * "Order Built" at a glance in a list of threads.
+   */
+  flagOrderUpdated?: (a: ThreadTag) => Promise<void>;
   flagForManual?: (a: {
     thread_id: string;
     state: "manual" | "cleared";
@@ -459,6 +481,7 @@ export async function handleThread(
   await store.put(next);
   await flagManualIfNeeded(next, deps);
   await flagBuiltIfNeeded(next, deps);
+  await flagUpdatedIfNeeded(next, deps);
   return next;
 }
 
@@ -554,6 +577,59 @@ export async function flagBuiltIfNeeded(next: ConversationState, deps: PipelineD
     // untagged thread is slower for ops; a lost booking would be dangerous, and a
     // marker set for a tag that never landed would stop it ever being retried.
     console.error("[order-built-tag] flag failed", err);
+  }
+}
+
+/**
+ * Gmail's blue. The API rejects any pair outside its fixed palette with a 400, and
+ * `#4986e7` on white is the pair Gmail's own UI offers as blue.
+ */
+export const TAG_BLUE = { backgroundColor: "#4986e7", textColor: "#ffffff" } as const;
+
+/**
+ * "ORDER UPDATED" — a booking this thread already had has been changed.
+ *
+ * Ben, 2026-09-02: "when orders are appended the thread should get a blue 'Order
+ * Updated' tag in Gmail."
+ *
+ * WHAT COUNTS AS APPENDED is read off `order_action_log` rather than passed down
+ * from the amend path, because three separate routes change a standing order — a
+ * PATCH in place, a block appended to it, and the delete-and-repost rebuild — and
+ * every one of them already writes its own line to that log. Reading the log means
+ * a fourth route added later is tagged without anybody remembering to tag it.
+ *
+ * `create` is NOT in the set. The first booking is what "Order Built" says, and a
+ * thread wearing both on its first order would make the blue tag mean nothing.
+ *
+ * It is posted once and never taken back — see `updated_flagged` in types.ts.
+ */
+const CHANGED_A_STANDING_ORDER = new Set(["amend", "patch", "replace"]);
+
+export async function flagUpdatedIfNeeded(next: ConversationState, deps: PipelineDeps): Promise<void> {
+  if (!deps.flagOrderUpdated) return;
+  if (next.updated_flagged === true) return;
+  const change = [...(next.order_action_log ?? [])]
+    .reverse()
+    .find((a) => a.ok && CHANGED_A_STANDING_ORDER.has(a.kind));
+  if (!change) return;
+
+  try {
+    await deps.flagOrderUpdated({
+      label: "Order Updated",
+      color: TAG_BLUE,
+      thread_id: next.thread_id,
+      state: "built",
+      reason: `order ${next.onsinch_order_number ? `R${next.onsinch_order_number}` : `#${change.order_id ?? next.onsinch_order_id}`} was changed after it was raised`,
+      status: next.status,
+      subject: next.subject,
+      ...(change.order_id ?? next.onsinch_order_id ? { order_id: Number(change.order_id ?? next.onsinch_order_id) } : {}),
+    });
+    next.updated_flagged = true;
+    await deps.store.put(next);
+  } catch (err) {
+    // The change is made and recorded. An untagged thread is slower for ops; a marker
+    // set for a tag that never landed would stop it ever being retried.
+    console.error("[order-updated-tag] flag failed", err);
   }
 }
 

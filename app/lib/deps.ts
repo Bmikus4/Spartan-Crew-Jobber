@@ -56,7 +56,7 @@ async function readOrderIdentifiers(
  * which is exactly what a rejected secret produces. Throwing lets the caller leave its
  * marker unset so the next email retries, instead of recording a tag never applied.
  */
-async function postTag(body: Record<string, unknown>): Promise<void> {
+async function postTag<T extends { label: string }>(body: T): Promise<void> {
   const hook = process.env.MANUAL_TAG_WEBHOOK;
   if (!hook) return;
   const res = await fetch(hook, {
@@ -573,6 +573,15 @@ export async function buildDeps(): Promise<PipelineDeps> {
      * because editing the live n8n is the recurring way this system breaks.
      */
     async flagOrderBuilt(a) {
+      return postTag(a);
+    },
+    /**
+     * The blue "Order Updated" tag, through the same workflow again. The only reason
+     * that workflow needed touching is `color`: it now PATCHes the label's colour on
+     * a branch that is allowed to fail, so a palette value Gmail rejects costs the
+     * colour and not the tag.
+     */
+    async flagOrderUpdated(a) {
       return postTag(a);
     },
     senderVerdict,

@@ -285,6 +285,18 @@ export interface ConversationState {
    * "Manual" says somebody must act. A job booked on an assumed rate card is both.
    */
   built_flagged?: boolean;
+  /**
+   * The thread wears the blue "Order Updated" tag, because the engine CHANGED an
+   * order that already existed — amended it in place, appended a block to it, or
+   * rebuilt it (Ben, 2026-09-02).
+   *
+   * Not the mirror of `built_flagged` and it never clears. "Order Built" is a
+   * standing statement about now — a booking exists, and it comes off when the order
+   * stops existing. This one is a statement about the past: somebody's booking moved
+   * after they had already been told about it, and the people who need to know that
+   * need to know it even after the order is deleted. So it is set once and left.
+   */
+  updated_flagged?: boolean;
   // an order the engine WANTS to write but is holding for human confirm
   // (always set in draft-only mode; this is the dashboard confirm queue).
   pending_order?: {
