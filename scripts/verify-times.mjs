@@ -113,6 +113,16 @@ function timesInText(text) {
   return out;
 }
 
+/** Shift lengths the client wrote — "4 hour call", "8hrs", "a 10-hour day". */
+function statedDurations(text) {
+  const out = new Set();
+  for (const m of String(text || '').matchAll(/\b(\d{1,2})(?:\.5)?\s*-?\s*(?:h|hr|hrs|hour|hours)\b/gi)) {
+    const n = Number(m[1]);
+    if (n >= 1 && n <= 24) out.add(n);
+  }
+  return out;
+}
+
 // ------------------------------------------------------------------ the data
 const rows = await sql`
   select c.thread_id,
@@ -193,13 +203,28 @@ for (const r of rows) {
     }
   }
 
+  /**
+   * A FINISH IS OFTEN NEVER WRITTEN DOWN. Clients book a length, not an end: "6 x
+   * local crew - 4 hour call" from 08:00 is a 12:00 finish that appears nowhere in
+   * the thread. Checking the finish against the words alone flagged twelve orders as
+   * having booked a time the client never gave, and every one of them was a duration
+   * the client did give — the check was crying wolf, which is worse than silent.
+   *
+   * So a finish also passes when the block's LENGTH is a number of hours stated in
+   * the thread. Starts are still checked against the words, because a start is always
+   * written.
+   */
   const seen = timesInText(bodies.get(r.thread_id));
+  const hours = statedDurations(bodies.get(r.thread_id));
   const unseen = [];
   for (const t of teams) {
-    for (const raw of [t.beginning, t.end]) {
-      const p = parseStamp(raw);
-      if (p && !seen.has(p.hm)) unseen.push(p.hm);
-    }
+    const b = parseStamp(t.beginning), e = parseStamp(t.end);
+    if (b && !seen.has(b.hm)) unseen.push(b.hm);
+    if (!e) continue;
+    if (seen.has(e.hm)) continue;
+    const span = b && e ? (Date.parse(`${e.day}T${e.hm}Z`) - Date.parse(`${b.day}T${b.hm}Z`)) / 3600000 : null;
+    if (span !== null && hours.has(span)) continue; // a stated length, not a stated time
+    unseen.push(e.hm);
   }
 
   const lv = live.get(Number(r.order_id));
