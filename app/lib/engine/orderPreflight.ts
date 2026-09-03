@@ -43,14 +43,32 @@ export type Preflight =
  */
 export async function preflightOrder(
   client: OnsinchClient,
-  args: { order_id: number; company_id?: number }
+  args: { order_id: number; company_id?: number; happening_day?: string }
 ): Promise<Preflight> {
   const { order_id } = args;
   const live = (await client.orderById(order_id)) as LiveOrder | null;
   if (!live) {
     // Someone deleted it, or our stored id is stale. Either way there is nothing to
     // change, and creating silently could duplicate a job booked elsewhere.
-    return { refused: `order #${order_id} no longer exists in OnSinch — not recreating it blindly` };
+    //
+    // BUT THE JOB IS USUALLY STILL THERE, UNDER SOMEBODY ELSE'S ID. Measured on the
+    // live tenant 2026-09-03: of the 54 recorded ids that read back absent, 24 have a
+    // PRESENT order for the same company on the same day, raised by a named person,
+    // with an id and an R number one or two away from ours (ours #15588 -> #15590 by
+    // user 413; ours #15578 -> #15585; ours #13783 -> #13784). Ops re-key the engine's
+    // order and the original goes. So "no longer exists" was true and useless: it sent
+    // a human to look for a deleted order instead of at the live one.
+    //
+    // Naming it is a REPORT, NOT AN ADOPTION. Whether the engine may re-point a thread
+    // at an order a person raised, and then amend it, is a business ruling and is
+    // DECISIONS.md D6 — so nothing is written here and the refusal still refuses. This
+    // only spends one read to turn a dead end into an order number.
+    const successor = await successorFor(client, args);
+    return {
+      refused:
+        `order #${order_id} no longer exists in OnSinch — not recreating it blindly` +
+        (successor ? ` — ${successor}` : ""),
+    };
   }
   /**
    * THIS GATE USED TO BE `provisional !== true` AND CANNOT BE ANY MORE.
@@ -76,4 +94,55 @@ export async function preflightOrder(
     };
   }
   return { live };
+}
+
+/**
+ * The order that probably replaced a vanished one, described for a human, or null.
+ *
+ * ONE READ, AND IT MAY ANSWER NOTHING. Both keys have to be known — a company and a
+ * day — because either alone names the wrong thing: the company alone would offer up
+ * whichever job that client last booked, and a day alone spans every client.
+ *
+ * THE R NUMBER IS NOT USABLE HERE AND THAT IS WHY THIS MATCHES ON THE DAY. R numbers
+ * are `max(live)+1` and ARE REUSED after a delete — 10726 stands against two different
+ * recorded orders in our own database — so "find the order with our R number" would
+ * confidently return a stranger's booking. The numeric id is the only key, and the one
+ * we hold is precisely the one that has stopped resolving.
+ *
+ * A FAILED LOOKUP RETURNS NULL, DELIBERATELY, unlike `findLostCreate` in onsinch.ts
+ * which throws. The asymmetry is the point: there, an unanswered question could
+ * authorise a second write, so it must not read as "absent"; here the caller is
+ * refusing either way and the only thing at stake is whether the note is more useful
+ * than it was. Degrading to the old message costs nothing.
+ */
+async function successorFor(
+  client: OnsinchClient,
+  args: { order_id: number; company_id?: number; happening_day?: string }
+): Promise<string | null> {
+  const day = (args.happening_day ?? "").slice(0, 10);
+  if (!args.company_id || day.length !== 10) return null;
+  try {
+    // `id[eq]` is not used: this is a list by company, and the day is applied here
+    // rather than as a `happening[eq]` filter because `happening` is a timestamp and
+    // an [eq] against a bare date would compare it against midnight and match nothing.
+    const rows = (await client.getOrders?.({ "company_id[eq]": args.company_id, limit: 100 })) ?? [];
+    const sameDay = rows
+      .filter((o: any) => {
+        const job = (Array.isArray(o?.Job) ? o.Job[0] : o?.Job) ?? {};
+        return String(o?.happening ?? "").slice(0, 10) === day || String(job?.min_beginning ?? "").slice(0, 10) === day;
+      })
+      // Never offer the dead order back to the caller if the filter happened to include
+      // it, and prefer the highest id: after a re-key the replacement is the later row.
+      .filter((o: any) => Number(o?.id) !== Number(args.order_id))
+      .sort((a: any, b: any) => Number(b?.id) - Number(a?.id));
+    const hit = sameDay[0];
+    if (!hit) return null;
+    const who = hit.creator == null ? "through the API" : `by user ${hit.creator}`;
+    return (
+      `order #${hit.id}${hit.number ? ` (R${hit.number})` : ""} exists for the same client on ${day}, raised ${who}` +
+      ` — very probably this same job, re-keyed. Check that one rather than looking for #${args.order_id}.`
+    );
+  } catch {
+    return null;
+  }
 }

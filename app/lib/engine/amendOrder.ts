@@ -202,7 +202,13 @@ export async function amendOrderInPlace(
     return { declined: `a slot team has no start or finish (the date is still TBC)` };
   }
 
-  const pre = await preflightOrder(client, { order_id, company_id: args.desired.company_id });
+  // `next` is the shape we are about to write, so its first block is the day this
+  // amendment is about — the key the successor lookup needs if the order has vanished.
+  const pre = await preflightOrder(client, {
+    order_id,
+    company_id: args.desired.company_id,
+    happening_day: next[0]?.beginning ?? args.desired.slot_teams?.[0]?.beginning,
+  });
   if (pre.refused) return { refused: pre.refused };
 
   /**

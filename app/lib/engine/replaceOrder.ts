@@ -111,7 +111,13 @@ export async function replaceProvisionalOrder(
    * ONLY thing standing between an amendment and a live booking. One implementation, so
    * the two paths cannot drift on the rule that protects a confirmed order.
    */
-  const pre = await preflightOrder(client, { order_id, company_id: desired.company_id });
+  // The day is passed so that, if the order has vanished, the refusal can name the
+  // order a person raised in its place instead of sending ops after a deleted id.
+  const pre = await preflightOrder(client, {
+    order_id,
+    company_id: desired.company_id,
+    happening_day: desired.slot_teams?.[0]?.beginning,
+  });
   if (!pre.live) return { deleted: false, refused: pre.refused };
   const live = pre.live;
 
