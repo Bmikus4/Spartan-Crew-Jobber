@@ -59,7 +59,22 @@ async function main() {
     const r = await go("ExCeL Docklands");
     ok(r.id === 49, "matchPlace matches shell 6894 exactly; 49 is the building", String(r.id));
     ok(!r.provision, "and no duplicate is created");
-    ok(!!r.note && /token agreement/.test(r.note), "the ticket says how it was matched", r.note ?? "(none)");
+    /**
+     * THE ANSWER IS PINNED, THE MECHANISM IS NOT, and that distinction cost a
+     * green suite.
+     *
+     * This asserted `/token agreement/` — matchPlaceV2's own wording. Production
+     * runs with SPARTAN_VENUE_V3=1 (set in .env.local and in Vercel Production),
+     * and V3 answers this first with "searched N venues, model-unavailable", so
+     * the assertion was false everywhere the engine actually runs. It stayed green
+     * because the test files do not load .env.local: `npm run test:all` exercises
+     * the flag-OFF engine, which is not the one that books jobs.
+     *
+     * So run the suite the way production runs — SPARTAN_VENUE_V3=1 npx tsx
+     * test/all.ts — and assert only what both resolvers must agree on: the shell
+     * lost, the building won, and the ticket says which building.
+     */
+    ok(!!r.note && /49|ExCel/i.test(r.note), "the ticket names the building it landed on", r.note ?? "(none)");
   }
 
   console.log("\n[3] a CITY cannot identify a building");

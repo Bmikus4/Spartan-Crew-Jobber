@@ -23,22 +23,52 @@ import type { Executor, PipelineDeps } from "./engine/pipeline";
 import { reportError } from "./errorReport";
 
 /**
- * The job id, which the create does not return. `POST /orders` answers with the order id
- * alone — nested Job and SlotTeam ids are never in the response — and every block that
- * follows has to be posted against a job_id, so this read is not optional.
+ * The job id and the R number, neither of which the create returns. `POST /orders`
+ * answers with the order id alone — nested Job and SlotTeam ids are never in the
+ * response — so both of the identifiers a human searches OnSinch on cost one read, and
+ * it is the same read.
+ *
+ * IT USED TO THROW WHEN THE JOB ID WOULD NOT READ, AND THAT WAS A STALE INVARIANT.
+ * The justification was "every block that follows has to be posted against a job_id, so
+ * this read is not optional" — true while the create posted `SlotTeam: []` and appended
+ * the crew afterwards. That changed on 2026-08-28: the create carries the crew nested,
+ * and `client.createSlotTeam` is now reached from `amendOrder.ts` alone. Verified
+ * 2026-09-02: no call site posts a block after a create.
+ *
+ * So nothing follows the create that needs the job id, and throwing here discarded a
+ * COMPLETED booking — the order exists in OnSinch, the exception propagates out of
+ * `createOrder`, the pipeline's catch marks the thread `error`, and `onsinch_order_id`
+ * is never persisted. The order then belongs to nobody: it is not on the board, and the
+ * next email on the thread either matches it out of history or raises a second one.
+ *
+ * NOT A REALISED LOSS — no thread in `conversation_state` carries that message, checked
+ * 2026-09-02, so this hazard has never fired. It is removed because the reason for it is
+ * gone, not because it has cost anything.
+ *
+ * `job_id` is now optional and its absence is reported to the caller, which records it
+ * on the order rather than losing the order. What it costs is that a later in-place
+ * amendment has no `job_id` to append against and declines to the rebuild — the same
+ * degradation the missing team ids already cause, and a new R number is a smaller price
+ * than an orphaned booking.
  */
 async function readOrderIdentifiers(
   client: OnsinchClient,
   order_id: number
-): Promise<{ job_id: number; order_number?: string }> {
-  const live: any = await client.orderById(order_id);
-  const o = live?.data ?? live;
+): Promise<{ job_id?: number; order_number?: string; unread?: string }> {
+  let o: any;
+  try {
+    const live: any = await client.orderById(order_id);
+    o = live?.data ?? live;
+  } catch (err) {
+    return { unread: `the order could not be read back (${String((err as Error)?.message ?? err)})` };
+  }
   const job = (Array.isArray(o?.Job) ? o.Job[0] : o?.Job) ?? {};
   const job_id = Number(job?.id);
+  const order_number = o?.number ? String(o.number) : undefined;
   if (!Number.isInteger(job_id)) {
-    throw new Error(`order #${order_id} was created but its job id could not be read back — cannot post crew blocks`);
+    return { order_number, unread: "its job id could not be read back, so a later crew change will rebuild rather than amend in place" };
   }
-  return { job_id, order_number: o?.number ? String(o.number) : undefined };
+  return { job_id, order_number };
 }
 
 /**
@@ -123,7 +153,20 @@ export async function createOrderWithPlace(
 
   if (o.provision_place && o.slot_teams.some((s) => !s.place_id)) {
     const place = await client.createPlace({ ...o.provision_place });
-    o.slot_teams = o.slot_teams.map((s) => ({ ...s, place_id: place.id }));
+    /**
+     * FILL THE BLANKS ONLY. This was `map((s) => ({ ...s, place_id: place.id }))`
+     * and it relocated teams that already had a venue.
+     *
+     * The two are identical on a single-venue job, which is every job the engine
+     * had written, so it survived a fortnight and the sibling implementation in
+     * provisionPlaceIfNeeded had the guard all along. It bites on a job that
+     * moves crew between two buildings where the tenant holds only one of them:
+     * "6 at ExCeL, then 4 at the Glass House" created the Glass House and then
+     * booked all ten people there. Nothing upstream was wrong — both venues were
+     * stated, extracted, resolved and composed — and the crew still went to one
+     * address.
+     */
+    o.slot_teams = o.slot_teams.map((s) => (s.place_id ? s : { ...s, place_id: place.id }));
     await remember?.({
       kind: "place",
       // Keyed on what the resolver will look up next time: the venue text from the
@@ -181,12 +224,25 @@ export async function createOrderWithPlace(
     const rec = buildOrderRecord({
       order_id: created.id,
       thread_id: context.thread_id,
-      job_id: ids.job_id,
+      job_id: ids.job_id ?? null,
       order_number: created.number ?? ids.order_number ?? null,
       sender_email: context.sender_email,
       sender_domain: context.sender_domain,
       place_id: o.slot_teams[0]?.place_id ?? null,
       shape_sent: o,
+      /**
+       * WHERE THIS ID CAME FROM, recorded at the one moment it is known for certain.
+       *
+       * Phase 0 counted 148 distinct order ids across `conversation_state` and found 90
+       * of them were never created by this engine — they were read out of OnSinch by
+       * `matchExistingOrder` (compiler.ts) and, because that only runs when the thread
+       * has no id yet, never re-read afterwards. A recorded id therefore carries no
+       * indication of whether it is a fact we established or a reading we took once,
+       * and the 39-of-47 finding in the outstanding document counts both as one
+       * population. `api_response` is the half that is not in doubt.
+       */
+      id_source: "api_response",
+      verified_at: ids.job_id ? new Date().toISOString() : null,
     });
     await recordOrder(rec).catch((err: unknown) => {
     void reportError({ route: "booking-lost", where: "deps/order-records", what: "order record not written", detail: String((err as Error)?.message ?? err), severity: "log" });
@@ -194,7 +250,13 @@ export async function createOrderWithPlace(
   });
   }
 
-  return { id: created.id, number: created.number ?? ids.order_number, job_id: ids.job_id, team_ids: [] };
+  return {
+    id: created.id,
+    number: created.number ?? ids.order_number,
+    job_id: ids.job_id,
+    team_ids: [],
+    ...(ids.unread ? { unread: ids.unread } : {}),
+  };
 }
 import { archiveOrder, recordReplacement } from "./orderArchiveDb";
 import { loadProfessions } from "./professionsDb";
@@ -368,11 +430,16 @@ export function executor(client: OnsinchClient): Executor {
       }
       return String(j.draftId);
     },
-    async createOrder(order) {
+    async createOrder(order, where) {
       // recordAlias is what makes a created company or venue findable from a cold
       // lambda. Passed rather than imported inside createOrderWithPlace so the write
       // path stays testable with no database.
-      return createOrderWithPlace(client, order, recordAlias);
+      //
+      // `where` IS THE FOURTH ARGUMENT THAT WAS NEVER PASSED. createOrderWithPlace has
+      // taken a context parameter since 2026-08-28 and this call site supplied three
+      // arguments, so `recordOrder` never ran and `order_records` was never created —
+      // a finished durable-record store that existed only as a type. See OrderContext.
+      return createOrderWithPlace(client, order, recordAlias, where);
     },
     /**
      * A crew or time change applied to the order that exists, rather than to a

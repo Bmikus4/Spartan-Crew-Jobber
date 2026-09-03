@@ -831,6 +831,115 @@ export async function resolvePlace(
   );
 }
 
+/**
+ * A BLOCK THAT NAMES ITS OWN VENUE — "6 crew at ExCeL, then 4 at the Banqueting
+ * House". Location is half of what separates one SlotTeam from another, so a block
+ * with its own place composes as its own team and stays there.
+ *
+ * THIS USED TO CALL `matchPlace` AND NOTHING ELSE, and that is the whole defect.
+ * matchPlace is the weakest of the six things resolvePlace tries — no alias store,
+ * no adjudicator, no fuzzy second pass, no shell rules — so a block naming a venue
+ * the job's own text would have resolved fine came back null. And null meant "keep
+ * the order's place", which is not a hold: the merge key includes the place, so the
+ * block then MERGED into whichever venue the job was booked at. Six at ExCeL and
+ * four at the Banqueting House became ten at ExCeL, with a note reading "a block
+ * named its own venue but it did not resolve" and nothing saying where the four
+ * went. Measured on real mail, 2026-09-03: 5 of 100 threads name a block venue and
+ * 2 of those inherited silently.
+ *
+ * So blocks now go through the SAME resolver the job's venue did, which since
+ * 2026-09-03 also means an unresolved one creates a row rather than being discarded.
+ *
+ * THE ONE THING THAT CANNOT BE DONE: an OnSinch order carries a single
+ * `provision_place`, backfilled onto every team still lacking a place_id. So at
+ * most ONE new venue per order. Where the job's venue and a block both need
+ * creating, or two blocks do, the second is stranded — it keeps the job's place and
+ * the thread is flagged for review, naming the wording, rather than merging in
+ * silence. That is a real limit of the write API, not a decision, and it is the
+ * reason this returns `review` instead of quietly doing its best.
+ */
+export async function resolveBlockVenues(
+  facts: ConversationFacts,
+  job: { place_id?: number; provision?: DesiredOrder["provision_place"]; location_text?: string },
+  onsinch: OnsinchClient,
+  aliases?: CompileDeps["aliases"],
+  deps?: { venueJudge?: VenueJudge | null }
+): Promise<{
+  facts: ConversationFacts;
+  provision?: DesiredOrder["provision_place"];
+  notes: string[];
+  review: boolean;
+}> {
+  const wordings = [
+    ...new Set(
+      (facts.requests ?? []).map((r) => r.location_text?.trim()).filter((w): w is string => !!w)
+    ),
+  ];
+  if (!wordings.length) return { facts, provision: job.provision, notes: [], review: false };
+
+  // Resolved once per DISTINCT wording: the search is ~3,000 rows and the
+  // adjudicator is a model call, and "then back to the same loading bay" appearing
+  // in four blocks is one question, not four.
+  const resolved = new Map<string, Awaited<ReturnType<typeof resolvePlace>>>();
+  for (const w of wordings) {
+    resolved.set(w, await resolvePlace({ requests: [], location_text: w } as ConversationFacts, undefined, onsinch, aliases, deps));
+  }
+
+  // The order's single provision slot, and who holds it. When the JOB's own venue
+  // could not be resolved it already has it, keyed on the job's wording, so a block
+  // repeating that wording shares the row rather than being stranded by it.
+  let provision = job.provision;
+  let claimedBy = provision ? normAddr(job.location_text ?? "") : null;
+
+  let moved = 0;
+  let created = 0;
+  let sameAsJob = 0;
+  const stranded: string[] = [];
+
+  const requests = (facts.requests ?? []).map((r) => {
+    const w = r.location_text?.trim();
+    if (!w) return r;
+    const got = resolved.get(w)!;
+
+    if (got.id) {
+      // The same building the job is at. Leaving place_id unset is what MERGES it,
+      // and that is correct — it is one venue, so it is one team.
+      if (got.id === job.place_id) { sameAsJob++; return r; }
+      moved++;
+      return { ...r, place_id: got.id };
+    }
+
+    // A venue the tenant does not hold.
+    if (!provision) {
+      provision = got.provision;
+      claimedBy = normAddr(w);
+      created++;
+      // 0, not undefined: `compose` reads `r.place_id ?? inp.place_id`, so undefined
+      // would inherit the job's venue and merge. 0 is the "created on write" marker
+      // both write paths already fill in, and only where it is still 0.
+      return { ...r, place_id: 0 };
+    }
+    if (claimedBy === normAddr(w)) return { ...r, place_id: 0 };
+
+    stranded.push(w);
+    return r;
+  });
+
+  const notes: string[] = [];
+  if (moved) notes.push(`${moved} block(s) name a different venue — staffed as separate teams`);
+  if (created) notes.push(`a block names a venue this tenant does not hold — created as a new venue from what the client wrote; CHECK IT in OnSinch`);
+  if (sameAsJob && !moved && !created) notes.push(`block venue(s) name the same building as the job — staffed as one team`);
+  if (stranded.length) {
+    notes.push(
+      `SECOND NEW VENUE CANNOT BE CREATED — ${stranded.map((s) => `"${s}"`).join(", ")} ` +
+      `is not a venue this tenant holds and an order can only carry one new one, so that crew is ` +
+      `booked at the job's venue. SPLIT IT BY HAND: create the venue in OnSinch and move those blocks.`
+    );
+  }
+
+  return { facts: { ...facts, requests }, provision, notes, review: stranded.length > 0 };
+}
+
 export async function compile(
   thread: HydratedThread,
   prior: ConversationState | undefined,
@@ -1115,18 +1224,6 @@ export async function compile(
     }
 
     /**
-     * A block that names its OWN venue — "4 crew at ExCeL, then 2 at Olympia that
-     * afternoon". Location is half of what separates one SlotTeam from another, and
-     * until now nothing upstream could express it: every block inherited the order's
-     * single place, so a job that moved crew between venues composed as one team.
-     *
-     * Only resolved against places that already exist. A per-block venue that does
-     * not resolve keeps the order's place rather than provisioning a second one:
-     * creating a venue from a fragment inside a request block is how the 632 ExCeL
-     * shells got there in the first place, and the block-level string is the shortest
-     * and least reliable venue text in the whole email.
-     */
-    /**
      * Learn the profession wordings this client actually uses (Ben, Q11).
      *
      * The resolver works every hint out from first principles on every email, so a
@@ -1176,22 +1273,21 @@ export async function compile(
       };
     }
 
-    const perBlock = (facts.requests ?? []).filter((r) => r.location_text?.trim());
-    if (perBlock.length) {
-      const places = await onsinch.allPlaces();
-      let moved = 0;
-      facts = {
-        ...facts,
-        requests: (facts.requests ?? []).map((r) => {
-          if (!r.location_text?.trim()) return r;
-          const id = matchPlace(r.location_text, places);
-          if (!id || id === place_id) return r;
-          moved++;
-          return { ...r, place_id: id };
-        }),
-      };
-      if (moved) notes.push(`${moved} block(s) name a different venue — staffed as separate teams`);
-      else notes.push(`a block named its own venue but it did not resolve — kept on the job's venue`);
+    {
+      const blocks = await resolveBlockVenues(
+        facts,
+        { place_id, provision: provisionPlace, location_text: facts.location_text },
+        onsinch,
+        deps.aliases,
+        deps
+      );
+      facts = blocks.facts;
+      provisionPlace = blocks.provision;
+      notes.push(...blocks.notes);
+      // Not `blocked`: the order still writes, with the crew it could place. A person
+      // splits the second venue off. Withholding the whole booking over one block is
+      // the failure Ben ruled out on 2026-08-09.
+      if (blocks.review) review_flag = true;
     }
 
     // Order dedup vs OnSinch — never create a second job for an existing one, and
