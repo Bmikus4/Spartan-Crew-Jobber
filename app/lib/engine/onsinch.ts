@@ -460,8 +460,16 @@ export class OnsinchClient {
    *                              "data":{"path":"Order:13784\/Job:14064\/SlotTeam:35499"}}
    *
    * Verified live against orders from three different months, raised both by this engine
-   * (`creator: null`) and by hand in the UI (`creator: <user id>`), back to the tenant's
-   * first order in 2023.
+   * and by hand in the UI, back to the tenant's first order in 2023.
+   *
+   * `creator` IS NEVER NULL AND CANNOT IDENTIFY AN ENGINE ORDER. This docstring said
+   * engine orders carry `creator: null` and orders raised in the UI carry a user id, and
+   * a whole session's reasoning was built on it. Falsified 2026-09-03: `?creator[eq]=`
+   * matches 0 of the 6,880 orders in the tenant, and the engine's own orders carry
+   * `creator: 2257` — the API key's user — exactly like a person's. What DOES separate
+   * them is `request_approval`, which is `"1"` on all 33 orders creator 2257 still has
+   * and absent on almost everything else. It is not a filterable field, so it can be
+   * read but not queried.
    *
    * THREE PROPERTIES OF THE QUERY, each of which cost a probe:
    *

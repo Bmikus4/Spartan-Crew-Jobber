@@ -778,3 +778,160 @@ Phase 1 begins. Both are above. The four corrections in §5 and the new risk in 
 what Phase 1 should do first, so acceptance is a real decision, not a formality.
 
 Nothing was changed. Zero writes to the database, zero OnSinch calls, no deploy.
+
+---
+
+# 8. Where the engine's orders actually go (settled 2026-09-03)
+
+Phase 0 left one question open and called it the biggest: orders created through the API
+do not survive (8 of 398 in a window, 2%) while orders raised in the OnSinch UI do (51
+of 52, 98%). Ben's explanation, unverified at the time, was that "the jobs are being
+approved by the team internally". This section settles it. Everything here is read-only
+and reproducible with `node scripts/approval-forensics.mjs`.
+
+## 8.1 The tool that made it answerable: the filter oracle
+
+`?ZZZ=1` on any list endpoint returns a 400 naming every allowed filter field. Run
+against the two models that matter:
+
+```
+Order          id, company_id, user_id, agency_invoice_address_id, order_manager_id,
+               name, specification, number, status, quote, provisional, reverse_charge,
+               happening, created, modified, creator, modifier, intern_name
+TimelineAudit  id, action, data, creator, created
+```
+
+That is what replaces `data[like]=%15761%` — a substring match over the whole payload
+which returns about 100 rows for any five-digit number and means nothing. The audit log
+can be filtered on `action` and on a `created` window, and `pagination.count` on a
+`limit=1` read gives the true total without walking a single page.
+
+## 8.2 The 2% figure has the wrong numerator
+
+| action | total ever |
+|---|---|
+| `order_create` (UI) | 6,866 |
+| `order_created_via_api` | 5,708 |
+| `order_cancel` | 1,107 |
+| `order_convert_to_quote` | 263 |
+| `job_publish` | 5,908 |
+| `slot_team_close` | 18,712 |
+| orders present in the tenant | **6,880** |
+| all audit rows | 907,969 |
+
+The arithmetic that produced "5,693 bookings destroyed" was 6,856 + 5,698 - 6,861. It
+treats every `order_created_via_api` row as a booking that once existed. It is not.
+
+Filtered to the window the 2% was measured over: **752 api-create rows since 2026-08-26,
+all by creator 2257.** Sampling three pages across that set, 200 of 252 rows fall in a
+**two-hour window on 2026-08-26 between 02:00 and 04:00**, and they are named:
+
+```
+#14869  ZZ POSTURE TEST A - no rate card
+#14870  ZZ POSTURE TEST B - with rate card
+#14871  AMEND MATRIX - safe to delete
+#14872  AMEND MATRIX - safe to delete      ... and so on
+```
+
+That is the posture and amend-matrix probe session. The orders were created in order to
+be deleted; "safe to delete" is in the name. Real client traffic is the trickle either
+side of it — 1 to 3 rows an hour on 09-02 and 09-03, with composed names like
+`RG Jones — sound crew at Guildhall, 4 Sep` and `Steeldeck — 2 warehouse crew at Unit 58
+T. Marchant Estate, 7 Sep`.
+
+**The window chosen for the measurement opens on the largest deliberate
+throwaway-order run in the project's history.**
+
+For scale, the engine's own ledger: `order_action_log` holds **90 creates all time**, 86
+patches, 5 amends, 2 replaces, 22 amend-refused, 9 replace-refused — 183 entries naming
+108 distinct order ids. The most recent create is stamped 2026-09-03T16:20:18Z and order
+#15788 was created at 2026-09-03T16:20:16Z. The engine is booking, and it is recording
+what it books.
+
+## 8.3 What is actually true of the ids the engine recorded
+
+186 threads carry an `onsinch_order_id`. Each read back individually with `?id[eq]=`:
+
+| | |
+|---|---|
+| present | **132** |
+| absent | **54** |
+| unreadable | 0 |
+
+Of the 54 absent, matched against every present order the same company has, on the day
+the thread's own first block names:
+
+| | |
+|---|---|
+| a present order exists for that company that day | **24** |
+| nothing that day — the booking is gone | **18** |
+| untestable (no company_id or no date recorded) | 12 |
+
+The 24 are unmistakable once seen. Ours to theirs, with the creator of the survivor:
+
+```
+ours #15743/R10797  co=324  2026-09-08  ->  #15744/R10798  user 2714
+ours #15740/R10795  co=223  2026-09-10  ->  #15735/R10790  user 2714
+ours #15724/R10781  co=126  2026-09-02  ->  #15725/R10782  user 2714
+ours #15588/R10738  co=713  2026-09-02  ->  #15590/R10740  user 413
+ours #15578/R10730  co=723  2026-08-29  ->  #15585/R10735  user 413
+ours #13783/R10653  co=157  2026-08-21  ->  #13784/R10654  user 2620
+```
+
+Adjacent ids, adjacent R numbers, same client, same day, raised by a person hours after
+ours. **The team re-keys the engine's order in the UI and the original is deleted.** The
+work was never lost; the engine's pointer to it was. That is Ben's explanation, confirmed
+in the only form the data can confirm it.
+
+Of the 18 with nothing that day, several are Ben's own test sends — `new booking request
+in london` against companies 502 and 39, one dated 2027-10-24 and one 2024-10-23 — and
+some are amendment threads where the recorded id is the one the engine itself deleted
+during a delete-and-repost, whose replacement is on a different day than the first block
+this comparison keys on. The residue is small and no longer the headline.
+
+## 8.4 Approval leaves no trace, and `creator` cannot identify an engine order
+
+Two things that look like they should be findable are not:
+
+- **No audit action removes an order.** `order_delete`, `order_remove`, `order_change`,
+  `order_approve`, `order_approved`, `order_request_approval`, `job_create`, `job_delete`,
+  `slot_team_create`, `slot_team_delete`, `slot_team_change` — every one returns **0 rows
+  out of 907,969**. A deletion is invisible in the audit log, which is the whole reason
+  create rows outnumber live orders.
+- **`creator` is never null.** `?creator[eq]=` (empty) matches 0 of 6,880. The engine's
+  orders carry `creator: 2257` — the API key's user — exactly like a person's. The
+  docstring on `onsinch.ts:slotTeamsForOrder` claimed engine orders carry `creator: null`
+  and a session's reasoning was built on it; it is corrected, and `ASSUMPTIONS.md` A11
+  records the falsification.
+
+What DOES mark an engine order is **`request_approval: "1"`**, a field the API reference
+never mentions. It is set on all 33 orders creator 2257 still has and absent on
+essentially every other order in the tenant. It is returned but **not filterable** — so
+it can be read one order at a time and never queried, which is why it went unnoticed.
+
+There is no approval endpoint: `/orderApprovals`, `/approvals`, `/orderRequests`,
+`/requestApprovals` and `/orderApproval` are all 404 (and 404 means no such resource,
+where 405 would mean it exists with GET barred).
+
+`status` takes only three values across the tenant — `-2` (5,602), `-1` (1,138) and `0`
+(the rest) — and `status[gte]=1` matches nothing, so approval does not move an order to a
+hidden state. It removes it.
+
+## 8.5 The read that reports every order absent
+
+`/orders/{id}` **returns 404 for every id, including ids that exist.** #15761 is 404 by
+path and present by `?id[eq]=15761`. Any verification built on the path form reports the
+whole tenant missing. The filter form is the only one that answers, and `orderById`
+already re-checks the returned id client-side because the filter being silently ignored
+is the other failure mode on this API.
+
+## 8.6 What this changes
+
+- §3.2's headline is withdrawn. There is no population of thousands of destroyed
+  bookings. The real number is 54 absent recorded ids, of which 24 are demonstrably
+  re-keyed and live.
+- The defect worth fixing is the engine's blindness to a re-key, not a recovery job.
+  Shipped: the refusal now names the replacement order, its R number and who raised it,
+  instead of "no longer exists". Whether the engine may adopt it is `DECISIONS.md` D6.
+- `HANDOVER.md` H7 lists the five threads stranded on this today, with the live order to
+  work on for the three that have one.

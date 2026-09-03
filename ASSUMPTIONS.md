@@ -37,7 +37,14 @@ lives inside a `conversation_state` row that maintenance scripts have rewritten 
 - **Falsified by:** the Vercel deployment list showing the fix shipped later, which
   would mean those companies were created some other way.
 - **Cost of being wrong:** §3.3 is not fixed and new clients are still failing silently.
-- **How to close it:** `vercel ls` / the deployments page against `4e73213`. One minute.
+- **How to close it:** NOT THIS WAY. Tried 2026-09-03: no deployment of this project
+  carries a commit sha, because every one is a `npx vercel --prod` upload of the working
+  directory rather than a git build. There is nothing to match `4e73213` against and one
+  minute of looking cannot produce it. See `HANDOVER.md` H3 — the general form of this is
+  that **what production is running is not identifiable from git at all**, which is a
+  worse problem than A3 and the reason A3 is unclosable rather than merely open.
+- **What stands regardless:** the outcome evidence does not depend on the deploy time.
+  Zero `createCompany` 400s since 2026-08-28T00:19Z and companies 822/823 created.
 
 ## A4 — production runs one thread at a time
 
@@ -141,7 +148,30 @@ No recovery lookup was added, because I did not probe a key for it the way I did
 
 ---
 
-## A11 — the original A7 text, kept for the reasoning
+## A11 — FALSIFIED. `creator` is null on nothing, and cannot identify an engine order
+
+Both sources quoted below are wrong about the same field, and the docstring's version
+was load-bearing for a session's reasoning. Measured 2026-09-03 against the live tenant:
+
+- `GET /orders?creator[eq]=` (empty) matches **0 of 6,880** orders. No order in this
+  tenant has a null creator.
+- The engine's own orders carry `creator: 2257`, the API key's user, indistinguishable
+  in that field from a person's order. #15788, created 2026-09-03T16:20Z by this engine,
+  reads `creator: 2257, user_id: 2257, order_manager_id: 2257`.
+- What DOES separate them is **`request_approval`**, a field the API reference never
+  mentions: `"1"` on all 33 orders creator 2257 still has, absent on essentially
+  everything else. It is returned but **not filterable** (`request_approval[eq]=1` is a
+  400 naming the allowed fields), so it can be read per order and never queried.
+
+`request_approval` is also the mechanism behind Ben's "the team approves them
+internally": orders this engine raises are marked as awaiting approval, and the team
+works them in the UI. The docstring in `onsinch.ts:slotTeamsForOrder` has been corrected.
+
+The original A11 text follows, kept because the contradiction it recorded was real and
+the resolution is that BOTH sources were wrong in the same direction.
+
+### The original A11 text
+
 
 Two sources in the repo contradict each other and Phase 0 believed neither:
 
@@ -155,3 +185,35 @@ Only one can hold. Which one decides whether §3.1's seven orders can be correct
 
 - **How to close it:** one read of `/timelineAudits?data[like]=%Order:15761%` against a
   known engine-raised order. Read-only, one API call.
+
+---
+
+## A12 — CLOSED. `order_created_via_api` is not a count of engine bookings
+
+The 2% survival finding rested on 5,708 `order_created_via_api` audit rows against a
+tenant holding 6,880 orders, and on 398 creates in a window from 2026-08-26 of which 8
+survived. Both numerators are dominated by orders that were MEANT to be destroyed.
+
+Measured 2026-09-03 with the action filter (`?action[eq]=`, an allowed filter field, so
+no substring matching is involved):
+
+- 752 `order_created_via_api` rows since 2026-08-26, **all** by creator 2257.
+- Sampling three pages across that set, 200 of 252 rows land in a **two-hour window on
+  2026-08-26 between 02:00 and 04:00**, named `ZZ POSTURE TEST A - no rate card`,
+  `ZZ POSTURE TEST B - with rate card`, and `AMEND MATRIX - safe to delete` x many.
+  That is the posture/amend probe session, and "safe to delete" is in the order name.
+- Real client traffic is the trickle either side: 1-3 rows an hour on 09-02 and 09-03,
+  with composed names like `RG Jones — sound crew at Guildhall, 4 Sep`.
+- The engine's own `order_action_log` holds **90 creates all time**, the most recent at
+  2026-09-03T16:20:18Z, matching order #15788 to the second.
+
+So the window chosen for the 2% measurement opens on the largest deliberate
+throwaway-order run in the project's history. **There is no population of 5,693
+destroyed bookings.** What there is: 90 engine creates ever, 33 API-created orders still
+present tenant-wide, and the real question, which is what happens to the ones a person
+re-keys — see the model §8 and `DECISIONS.md` D6.
+
+- **Falsified by:** an audit action that removes an order. There is none: `order_delete`,
+  `order_remove`, `order_change`, `order_approve`, `order_approved` and
+  `order_request_approval` all return **0 rows** out of 907,969. Deletion and approval
+  leave no trace in the audit log, which is why the create rows outnumber the orders.

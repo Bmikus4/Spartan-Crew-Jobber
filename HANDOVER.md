@@ -5,7 +5,33 @@ command or screen that verifies it, and what is blocked until it is done.
 
 ---
 
-## H1 — Turn on authentication (findings §3.9) — **Ben, in a browser**
+## H1 — Turn on authentication (findings §3.9) — **DONE, verified 2026-09-03**
+
+**This is closed and needed nothing from this session.** Somebody completed it between
+09-02 and 09-03. Measured against `https://spartan-crew-jobber.vercel.app`:
+
+| probe | answer |
+|---|---|
+| `GET /api/jobs`, `/api/metrics`, `/api/settings`, `/api/onboarding`, `/api/confirm-order` | **401**, body `{"error":"Unauthorized"}` |
+| `GET /api/health/intake` | 401 from its own secret check, not the session gate |
+| `GET /api/auth/google` | **302** to `accounts.google.com` with a real `client_id` and `redirect_uri=https://spartan-crew-jobber.vercel.app/api/auth/google/callback` |
+| `GET /` | 200, the board still renders |
+
+The 401 body is the middleware's own JSON rather than a Vercel login page, so the gate
+is `AUTH_REQUIRED=true` in Production and not deployment protection — which matters,
+because deployment protection would also have blocked n8n. Google OAuth is configured,
+so the team is not locked out: the failure mode this item warned about did not happen.
+
+Charter invariant 4 ("every API route denies unauthenticated requests by default in
+production") is therefore satisfied, and it is held in code as well as in config:
+`test/machineRouteAuth.ts` parses the SKIP list out of `middleware.ts` and asserts each
+skipped route has no "unconfigured means allowed" branch, and
+`test/writeRoutesAuthorised.ts` sweeps every route file and asserts each state-changing
+method consults an authority. A route added tomorrow is checked by both.
+
+The original steps are kept below as the record of what was done.
+
+### The original instructions
 
 `GET /api/jobs` and `/api/metrics` are open in production. ~124 KB across 258 threads:
 contact names, companies, venues, dates, crew sizes, R and J numbers.
@@ -84,7 +110,30 @@ and how it was falsified.
 
 ---
 
-## H2b — Try the local build on C:, once, to close §3.9's build failure
+## H2b — Try the local build on C: — **DONE, 2026-09-03. It is the filesystem.**
+
+Run at commit `46c7cd3` in a git worktree on `C:` (NTFS) with its own `npm ci`:
+
+```
+tsc --noEmit   exit 0
+npm run build  Compiled successfully in 16.4s, 14 routes + middleware, exit 0
+```
+
+No `EISDIR`, no readlink failure, nothing changed in the repo. The diagnosis in
+`docs/PHASE0-SYSTEM-MODEL.md` §5.3 is confirmed: `D:` is exFAT and its driver answers
+`readlink()` on a regular file with EISDIR where NTFS answers EINVAL, and webpack's
+resolver only handles EINVAL. **The answer is to keep a build checkout on `C:`; nothing
+in the repo needs changing.** The worktree used was `C:/spartan-headcheck`, made with
+`git worktree add --detach`, which costs no second clone.
+
+That run also caught something the exFAT failure had been masking: **HEAD `1471293` did
+not typecheck.** It carried the reader for `id_source`/`verified_at`/`OrderContext` in
+`app/lib/deps.ts` while the type declarations sat uncommitted in the working tree, so
+`tsc` gave 4 errors and `next build` failed on the type check rather than on readlink.
+It was never deployed — production is a CLI deploy from 09-02 — and committing the
+working tree repaired it. The lesson is in H3.
+
+### The original instructions
 
 Not engine work and it changes no production behaviour, which is why it is here rather
 than in a phase. `next build` fails on this checkout with `EISDIR ... readlink` on an
@@ -110,7 +159,30 @@ is a real defect and it deserves a proper look.
 
 ---
 
-## H3 — Confirm the createCompany fix actually deployed — **anyone with Vercel access**
+## H3 — Confirm the createCompany fix deployed — **CANNOT BE CLOSED THIS WAY**
+
+`vercel ls` and `vercel inspect` were run, 2026-09-03. **No deployment of this project
+carries any git metadata** — no commit sha, no branch, no author. Every one was made
+with `npx vercel --prod`, which uploads the working DIRECTORY, so a deployment is not a
+commit and there is nothing to match `4e73213` against. The production alias points at
+`dpl_BWun8QWezXMo2ucNxGsyG3z2UrpQ`, created 2026-09-02T20:13:43Z.
+
+The consequence is bigger than this item and belongs on the record: **what is running in
+production is not identifiable from git.** A CLI deploy from a dirty tree ships
+uncommitted work, and a commit that is never deployed ships nothing; both have happened
+here in the last two days. The 09-02 deploy may well contain Phase 0's uncommitted
+fixes, and no evidence available now can say.
+
+So A3 stays open as stated and cannot be closed by looking. What DOES stand on its own,
+without knowing the deploy time, is the outcome: zero `createCompany` 400s since
+2026-08-28T00:19Z, and companies 822 and 823 created successfully. §3.3 is fixed
+whichever deployment carried it.
+
+**Worth fixing properly:** connect the Vercel git integration, or deploy only from a
+clean tree and record the sha. Until then no claim of the form "production has X" is
+verifiable.
+
+### The original instructions
 
 §3.3 is called fixed on measured evidence: zero `createCompany` failures since
 2026-08-28T00:19Z, and companies 822 and 823 created successfully after commit
@@ -166,3 +238,26 @@ remediation charter forbids and which is the only reason new clients can be book
 all. Recommendation is to keep it and add a review-queue entry once one exists.
 
 **Blocked until answered:** whether `createCompany`'s defaults stay in the code.
+
+---
+
+## H7 — Five threads are stranded on an order that was re-keyed — **Ben or ops**
+
+These sit at `needs-info` with "crew/time change NOT applied — order #N no longer exists
+in OnSinch". The client's change never reached OnSinch, so each needs a person.
+
+Three of them have a live order that is almost certainly the same job, re-keyed by hand
+(same client, same day, adjacent id and R number) — found 2026-09-03 by
+`node scripts/approval-forensics.mjs --survive`:
+
+| thread | our dead order | the live order to work on |
+|---|---|---|
+| `1a0481a801dde268` | #15588 / R10738 | **#15590 / R10740**, raised by user 413 |
+| `1a0477e1e0de5ac4` | #15578 / R10730 | **#15585 / R10735**, raised by user 413 |
+| `1a01e5fb812611a1` | #13783 / R10653 | **#13784 / R10654**, raised by user 2620 |
+| `1a043daff1110f26` | #15591 / R10741 | none found that day — genuinely gone |
+| `1a057789646e6272` | #15700 / R10758 | none found that day — genuinely gone |
+
+Apply the client's change to the live order by hand, then clear the thread. The engine
+now names the replacement in its own refusal note, so the next occurrence will not need
+this table — but it still refuses to write, which is `DECISIONS.md` D6.

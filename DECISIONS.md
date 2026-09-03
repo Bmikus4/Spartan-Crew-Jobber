@@ -73,6 +73,12 @@ available to say whether anyone but Ben ever fetched it.
 **Recommendation:** close the hole first (`HANDOVER.md` H1), then decide. The two are
 independent and the fix should not wait on the ruling.
 
+**Update 2026-09-03: the hole is closed** — every `/api/*` route on production answers
+401, verified by probe (H1). So the precondition is met and this is now purely the
+business question: does data served unauthenticated for the life of the deployment, up
+to 2026-09-02, need a disclosure? Nothing in the code is waiting on the answer, and
+there is still no access log that could say whether anyone but Ben ever fetched it.
+
 **Blocked until answered:** nothing.
 
 ---
@@ -111,3 +117,37 @@ human approval per order — never a batch. And nothing at all until A7 in
 orders then there is no in-place route and the answer is hands, not code.
 
 **Blocked until answered:** Phase 5a.
+
+---
+
+## D6 — May the engine re-point a thread at an order a person raised?
+
+**The situation, measured 2026-09-03.** Of 186 recorded order ids, 132 read back present
+and 54 absent. Of those 54, **24 have a live order for the same company on the same day,
+raised by a named person, with an id and an R number one or two away from ours** — ours
+#15588 to #15590 by user 413, ours #15578 to #15585, ours #13783 to #13784. The team
+re-keys the engine's order in the OnSinch UI and the original goes. The work was never
+lost; our pointer to it was.
+
+Five threads are stranded at `needs-info` on this today, and the engine's live symptom is
+`patchOrder 400: Records with specified IDs not found`.
+
+| option | cost of being wrong |
+|---|---|
+| **A. Refuse and name it** (shipped) | A person still has to apply every change by hand, and the thread stays open until they do. Nothing can go wrong automatically; nothing gets faster. |
+| **B. Adopt the successor automatically** and amend it | The engine writes to an order it did not create, on the strength of a company-and-day match. If the match is wrong it amends a DIFFERENT job for the same client on a day they have two bookings — and it would then delete-and-repost somebody's confirmed work. |
+| **C. Propose the adoption into the review queue** with the evidence, one human click | Needs Phase 2d. Gets the speed without the engine deciding whose order it may take over. |
+
+**Recommendation: C, with A shipped as the interim.** A is live now: the refusal names
+the replacement order, its R number and who raised it, so ops read an order number
+instead of a dead end (`orderPreflight.ts`, `test/orderReplacedByHand.ts`). B should not
+be taken without the queue: the match is a heuristic, and the one case it gets wrong is
+the case where a client has two jobs on one day, which is exactly the client that books
+often enough for ops to re-key.
+
+**What would make B safe:** an OnSinch-side link between the order a person raised and
+the one it replaced. None exists — the R number is reused after a delete, so it cannot
+serve, and no audit action records the deletion at all.
+
+**Blocked until answered:** whether the 24 identified threads get re-pointed in bulk, and
+what an amendment to a re-keyed order does. Phase 5b.
