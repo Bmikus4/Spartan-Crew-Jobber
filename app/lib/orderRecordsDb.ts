@@ -14,6 +14,24 @@
 // ============================================================================
 import { neon, type NeonQueryFunction } from "@neondatabase/serverless";
 
+/**
+ * How an order id came to be recorded. The distinction Phase 0 found missing, and the
+ * reason "39 of 47 recorded ids do not resolve" reads as one finding when it is two.
+ *
+ *   api_response  OnSinch's own answer to a `POST /orders` this engine sent. Not in
+ *                 doubt: the id was minted for us and read back on the same call.
+ *   matched       read out of OnSinch history by company and date
+ *                 (`matchExistingOrder`) because the thread had no id yet. True at the
+ *                 moment it was read and never re-read since, because the link is
+ *                 guarded on `!linkedOrderId`. 90 of the 148 recorded ids are these.
+ *   manual        set by a person or a maintenance script.
+ *
+ * Only `api_response` is written today — the create path is the only writer wired up.
+ * The other two are declared rather than invented later, so that the day the matched
+ * ids get provenance the vocabulary does not have to change underneath them.
+ */
+export type IdSource = "api_response" | "matched" | "manual";
+
 export interface OrderRecord {
   order_id: number;
   thread_id: string;
@@ -26,6 +44,16 @@ export interface OrderRecord {
   shape_sent: unknown;
   block_count: number;
   crew_total: number;
+  /** Where the id came from. See IdSource — this is the column §3.2 needed and lacked. */
+  id_source: IdSource;
+  /**
+   * When the id was last confirmed to name a real order, or null.
+   *
+   * NULL IS A THIRD STATE, NOT A FALSE. "Never verified" and "verified and absent" are
+   * different facts about an order and the outstanding document counts them together;
+   * a boolean here would rebuild that conflation in the schema.
+   */
+  verified_at: string | null;
   created_at?: string;
 }
 
@@ -48,6 +76,8 @@ export function buildOrderRecord(input: {
   sender_domain: string | null;
   place_id: number | null;
   shape_sent: unknown;
+  id_source: IdSource;
+  verified_at: string | null;
 }): OrderRecord {
   const shape = (input.shape_sent ?? {}) as ShapeLike;
   const teams = Array.isArray(shape.slot_teams) ? shape.slot_teams : [];
@@ -89,10 +119,18 @@ async function ensure(sql: NeonQueryFunction<false, false>): Promise<void> {
       shape_sent    JSONB NOT NULL,
       block_count   INT NOT NULL,
       crew_total    INT NOT NULL,
+      id_source     TEXT NOT NULL DEFAULT 'api_response',
+      verified_at   TIMESTAMPTZ,
       created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
     )`;
+  // The CREATE above only runs on an empty database, so a column added later has to be
+  // added here too or it exists in dev and nowhere else. Same rule, and the same comment,
+  // as ticketsDb.ts — that repo learned it by shipping a column into one environment.
+  await sql`ALTER TABLE order_records ADD COLUMN IF NOT EXISTS id_source TEXT NOT NULL DEFAULT 'api_response'`;
+  await sql`ALTER TABLE order_records ADD COLUMN IF NOT EXISTS verified_at TIMESTAMPTZ`;
   await sql`CREATE INDEX IF NOT EXISTS order_records_thread ON order_records (thread_id)`;
   await sql`CREATE INDEX IF NOT EXISTS order_records_domain ON order_records (sender_domain)`;
+  await sql`CREATE INDEX IF NOT EXISTS order_records_unverified ON order_records (id_source) WHERE verified_at IS NULL`;
   _ready = true;
 }
 
@@ -104,16 +142,22 @@ export async function recordOrder(rec: OrderRecord): Promise<void> {
     await ensure(sql);
     await sql`
       INSERT INTO order_records (order_id, thread_id, job_id, order_number, sender_email,
-                                 sender_domain, company_id, place_id, shape_sent, block_count, crew_total)
+                                 sender_domain, company_id, place_id, shape_sent, block_count, crew_total,
+                                 id_source, verified_at)
       VALUES (${rec.order_id}, ${rec.thread_id}, ${rec.job_id}, ${rec.order_number}, ${rec.sender_email},
               ${rec.sender_domain}, ${rec.company_id}, ${rec.place_id}, ${JSON.stringify(rec.shape_sent)},
-              ${rec.block_count}, ${rec.crew_total})
+              ${rec.block_count}, ${rec.crew_total}, ${rec.id_source}, ${rec.verified_at})
       ON CONFLICT (order_id) DO UPDATE
         SET thread_id = EXCLUDED.thread_id, job_id = EXCLUDED.job_id,
             order_number = EXCLUDED.order_number, sender_email = EXCLUDED.sender_email,
             sender_domain = EXCLUDED.sender_domain, company_id = EXCLUDED.company_id,
             place_id = EXCLUDED.place_id, shape_sent = EXCLUDED.shape_sent,
-            block_count = EXCLUDED.block_count, crew_total = EXCLUDED.crew_total`;
+            block_count = EXCLUDED.block_count, crew_total = EXCLUDED.crew_total,
+            id_source = EXCLUDED.id_source,
+            -- A confirmation is never un-done by a later write that could not confirm.
+            -- COALESCE in this direction because "verified once" is a fact about the
+            -- past, and an upsert from a run whose read-back failed must not erase it.
+            verified_at = COALESCE(EXCLUDED.verified_at, order_records.verified_at)`;
   } catch (err) {
     console.error("[order-records] write failed", err);
   }

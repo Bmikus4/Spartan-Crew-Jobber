@@ -44,12 +44,29 @@ export function httpTransport(cfg: OnsinchConfig): Transport {
    * the thread went to `error` and nothing reached OnSinch. A burst of enquiries arriving
    * together is exactly when this fires and exactly when it costs most.
    *
-   * ONLY IDEMPOTENT-ON-FAILURE CALLS ARE RETRIED. A 500 means the server did not tell us
-   * what it did, so a retried POST could double-create. Two facts make it safe here:
-   * `POST /orders` now carries an EMPTY SlotTeam array (id custody), so a duplicate would
-   * be an empty order rather than a duplicate booking; and every duplicate is visible to
-   * the caller's ledger. `POST /slotTeams` is NOT retried — it is the one non-idempotent
-   * call in the engine (see amendOrder.ts) and a retry there appends a second crew block.
+   * NO POST IS EVER REPEATED HERE. A 500 does not say what the server did, and every
+   * POST in this API creates something, so repeating one can create it twice.
+   *
+   * This used to exempt only `POST /slotTeams`, on the reasoning that a duplicated
+   * `POST /orders` would be harmless "because `POST /orders` now carries an EMPTY
+   * SlotTeam array (id custody)". That stopped being true on 2026-08-28, when the create
+   * was changed to carry the crew nested — for the good reason that an order created
+   * blockless is filed into no queue anyone looks at (see deps.ts). The exemption was not
+   * revisited, so from that day a 500 the server had actually applied would have posted a
+   * second COMPLETE booking: real crew, real job, real invoice. `POST /companies` and
+   * `POST /places` were in the same position and would have duplicated a client or a
+   * venue — the tenant pollution the whole alias/dedup layer exists to prevent.
+   *
+   * So the rule is now stated by what is safe to repeat rather than by a list of
+   * exceptions, because the list is what went stale: GET is a read; PATCH and DELETE
+   * address a record by id and land in the same state whether sent once or twice.
+   *
+   * LOSING A BOOKING IS NOT ACCEPTED IN EXCHANGE. OnSinch 500s on 17% of creates under
+   * concurrency (measured 2026-08-25, 15 of 86 at concurrency 4; 0 of 25 at concurrency
+   * 1), and without a retry every one of those was a silently lost booking. The recovery
+   * moved to `createOrder`, which knows the body and can therefore ASK OnSinch whether
+   * the order exists instead of guessing — a read, repeated safely, in place of a write
+   * repeated dangerously.
    *
    * The budget is deliberately small. The whole pipeline runs inside n8n's 60s ceiling
    * and this transport already has a 12s per-request timeout, so two retries at 400ms and
@@ -58,7 +75,7 @@ export function httpTransport(cfg: OnsinchConfig): Transport {
    */
   const RETRY_BACKOFF_MS = [400, 1200];
   const retriable = (method: string, path: string, status: number) =>
-    status >= 500 && status !== 501 && !(method === "POST" && path.startsWith("/slotTeams"));
+    status >= 500 && status !== 501 && method !== "POST";
 
   const once = async (method: string, path: string, body: unknown) => {
     let res: Response;
@@ -223,7 +240,76 @@ export class OnsinchClient {
    * `undefined` into the one field a human searches OnSinch on.
    */
   async createOrder(body: OnsinchOrderBody[]) {
-    const r = await this.t("POST", "/orders", body);
+    const sent = body?.[0];
+    // The earliest `created` stamp an order may carry and still be the one this call
+    // made. Wide on purpose: it is compared against OnSinch's clock, not ours, and the
+    // cost of the window being too NARROW is a duplicate booking while the cost of it
+    // being too WIDE is adopting an identical order for the same client raised minutes
+    // ago — which is very nearly always this same engine, and is the answer we want.
+    const notBefore = Date.now() - 5 * 60 * 1000;
+
+    let r: { status: number; data: any };
+    try {
+      r = await this.t("POST", "/orders", body);
+    } catch (err) {
+      /**
+       * THE TRANSPORT THREW — a 12s timeout or a dropped connection. This is the case
+       * where the order most probably EXISTS and least probably is known: the write may
+       * have been applied and only the answer lost. Before 2026-09-02 this threw
+       * straight through, the thread went to `error`, and the order sat in OnSinch
+       * belonging to nobody until the next email on the thread either matched it out of
+       * history or created a second one.
+       */
+      const found = sent ? await this.findLostCreate(sent, notBefore).catch(() => null) : null;
+      if (found) return found;
+      throw err;
+    }
+
+    if (r.status >= 500) {
+      /**
+       * A 5xx DOES NOT SAY WHAT THE SERVER DID, SO WE ASK RATHER THAN RE-POST.
+       *
+       * The transport used to repeat this call. It cannot any more (see httpTransport):
+       * a repeated create makes a second complete booking, with real crew on a real job.
+       * A read cannot, so the recovery is a read — twice, 1.2s apart, because the first
+       * may race the write that produced the 500.
+       *
+       * If it is there, the booking was never lost and we adopt it. Only after OnSinch
+       * has twice said the order does not exist is the create sent again, and that is
+       * one re-post, not a loop. The residual risk is stated rather than hidden: a
+       * duplicate is still possible if OnSinch applied the write, answered 5xx, AND hid
+       * the row from two reads. Nothing available through this API narrows that further.
+       */
+      for (const wait of [0, 1200]) {
+        if (wait) await new Promise((res) => setTimeout(res, wait));
+        let found: { id: number; number?: string } | null;
+        try {
+          found = sent ? await this.findLostCreate(sent, notBefore) : null;
+        } catch (probeErr) {
+          /**
+           * THE LOOKUP ITSELF FAILED, WHICH IS NOT THE SAME AS "THE ORDER IS ABSENT",
+           * and conflating the two is how this fix would have reintroduced the bug it
+           * exists to remove. An unanswered question must not authorise a second write.
+           *
+           * So it stops here. A booking lost this way is loud — the thread goes to
+           * `error`, the reporter's booking-lost route fires, the Manual tag lands and
+           * ops see it on the board. A duplicate booking produces no signal at all.
+           */
+          throw new Error(
+            `createOrder ${r.status} and the order could not be looked up ` +
+              `(${String((probeErr as Error)?.message ?? probeErr)}) — deliberately NOT re-posted, ` +
+              `because a repeated create makes a second real booking. The order may exist; check "${String(sent?.name ?? "")}".`
+          );
+        }
+        if (found) return found;
+      }
+      r = await this.t("POST", "/orders", body);
+      if (r.status >= 500) {
+        const found = sent ? await this.findLostCreate(sent, notBefore).catch(() => null) : null;
+        if (found) return found;
+      }
+    }
+
     if (r.status !== 201)
       throw new Error(
         `createOrder ${r.status}: ${JSON.stringify(r.data?.validationErrors ?? r.data)}`
@@ -243,6 +329,61 @@ export class OnsinchClient {
         `createOrder: OnSinch returned ${r.status} but no order id — ${JSON.stringify(r.data).slice(0, 200)}`
       );
     return created as { id: number; number?: string };
+  }
+
+  /**
+   * DID THE CREATE WE LOST ACTUALLY LAND? The order this body would have made, or null.
+   *
+   * The only key available. `POST /orders` returns `{id}` and nothing a failed call can
+   * hand back, and this API has no idempotency key — the reference documents none and
+   * the unknown-property oracle rejects anything it does not know — so the order has to
+   * be recognised by what was sent.
+   *
+   * `name` is the discriminator and it is exact. Probed live 2026-09-02 against order
+   * 15574: `?name[eq]=<name>&company_id[eq]=150` returns that one row out of the
+   * tenant's 6,686 orders, and a name no order carries returns zero — so the filter is
+   * being applied rather than silently ignored, which is the failure that would make
+   * this function answer "yes, it landed" for every create ever attempted. The
+   * percent-encoded bracket form `qs()` emits was probed in the same run.
+   *
+   * `sort=-id` IS NOT HONOURED ON /orders. Probed in the same run: it returned
+   * 478, 1111, 1547, ... ascending. Anything here that read "the newest page" would be
+   * reading the tenant's oldest orders and would report every lost create as absent.
+   * The window is narrowed by `created` instead, and the highest id among the matches
+   * is taken, so a repeat of a name used months ago cannot be adopted.
+   */
+  private async findLostCreate(
+    sent: OnsinchOrderBody,
+    notBefore: number
+  ): Promise<{ id: number; number?: string } | null> {
+    const name = String(sent?.name ?? "");
+    if (!name) throw new Error("findLostCreate: the order carried no name — there is no key to look it up by");
+    const filters: Record<string, string | number> = { "name[eq]": name, limit: 100 };
+    if (Number.isInteger(Number(sent?.company_id))) filters["company_id[eq]"] = Number(sent.company_id);
+    const r = await this.t("GET", "/orders" + qs(filters));
+    /**
+     * A FAILED LOOKUP IS NOT AN EMPTY ONE. `this.t` hands back `{status: 500, data: null}`
+     * rather than throwing, so reading `data?.data ?? []` off it would turn every server
+     * error into the confident answer "no such order" — and the caller acts on that by
+     * posting the create again. It throws instead, and the caller decides.
+     */
+    if (r.status !== 200) {
+      throw new Error(`findLostCreate: GET /orders answered ${r.status}, so whether the order exists is unknown`);
+    }
+    const rows = (r.data?.data ?? []) as Array<{ id?: unknown; number?: unknown; created?: unknown }>;
+    const mine = rows
+      .filter((o) => Number.isInteger(Number(o?.id)) && Number(o?.id) > 0)
+      .filter((o) => {
+        const t = Date.parse(String(o?.created ?? ""));
+        return Number.isFinite(t) && t >= notBefore;
+      })
+      .sort((a, b) => Number(b.id) - Number(a.id));
+    const hit = mine[0];
+    if (!hit) return null;
+    return {
+      id: Number(hit.id),
+      ...(hit.number != null ? { number: String(hit.number) } : {}),
+    };
   }
 
   /**

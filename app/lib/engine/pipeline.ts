@@ -33,10 +33,51 @@ function shapeOf(s: ConversationState): ThreadShape {
   };
 }
 
+/**
+ * WHICH CONVERSATION AN ORDER IS BEING WRITTEN FOR.
+ *
+ * Everything here is already on the `ConversationState` when the write happens — the
+ * compiler sets `sender_email` and `sender_domain` from `counterpartyIdentity` — so this
+ * carries no new facts and nothing has to be derived twice. It exists because the write
+ * path had no way to READ them.
+ */
+export interface OrderContext {
+  thread_id: string;
+  sender_email: string | null;
+  sender_domain: string | null;
+}
+
 /** The side-effecting edges. Injected so the pipeline stays testable. */
 export interface Executor {
   createReplyDraft(a: NonNullable<Actions["createReplyDraft"]>): Promise<string>; // -> draft id
-  createOrder(order: NonNullable<Actions["createOrder"]>): Promise<{
+  /**
+   * `where` IS WHAT UNBLOCKED TWO FINISHED-BUT-DEAD FEATURES, and it is why this
+   * signature has a second argument.
+   *
+   * A `DesiredOrder` says what to book and nothing about which conversation asked for
+   * it, so the create path could not name the thread it was serving. Two things were
+   * written against that gap and neither could run:
+   *
+   *   `order_records` (orderRecordsDb.ts, 2026-08-28) — one durable row per order
+   *     written, keyed on the order id, holding the shape sent and the counterparty.
+   *     `recordOrder` is only called when `createOrderWithPlace` receives a context
+   *     argument, and deps.ts passed three arguments. The table did not exist in the
+   *     database at all: verified 2026-09-02, `information_schema.tables` has no
+   *     `order_records`.
+   *
+   *   `verifyCreate` (verifyWrite.ts, 2026-08-28) — its own docstring says it is
+   *     "READY AND INERT", names this exact blocker ("Executor.createOrder, which takes
+   *     a DesiredOrder carrying no thread id"), and says DO NOT wire it until the create
+   *     path can pass a thread id, because "a verdict with no thread to name is an email
+   *     the reader cannot act on".
+   *
+   * Optional, because a test double and the dry-run harness have no thread to name and
+   * must keep working without inventing one.
+   */
+  createOrder(
+    order: NonNullable<Actions["createOrder"]>,
+    where?: OrderContext
+  ): Promise<{
     id: number;
     number?: string;
     /** The job the crew blocks hang off, so an amendment can append to it. */
@@ -1041,7 +1082,11 @@ async function executeOrder(
   const { executor, now, hashOrder } = deps;
   try {
     if (intended.kind === "create") {
-      const created = await executor.createOrder(intended.desired);
+      const created = await executor.createOrder(intended.desired, {
+        thread_id: next.thread_id,
+        sender_email: next.sender_email ?? null,
+        sender_domain: next.sender_domain ?? null,
+      });
       const ids = await readIdentifiers(created.id, deps);
       next.onsinch_order_id = created.id;
       next.onsinch_order_number = created.number ?? ids.order_number;

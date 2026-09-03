@@ -13,9 +13,13 @@
 // enquiries arriving together is precisely when this fires.
 //
 // THE LINE THAT MATTERS is which calls may be retried. A 500 does not say what the
-// server did, so a retried POST can double-create. `POST /slotTeams` is the one
-// non-idempotent call in the engine — a retry appends a SECOND crew block, and the
-// order silently carries twice the people. It is excluded, permanently.
+// server did, so a retried POST can double-create. This file used to draw that line
+// around `POST /slotTeams` alone and assert that `POST /orders` WAS retried — correct
+// only while the create carried an empty SlotTeam array, which stopped being true on
+// 2026-08-28. Every POST in this API creates something, so the line is now drawn at the
+// method: no POST is repeated here, and the create's own recovery is a READ, in
+// `OnsinchClient.createOrder`. See test/createNeverDuplicates.ts, which is where the
+// "the booking survives a 500" behaviour is now asserted.
 //
 // Run: npx tsx test/transportRetry.ts
 // ============================================================================
@@ -46,22 +50,23 @@ function withFetch(script: Array<{ status: number; body?: unknown }>) {
 const transport = httpTransport({ baseUrl: "https://x.test/api/v1", apiKey: "k" } as never);
 
 (async () => {
-  console.log("\n[1] a 500 on POST /orders is retried, and the booking survives");
+  console.log("\n[1] a 500 on POST /orders is NOT retried here — a repeat is a second booking");
   {
     const f = withFetch([{ status: 500 }, { status: 201, body: { data: [{ id: 42 }] } }]);
     const r = await transport("POST", "/orders", [{ name: "x" }]);
     f.restore();
-    ok(r.status === 201, "the second attempt is the one that counts", String(r.status));
-    ok(f.calls.length === 2, "exactly one retry was needed", `${f.calls.length} attempts`);
+    ok(f.calls.length === 1, "sent once", `${f.calls.length} attempts`);
+    ok(r.status === 500, "and the 500 is handed to createOrder, which reads before it writes", String(r.status));
   }
 
-  console.log("\n[2] it gives up rather than hammering, and reports the 500");
+  console.log("\n[2] nor is any other create — /companies and /places duplicate a client or a venue");
   {
-    const f = withFetch([{ status: 500 }]);
-    const r = await transport("POST", "/orders", [{ name: "x" }]);
-    f.restore();
-    ok(r.status === 500, "the caller still sees the failure", String(r.status));
-    ok(f.calls.length === 3, "one attempt plus two retries, then stop", `${f.calls.length} attempts`);
+    for (const path of ["/companies", "/places"]) {
+      const f = withFetch([{ status: 500 }]);
+      const r = await transport("POST", path, [{ name: "x" }]);
+      f.restore();
+      ok(f.calls.length === 1 && r.status === 500, `POST ${path} sent once`, `${f.calls.length} attempts`);
+    }
   }
 
   console.log("\n[3] POST /slotTeams is NEVER retried — a retry appends a second crew block");

@@ -253,7 +253,20 @@ async function main() {
   // These hooks write to the store rather than to `calls`, so the sequence assertion
   // here is over the API calls only; the two checks above are what prove the writes
   // landed, and the recorded-hook case earlier proves the interleaving.
-  ok(calls.join(" -> ") === "GET -> DELETE [13632] -> POST", "the API sequence is read, delete, create", calls.join(" -> "));
+  /**
+   * The trailing GET is the create's own lost-write lookup, and this is the branch where
+   * it matters most: the old order is already DELETED, so "did the replacement land?" is
+   * the difference between a booking that exists unowned and one that does not exist at
+   * all. It asks before giving up, and it does not re-post — a second create here would
+   * leave two live orders where a client has one job.
+   *
+   * It correctly declines to adopt the row this fake hands back: that row carries no
+   * `created` stamp, so it cannot be shown to post-date the create, and an unprovable
+   * match is treated as no match. See test/createNeverDuplicates.ts [6].
+   */
+  ok(calls.join(" -> ") === "GET -> DELETE [13632] -> POST -> GET",
+     "read, delete, create — and then ask whether the create landed before reporting failure",
+     calls.join(" -> "));
 }
 
 // ===========================================================================
