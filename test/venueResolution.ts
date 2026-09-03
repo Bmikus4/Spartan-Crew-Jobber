@@ -1,16 +1,16 @@
 // ============================================================================
 // The four branches resolvePlace has, and the one that had no test at all.
 //
-// A venue miss USED TO PROVISION A ROW. That is how the tenant came to hold 632
-// ExCeLs, and since 2026-08-31 it does not happen at all — a miss books the
-// "No Location" placeholder and tells a person. See test/venueNeverProvisions.ts
-// for the measurement that settled it.
+// A venue miss creates a row named after the client's own words. It did that until
+// 2026-08-31, stopped -- that is how the tenant came to hold 632 ExCeLs -- and does
+// it again from 2026-09-03. See test/venueCreatesOnUnresolved.ts, which owns that
+// behaviour and carries both rulings and the measurement between them.
 //
 //   1. matchPlace answers            -> book it
 //   2. it answers with a SHELL       -> hold it back, let the second pass look
 //   3. it answers with a CITY        -> refuse; a city cannot identify a building
 //   4. no venue was named at all     -> the "No Location" placeholder, reused
-//   5. a miss                        -> the same placeholder, never a new row
+//   5. a miss                        -> a new row carrying what the client wrote
 //
 // (4) is why this file exists. The city-only guard added for (3) read "No
 // Location" as a city name — it has no identifying words, by construction — so it
@@ -64,15 +64,16 @@ async function main() {
 
   console.log("\n[3] a CITY cannot identify a building");
   {
-    // A city is refused exactly as before. What CHANGED on 2026-08-31 is what happens
-    // next: refusing the city row was always right, creating a second row was the half
-    // that made duplicates. See test/venueNeverProvisions.ts.
+    // The REFUSAL is the invariant here and it has never changed: a row whose entire
+    // name is "London" identifies no building, and "Birmingham" must not book the NEC
+    // just because the NEC is the richest Birmingham row. Where the refusal lands has
+    // changed twice — placeholder from 08-31, a new row from 09-03 — so this asserts
+    // only that neither city row wins.
     const r = await go("London");
-    ok(r.id === 900, "it books the placeholder, not the city row", String(r.id));
-    ok(!r.provision, "and creates nothing");
+    ok(r.id !== 2069, "the city row does not win", String(r.id));
     ok(!!r.note && /names only a city/.test(r.note), "and the ticket says why", r.note ?? "(none)");
     const b = await go("Birmingham");
-    ok(b.id === 900, "Birmingham does not book the NEC either", String(b.id));
+    ok(b.id !== 791, "Birmingham does not book the NEC either", String(b.id));
   }
 
   console.log("\n[4] NO VENUE NAMED — the placeholder, found and REUSED");
@@ -93,16 +94,17 @@ async function main() {
     ok(!(r.provision as { address?: string })?.address, "and with NO address");
   }
 
-  console.log("\n[6] a venue the tenant genuinely does not hold is NOT created any more");
+  console.log("\n[6] a venue the tenant genuinely does not hold is CREATED");
   {
-    // This asserted the opposite until 2026-08-31. Ben: "no unresolved venues should
-    // create venues." Measured across every job the engine had processed, 18 of the 19
-    // venues it created were duplicates of rows already in the tenant and 1 was genuinely
-    // new — so the genuinely-new case is not worth the eighteen that arrive with it. The
-    // job still books, at the placeholder, flagged for a person to set the real venue.
+    // This branch has now been asserted both ways within a fortnight, so what it does
+    // is settled by ruling and not by inference: Ben, 2026-09-03, "Venues that cannot
+    // be resolved this way, should be created." The 08-31 ruling it replaces, and the
+    // 18-of-19-duplicates measurement behind that one, are in
+    // test/venueCreatesOnUnresolved.ts, which is the file that owns this behaviour.
+    // Here it is pinned only as the fifth branch of resolvePlace.
     const r = await go("Thornbury Assembly Rooms, 14 Kestrel Way, Thornbury BS35 2QQ");
-    ok(r.id === 900 && !r.provision, "it books the placeholder instead", String(r.id));
-    ok(!!r.note && /Thornbury/.test(r.note), "and the ticket names the venue to set", r.note ?? "(none)");
+    ok(r.id === undefined && !!r.provision, "a new venue is provisioned, not the placeholder", String(r.id));
+    ok(!!r.note && /Thornbury/.test(r.note), "and the ticket names the venue to check", r.note ?? "(none)");
   }
 
 console.log(fails ? `\n${fails} FAILED\n` : "\nALL PASS\n");

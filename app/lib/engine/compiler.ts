@@ -23,7 +23,7 @@ import { triage, decisionBinds, triageModeFromEnv, type TriageMode } from "./tri
 import { composeOrder } from "./compose";
 import { validateOrder } from "./format";
 import { matchCompany, matchCompanyByDomain, matchContact, matchPlace, matchExistingOrder, normName, normAddr } from "./resolve";
-import { matchPlaceV2, matchedOnCityAlone, isAShell } from "./venueMatch";
+import { matchPlaceV2, matchedOnCityAlone, isAShell, tokenise } from "./venueMatch";
 import { buildIndex, searchVenues, applyRuledWording, type Building } from "./venueSearch";
 import { adjudicateVenue, type VenueJudge } from "./venueAdjudicate";
 import { resolveProfession, normProf, type ProfessionRec } from "./professions";
@@ -328,7 +328,77 @@ function holdAtPlaceholder(places: PlaceCandidate[], why: string): { id?: number
 
 /** What the ticket says when the engine could not settle a venue the client did name. */
 function unsettled(locationText: string, because: string): string {
-  return `venue "${locationText}" ${because} — booked to "${PLACEHOLDER_PLACE_NAME}" rather than creating a new row; set the real venue in OnSinch`;
+  return `venue "${locationText}" ${because}`;
+}
+
+/**
+ * DOES THIS STRING SAY ANYTHING AT ALL?
+ *
+ * Deliberately the weakest possible guard, and it was stronger for one draft.
+ *
+ * The first version refused to create unless the text carried a postcode or a
+ * "strong" token, borrowing the venue tokeniser's own strong/weak split. That
+ * split is exactly what defect D1 is about: it classes "london" as a stop word
+ * and "stadium" as a building-type word, so "London Stadium" has no strong
+ * token — and the guard then refused to create a venue for a building whose
+ * name that is. The same bug that stops it being FOUND would have stopped it
+ * being MADE, which is the worst of both.
+ *
+ * It also did not do the job it was added for. "Gate 50 W3W: ///sugars.takes.scam"
+ * tokenises to several strong words and sailed through.
+ *
+ * So the rule is now what Ben actually asked for — when a venue cannot be
+ * resolved, create one — with a floor that only stops an empty string. A row
+ * created from a poor description is a row a human can see and merge; a booking
+ * silently placed at the wrong building is not.
+ */
+function namesAPlace(locationText: string): boolean {
+  return /[a-z]{3}/i.test(locationText);
+}
+
+/**
+ * A venue the client NAMED and the tenant does not hold. Create it.
+ *
+ * Ben, 2026-09-03: "When a Venue cant be resolved, we must create a new one."
+ * This reverses the venue half of his 2026-08-31 ruling ("no unresolved venues
+ * should create venues"), which was itself a reversal made on evidence: of 19
+ * venues the engine had provisioned, 18 duplicated rows the tenant already held.
+ *
+ * The reversal is safe only alongside the venue-table overhaul and the sync that
+ * keeps it clean (plan item F11). Measured today, before that work: on 106 real
+ * client wordings, 3 of them (2.8%) would create a row for a building the tenant
+ * already has. That is the price, and it is stated here rather than discovered
+ * later.
+ *
+ * WHEN THE CLIENT NAMED NOTHING, NOTHING IS CREATED. An enquiry with no venue in
+ * it is still a job — Ben, same ruling: "When there is no venue at all, it is
+ * still a successful job" — and it goes to the "No Location" placeholder exactly
+ * as before. The two cases are different and must not be collapsed: one is a
+ * building we have never met, the other is a question nobody asked.
+ */
+function unresolvedVenue(
+  places: PlaceCandidate[],
+  locationText: string,
+  why: string,
+  missingVenue: boolean
+): { id?: number; provision?: DesiredOrder["provision_place"]; note: string } {
+  if (missingVenue) return holdAtPlaceholder(places, why);
+  if (!namesAPlace(locationText)) {
+    return holdAtPlaceholder(places, `${why} — and it names no building, so no venue was created; set the real venue in OnSinch`);
+  }
+  const pcs = tokenise(locationText).postcodes;
+  return {
+    // The client's own words become the row. Its NAME carries them in full, and
+    // the postcode is lifted out where they wrote one, because a postcode in the
+    // right field is what makes the row findable next time instead of becoming
+    // the 3,404th shell.
+    provision: {
+      name: locationText.slice(0, 120),
+      country: "GB",
+      ...(pcs.length ? { zip: pcs[0] } : {}),
+    },
+    note: `${why} — created as a new venue from what the client wrote; CHECK IT in OnSinch and merge it if we already had this building`,
+  };
 }
 
 /**
@@ -512,7 +582,13 @@ function venueIndex(places: PlaceCandidate[]): Building[] {
   return built;
 }
 
-async function resolveVenueV3(
+/**
+ * Exported for study/venues.ts, which resolves every venue wording in the gold
+ * set twice — once deterministically and once with the adjudicator — to say
+ * WHICH phrasing fails rather than only how often one does. It is a pure read
+ * and exporting it changes no behaviour.
+ */
+export async function resolveVenueV3(
   locationText: string,
   places: PlaceCandidate[],
   remembered: number | null,
@@ -539,7 +615,7 @@ async function resolveVenueV3(
   const cityOnly = hits.length > 0 && hits.every((h) =>
     matchedOnCityAlone(locationText, places.find((p) => p.id === h.building.place_id)!));
   if (cityOnly) {
-    return holdAtPlaceholder(places, unsettled(locationText, "names only a city, which identifies no building"));
+    return unresolvedVenue(places, locationText, unsettled(locationText, "names only a city, which identifies no building"), false);
   }
   if (!hits.length && !rememberedBuilding) return null;
 
@@ -554,7 +630,7 @@ async function resolveVenueV3(
   }, deps?.venueJudge ?? null);
 
   if (verdict.decision === "none" || !verdict.place_id) {
-    return holdAtPlaceholder(places, unsettled(locationText, `was not settled against ${searched} venues (${verdict.how}: ${verdict.reason})`));
+    return unresolvedVenue(places, locationText, unsettled(locationText, `was not settled against ${searched} venues (${verdict.how}: ${verdict.reason})`), false);
   }
   const chosen = index.find((b) => b.place_id === verdict.place_id);
   return {
@@ -694,7 +770,7 @@ export async function resolvePlace(
   const id = v1 && !v1IsShell && !v1IsCityOnly ? v1 : null;
   if (v1 && v1IsCityOnly) {
     // Said out loud: this is a venue the engine had an answer for and refused.
-    return holdAtPlaceholder(places, unsettled(locationText, "names only a city, which identifies no building"));
+    return unresolvedVenue(places, locationText, unsettled(locationText, "names only a city, which identifies no building"), missingVenue);
   }
   if (id) {
     // matchPlace resolves on several rules, only one of which is equality; the others
@@ -735,7 +811,7 @@ export async function resolvePlace(
     // happens — a wrong building is worse than a duplicate row — but the ticket now
     // names the rows it was choosing between instead of silently creating a 633rd.
     if (v2.decision === "ambiguous") {
-      return holdAtPlaceholder(places, `${v2.note} — booked to "${PLACEHOLDER_PLACE_NAME}" rather than creating a new row; pick the right row in OnSinch`);
+      return unresolvedVenue(places, locationText, v2.note ?? unsettled(locationText, "matched several plausible buildings and none clearly"), missingVenue);
     }
   }
 
@@ -745,11 +821,13 @@ export async function resolvePlace(
     return { id: v1, note: `venue "${locationText}" matched ${v1} "${String(v1Row?.name ?? "").trim()}", a row carrying no address — the tenant has no better record of this venue` };
   }
 
-  return holdAtPlaceholder(
+  return unresolvedVenue(
     places,
+    locationText,
     missingVenue
       ? `no venue named — using the "${PLACEHOLDER_PLACE_NAME}" placeholder; set the real venue in OnSinch`
       : unsettled(locationText, "is not a venue this tenant holds"),
+    missingVenue,
   );
 }
 
