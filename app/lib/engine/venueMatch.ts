@@ -172,8 +172,17 @@ export function isAShell(p: PlaceCandidate): boolean {
 
 export function matchedOnCityAlone(text: string | undefined, p: PlaceCandidate): boolean {
   const q = tokenise(text);
-  if (!q.strong.length) return true; // nothing identifying was written at all
+  /**
+   * THE POSTCODE CHECK RUNS FIRST, AND THE ORDER IS THE WHOLE POINT.
+   *
+   * A postcode is not a word, so it yields no strong tokens — which meant a wording that
+   * was NOTHING BUT a postcode fell into the "nothing identifying was written" arm below
+   * and never reached this line, the one written to exempt it. "GU8 4AR" searched against
+   * all 3,045 buildings returns exactly one hit on postcode_exact, and the guard threw it
+   * away as a city name.
+   */
   if (q.postcodes.length) return false; // a postcode is never a city name
+  if (!q.strong.length) return true; // nothing identifying was written at all
   const identity = identityTokens(p);
   const street = tokenise(p.address).strong;
   return !q.strong.some((w) => identity.includes(w) || street.includes(w));
