@@ -56,6 +56,7 @@ import type { OnsinchClient } from "./onsinch";
 import type { DesiredOrder, DesiredSlotTeam } from "./types";
 import { buildSlotTeamBody, capSlotTeamName } from "./format";
 import { preflightOrder } from "./orderPreflight";
+import { readLiveShape, sameMoment, type LiveShape } from "./reconcile";
 import { provisionPlaceIfNeeded } from "./provisionPlace";
 
 /** The fields of a slot team the engine sets, and can therefore correct. */
@@ -132,6 +133,146 @@ export function planAmendment(
     if (Object.keys(patch).length) patches.push({ id: live[i].id, ...patch });
   }
   return { patches, creates: next.slice(previous.length) };
+}
+
+/**
+ * WHICH LIVE BLOCK EACH DESIRED BLOCK IS, ON AN ORDER THIS ENGINE DID NOT WRITE.
+ *
+ * `planAmendment` pairs by position, and that is only legitimate against a set we wrote
+ * ourselves — the array and the ids came out of the same create, in the same order. On a
+ * staff-raised order there is no such array, and position means nothing: ops add blocks in
+ * whatever order the job needed them, so live[1] is not "the second thing the client asked
+ * for", it is whatever they typed second. Pairing on that writes one block's times onto
+ * another and reports a 201.
+ *
+ * Measured 2026-09-14: 28 of 37 live bound orders are staff-raised. This is the common
+ * case, not the edge one, and until now every one of them fell through to the rebuild —
+ * which, since 4.3, refuses. So without this the label is all a staff-raised order ever
+ * gets.
+ *
+ * THE KEY IS DAY AND VENUE, which is Ben's identity ruling applied one level down. Within
+ * an order, a block is identified by the day it runs and where it runs; the crew size and
+ * the times are what an amendment CHANGES, so neither can be part of what identifies the
+ * thing being changed. The day rather than the start time for exactly that reason — "make
+ * that 4x at 1400-2000" moves the time and must still find its block.
+ *
+ * It DECLINES rather than guessing whenever the correspondence is not proven:
+ *
+ *   two blocks on the same day at the same venue   the key does not separate them, and
+ *                                                  nothing else can. Order 13784 carries
+ *                                                  two blocks called "General", so names
+ *                                                  do not rescue it.
+ *   a block whose venue moved                      its key changed, so it matches nothing
+ *                                                  — and a venue change is precisely when
+ *                                                  a wrong pairing sends crew to the
+ *                                                  wrong building.
+ *   live shapes unreadable and more than one block a block nobody is signed on to returns
+ *                                                  no attendance row, so its day and venue
+ *                                                  cannot be read at all.
+ *
+ * ONE BLOCK ON EACH SIDE NEEDS NO KEY. The pairing is the only one there is, whatever the
+ * shapes say, and this is the case that carries an unstaffed staff-raised order.
+ */
+export interface LiveBlock {
+  id: number;
+  name: string;
+  /** Present only where the block could be read back — see reconcile.ts. */
+  beginning?: string;
+  profession_id?: number;
+}
+
+export interface Pairing {
+  /** desired index -> live slot team id. Blocks not listed are appends. */
+  pairs: Array<{ id: number; index: number }>;
+  declined?: string;
+}
+
+/**
+ * THE DAY AND THE PROFESSION. Undefined when either is missing, which means "cannot be
+ * keyed" and never "matches everything".
+ *
+ * THE VENUE IS DELIBERATELY ABSENT, and it took a positive control to find out why. A
+ * Slot carries `slotlocation_id`, which reads exactly like the `place_id` the engine sets
+ * and is not one: thread place 621 is "Westfield Stratford City" and 236 is "Syon Park",
+ * while the slotlocation ids on those same blocks are 16610 and 16578, and
+ * `GET /places?id[eq]=` finds neither. There is no `/slotLocations` endpoint in any
+ * spelling. So a block's venue simply cannot be read through this API, and a key that
+ * included it matched NOTHING — measured 2026-09-14, it declined every multi-block
+ * staff-raised order in the tenant.
+ *
+ * The profession carries the discrimination the venue was expected to. Within one order a
+ * block is the work it is for — the crew-chief rule carves a block of 4 into 3 crew plus 1
+ * chief, and those two run the same hours on the same day and are told apart by nothing
+ * else. It is also the right kind of key: a chief block stays a chief block, where the
+ * size and the times are precisely what an amendment CHANGES.
+ *
+ * What this gives up: a block that moves to a different building, on the same day, in the
+ * same role, is paired rather than refused. The patch then sets the new place on it, which
+ * is what the thread asked for — so the cost is that a venue move is applied without being
+ * separately verified, not that crew go to the wrong address.
+ */
+function blockKey(b: { beginning?: string; profession_id?: number }): string | undefined {
+  const day = String(b.beginning ?? "").slice(0, 10);
+  if (!day || !b.profession_id) return undefined;
+  return `${day}|${b.profession_id}`;
+}
+
+export function pairBlocks(desired: DesiredSlotTeam[], live: LiveBlock[]): Pairing {
+  if (!live.length) return { pairs: [], declined: "no slot team ids could be read back for the order" };
+
+  // The unambiguous case, and the one that covers an unstaffed order whose blocks cannot
+  // be read at all.
+  if (live.length === 1 && desired.length === 1) return { pairs: [{ id: live[0].id, index: 0 }] };
+
+  const liveKeys = new Map<string, number>();
+  for (const b of live) {
+    const k = blockKey(b);
+    if (!k) {
+      return {
+        pairs: [],
+        declined:
+          `order has ${live.length} crew blocks and block ${b.id} cannot be read back — ` +
+          `nobody is signed on to it, so there is no way to say which block is which`,
+      };
+    }
+    if (liveKeys.has(k)) {
+      return {
+        pairs: [],
+        declined: `two crew blocks run the same role on the same day (${k}) — nothing separates them`,
+      };
+    }
+    liveKeys.set(k, b.id);
+  }
+
+  const pairs: Pairing["pairs"] = [];
+  const used = new Set<number>();
+  for (let i = 0; i < desired.length; i++) {
+    const k = blockKey(desired[i]);
+    if (!k) continue; // not keyable: treated as an append, never as a match
+    const id = liveKeys.get(k);
+    if (id === undefined || used.has(id)) continue;
+    used.add(id);
+    pairs.push({ id, index: i });
+  }
+
+  /**
+   * A live block nothing claimed is one ops added and this thread knows nothing about.
+   * Leaving it alone is right — the engine only ever touches what it can account for —
+   * but an amendment that also wants to APPEND would then leave the order carrying both
+   * that block and a new one, which is double crew on a 201. So appends are only allowed
+   * when every live block was accounted for.
+   */
+  const appends = desired.length - pairs.length;
+  if (appends > 0 && used.size < live.length) {
+    return {
+      pairs: [],
+      declined:
+        `${live.length - used.size} crew block(s) on the order belong to nobody in this thread, ` +
+        `and it also wants to add ${appends} — appending beside blocks we cannot account for would double the crew`,
+    };
+  }
+
+  return { pairs };
 }
 
 export interface AmendResult {
@@ -256,8 +397,119 @@ export async function amendOrderInPlace(
     live = done.length ? read.teams.filter((t) => !done.includes(t.id)) : read.teams;
     job_id = read.job_id;
   }
+
+  /**
+   * AN ORDER WE DID NOT WRITE, AMENDED IN PLACE. Measured 2026-09-14: 28 of 37 live bound
+   * orders are staff-raised, so this is the common case and not the edge one.
+   *
+   * `previous` is the block array this engine last wrote, and for an order ops raised
+   * there is none — so `planAmendment` has nothing to pair against and declines, which
+   * used to fall through to the rebuild. Since 4.3 the rebuild refuses to destroy an order
+   * ops raised, so without this path a staff-raised order can only ever get a label.
+   *
+   * What replaces `previous` is the live order itself, read back: `pairBlocks` says which
+   * live block each desired block IS, on day and venue, and the shapes come from
+   * attendance where anybody is signed on. That is a stronger footing than `previous`
+   * ever was — it is what OnSinch holds now rather than what we remember sending — and it
+   * declines wherever the correspondence is not proven.
+   */
+  if (!previous.length) {
+    const shapes = await readLiveShape(client, order_id).catch(() => null);
+    if (shapes?.unreadable === undefined && shapes) {
+      live = live.map((t) => {
+        const seen = shapes.teams.get(t.id);
+        return seen ? { ...t, beginning: seen.beginning, profession_id: seen.profession_id } : t;
+      });
+    }
+    const paired = pairBlocks(next, live as LiveBlock[]);
+    if (paired.declined) return { declined: `order #${order_id}: ${paired.declined}` };
+
+    /**
+     * The patch set, built from the pairing rather than from a diff. There is nothing to
+     * diff against for a block nobody is signed on to — its current size and times are not
+     * readable — so every field the engine sets is sent. Re-sending a field the value it
+     * already holds is a no-op, proved by the live amend matrix, so the cost of not being
+     * able to diff is a slightly larger PATCH and never a wrong one.
+     */
+    const byIndex = new Map(paired.pairs.map((p) => [p.index, p.id]));
+    const patches: AmendmentPlan["patches"] = [];
+    const creates: DesiredSlotTeam[] = [];
+    for (let i = 0; i < next.length; i++) {
+      const id = byIndex.get(i);
+      if (id === undefined) {
+        creates.push(next[i]);
+        continue;
+      }
+      const want = capSlotTeamName(next[i]) as unknown as Record<string, unknown>;
+      const seen = shapes?.teams.get(id);
+      const patch: Record<string, unknown> = {};
+      for (const f of TEAM_FIELDS) {
+        const b = want[f];
+        if (b === undefined || b === "") continue;
+        /**
+         * The venue is asserted, never compared, and never on its own.
+         *
+         * A block's live venue cannot be read at all — `slotlocation_id` is a different id
+         * space with no endpoint to resolve it — so "did the venue move?" has no answer and
+         * sending it always would report a correction on every block of every pass. It
+         * rides along with a patch that is going anyway, which keeps the order's venue right
+         * without inventing a change that was never observed.
+         */
+        if (f === "place_id") continue;
+        // Where the live value IS readable, only what actually moved is sent — so the
+        // shrink guard below sees a size only when the size really changed.
+        //
+        // Times through sameMoment, never through ===. OnSinch echoes `+00:00` where the
+        // engine sent `+01:00`, so the strings differ on every block through British
+        // Summer Time and every amendment would re-send two times that had not moved.
+        if (seen) {
+          const liveVal = (seen as unknown as Record<string, unknown>)[f];
+          const isTime = f === "beginning" || f === "end";
+          if (isTime ? sameMoment(liveVal, b) : f in seen && String(liveVal) === String(b)) continue;
+        }
+        patch[f] = b;
+      }
+      if (Object.keys(patch).length) {
+        const place = (want as Record<string, unknown>).place_id;
+        patches.push({ id, ...patch, ...(place ? { place_id: place } : {}) });
+      }
+    }
+    return applyAmendment(client, { order_id, job_id, plan: { patches, creates }, live, previous: [], shapes }, hooks, done);
+  }
+
   const plan = planAmendment(previous, next, live);
   if (plan.declined) return { declined: plan.declined };
+
+  return applyAmendment(client, { order_id, job_id, plan, live, previous, shapes: null }, hooks, done);
+}
+
+/**
+ * Send a planned amendment, whatever planned it.
+ *
+ * Both routes into this — the positional pairing against a set we wrote, and the day-and-
+ * venue pairing against an order ops raised — end in the same three writes, and the guard
+ * that matters most sits here rather than in either planner: a block is never shrunk while
+ * somebody is signed on to it.
+ *
+ * `shapes` is the live read, present only on the staff-raised route. It is what supplies
+ * the block's CURRENT size there; on the route that has `previous`, the array we wrote
+ * supplies it. One of the two is always available whenever a size is being changed at all,
+ * which is what lets the shrink guard be unconditional.
+ */
+async function applyAmendment(
+  client: OnsinchClient,
+  args: {
+    order_id: number;
+    job_id?: number;
+    plan: AmendmentPlan;
+    live: LiveBlock[];
+    previous: DesiredSlotTeam[];
+    shapes: LiveShape | null;
+  },
+  hooks: AmendHooks,
+  done: number[]
+): Promise<AmendResult> {
+  const { order_id, job_id, plan, live, previous, shapes } = args;
 
   const stillToCreate = plan.creates.slice(done.length);
   if (!plan.patches.length && !stillToCreate.length) {
@@ -289,13 +541,20 @@ export async function amendOrderInPlace(
     for (const p of plan.patches) {
       if (p.size === undefined) continue;
       const i = live.findIndex((t) => t.id === p.id);
-      const was = i >= 0 ? capSlotTeamName(previous[i]).size : undefined;
+      /**
+       * What the block holds NOW. From the array we wrote where we have one, otherwise
+       * from the live read — and `undefined` there means unreadable, which on this API
+       * only happens when nobody is signed on. An empty block cannot be un-booking
+       * anybody, so an unreadable size is safe to resize rather than a reason to refuse.
+       */
+      const was =
+        previous.length && i >= 0 ? capSlotTeamName(previous[i]).size : shapes?.teams.get(p.id)?.size;
       if (was === undefined || Number(p.size) >= Number(was)) continue; // growing is safe
       const on = byTeam.get(p.id) ?? 0;
       if (on > 0) {
         return {
           refused:
-            `order #${order_id}: crew block "${live[i].name}" is being reduced from ${was} to ${p.size} and ${on} ` +
+            `order #${order_id}: crew block "${live[i]?.name}" is being reduced from ${was} to ${p.size} and ${on} ` +
             `crew are already signed on to it. Shrinking a staffed block may unbook them, so it must be done by hand`,
         };
       }

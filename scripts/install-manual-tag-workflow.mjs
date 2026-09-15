@@ -121,7 +121,7 @@ if (TEST_ID) {
         subject: "Spartan engine — Order Updated tag colour test",
       }
     : {
-        label: "Manual",
+        label: "Order Needs Built",
         thread_id: TEST_ID,
         state: "manual",
         reason: "connectivity test from the Spartan engine — safe to untag",
@@ -157,7 +157,7 @@ const nodes = [
         `if (hdr !== ${JSON.stringify(SECRET)}) throw new Error('bad secret');\n` +
         `const b = $json.body ?? {};\n` +
         `if (!b.thread_id) throw new Error('no thread_id');\n` +
-        `return [{ json: { ...b, label: b.label || 'Manual' } }];`,
+        `return [{ json: { ...b, label: b.label || 'Order Needs Built' } }];`,
       // `color` rides through untouched when the engine sends one. See "Create label".
     },
   },

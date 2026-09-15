@@ -1,9 +1,17 @@
 // ============================================================================
-// A job this engine could not book gets tagged "Manual" — and a job it later books
-// stops wearing the tag.
+// A job this engine could not book gets a "Needs" label — and a job it later books
+// stops wearing it.
 // ----------------------------------------------------------------------------
 // Ben, 2026-08-26: "any that cannot be booked should pipe into n8n via webhook and
-// mark the thread with a tag 'Manual'."
+// mark the thread with a tag 'Manual'." Superseded 2026-09-13: the system may produce
+// FOUR labels and only four — Order Built, Order Updated, Order Needs Built, Order Needs
+// Updated — so the single "Manual" tag splits in two. Which one depends on whether the
+// thread holds an order: none means the booking was never made, one means it exists and
+// will not take the client's change.
+//
+// A LABEL IS A TERMINAL MARKER AND NEVER A QUEUE. Nothing downstream waits on it and the
+// sweep keeps trying either way; it exists so a person can see what is outstanding, not
+// so a person can unblock the engine.
 //
 // TWO THINGS DECIDE WHETHER THIS IS USEFUL OR NOISE, and both are pinned here.
 //
@@ -53,6 +61,64 @@ function rig(opts: { fail?: boolean } = {}) {
 }
 
 (async () => {
+  console.log("\n[0] WHICH of the two failure labels, and it is decided by one thing");
+  {
+    // No order: the booking was never made.
+    const a = rig();
+    const noOrder = st({ status: "needs-info" });
+    await flagManualIfNeeded(noOrder, a.deps);
+    ok(a.sent[0]?.label === "Order Needs Built", "a thread with no order needs BUILDING", String(a.sent[0]?.label));
+    ok(noOrder.needs_label === "Order Needs Built", "and the row remembers which one it wears", String(noOrder.needs_label));
+
+    // An order exists and disagrees with the client's latest email. The more dangerous of
+    // the two and the easier to miss: the board shows an order and it all looks done.
+    const b = rig();
+    const hasOrder = st({ status: "ordered", needs_human: true, onsinch_order_id: 14866 });
+    await flagManualIfNeeded(hasOrder, b.deps);
+    ok(b.sent[0]?.label === "Order Needs Updated", "a thread with an order needs UPDATING", String(b.sent[0]?.label));
+
+    // The four are the whole vocabulary. "Manual" is retired.
+    ok(a.sent.every((x) => x.label !== "Manual") && b.sent.every((x) => x.label !== "Manual"), "and nothing says Manual any more");
+  }
+
+  console.log("\n[0b] a thread that changes WHICH kind of failure it is swaps labels");
+  {
+    // It had no order, so it wore Order Needs Built. Now it has one that will not take the
+    // change. Posting the new label alone would leave it wearing both, which reads as two
+    // outstanding jobs; re-deriving on clear would take off a label it never wore.
+    const r = rig();
+    const s1 = st({ status: "needs-info" });
+    await flagManualIfNeeded(s1, r.deps);
+    s1.onsinch_order_id = 14866;
+    s1.status = "ordered";
+    s1.needs_human = true;
+    await flagManualIfNeeded(s1, r.deps);
+
+    ok(r.sent.length === 3, "three posts: set, clear the old, set the new", JSON.stringify(r.sent.map((x) => `${x.label}:${x.state}`)));
+    ok(r.sent[1]?.label === "Order Needs Built" && r.sent[1]?.state === "cleared", "the wrong one comes off first", JSON.stringify(r.sent[1]));
+    ok(r.sent[2]?.label === "Order Needs Updated" && r.sent[2]?.state === "manual", "then the right one goes on", JSON.stringify(r.sent[2]));
+    ok(s1.needs_label === "Order Needs Updated", "and the row now remembers the new one", String(s1.needs_label));
+  }
+
+  console.log("\n[0c] clearing takes off the label that was PUT on, not the one derived now");
+  {
+    // A thread tagged Order Needs Built that later gets booked has an order id by the time
+    // the tag clears. Deriving the label at clear time would take off Order Needs Updated
+    // and leave Order Needs Built standing on a booked thread — a label claiming work is
+    // outstanding when it is done, which is the one thing it must never say.
+    const r = rig();
+    const s1 = st({ status: "needs-info" });
+    await flagManualIfNeeded(s1, r.deps);
+    s1.status = "ordered";
+    s1.needs_human = false;
+    s1.onsinch_order_id = 15001;
+    await flagManualIfNeeded(s1, r.deps);
+
+    ok(r.sent[1]?.state === "cleared", "it cleared", JSON.stringify(r.sent[1]));
+    ok(r.sent[1]?.label === "Order Needs Built", "and cleared the label it actually wore", String(r.sent[1]?.label));
+    ok(s1.needs_label === undefined, "the row stops claiming a label", String(s1.needs_label));
+  }
+
   console.log("\n[1] what counts as 'cannot be booked'");
   {
     ok(cannotBeBooked(st({ status: "error" })), "error");

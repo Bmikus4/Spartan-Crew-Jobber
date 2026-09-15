@@ -167,7 +167,7 @@ const NEW = { message_id: "m1", body: "Hi, can I book 4 crew on 9th March at Sav
   ];
   const amb = matchExistingOrder("2026-03-09", twoSameDay);
   assert(!!amb && "ambiguous" in amb && amb.ambiguous === 2, "two orders on the day -> ambiguous, not a coin flip");
-  const byVenue = matchExistingOrder("2026-03-09", twoSameDay, "ExCeL London, Royal Victoria Dock");
+  const byVenue = matchExistingOrder("2026-03-09", twoSameDay, { location_text: "ExCeL London, Royal Victoria Dock" });
   assert(!!byVenue && "order_id" in byVenue && byVenue.order_id === 5002, "the venue separates them -> the right order");
 
   console.log("\n[9] Tool 2 — new venue provisioned on write, then order created");

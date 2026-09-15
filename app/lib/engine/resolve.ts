@@ -403,70 +403,254 @@ export function matchContact(email: string | undefined, clients: ClientRec[]): n
   return hit?.id ?? null;
 }
 
-export interface OrderRec { id: number; number?: string; happening?: string; name?: string; Job?: { id: number }[] }
+export interface OrderRec {
+  id: number;
+  number?: string;
+  happening?: string;
+  name?: string;
+  Job?: { id: number }[];
+}
 
 export type OrderMatch =
-  | { order_id: number; order_number?: string; job_id?: number; by: "date" | "date+venue" }
+  | { order_id: number; order_number?: string; job_id?: number; by: "date" | "date+venue" | "date+r-number" }
   /** Several orders fit and nothing separates them. Never guessed at. */
   | { ambiguous: number; day: string };
 
 /**
- * Which existing OnSinch order an update belongs to — or nothing.
+ * Every R number a thread names - "R10687", "r 10687", "Ref R10687".
  *
- * Ben, 2026-08-09: "If a thread update/potential update comes in, we should search
- * for it in Onsinch, so that we can potentially match it to a past thread/order
- * within onsinch to make the update. This is a very particular one and should only
- * apply when its absolutely 100% sure."
+ * Ben, 2026-09-14: "Threads will likely NEVER directly name an R number, dont expect
+ * to find it in an order, though for consistency in code we can look for it." The
+ * measurement agrees: 40 of 238 bound threads name one, and those 40 are mostly staff
+ * forwards and quote replies - a population that shrinks as the engine takes more
+ * threads from first contact. So this is a CONFIRMATION, never the mechanism, and
+ * nothing downstream may depend on it being present.
  *
- * The old rule was company + happening date, taking the FIRST hit. That is not
- * sure at all: over the live tenant's 1,029 recent orders, 121 of 870 company+date
- * keys carry more than one order — 13.9%, covering 280 orders — so roughly one
- * update in seven was attaching itself to whichever of them the API happened to
- * return first. Company 128 has FIVE orders on 2026-06-09 alone: Hackney Town
- * Hall, The Carter Building, and three at Chicago Booth.
+ * Two phrasings have to be excluded or the number means the opposite of what it says:
  *
- * The venue is what tells them apart. Spartan name orders "<Company> @ <Venue>"
- * tenant-wide, and across those 121 collisions 94 give every order a distinct
- * venue. So:
+ *   "Re: Repeat of R5531"   names the order this job is a COPY of, deliberately not
+ *                           the order this thread is about. Binding to it attaches a
+ *                           new booking's crew to last year's job.
+ *   three numbers at once   a quote reply listing several jobs. Nothing picks one.
  *
- *   one order on the day                      -> match
- *   several, and the thread's venue picks out
- *     exactly one of them                     -> match
- *   several, and the venue picks out none or
- *     more than one                           -> AMBIGUOUS, match nothing
+ * Both are handled by returning the whole set and letting the caller require exactly
+ * one: "repeat of" is stripped with its number, so a thread that named only that reads
+ * as having named nothing, and a multi-number thread fails the count test on its own.
+ */
+export function rNumbersIn(text: string): string[] {
+  const cleaned = text.replace(/\brepeat\s+(?:of\s+)?r\s*\.?\s*#?\s*\d{3,6}\b/gi, " ");
+  const out = new Set<string>();
+  for (const m of cleaned.matchAll(/\bR\s*\.?\s*#?\s*(\d{3,6})\b/gi)) out.add(m[1]);
+  return [...out];
+}
+
+export interface MatchOpts {
+  /**
+   * EVERY date the thread asks for, not just the earliest.
+   *
+   * A thread that says "moving the 9th to the 11th" holds both. Matching on the
+   * earliest alone means a date change finds no same-day order and the engine creates a
+   * SECOND booking for a job that already exists - the exact duplicate this function is
+   * here to prevent. Ben's ruling, 2026-09-13: a stated change proves identity and
+   * carries an instruction; it can never be the reason to call this a different job.
+   */
+  days?: string[];
+  /** The thread's venue as written. Fallback only - see place_id. */
+  location_text?: string;
+  /**
+   * The thread's venue RESOLVED to an OnSinch place. Comparing the two raw strings does
+   * not work and the measurement is unambiguous: it refused "@ Rosewood Hotel" against
+   * "Rosewood London, 252 High Holborn", "@ Kings Cross Station" against "King's Cross,
+   * Euston Road", and "@ HQ" against "We are Family office, Kingsland Road" - all the
+   * same venue, typed by different people on different sides. Resolving BOTH sides
+   * through matchPlace and comparing ids took the refusals from 58 of 141 to 35.
+   */
+  place_id?: number | null;
+  /** The tenant's places, so an order's own venue text can be resolved the same way. */
+  places?: PlaceCandidate[];
+  /** R numbers the thread names, from rNumbersIn(). Narrows; never widens. */
+  r_numbers?: string[];
+}
+
+/** The venue an order name carries: Spartan name orders "<Company> @ <Venue>" tenant-wide. */
+function venueOfOrder(name: unknown): string {
+  return String(name ?? "").split("@").slice(1).join("@").trim();
+}
+
+/**
+ * How this order's venue stands against the one the thread asked for.
  *
- * Ambiguity is reported rather than swallowed, because "we could not tell which of
- * your three jobs you meant" is a thing a human must see. Attaching a crew change
- * to the wrong job is worse than not attaching it: the right job goes unstaffed
+ * The three non-agreeing answers are kept apart because they carry different weights and
+ * collapsing them is what made the first version of this rule move a booking to the
+ * wrong building:
+ *
+ *   "agree"          both sides name the same place.
+ *   "differ-id"      BOTH sides resolved to an OnSinch place and the places are
+ *                    different. This is a real disagreement and strong enough to refuse
+ *                    on, because nothing about it is a matter of wording.
+ *   "differ-text"    neither side resolved, and the two strings do not overlap. Weak:
+ *                    "@ Rosewood Hotel" against "Rosewood London, 252 High Holborn" is
+ *                    this, and it is the same venue. Never refuses on its own.
+ *   "unreadable"     one side or the other gave nothing to compare. Not a disagreement,
+ *                    and must never be counted as one — the engine's own orders are
+ *                    named "Light Motif - install crew at Design Museum, 17 Sep" with no
+ *                    "@" at all, so every order WE raised lands here.
+ */
+type VenueVerdict = "agree" | "differ-id" | "differ-text" | "unreadable";
+
+function venueVerdict(o: OrderRec, opts: MatchOpts): VenueVerdict {
+  const orderVenue = venueOfOrder(o.name);
+  if (!orderVenue) return "unreadable";
+
+  // Preferred: both sides as place ids, through the tenant's own alias list. This is the
+  // only comparison strong enough to refuse on, and the only one that is symmetric —
+  // each side went through the same function against the same 5,627 rows.
+  if (opts.place_id && opts.places?.length) {
+    const resolved = matchPlace(orderVenue, opts.places);
+    if (resolved != null) return Number(resolved) === Number(opts.place_id) ? "agree" : "differ-id";
+  }
+
+  // Fallback, for a thread whose venue never resolved: substring either way round,
+  // because either side may be the fuller string - an order name is "@ Excel" where the
+  // email says "ExCeL London, Royal Victoria Dock".
+  const want = normAddr(opts.location_text);
+  if (!want) return "unreadable";
+  const venue = normAddr(orderVenue);
+  if (!venue) return "unreadable";
+  const hit =
+    venue === want || (venue.length >= 5 && want.includes(venue)) || (want.length >= 5 && venue.includes(want));
+  return hit ? "agree" : "differ-text";
+}
+
+/**
+ * Which existing OnSinch order a thread belongs to - or nothing.
+ *
+ * Ben, 2026-08-09: "If a thread update/potential update comes in, we should search for
+ * it in Onsinch, so that we can potentially match it to a past thread/order within
+ * onsinch to make the update. This is a very particular one and should only apply when
+ * its absolutely 100% sure."
+ *
+ * THE IDENTITY RULE (Ben, 2026-09-13). A thread is about the same job as an order when
+ * the CLIENT, the DATE and the VENUE agree - each of which may be superseded by a change
+ * the thread states. Silence about a field means that field is UNCHANGED, not unknown.
+ * Only a positively stated difference refuses.
+ *
+ * TIMES AND CREW ARE NOT CONSULTED, and that is the ruling, not an omission. Crew size is
+ * the most frequent change in the mailbox, so it can never be evidence that this is a
+ * different job; times are the same - "Make that 4x at 1400-2000" against a block of 2 at
+ * 1200-1800 is a crew change and a time change, neither one announced in words. They are
+ * instructions to apply after binding, and a matcher that weighed them would refuse
+ * precisely the amendments it exists to catch.
+ *
+ * WHY THE VENUE MOSTLY ONLY NARROWS. Over the live tenant's 1,029 recent orders, 121 of
+ * 870 company+date keys carry more than one order - 13.9%, covering 280 orders - so
+ * roughly one update in seven was attaching itself to whichever the API returned first.
+ * Company 128 has FIVE orders on 2026-06-09. The venue separates 94 of those 121.
+ *
+ * THE ONE CASE WHERE IT REFUSES is a sole candidate that resolved to a DIFFERENT OnSinch
+ * place than the thread did. That exception is paid for: without it, thread
+ * "PO - Tottenham Hotspur Stadium - 02/09/26" bound to "Blackout - MCS Prods @ The Tower
+ * Hotel" because it was the only order Blackout had that day, and a crew change for a
+ * stadium would have landed on a hotel. A weaker disagreement never refuses - our own
+ * venue resolution is the softer side of the comparison (R10556's thread says "Royal
+ * Horse Guards Hotel" and resolved to Banqueting House; R10657's resolved to "London"),
+ * so refusing on a string miss would break binds that are right today to fix errors that
+ * are ours.
+ *
+ *   one order on the day, venue agrees or
+ *     cannot be read                              -> match
+ *   one order on the day, both sides resolved to
+ *     DIFFERENT places                            -> refuse
+ *   several, venue picks out exactly one          -> match
+ *   several, venue picks none or more than one    -> AMBIGUOUS, match nothing
+ *
+ * Ambiguity is never guessed at, and it is not an escalation either: the thread is left
+ * unbound, nothing is created beside the job that already exists, and the next message or
+ * the next sweep tries again with whatever the client has since said. Attaching a crew
+ * change to the wrong job is worse than not attaching it - the right job goes unstaffed
  * and the wrong one gets people it does not need.
+ *
+ * MEASURED, 2026-09-14, against all 265 bindings the live system holds
+ * (`npx tsx scripts/score-identity-rule.ts`, which drives THIS function rather than a
+ * re-implementation of it). Re-deriving every binding from scratch:
+ *
+ *                           agrees   moves   refuses   finds nothing
+ *   thread names one R no.   93.8%    6.3%      0%          0%       (16 scored)
+ *   thread names none        56.8%    5.8%   36.0%        1.4%      (139 scored)
+ *
+ * And on the only rows the shipped code actually re-derives - the 100 whose order staff
+ * have since deleted - 42% find a successor, 29% refuse, 29% find nothing on the day.
+ *
+ * READ THE 36% CORRECTLY. It is not an error rate; it is the rule declining to guess
+ * where a client has several orders on one day and the thread's venue picks out none of
+ * them. The old rule bound those anyway. What changed is the DIRECTION of the failure:
+ * from a silent wrong bind, which puts crew on the wrong job, to a refusal, which leaves
+ * the thread unbound and blocked so nothing duplicates and the next sweep tries again.
+ *
+ * WHAT IS NOT PROVEN. Ben's bar is "wrong less than 1% of the time" and this measurement
+ * cannot establish it, because agreement with an existing binding is not proof that
+ * binding was right. What it does establish is the sign of each change: of the moves it
+ * makes, two are defects with documentary proof (#13841 above, and thread "crew at Big
+ * Feastival" moving off "@ Silverstone Circuit" onto "@ Alex James Farm", which is where
+ * the Big Feastival is), and the one provable regression an earlier draft introduced -
+ * "PO - Tottenham Hotspur Stadium" binding to "@ The Tower Hotel" - is what the
+ * "differ-id" refusal above exists to stop. The remainder are unproven either way and a
+ * real 1% figure needs ground truth this tenant does not hold yet.
  */
 export function matchExistingOrder(
   earliestDateISO: string | undefined,
   orders: OrderRec[],
-  locationText?: string
+  opts: MatchOpts = {}
 ): OrderMatch | null {
-  const day = (earliestDateISO || "").slice(0, 10);
-  if (!day) return null;
+  const days = new Set(
+    [earliestDateISO, ...(opts.days ?? [])].map((d) => (d || "").slice(0, 10)).filter(Boolean)
+  );
+  if (!days.size) return null;
 
-  const sameDay = orders.filter((o) => (o.happening || "").slice(0, 10) === day);
+  const sameDay = orders.filter((o) => days.has((o.happening || "").slice(0, 10)));
   if (!sameDay.length) return null;
+  const day = (sameDay[0].happening || "").slice(0, 10);
+
+  /**
+   * The R number as a CHECK, not a branch: it may only pick from what the shape rule has
+   * already accepted. Requiring exactly one is what makes the two poisoned phrasings
+   * inert, and keeping it inside the same-day set is what stops a stale reference in a
+   * signature block dragging the thread onto last year's job.
+   *
+   * This is also the one place a live defect is provable: thread #13841, whose own
+   * subject reads "Price quote - R10687 Delta Live - BBC PROMS 53 @ RAH", is bound to
+   * R10688 - PROMS 54, a different show at a different venue, created five minutes
+   * apart. Both are same-client same-day, so both survive the filter above, and this is
+   * what separates them.
+   */
+  const rn = opts.r_numbers ?? [];
+  if (rn.length === 1) {
+    const named = sameDay.filter((o) => String(o.number ?? "") === rn[0]);
+    if (named.length === 1) {
+      return {
+        order_id: named[0].id,
+        order_number: named[0].number,
+        job_id: named[0].Job?.[0]?.id,
+        by: "date+r-number",
+      };
+    }
+    // Named an order that is not among the candidates: a stale or copied reference. It
+    // narrows nothing and must not widen anything, so the shape rule carries on exactly
+    // as if the thread had named no number at all.
+  }
+
   if (sameDay.length === 1) {
+    // A sole candidate binds unless the disagreement is the strong kind - see the
+    // "Tottenham Hotspur Stadium" case in the header. Refusing leaves the thread unbound
+    // and blocked, so nothing is created beside the job that already exists.
+    if (venueVerdict(sameDay[0], opts) === "differ-id") return { ambiguous: 1, day };
     return { order_id: sameDay[0].id, order_number: sameDay[0].number, job_id: sameDay[0].Job?.[0]?.id, by: "date" };
   }
 
   // More than one. Only the venue can separate them, and only if the thread names one.
-  const want = normAddr(locationText);
-  if (want) {
-    const hits = sameDay.filter((o) => {
-      const venue = normAddr(String(o.name || "").split("@").slice(1).join("@"));
-      if (!venue) return false;
-      // Either side may be the fuller string: an order name is "@ Excel" where the
-      // email says "ExCeL London, Royal Victoria Dock", and vice versa.
-      return venue === want || (venue.length >= 5 && want.includes(venue)) || (want.length >= 5 && venue.includes(want));
-    });
-    if (hits.length === 1) {
-      return { order_id: hits[0].id, order_number: hits[0].number, job_id: hits[0].Job?.[0]?.id, by: "date+venue" };
-    }
+  const hits = sameDay.filter((o) => venueVerdict(o, opts) === "agree");
+  if (hits.length === 1) {
+    return { order_id: hits[0].id, order_number: hits[0].number, job_id: hits[0].Job?.[0]?.id, by: "date+venue" };
   }
   return { ambiguous: sameDay.length, day };
 }

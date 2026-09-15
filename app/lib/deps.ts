@@ -15,7 +15,7 @@ import { guardReasoner } from "./engine/spend";
 import { tieredReasoner } from "./engine/tiered";
 import { logKeyBalanceOnce } from "./engine/keyBalance";
 import { buildOrderBody, buildSlotTeamBody } from "./engine/format";
-import { recordOrder, buildOrderRecord } from "./orderRecordsDb";
+import { recordOrder, buildOrderRecord, ensureOrderRecord } from "./orderRecordsDb";
 import { replaceProvisionalOrder } from "./engine/replaceOrder";
 import { amendOrderInPlace } from "./engine/amendOrder";
 import type { DesiredOrder, DesiredSlotTeam } from "./engine/types";
@@ -612,7 +612,8 @@ export async function buildDeps(): Promise<PipelineDeps> {
     // Read once per invocation from the Neon cache; the committed list is the floor.
     professions: await loadProfessions(PROFESSION_LIST),
     /**
-     * A job this engine could not book, tagged "Manual" in Gmail so ops see it in the
+     * A job this engine could not book, tagged "Order Needs Built" or "Order Needs
+     * Updated" in Gmail so ops see it in the
      * mailbox they already work from rather than only on a board they have to open.
      *
      * Ben, 2026-08-26: "any that cannot be booked should pipe into n8n via webhook and
@@ -628,14 +629,14 @@ export async function buildDeps(): Promise<PipelineDeps> {
      * on the board with its reason either way.
      */
     async flagForManual(a) {
-      return postTag({ label: "Manual", ...a });
+      return postTag(a);
     },
     /**
      * A booking exists for this thread, tagged "Order Built" in the same mailbox.
      *
      * Ben, 2026-08-29. It goes through the SAME n8n workflow as the Manual tag and
      * needed no change there: that workflow reads the label out of the payload
-     * (`label: b.label || 'Manual'`) and creates it in the mailbox if it has never seen
+     * (`label: b.label || 'Order Needs Built'`) and creates it in the mailbox if it has never seen
      * it. So a new tag is a new string, not a new workflow — which is the whole point,
      * because editing the live n8n is the recurring way this system breaks.
      */
@@ -653,6 +654,7 @@ export async function buildDeps(): Promise<PipelineDeps> {
     },
     senderVerdict,
     recordSender,
+    ensureOrderRecord: (rec) => ensureOrderRecord(buildOrderRecord(rec)),
     // The permanent record of every order a rebuild destroys, and what replaced it.
     archiveOrder,
     recordReplacement,

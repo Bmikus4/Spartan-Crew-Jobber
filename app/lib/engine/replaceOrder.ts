@@ -94,6 +94,39 @@ export async function replaceProvisionalOrder(
     return { deleted: false, refused: `refusing to replace order #${order_id}: a slot team has no start or finish (the date is still TBC)` };
   }
 
+  /**
+   * CUSTODY IS A GATE AGAIN, AND THE REASON IT CAN BE ONE NOW IS NEW.
+   *
+   * It was a gate until 2026-08-18, when Ben overruled it: an amendment had to rebuild an
+   * ops-raised draft too, because the alternative was a booking that disagreed with the
+   * client's latest email and a human who had to notice unaided. That was the right call
+   * on the facts of the day — the only way to change a crew block was to destroy the order
+   * and post it again, so refusing to destroy meant refusing to amend.
+   *
+   * That is no longer the choice. `amendOrderInPlace` recovers a staff-raised order's block
+   * ids from the audit tree or from attendance and PATCHes them where they stand, so the
+   * order keeps its R number, its attachments, its hand-typed fields and anybody signed on.
+   * Measured 2026-09-14: 28 of 37 live bound orders are staff-raised, and 30 of 37 have
+   * their block ids recoverable. Destroying one is now a cost with nothing bought by it.
+   *
+   * So the plan's rule of 2026-09-13 stands: never destroy a staff-raised order. If it
+   * cannot be amended in place it is not replaced — the thread carries the terminal
+   * "Order Needs Updated" label and the sweep keeps trying. A booking that disagrees with
+   * the client is recoverable; an order ops built, deleted under a new R number they have
+   * already quoted and worked from, is not.
+   *
+   * `weCreatedIt` comes from the action log — a create or replace this pipeline itself
+   * recorded against this id — so it is custody we established, not custody we inferred.
+   */
+  if (!args.weCreatedIt) {
+    return {
+      deleted: false,
+      refused:
+        `order #${order_id} was raised by somebody else, so it is not ours to delete — ` +
+        `a change it cannot take in place goes on the thread as a label, not through a rebuild`,
+    };
+  }
+
   if (args.alreadyDeleted) {
     // Resuming: the old order is already gone. Do not preflight — there is nothing left
     // to preflight, and re-reading a deleted order would look like "refuse" and strand

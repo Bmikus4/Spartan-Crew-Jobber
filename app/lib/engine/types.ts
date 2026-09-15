@@ -245,7 +245,7 @@ export interface ConversationState {
    *                               client or venue created from a name alone, a
    *                               placeholder contact, an assumed rate card
    *
-   * This marks the second. It exists because the "Manual" Gmail tag means "this engine
+   * This marks the second. It exists because a "Needs" Gmail label means "this engine
    * could not book it", and keying that tag off `needs_human` alone put the label on
    * every booking that merely wanted a second pair of eyes. Measured 2026-08-28: 6 of
    * the 8 tagged threads that had an order were `status: ordered` with a clean write.
@@ -259,7 +259,8 @@ export interface ConversationState {
    */
   review_only?: boolean;
   /**
-   * The thread currently wears the "Manual" tag in Gmail, because this engine could not
+   * The thread currently wears one of the two "Needs" labels in Gmail (which one is in
+   * `needs_label`), because this engine could not
    * book it (Ben, 2026-08-26).
    *
    * Held in state ONLY to make the webhook idempotent. A thread is re-read on every new
@@ -273,6 +274,21 @@ export interface ConversationState {
    */
   manual_flagged?: boolean;
   /**
+   * WHICH of the two "Needs" labels this thread is currently wearing.
+   *
+   * Ben, 2026-09-13: the system may produce four labels and only four — `Order Built`,
+   * `Order Updated`, `Order Needs Built`, `Order Needs Updated`. The failure case is two of
+   * them, and which one depends on whether the thread already holds an order: one that has
+   * none needs BUILDING, one that has an order the change could not reach needs UPDATING.
+   *
+   * It has to be remembered rather than re-derived, because the answer can change between
+   * setting the tag and clearing it. A thread tagged `Order Needs Built` that later gets an
+   * order would, on a re-derivation, clear `Order Needs Updated` — a label it never wore —
+   * and leave `Order Needs Built` on a thread that is now booked. That is the one thing a
+   * label must never do: claim work is outstanding when it is done.
+   */
+  needs_label?: "Order Needs Built" | "Order Needs Updated";
+  /**
    * The thread currently wears the "Order Built" tag in Gmail, because a booking
    * exists in OnSinch for this conversation (Ben, 2026-08-29).
    *
@@ -282,7 +298,7 @@ export interface ConversationState {
    * has taken it off.
    *
    * Independent of `manual_flagged` on purpose. "Order Built" says a booking exists;
-   * "Manual" says somebody must act. A job booked on an assumed rate card is both.
+   * a "Needs" label says somebody must act. A job booked on an assumed rate card is both.
    */
   built_flagged?: boolean;
   /**
@@ -379,6 +395,25 @@ export interface ConversationState {
    */
   last_ordered_team_ids?: number[];
   /**
+   * A difference between OnSinch and this thread's desired shape that ONE re-assertion
+   * did not close.
+   *
+   * Reconciliation re-sends the desired shape every pass rather than verifying a write
+   * landed, because an API write leaves no audit row and cannot be verified (see
+   * reconcile.ts). That is correct until the write is one OnSinch will never accept —
+   * then it re-sends forever, silently, and the thread reads as healthy while the
+   * client's change never lands.
+   *
+   * `key` is a fingerprint of WHAT is being asked for, not of what OnSinch currently
+   * holds, so a difference that is still the same difference keeps its count instead of
+   * resetting whenever the live side wobbles. When `attempts` reaches the ceiling the
+   * thread gets the terminal "Order Needs Updated" label and stops re-asserting: a label
+   * is a dead end, never a queue (Ben, 2026-09-13).
+   *
+   * Cleared the moment a sweep reads the order back and finds no drift at all.
+   */
+  reconcile?: { order_id: number; key: string; attempts: number; first_ts: number };
+  /**
    * needs-info = the engine did its job but cannot proceed without a human
    *              (no company name in the email, unknown sender, new venue).
    *              Expected and routine.
@@ -396,6 +431,24 @@ export interface ConversationState {
     order_id?: number;
     ok: boolean;
     error?: string;
+    /**
+     * HOW LONG AFTER THE ORDER WAS RAISED THIS CHANGE ARRIVED, in whole days.
+     *
+     * Ben's question is whether amendments land within 30 days of the booking, and it
+     * cannot be answered from this tenant today: the longest interval on record is 14 days,
+     * and that is the age of the ENGINE rather than a fact about clients. A number bounded
+     * by how long we have been running looks like an answer and is not one.
+     *
+     * So the fact is written down each time it happens and the question is answered later
+     * with data. Stamped on the log entry rather than in a table of its own because the log
+     * is already persisted, already survives every path that rewrites the state row, and a
+     * second store is a second thing to keep in step.
+     *
+     * Absent when this thread's log holds no create — an order matched out of OnSinch
+     * history was raised before we ever saw it, and measuring from the day we first read it
+     * would make every inherited order look same-day.
+     */
+    days_after_create?: number;
   }>;
 }
 

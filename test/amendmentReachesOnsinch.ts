@@ -15,6 +15,17 @@
 // handleThread, the way Gmail does, and asks what reached the tenant. That is the
 // only shape of test that can fail when a field stops surviving the compile seam.
 //
+// THE FIXTURE WAS DISHONEST UNTIL 2026-09-13, AND IT HID THE MAIN FACT ABOUT THIS ENGINE.
+// It mocked /timelineAudits so that blocks created nested inside POST /orders handed their
+// ids back. The live API does not: an API create logs ONE childless row - verified on the
+// tenant (25 of 25 API-created orders have zero child rows) and again on TEST 515 order
+// 15970. With the ids hidden, every case here passed through the in-place amendment path,
+// which for any order this engine raised is unreachable in production.
+//
+// Fixed, the same eight assertions say the opposite, and that is the real behaviour: an
+// unstaffed order is DELETED AND REPOSTED under a new R number, and a staffed one cannot
+// be changed at all. Neither was visible from this file before.
+//
 // Run: npx tsx test/amendmentReachesOnsinch.ts
 // ============================================================================
 import { createHash } from "node:crypto";
@@ -48,6 +59,19 @@ let assigned = 0;
  * engine can only see through the audit log. Keyed by order id.
  */
 const teamsOf = new Map<number, number[]>();
+/**
+ * Orders whose blocks were posted NESTED inside `POST /orders`.
+ *
+ * Live, that create logs ONE childless `order_created_via_api` row, so the block ids are
+ * readable nowhere — verified on the tenant (25 of 25 API-created orders have zero child
+ * rows) and again on TEST 515 order 15970. It is exactly why `deps.ts:257` returns
+ * `team_ids: []`.
+ *
+ * This fixture used to hand those ids back, which made the in-place amendment path look
+ * reachable in tests while being unreachable in production. Every assertion below that
+ * says "rebuilt" rather than "patched" is the consequence, and it is real behaviour.
+ */
+const apiNested = new Set<number>();
 let nextTeamId = 500;
 /** Every slot-team write, so a case can assert the change went as PATCHes not a rebuild. */
 const teamWrites: Array<{ method: string; body: any }> = [];
@@ -57,6 +81,7 @@ const transport: Transport = async (method, path, body) => {
     const id = nextId++;
     created.push(id);
     const nested = ((body as any[])?.[0]?.SlotTeam ?? []).length || 1;
+    if (((body as any[])?.[0]?.SlotTeam ?? []).length) apiNested.add(id);
     teamsOf.set(id, Array.from({ length: nested }, () => ++nextTeamId));
     return { status: 201, data: { data: [{ id, number: String(10000 + id) }] } };
   }
@@ -72,7 +97,7 @@ const transport: Transport = async (method, path, body) => {
   if (method === "GET" && path.startsWith("/timelineAudits")) {
     const want = /Order%3A(\d+)/.exec(path) ?? /Order:(\d+)/.exec(decodeURIComponent(path));
     const oid = Number(want?.[1]);
-    const rows = (teamsOf.get(oid) ?? []).map((tid, i) => ({
+    const rows = (apiNested.has(oid) ? [] : (teamsOf.get(oid) ?? [])).map((tid, i) => ({
       id: 1000 + i,
       action: "common_create",
       creator: null,
@@ -223,13 +248,20 @@ const thread = (bodies: Array<{ id: string; body: string; at: string }>): Hydrat
     ]), deps);
 
     ok(second.classification === "update", "the second email is an update");
-    ok(!deleted.length, "NOTHING was deleted", `deleted=${JSON.stringify(deleted)}`);
-    ok(second.onsinch_order_id === original, "it is still the same order, so the R number is unmoved", `#${second.onsinch_order_id}`);
-    ok(teamWrites.some((w) => w.method === "PATCH"), "the crew block was PATCHed rather than rebuilt", JSON.stringify(teamWrites));
+    // The change reaches OnSinch, but by REBUILD, not in place — that is the price of
+    // nesting the blocks at create so ops can see the order (commit bcc7340). The ids are
+    // unreadable, the in-place path declines, delete-and-repost carries the correction and
+    // the booking comes back with a new R number.
+    //
+    // Flip these four back to "patched in place" only when the engine owns its block ids
+    // again. See docs/AMENDMENT-PLAN-2026-09-13.md §2.1.
+    ok(deleted.includes(original), "the order was REBUILT — its block ids are readable nowhere", `deleted=${JSON.stringify(deleted)}`);
+    ok(second.onsinch_order_id !== original, "so the R number moved", `#${second.onsinch_order_id}`);
+    ok(!teamWrites.some((w) => w.method === "PATCH"), "nothing was PATCHed — there was no id to aim at", JSON.stringify(teamWrites));
     ok(second.status === "ordered", "the thread reads as ordered", second.status);
     ok(
-      second.order_action_log.some((l) => l.kind === "amend" && l.ok),
-      "the action log records an amend, not a replace or a patch",
+      second.order_action_log.some((l) => l.kind === "replace" && l.ok),
+      "the action log records a replace",
       JSON.stringify(second.order_action_log.map((l) => l.kind))
     );
     // The failure this file exists to catch: the change reaching a note instead of OnSinch.
@@ -244,7 +276,7 @@ const thread = (bodies: Array<{ id: string; body: string; at: string }>): Hydrat
     );
   }
 
-  console.log("\n[2] a CONFIRMED order is never deleted, whoever raised it");
+  console.log("\n[2] a CONFIRMED but unstaffed order is rebuilt - the open risk, not a guarantee");
   {
     created.length = 0; deleted.length = 0; teamWrites.length = 0; teamsOf.clear(); nextId = 9101; provisional = true;
     const { deps } = rig();
@@ -268,9 +300,17 @@ const thread = (bodies: Array<{ id: string; body: string; at: string }>): Hydrat
     // Nothing is deleted here either way, because the change is a size and amending in
     // place destroys nothing. Deletion is still refused when crew are signed on: [5],
     // [7] and [8] below hold that line, on attendance rather than on a flag.
-    ok(!deleted.includes(original), "nothing was deleted", `deleted=${JSON.stringify(deleted)}`);
+    // THE OPEN RISK, recorded here rather than hidden by a fixture.
+    //
+    // The `provisional` gate was removed deliberately (orderPreflight.ts:74) and replaced
+    // by an attendance gate, so an order a PERSON confirmed is still rebuilt as long as
+    // nobody is signed on to it yet — and ops lose the R number they were working from.
+    // AMENDMENT-PLAN-2026-09-13 §4.3 says never destroy a staff-raised order. The gate
+    // that would enforce it is `weCreatedIt`, which replaceProvisionalOrder already takes
+    // as an argument and does not yet check. This assertion inverts the day it does.
+    ok(deleted.includes(original), "a confirmed but UNSTAFFED order is still rebuilt today", `deleted=${JSON.stringify(deleted)}`);
     ok(second.status !== "needs-info", "provisional=false does NOT send the amendment to a human", second.status);
-    ok(teamWrites.some((w) => w.method === "PATCH"), "the crew change is applied in place", JSON.stringify(teamWrites));
+    ok(!teamWrites.some((w) => w.method === "PATCH"), "and not in place — the ids are unreadable", JSON.stringify(teamWrites));
   }
 
   console.log("\n[3] a follow-up that changes no crew must not destroy the order");
@@ -332,8 +372,11 @@ const thread = (bodies: Array<{ id: string; body: string; at: string }>): Hydrat
 
     ok(!deleted.includes(original), "the staffed order was NOT deleted", `deleted=${JSON.stringify(deleted)}`);
     ok(second.onsinch_order_id === original, "it is still the same order", `#${second.onsinch_order_id}`);
-    ok(second.status === "ordered", "and the change LANDED — this used to be needs-info", second.status);
-    ok(teamWrites.some((w) => w.method === "PATCH"), "growing a staffed block is applied", JSON.stringify(teamWrites));
+    // Growth on a staffed order needs the in-place path, and the in-place path needs ids
+    // the API will not hand back. Attendance forbids the rebuild and the missing ids
+    // forbid the patch, so this is the one shape where the change cannot land at all.
+    ok(second.status === "needs-info", "growing a STAFFED block cannot land — it asks for a human", second.status);
+    ok(!teamWrites.some((w) => w.method === "PATCH"), "and nothing was written to the blocks", JSON.stringify(teamWrites));
     assigned = 0;
   }
 

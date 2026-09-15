@@ -127,14 +127,23 @@ async function main() {
 {
   // Exists, provisional, right company - and OPS raised it, not us.
   //
-  // This used to refuse. Ben overruled it on 2026-08-18: an amendment rebuilds the
-  // order whoever raised it, because the alternative is a booking that disagrees with
-  // the client's latest email and a human who has to notice unaided. `provisional` is
-  // now the only gate, and it still holds — see the confirmed-order case below.
+  // This refused, then did not, and now refuses again, and the reversal is not a change
+  // of mind — it is a change of what the alternative costs.
+  //
+  // Ben overruled the refusal on 2026-08-18 because the only way to change a crew block
+  // was to destroy the order and post it again, so refusing to destroy meant refusing to
+  // amend, and the client's latest email reached nobody.
+  //
+  // `amendOrderInPlace` now recovers a staff-raised order's block ids from the audit tree
+  // or from attendance and PATCHes them where they stand. Measured 2026-09-14: 28 of 37
+  // live bound orders are staff-raised and 30 of 37 have recoverable ids, so destroying
+  // one is a cost with nothing bought by it. The plan's rule of 2026-09-13 therefore
+  // stands: never destroy a staff-raised order.
   const { client, calls } = fakeOnsinch({ liveOrder: { id: 13632, provisional: true, quote: false, company_id: 501 } });
   const r = await replaceProvisionalOrder(client, { weCreatedIt: false, order_id: 13632, desired: desired(6) }, recordingHooks(calls));
-  ok(!r.refused, "an ops-raised DRAFT is rebuilt, not refused", r.refused ?? "(not refused)");
-  ok(r.deleted && !!r.created, "it is deleted and reposted", `deleted=${r.deleted} created=${!!r.created}`);
+  ok(!!r.refused && /not ours to delete/.test(r.refused), "an ops-raised draft is NOT ours to destroy", r.refused ?? "(not refused)");
+  ok(!r.deleted && !r.created, "nothing was deleted and nothing was posted", `deleted=${r.deleted} created=${!!r.created}`);
+  ok(!calls.some((c) => c.startsWith("DELETE")), "and the refusal happens before any write", calls.join(" -> "));
 }
 {
   const { client, calls } = fakeOnsinch({ liveOrder: null });
@@ -359,14 +368,19 @@ async function runConfirm(opts: {
 }
 
 {
-  // THE INHERITED ORDER. Order dedup links a thread to any existing order for the same
-  // company and date, so a thread routinely ends up pointing at one ops raised by hand.
-  // The action log holds no create for 13632, which used to stop the deletion outright.
-  // It no longer does: only attendance does.
+  // THE INHERITED ORDER, and it is the common one rather than the edge case. Order dedup
+  // links a thread to any existing order for the same company and date, so a thread
+  // routinely ends up pointing at one ops raised by hand — measured 2026-09-14, 28 of 37
+  // live bound orders. The action log holds no create for 13632, which is what says so.
+  //
+  // It is never rebuilt. Ops have the R number, may have quoted it, and have hand-typed
+  // fields on it; a rebuild returns the order correct in crew under a number nobody
+  // recognises. The crew change reaches it through `amendOrderInPlace` or it reaches the
+  // thread as a label — never through a delete.
   const inherited = staged({ order_action_log: [] });
   const { out, calls } = await runConfirm({ state: inherited });
-  ok(calls.some((c) => c.startsWith("DELETE")), "an inherited DRAFT is now rebuilt too (Ben, 2026-08-18)", calls.join(" -> "));
-  ok(out?.onsinch_order_id !== 13632, "so the thread moves to the replacement order", String(out?.onsinch_order_id));
+  ok(!calls.some((c) => c.startsWith("DELETE")), "an inherited order is never destroyed", calls.join(" -> "));
+  ok(out?.onsinch_order_id === 13632, "and the thread still points at the order ops raised", String(out?.onsinch_order_id));
 }
 
 {

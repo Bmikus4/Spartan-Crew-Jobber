@@ -13,6 +13,45 @@ import { findCrossThreadMatches, crossThreadDraft, type ThreadShape, type Intern
 import { assessAmendment } from "./amendment";
 import { reportError } from "../errorReport";
 import type { AmendResult } from "./amendOrder";
+import { readLiveShape, driftAgainst, driftKey, describeDrift, type Drift } from "./reconcile";
+
+/**
+ * How many times one unchanged difference is re-asserted before the thread gives up on it.
+ *
+ * Three, because reconciliation exists to survive a PATCH that silently did nothing, and a
+ * write that fails three consecutive sweeps is not a flake — it is a write OnSinch will not
+ * take. Past that the re-assertion costs two reads and a write per sweep for the life of the
+ * thread and hides the failure behind a healthy-looking record.
+ */
+const RECONCILE_CEILING = 3;
+
+/**
+ * Append one line to the order action log, stamping how long after the create it happened.
+ *
+ * A helper rather than eight call sites setting the field by hand, because eight call sites
+ * is eight chances for the ninth to forget — and a horizon measured from a log that is
+ * missing its longest intervals reads low, which is the direction that would answer Ben's
+ * "within 30 days?" with a confident yes it has not earned.
+ *
+ * The create it measures from is the EARLIEST successful one in this thread. A thread whose
+ * order was destroyed and reposted gets a `replace` entry, not a second `create`, so the
+ * interval keeps running from the original booking — which is the one the client thinks they
+ * made.
+ */
+export function logAction(
+  state: ConversationState,
+  now: () => number,
+  entry: ConversationState["order_action_log"][number]
+): void {
+  const created = state.order_action_log.find((a) => a.kind === "create" && a.ok)?.ts;
+  const days =
+    created && entry.ts > created ? Math.floor((entry.ts - created) / 86_400_000) : undefined;
+  state.order_action_log = [
+    ...state.order_action_log,
+    days === undefined ? entry : { ...entry, days_after_create: days },
+  ];
+}
+
 
 /**
  * The shape the cross-thread check compares. Built from the state row rather than
@@ -201,6 +240,21 @@ export interface PipelineDeps extends CompileDeps {
   /** Feeds the sender ledger that triage reads. Injected; absent in tests. */
   recordSender?: (a: { addr: string; thread_id: string; wasJob: boolean; subject?: string }) => Promise<void>;
   /**
+   * Adopt a thread->order link this engine did not mint, once, permanently.
+   *
+   * Most links are not ours: 90 of 148 recorded ids were read out of OnSinch by
+   * `matchExistingOrder`, which only runs when the thread has no id yet and so never
+   * re-reads. Those links lived only in the conversation-state blob, which every write
+   * rewrites wholesale. This puts them where nothing rewrites them.
+   *
+   * Implementations MUST NOT overwrite an existing row - see ensureOrderRecord.
+   */
+  ensureOrderRecord?: (rec: {
+    order_id: number; thread_id: string; job_id: number | null; order_number: string | null;
+    sender_email: string | null; sender_domain: string | null; place_id: number | null;
+    shape_sent: unknown; id_source: "api_response" | "matched" | "manual"; verified_at: string | null;
+  }) => Promise<boolean>;
+  /**
    * A JOB THIS ENGINE COULD NOT BOOK, HANDED TO A PERSON.
    *
    * Ben, 2026-08-26: "any that cannot be booked should pipe into n8n via webhook and
@@ -240,7 +294,18 @@ export interface PipelineDeps extends CompileDeps {
    */
   flagOrderUpdated?: (a: ThreadTag) => Promise<void>;
   flagForManual?: (a: {
+    /**
+     * Which label to post. There are two failure labels, not one — see `needs_label` in
+     * types.ts — so the caller decides and this carries it.
+     */
+    label: "Order Needs Built" | "Order Needs Updated";
     thread_id: string;
+    /**
+     * UNCHANGED ON THE WIRE, deliberately. The n8n tag workflow switches on this string
+     * and it is not editable from here today (the Gmail credential has been dead since
+     * 2026-09-09), so renaming it to match the new labels would be a guess at somebody
+     * else's contract. Only the LABEL moved; "manual" here still means "put the tag on".
+     */
     state: "manual" | "cleared";
     /** Why a person is needed, in the words already on the ticket. */
     reason: string;
@@ -477,7 +542,7 @@ export async function handleThread(
      * gate nobody opens is a drawer, not safety. What was missing was any way for the
      * flag to reach a person — so holding the order WAS the notification.
      *
-     * That changed today. `needs_human` now puts the "Manual" label on the thread in the
+     * That changed today. `needs_human` now puts a "Needs" label on the thread in the
      * bookings mailbox (deps.flagForManual), which is where ops actually work. The price
      * still gets a human's eyes; the booking no longer waits for them.
      *
@@ -520,6 +585,33 @@ export async function handleThread(
   }
 
   await store.put(next);
+  /**
+   * The durable half of the link. `store.put` writes the order id into a JSON blob that
+   * the next pass rewrites wholesale; this writes it where nothing rewrites it, so an
+   * amendment months later can still find the booking. It only ever ADDS: the create
+   * path has written its own row by now, and a re-match must never move `thread_id`.
+   *
+   * Never allowed to fail the email - a link we could not durably record is a worse
+   * report next month, not a lost booking today.
+   */
+  if (deps.ensureOrderRecord && Number.isInteger(Number(next.onsinch_order_id)) && Number(next.onsinch_order_id) > 0) {
+    try {
+      await deps.ensureOrderRecord({
+        order_id: Number(next.onsinch_order_id),
+        thread_id: tid,
+        job_id: Number.isInteger(Number(next.onsinch_job_id)) ? Number(next.onsinch_job_id) : null,
+        order_number: next.onsinch_order_number != null ? String(next.onsinch_order_number) : null,
+        sender_email: next.sender_email ?? null,
+        sender_domain: next.sender_domain ?? null,
+        place_id: next.desired_order?.slot_teams?.[0]?.place_id ?? null,
+        shape_sent: next.desired_order ?? {},
+        id_source: "matched",
+        verified_at: null,
+      });
+    } catch (err) {
+      console.error("[order-records] adopt skipped", err);
+    }
+  }
   await flagManualIfNeeded(next, deps);
   await flagBuiltIfNeeded(next, deps);
   await flagUpdatedIfNeeded(next, deps);
@@ -540,7 +632,7 @@ export async function handleThread(
  *               since the board shows an order and everything looks done
  *
  * NOT INCLUDED, deliberately: `ignored`. That is a newsletter, an out-of-office, a
- * machine sender — nothing anyone asked to be booked. Tagging those would put "Manual"
+ * machine sender — nothing anyone asked to be booked. Tagging those would put a "Needs" label
  * on most of the mailbox within a week and the tag would stop being read, which costs
  * more than it saves.
  *
@@ -580,7 +672,7 @@ export function cannotBeBooked(s: ConversationState): boolean {
  * "ORDER BUILT" — the thread says a booking exists.
  *
  * Ben, 2026-08-29. The mirror of the Manual tag and deliberately independent of it:
- * "Order Built" answers "is there an order for this conversation", "Manual" answers
+ * "Order Built" answers "is there an order for this conversation", the "Needs" labels answer
  * "does somebody have to do something". A job booked on an assumed rate card is both,
  * and letting either suppress the other would hide whichever ops needed that day.
  *
@@ -674,11 +766,40 @@ export async function flagUpdatedIfNeeded(next: ConversationState, deps: Pipelin
   }
 }
 
+/**
+ * THE TWO FAILURE LABELS. Ben, 2026-09-13: four labels, and only four.
+ *
+ * `cannotBeBooked` already decides THAT a job the client asked for is not correctly in
+ * OnSinch. Which of the two labels says so depends on one thing — whether the thread holds
+ * an order at all:
+ *
+ *   no order      the booking was never made. Order Needs Built.
+ *   an order      it exists and disagrees with the client's latest email, because the
+ *                 change could not be applied. Order Needs Updated. This is the more
+ *                 dangerous of the two and the easier to miss: the board shows an order
+ *                 and everything looks done.
+ *
+ * It replaces the single `Manual` tag, which said "a person is needed" and left them to
+ * work out which kind of needed. A label is a terminal marker and never a queue — nothing
+ * downstream waits on it, and the sweep keeps trying either way.
+ */
+function needsLabelFor(s: ConversationState): "Order Needs Built" | "Order Needs Updated" {
+  return Number(s.onsinch_order_id) > 0 ? "Order Needs Updated" : "Order Needs Built";
+}
+
 export async function flagManualIfNeeded(next: ConversationState, deps: PipelineDeps): Promise<void> {
   if (!deps.flagForManual) return;
   const should = cannotBeBooked(next);
   const already = next.manual_flagged === true;
-  if (should === already) return; // no transition, nothing to say
+  /**
+   * A thread already wearing one failure label whose situation has changed into the other
+   * — it had no order, now it has one that will not take the change — is a transition even
+   * though `should` did not move. Without this the thread keeps `Order Needs Built` while
+   * the booking exists, which is the one thing a label must never say.
+   */
+  const wanted = needsLabelFor(next);
+  const swapped = should && already && next.needs_label !== undefined && next.needs_label !== wanted;
+  if (should === already && !swapped) return; // no transition, nothing to say
 
   // The reason ops read is the last thing the engine wrote about the thread, not a
   // summary invented here — the notes already say why, in the engine's own words.
@@ -687,7 +808,22 @@ export async function flagManualIfNeeded(next: ConversationState, deps: Pipeline
     : `booked as order #${next.onsinch_order_id ?? "?"}`;
 
   try {
+    if (swapped && next.needs_label) {
+      // Take the wrong one off before putting the right one on. Posting the new label
+      // alone would leave a thread wearing both, which reads as two outstanding jobs.
+      await deps.flagForManual({
+        label: next.needs_label,
+        thread_id: next.thread_id,
+        state: "cleared",
+        reason: `superseded by ${wanted}`,
+        status: next.status,
+        subject: next.subject,
+      });
+    }
     await deps.flagForManual({
+      // On a clear, the label to take off is the one that was PUT on — not the one this
+      // thread's situation would produce now.
+      label: should ? wanted : (next.needs_label ?? wanted),
       thread_id: next.thread_id,
       state: should ? "manual" : "cleared",
       reason,
@@ -704,6 +840,7 @@ export async function flagManualIfNeeded(next: ConversationState, deps: Pipeline
         : {}),
     });
     next.manual_flagged = should;
+    next.needs_label = should ? wanted : undefined;
     await deps.store.put(next);
   } catch (err) {
     // The thread is already on the board with its reason. An untagged inbox is slower
@@ -762,17 +899,101 @@ async function tryAmendInPlace(
   // number must not rewrite the crew blocks of a real order.
   const teamsHash = hashOrder(intended.desired.slot_teams ?? []);
   const teamsChanged = !!next.last_ordered_teams_hash && teamsHash !== next.last_ordered_teams_hash;
-  if (!resuming && !teamsChanged) return false;
+
+  /**
+   * RECONCILIATION. `teamsChanged` compares what we want against WHAT WE LAST WROTE, and
+   * that record is updated the moment a PATCH returns 2xx — so a PATCH that returned 2xx
+   * and silently did nothing leaves the two in agreement and this gate closes forever.
+   * The client's change never lands and nothing anywhere says so.
+   *
+   * It cannot be caught by verifying the write: an API write leaves no audit row at all
+   * (measured on TEST 515, 2026-09-13 — a run that moved windows, resized and changed
+   * venue produced three `order_created_via_api` rows and nothing else). So the question
+   * asked here is not "did it land" but "does OnSinch hold what we want", read fresh.
+   *
+   * Only asked when we believe nothing changed, which is the case that would otherwise
+   * exit. A change we already intend to send needs no second reason to send it, and this
+   * keeps the extra two reads off the common path.
+   */
+  let drift: Drift[] = [];
+  if (!resuming && !teamsChanged && Number.isInteger(Number(order_id))) {
+    try {
+      const live = await readLiveShape(deps.onsinch, Number(order_id));
+      drift = driftAgainst(live, intended.desired, next.last_ordered_team_ids);
+    } catch (err) {
+      // An unreadable order is not a changed one. Reading failed, so nothing is known,
+      // so nothing is re-asserted — the opposite choice re-posts the whole shape against
+      // an order that was already correct, on every sweep.
+      console.error("[reconcile] live read failed", err);
+    }
+  }
+
+  if (!resuming && !teamsChanged && !drift.length) {
+    // Nothing moved and OnSinch holds what we want. Whatever was being tracked is closed.
+    if (next.reconcile) next.reconcile = undefined;
+    return false;
+  }
+
+  if (drift.length) {
+    /**
+     * The same difference, again. Re-asserting is right until the write is one OnSinch
+     * will never accept — then it re-asserts forever and the thread reads as healthy
+     * while the client's change never lands. The count is on the fingerprint of what is
+     * being ASKED FOR, so a difference that is still the same difference keeps counting
+     * even as the live side wobbles.
+     */
+    const key = driftKey(drift);
+    const same = next.reconcile?.order_id === order_id && next.reconcile.key === key;
+    const attempts = (same ? next.reconcile!.attempts : 0) + 1;
+    next.reconcile = { order_id, key, attempts, first_ts: same ? next.reconcile!.first_ts : now() };
+
+    if (attempts > RECONCILE_CEILING) {
+      /**
+       * A dead end, and a dead end is a LABEL — never a queue and never a checkpoint
+       * (Ben, 2026-09-13: nothing in this project may require a human to proceed). The
+       * booking still stands; what is recorded is that this one change will not go on,
+       * so the thread stops re-sending it every sweep and says so once.
+       */
+      next.needs_human = true;
+      next.review_only = false;
+      next.notes = [
+        ...next.notes,
+        `order #${order_id} has not taken this change after ${RECONCILE_CEILING} attempts — ${describeDrift(drift)}`,
+      ];
+      logAction(next, now, {
+        ts: now(),
+        kind: "amend-refused",
+        order_id,
+        ok: false,
+        error: `unreconciled after ${RECONCILE_CEILING} attempts`,
+      });
+      await store.put(next);
+      await emit("order_error", { error: "drift not reconciled", order_id, attempts });
+      return true;
+    }
+
+    next.notes = [
+      ...next.notes,
+      `OnSinch does not hold what this thread asks for — re-asserting (attempt ${attempts}): ${describeDrift(drift)}`,
+    ];
+  }
 
   /**
    * The set this engine last wrote, which is what the ids read back from OnSinch
    * correspond to. Absent on an order the engine did not raise — most often one matched
-   * out of OnSinch history by company and date — and absent is not empty: with nothing
-   * to pair against, the amendment declines and the rebuild path takes it, which is
-   * where an order of unknown provenance belongs.
+   * out of OnSinch history by company and date.
+   *
+   * THIS USED TO RETURN EARLY WHEN IT WAS ABSENT, on the reasoning that an order of
+   * unknown provenance belongs to the rebuild path. Two things made that wrong. Measured
+   * 2026-09-14, 28 of 37 live bound orders are staff-raised, so "unknown provenance" is
+   * the common case; and the rebuild now refuses to destroy an order ops raised, so the
+   * early return sent every one of them to a dead end.
+   *
+   * `amendOrderInPlace` takes them instead: it reads the order's blocks back and pairs
+   * them to the thread's on day and venue, declining wherever that is not proven. Absence
+   * is now a different ROUTE through the amendment rather than a reason to skip it.
    */
   const previous = next.last_ordered_teams;
-  if (!resuming && !previous?.length) return false;
 
   try {
     const res = await executor.amendOrderInPlace({
@@ -800,7 +1021,7 @@ async function tryAmendInPlace(
       // Final. Nothing was written that matters, and no other path may try.
       next.status = "needs-info";
       next.notes = [...next.notes, `crew/time change NOT applied — ${res.refused}`];
-      next.order_action_log = [...next.order_action_log, { ts: now(), kind: "amend-refused", order_id, ok: false, error: res.refused }];
+      logAction(next, now, { ts: now(), kind: "amend-refused", order_id, ok: false, error: res.refused });
       next.order_amend = undefined;
       await emit("order_updated", { order_id, applied: 0, refused: res.refused });
       return true;
@@ -838,6 +1059,16 @@ async function tryAmendInPlace(
       next.status = "ordered";
       next.pending_order = undefined;
       next.order_amend = undefined;
+      /**
+       * A real crew change has moved the desired shape, so any difference being counted
+       * against the OLD shape is stale and its count must not carry over. A difference
+       * this amendment fails to close is counted again from one on the next sweep, which
+       * is the honest reading — it is a new question about a new shape.
+       *
+       * The drift-driven path deliberately does NOT clear here: whether the re-assertion
+       * took is not knowable from a 2xx, and the next sweep's read is what answers it.
+       */
+      if (teamsChanged) next.reconcile = undefined;
       next.notes = [
         ...next.notes,
         `crew/time change applied to order #${order_id} in place — ` +
@@ -846,7 +1077,7 @@ async function tryAmendInPlace(
           (applied.length ? `, ${applied.join(", ")} updated` : "") +
           `; ${crew} crew across ${(intended.desired.slot_teams ?? []).length} block(s)`,
       ];
-      next.order_action_log = [...next.order_action_log, { ts: now(), kind: "amend", order_id, ok: true }];
+      logAction(next, now, { ts: now(), kind: "amend", order_id, ok: true });
       await emit("order_updated", {
         order_id,
         applied: res.amended.patched + res.amended.added.length,
@@ -867,7 +1098,7 @@ async function tryAmendInPlace(
     // not merely worth a look, it is not right. See review_only in types.ts.
     next.review_only = false;
     next.notes = [...next.notes, `in-place amendment of order #${order_id} returned no result — nothing is known to have been applied`];
-    next.order_action_log = [...next.order_action_log, { ts: now(), kind: "amend", order_id, ok: false, error: "no result" }];
+    logAction(next, now, { ts: now(), kind: "amend", order_id, ok: false, error: "no result" });
     await store.put(next);
     await emit("order_error", { error: "amend returned no result", order_id });
     return true;
@@ -888,7 +1119,7 @@ async function tryAmendInPlace(
       `in-place amendment of order #${order_id} failed (${String(err?.message ?? err)}). Nothing was deleted; ` +
         `the order may hold some corrected blocks and be missing a new one. A retry completes it.`,
     ];
-    next.order_action_log = [...next.order_action_log, { ts: now(), kind: "amend", order_id, ok: false, error: String(err?.message ?? err) }];
+    logAction(next, now, { ts: now(), kind: "amend", order_id, ok: false, error: String(err?.message ?? err) });
     await store.put(next);
     await emit("order_error", { error: String(err?.message ?? err), order_id });
     return true;
@@ -989,7 +1220,7 @@ async function tryReplace(
       // NOT claim the update landed.
       next.status = "needs-info";
       next.notes = [...next.notes, `crew/time change NOT applied — ${res.refused}`];
-      next.order_action_log = [...next.order_action_log, { ts: now(), kind: "replace-refused", order_id, ok: false, error: res.refused }];
+      logAction(next, now, { ts: now(), kind: "replace-refused", order_id, ok: false, error: res.refused });
       next.order_replace = undefined;
       await emit("order_updated", { order_id, applied: 0, refused: res.refused });
       return true;
@@ -1011,7 +1242,7 @@ async function tryReplace(
         ...next.notes,
         `crew/time change applied by replacing draft order #${old} with #${res.created.id} — PATCH cannot carry slot teams`,
       ];
-      next.order_action_log = [...next.order_action_log, { ts: now(), kind: "replace", order_id: res.created.id, ok: true }];
+      logAction(next, now, { ts: now(), kind: "replace", order_id: res.created.id, ok: true });
       // Close the chain, so the old number resolves to the job it became.
       if (archiveId) {
         await deps.recordReplacement?.(archiveId, {
@@ -1042,7 +1273,7 @@ async function tryReplace(
       `replace of order #${order_id} returned neither a replacement nor a reason` +
         (deletedBlind ? " AFTER the old order was deleted — see order_replace for the snapshot" : " — nothing was deleted"),
     ];
-    next.order_action_log = [...next.order_action_log, { ts: now(), kind: "replace", order_id, ok: false, error: "no result" }];
+    logAction(next, now, { ts: now(), kind: "replace", order_id, ok: false, error: "no result" });
     if (!deletedBlind) next.order_replace = undefined;
     await store.put(next);
     await emit("order_error", { error: "replace returned no result", order_id, deleted: deletedBlind });
@@ -1065,7 +1296,7 @@ async function tryReplace(
           `The order it held is snapshotted in order_replace and will be re-posted on the next run.`
         : `replace of order #${order_id} failed before anything was deleted (${String(err?.message ?? err)}) — the order is untouched`,
     ];
-    next.order_action_log = [...next.order_action_log, { ts: now(), kind: "replace", order_id, ok: false, error: String(err?.message ?? err) }];
+    logAction(next, now, { ts: now(), kind: "replace", order_id, ok: false, error: String(err?.message ?? err) });
     await store.put(next);
     await emit("order_error", { error: String(err?.message ?? err), order_id, deleted });
     return true;

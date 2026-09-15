@@ -445,6 +445,28 @@ export class OnsinchClient {
   }
 
   /**
+   * THE ONLY WAY TO READ A CREW BLOCK'S CURRENT SHAPE BACK OUT OF ONSINCH.
+   *
+   * There is no `GET /slotTeams` and no `GET /slots` — every spelling is 404 or 405 — so
+   * a block's size, window, venue, profession and name are not directly readable at all.
+   * They ride on the attendance rows: adding `Slot` to the expansion puts the whole Slot
+   * record on every seat, and `SlotTeam` puts the block it belongs to beside it.
+   *
+   * Probed live 2026-09-14 on order #15998: `Slot` carries slotteam_id, size,
+   * profession_id, slotlocation_id, beginning and end, and `SlotTeam` carries the name.
+   * Per block and exact — better than Job.min_beginning/max_end, which is the aggregate
+   * span across all of them.
+   *
+   * ONLY STAFFED BLOCKS APPEAR. Attendance is a row per assigned seat, so a block nobody
+   * is signed on to produces nothing: order #16005, attendance count 0, returns zero rows.
+   * An empty answer therefore means "nobody is assigned", NOT "the order has no blocks",
+   * and a caller that reads it the second way will re-post a shape that was already right.
+   */
+  async liveTeamsForOrder(order_id: number): Promise<any[]> {
+    return this.listAll("/attendance", { with: "Slot,SlotTeam,Order", Order__id: order_id });
+  }
+
+  /**
    * EVERY SLOT TEAM ID ON AN ORDER, READ BACK. This one call is what makes amending an
    * order possible at all, and it took until 2026-08-23 to find.
    *

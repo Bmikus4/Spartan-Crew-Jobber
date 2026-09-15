@@ -26,6 +26,13 @@ import { neon, type NeonQueryFunction } from "@neondatabase/serverless";
  *                 guarded on `!linkedOrderId`. 90 of the 148 recorded ids are these.
  *   manual        set by a person or a maintenance script.
  *
+ * ONE ORDER HOLDS MANY THREADS. Measured 2026-09-13: of 19 orders claimed by more than
+ * one thread, 12 are a single job whose client emailed about it in several Gmail threads —
+ * the PO in one, a crew change in another, a quote reply in a third, no shared message ids
+ * between them. Binding all of them to the one order is correct, so the key is
+ * (thread_id, order_id) and NOT order_id alone. An `order_id` primary key encoded a
+ * one-to-one that the business does not have, and made 19 real links look like conflicts.
+ *
  * Only `api_response` is written today — the create path is the only writer wired up.
  * The other two are declared rather than invented later, so that the day the matched
  * ids get provenance the vocabulary does not have to change underneath them.
@@ -108,7 +115,7 @@ async function ensure(sql: NeonQueryFunction<false, false>): Promise<void> {
   if (_ready) return;
   await sql`
     CREATE TABLE IF NOT EXISTS order_records (
-      order_id      BIGINT PRIMARY KEY,
+      order_id      BIGINT NOT NULL,
       thread_id     TEXT NOT NULL,
       job_id        BIGINT,
       order_number  TEXT,
@@ -121,13 +128,28 @@ async function ensure(sql: NeonQueryFunction<false, false>): Promise<void> {
       crew_total    INT NOT NULL,
       id_source     TEXT NOT NULL DEFAULT 'api_response',
       verified_at   TIMESTAMPTZ,
-      created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+      created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+      PRIMARY KEY (thread_id, order_id)
     )`;
   // The CREATE above only runs on an empty database, so a column added later has to be
   // added here too or it exists in dev and nowhere else. Same rule, and the same comment,
   // as ticketsDb.ts — that repo learned it by shipping a column into one environment.
+  /**
+   * Migrate a table created under the old one-row-per-order key. Postgres names that
+   * constraint `order_records_pkey`, and dropping it is safe because the composite key
+   * added straight after is strictly weaker — every row that satisfied the old key
+   * satisfies the new one, so nothing can fail to migrate.
+   */
+  await sql`ALTER TABLE order_records DROP CONSTRAINT IF EXISTS order_records_pkey`;
   await sql`ALTER TABLE order_records ADD COLUMN IF NOT EXISTS id_source TEXT NOT NULL DEFAULT 'api_response'`;
   await sql`ALTER TABLE order_records ADD COLUMN IF NOT EXISTS verified_at TIMESTAMPTZ`;
+  await sql`
+    DO $$ BEGIN
+      IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'order_records_thread_order_pk') THEN
+        ALTER TABLE order_records ADD CONSTRAINT order_records_thread_order_pk PRIMARY KEY (thread_id, order_id);
+      END IF;
+    END $$`;
+  await sql`CREATE INDEX IF NOT EXISTS order_records_order ON order_records (order_id)`;
   await sql`CREATE INDEX IF NOT EXISTS order_records_thread ON order_records (thread_id)`;
   await sql`CREATE INDEX IF NOT EXISTS order_records_domain ON order_records (sender_domain)`;
   await sql`CREATE INDEX IF NOT EXISTS order_records_unverified ON order_records (id_source) WHERE verified_at IS NULL`;
@@ -147,7 +169,7 @@ export async function recordOrder(rec: OrderRecord): Promise<void> {
       VALUES (${rec.order_id}, ${rec.thread_id}, ${rec.job_id}, ${rec.order_number}, ${rec.sender_email},
               ${rec.sender_domain}, ${rec.company_id}, ${rec.place_id}, ${JSON.stringify(rec.shape_sent)},
               ${rec.block_count}, ${rec.crew_total}, ${rec.id_source}, ${rec.verified_at})
-      ON CONFLICT (order_id) DO UPDATE
+      ON CONFLICT (thread_id, order_id) DO UPDATE
         SET thread_id = EXCLUDED.thread_id, job_id = EXCLUDED.job_id,
             order_number = EXCLUDED.order_number, sender_email = EXCLUDED.sender_email,
             sender_domain = EXCLUDED.sender_domain, company_id = EXCLUDED.company_id,
@@ -160,6 +182,45 @@ export async function recordOrder(rec: OrderRecord): Promise<void> {
             verified_at = COALESCE(EXCLUDED.verified_at, order_records.verified_at)`;
   } catch (err) {
     console.error("[order-records] write failed", err);
+  }
+}
+
+/**
+ * Record a link this engine did not mint, without ever overwriting one it did.
+ *
+ * `recordOrder` upserts, which is right for the create path: it owns the row and every
+ * later write knows more. This one must NOT, because it is called on every pass over a
+ * thread that already has an order id, and most of those ids came from
+ * `matchExistingOrder` reading OnSinch history. Upserting there would rewrite
+ * `thread_id` on a re-match and quietly move a real job to a different client
+ * conversation - the failure `orderLink.ts` was built to avoid.
+ *
+ * So: a (thread, order) pair is written once and never rewritten. With the composite key
+ * `thread_id` can no longer be moved by an upsert at all — a different thread claiming the
+ * same order is a NEW ROW, which is the real shape: one order, many conversations.
+ * ON CONFLICT DO NOTHING is the whole guarantee,
+ * and it is why this is a separate function rather than a flag on `recordOrder`.
+ *
+ * Returns true when a row was actually inserted, so a caller can count what it adopted.
+ */
+export async function ensureOrderRecord(rec: OrderRecord): Promise<boolean> {
+  const sql = db();
+  if (!sql) return false;
+  try {
+    await ensure(sql);
+    const rows = (await sql`
+      INSERT INTO order_records (order_id, thread_id, job_id, order_number, sender_email,
+                                 sender_domain, company_id, place_id, shape_sent, block_count, crew_total,
+                                 id_source, verified_at)
+      VALUES (${rec.order_id}, ${rec.thread_id}, ${rec.job_id}, ${rec.order_number}, ${rec.sender_email},
+              ${rec.sender_domain}, ${rec.company_id}, ${rec.place_id}, ${JSON.stringify(rec.shape_sent ?? {})},
+              ${rec.block_count}, ${rec.crew_total}, ${rec.id_source}, ${rec.verified_at})
+      ON CONFLICT (thread_id, order_id) DO NOTHING
+      RETURNING order_id`) as unknown as Array<{ order_id: number }>;
+    return rows.length > 0;
+  } catch (err) {
+    console.error("[order-records] ensure failed", err);
+    return false;
   }
 }
 

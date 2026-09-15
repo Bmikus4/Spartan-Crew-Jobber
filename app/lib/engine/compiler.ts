@@ -22,7 +22,7 @@ import { reconcileRequests } from "./parseWork";
 import { triage, decisionBinds, triageModeFromEnv, type TriageMode } from "./triage";
 import { composeOrder } from "./compose";
 import { validateOrder } from "./format";
-import { matchCompany, matchCompanyByDomain, matchContact, matchPlace, matchExistingOrder, normName, normAddr } from "./resolve";
+import { matchCompany, matchCompanyByDomain, matchContact, matchPlace, matchExistingOrder, rNumbersIn, normName, normAddr, type OrderRec } from "./resolve";
 import { matchPlaceV2, matchedOnCityAlone, isAShell, tokenise } from "./venueMatch";
 import { buildIndex, searchVenues, applyRuledWording, type Building } from "./venueSearch";
 import { adjudicateVenue, type VenueJudge } from "./venueAdjudicate";
@@ -1291,31 +1291,138 @@ export async function compile(
     }
 
     // Order dedup vs OnSinch — never create a second job for an existing one, and
-    // never attach a change to the wrong one. See matchExistingOrder: the venue is
-    // what separates a client's several jobs on the same day, and where it cannot,
-    // the thread goes to a human rather than picking.
-    if (company_id && !linkedOrderId) {
-      const existing = matchExistingOrder(
-        firstDate(facts),
-        await onsinch.companyOrdersWithJob(company_id),
-        facts.location_text
-      );
-      if (existing && "order_id" in existing) {
-        linkedOrderId = existing.order_id;
-        linkedOrderNumber = existing.order_number ?? linkedOrderNumber;
-        linkedJobId = existing.job_id ?? linkedJobId;
-        notes.push(
-          `matched existing OnSinch order #${existing.order_id}${existing.job_id ? ` (job J${existing.job_id})` : ""} (${existing.by === "date+venue" ? "same date and venue" : "same date"}) — will update, not create`
-        );
-      } else if (existing) {
-        // Deliberately does NOT fall through to creating a new order: on an update
-        // that would duplicate a job that already exists. A human picks.
-        needs_human = true;
-        blocked = true;
-        notes.push(
-          `${existing.ambiguous} existing OnSinch orders for this client on ${existing.day} and the thread does not say which — ` +
-            `not guessing; pick the right one by hand`
-        );
+    // never attach a change to the wrong one. See matchExistingOrder for the identity
+    // rule: client + date + venue, each superseded by a change the thread states, with
+    // times and crew deliberately excluded.
+    //
+    // THIS NO LONGER SKIPS A THREAD THAT ALREADY HAS AN ORDER, and that is Ben's ruling
+    // of 2026-09-13: "never skip a fresh check when jobs or to confirm orders still
+    // exist." The guard used to read `if (company_id && !linkedOrderId)`, so a binding
+    // was made once on the first message and never looked at again — a thread bound to
+    // the wrong order stayed bound for the life of the conversation, and a thread whose
+    // order staff had since deleted went on amending a row that was not there.
+    //
+    // What the fresh check is allowed to do is deliberately narrow:
+    //
+    //   the bound order still exists   keep it, refresh the number and job id, and do
+    //                                  NOT re-derive the binding. Ben, Q3: "check to
+    //                                  confirm the exact same job still exists, if it
+    //                                  does --> Do nothing and make the ammendment."
+    //                                  The association is permanent; re-matching a live
+    //                                  binding could only move it off a settled decision.
+    //   the bound order is gone        re-match from scratch. Staff delete our orders in
+    //                                  sweeps — 49 deletions across 31 sittings by three
+    //                                  named people — and the successor is usually the
+    //                                  job they raised in its place.
+    //
+    // ABSENCE NEEDS TWO WITNESSES AND A POSITIVE CONTROL. This API answers an
+    // unsupported or malformed filter with an empty list rather than an error, so "the
+    // order is not in the response" and "the order does not exist" are different claims
+    // and the cheap one is wrong often enough to matter. Unbinding on a single empty
+    // read would hand a live booking back to the create path and raise a SECOND order
+    // for a job that already exists — the precise failure this whole block prevents. So
+    // an empty company list is treated as no evidence at all, and a bound order is
+    // released only when a working list omits it AND a direct read of it comes back
+    // empty too.
+    if (company_id) {
+      const companyOrders = await onsinch.companyOrdersWithJob(company_id);
+
+      if (linkedOrderId) {
+        const inList = companyOrders.find((o: OrderRec) => Number(o.id) === Number(linkedOrderId));
+        if (inList) {
+          linkedOrderNumber = inList.number ?? linkedOrderNumber;
+          linkedJobId = inList.Job?.[0]?.id ?? linkedJobId;
+
+          /**
+           * THE ONE SIGNAL STRONG ENOUGH TO MOVE A LIVE BINDING.
+           *
+           * An association is permanent (Ben, 2026-09-13), and that is why the branch
+           * above refreshes the binding rather than re-deriving it. But permanence
+           * applied to a binding that is already WRONG makes the error permanent too,
+           * and there is one case where the thread itself says so out loud: it names an
+           * order number, exactly one, and it is not the one we hold.
+           *
+           * That is the same class of evidence as a stated date change — the thread
+           * asserting a fact about its own job — and it is the only evidence strong
+           * enough, which is why nothing else here may move a live binding.
+           *
+           * Thread #13841 is the case: its subject reads "Price quote - R10687 Delta
+           * Live - BBC PROMS 53 @ RAH" and it is bound to R10688, PROMS 54 @ Various, a
+           * different show created five minutes later. Without this it stays bound to
+           * PROMS 54 forever, because PROMS 54 still exists and the check above keeps it.
+           *
+           * Guarded three ways, because an R number in a thread is usually noise: exactly
+           * one number, it must name an order THIS client actually holds, and that order
+           * must be on a day this thread asks for. A number that fails any of them is a
+           * stale or copied reference and changes nothing.
+           */
+          const named = rNumbersIn(thread.messages.map((m) => `${m.subject} ${m.body}`).join("\n"));
+          if (named.length === 1 && String(inList.number ?? "") !== named[0]) {
+            const wantedDays = new Set(facts.requests.map((r) => (r.date || "").slice(0, 10)).filter(Boolean));
+            const target = companyOrders.find(
+              (o: OrderRec) => String(o.number ?? "") === named[0] && wantedDays.has((o.happening || "").slice(0, 10))
+            );
+            if (target) {
+              notes.push(
+                `the thread names R${named[0]} but was bound to R${inList.number} (#${linkedOrderId}) — ` +
+                  `rebinding to #${target.id}, which is the order it says it is about`
+              );
+              linkedOrderId = target.id;
+              linkedOrderNumber = target.number ?? linkedOrderNumber;
+              linkedJobId = target.Job?.[0]?.id ?? linkedJobId;
+            }
+          }
+        } else if (companyOrders.length) {
+          // The control passed — the list came back populated — so the omission means
+          // something. Confirm it against a second read before acting on it.
+          const direct = await onsinch.orderById(linkedOrderId);
+          if (!direct) {
+            notes.push(`OnSinch order #${linkedOrderId} no longer exists — looking for the job it became`);
+            linkedOrderId = undefined;
+            linkedOrderNumber = undefined;
+            linkedJobId = undefined;
+          }
+        }
+      }
+
+      if (!linkedOrderId) {
+        const existing = matchExistingOrder(firstDate(facts), companyOrders, {
+          // Every date the thread asks for, so a stated date change finds the order it
+          // is changing instead of creating a second booking beside it.
+          days: facts.requests.map((r) => r.date).filter((d): d is string => !!d),
+          location_text: facts.location_text,
+          // The resolved venue is the comparable side; the raw text is the fallback.
+          place_id: place_id ?? null,
+          places: place_id ? await onsinch.allPlaces() : undefined,
+          // A confirmation, never the mechanism — see rNumbersIn. 83% of threads name
+          // none, so nothing here may depend on this being populated.
+          r_numbers: rNumbersIn(thread.messages.map((m) => `${m.subject} ${m.body}`).join("\n")),
+        });
+        if (existing && "order_id" in existing) {
+          linkedOrderId = existing.order_id;
+          linkedOrderNumber = existing.order_number ?? linkedOrderNumber;
+          linkedJobId = existing.job_id ?? linkedJobId;
+          notes.push(
+            `matched existing OnSinch order #${existing.order_id}${existing.job_id ? ` (job J${existing.job_id})` : ""} (${
+              existing.by === "date+r-number"
+                ? "the thread names its R number"
+                : existing.by === "date+venue"
+                  ? "same date and venue"
+                  : "same date"
+            }) — will update, not create`
+          );
+        } else if (existing) {
+          // Deliberately does NOT fall through to creating a new order: on an update
+          // that would duplicate a job that already exists. `blocked` is what stops the
+          // duplicate; the thread is left unbound and the next message in it, or the
+          // next sweep, tries again with whatever the client has since said.
+          needs_human = true;
+          blocked = true;
+          notes.push(
+            `${existing.ambiguous} existing OnSinch orders for this client on ${existing.day} and the thread does not say which — ` +
+              `not guessing; pick the right one by hand`
+          );
+        }
       }
     }
 
@@ -1353,8 +1460,8 @@ export async function compile(
       // A company being created has no history by definition, so the standard card is
       // the only thing that lets its first job exist at all. It is now WRITTEN rather
       // than staged (Ben, 2026-08-27 — as few blockers to creating a job as possible),
-      // and the note plus needs_human carry the price to a human through the "Manual"
-      // tag instead of the booking waiting on one.
+      // and the note plus needs_human carry the price to a human through the
+      // "Order Needs Updated" label instead of the booking waiting on one.
       const fallback = deps.defaultRateCard;
       if (Number.isInteger(fallback as number) && (fallback as number) > 0) {
         pricelist_category_id = fallback as number;
@@ -1459,7 +1566,7 @@ export async function compile(
       /**
        * A REVIEW NOTE, NOT A FAILURE. Every condition here is a stand-in sitting inside
        * an order that composes, validates and writes exactly like a correct one. It
-       * still calls a person — but the "Manual" tag in Gmail claims the engine COULD NOT
+       * still calls a person — but a "Needs" tag in Gmail claims the engine COULD NOT
        * BOOK the job, and on these it booked it.
        *
        * While all four of these HELD, the two claims were the same sentence. Ben's rule
@@ -1667,7 +1774,28 @@ export async function compile(
     onsinch_order_id: linkedOrderId,
     onsinch_order_number: linkedOrderNumber,
     onsinch_job_id: linkedJobId,
-    desired_order: desired,
+    /**
+     * THE SHAPE SURVIVES A MESSAGE THAT COMPOSES NOTHING.
+     *
+     * This read `desired_order: desired`, which overwrites with null every time compile
+     * produces no order — and most messages in a booked thread produce no order. A PO
+     * arriving, a "thanks, see you Tuesday", an out-of-office: each one wiped the record
+     * of what the thread had asked for while `last_ordered_teams` two lines below was
+     * explicitly carried forward, so the row half-remembered its own booking.
+     *
+     * Measured 2026-09-14: 171 of 267 threads holding an OnSinch order had
+     * `desired_order: null` with a full block set still sitting in `last_ordered_teams`.
+     * Two things read the field and both were quietly disabled on 64% of live bookings —
+     * `assessAmendment`, which compares the new shape against the old to decide whether a
+     * change may be applied, and the reconciliation sweep, which has nothing to reconcile
+     * towards without it.
+     *
+     * A CANCELLATION IS THE ONE CASE THAT MUST NOT CARRY. The thread has told us the job
+     * is off; re-asserting the shape it used to have would put a cancelled booking back.
+     * The engine never cancels in OnSinch either (pipeline.ts) — it holds and reports —
+     * so this simply stops the sweep speaking for a thread that is standing still.
+     */
+    desired_order: desired ?? (cls.cancellation === true ? null : (prior?.desired_order ?? null)),
     last_ordered_hash: prior?.last_ordered_hash,
     /**
      * Both of these are written by the PIPELINE, after this function has returned, and
