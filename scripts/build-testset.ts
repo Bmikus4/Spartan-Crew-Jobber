@@ -43,7 +43,20 @@ const sql = neon(requireEnv("DATABASE_URL"));
 const argv = process.argv.slice(2);
 const WITH_ONSINCH = !argv.includes("--no-onsinch");
 
+const argvDate = (flag: string, dflt: string): string => {
+  const i = argv.indexOf(flag);
+  return i < 0 ? dflt : String(argv[i + 1] ?? dflt);
+};
+
 const OUT_DIR = join(ROOT_DIR, "data", "testset");
+
+// Shape tests for the recall list. Deliberately generous on "is this about crew" and
+// strict on "does it name a when" — a miss list that over-reports is still readable,
+// one that under-reports hides the thing it exists to find.
+const SPARTAN = /@spartancrew\.co\.uk/i;
+const CREW = /\b(\d+)\s*(x\s*)?(crew|men|guys|people|staff|techs?|hands|riggers?|loaders?|humans|subbies|porters?)\b/i;
+const CREW_SUBJ = /\b(crew|staff|riggers?|labour|quotation|quote)\b/i;
+const WHEN = /\b(mon|tue|wed|thu|fri|sat|sun)[a-z]*\b|\b\d{1,2}(st|nd|rd|th)\b|\b\d{1,2}[\/.-]\d{1,2}\b|\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\b|\b(today|tomorrow|tonight)\b/i;
 
 // ---------------------------------------------------------------------------
 // OnSinch — read-only. Status codes are 0 open, -1 cancelled, -2 finished; the
@@ -205,13 +218,20 @@ async function main() {
   // Intake polls ONE Gmail label on a 10-minute window. The sweep reads the whole
   // mailbox for a date range with no label filter. So a sweep thread inside the live
   // window that has no conversation_state row is mail the engine was never given.
-  const liveFrom = (await sql`select min(date_iso) d from thread_messages where date_iso >= '2026-07-01'`)[0]?.d ?? null;
-  const gap = liveFrom ? (await sql`
+  //
+  // The window matters more than it looks. Intake's first full day is 2026-08-04; before
+  // that it was still being stood up, so July threads it "never saw" say nothing about
+  // recall. And only the re-sweep of 2026-09-15 covers this period at all — the original
+  // August corpus stops on 2026-08-03. Counting outside either bound fills the miss list
+  // with mail nobody could have processed, which is how a 17% gap reads as 53%.
+  const liveFrom = argvDate("--recall-from", "2026-08-04");
+  const gap = (await sql`
     select s.thread_id, s.subject, s.message_count, s.first_date, s.last_date, s.participants, s.payload
     from sweep_threads s
     where s.last_date >= ${liveFrom}::timestamptz
+      and s.swept_at >= ${liveFrom}::timestamptz
       and not exists (select 1 from conversation_state c where c.thread_id = s.thread_id)
-    order by s.last_date asc`) as Array<any> : [];
+    order by s.last_date asc`) as Array<any>;
   const rec = createWriteStream(join(OUT_DIR, "recall.jsonl"), "utf8");
   for (const g of gap) {
     const messages = Array.isArray(g.payload?.messages) ? g.payload.messages : [];
@@ -224,16 +244,36 @@ async function main() {
   }
   await new Promise((res) => rec.end(res));
 
-  const sweptInWindow = liveFrom
-    ? Number((await sql`select count(*)::int n from sweep_threads where last_date >= ${liveFrom}::timestamptz`)[0].n)
-    : 0;
+  const sweptInWindow = Number((await sql`
+    select count(*)::int n from sweep_threads
+    where last_date >= ${liveFrom}::timestamptz and swept_at >= ${liveFrom}::timestamptz`)[0].n);
+
+  // Most of any miss list is autoreplies and machine mail the engine is right never to
+  // see. The number that matters is how many of them look like someone asking for crew.
+  const shapeOf = (g: any): string => {
+    const msgs = Array.isArray(g.payload?.messages) ? g.payload.messages : [];
+    const inb = msgs.filter((m: any) => !m.is_from_spartan && !SPARTAN.test(String(m.from || "")));
+    const subj = String(g.subject || "");
+    if (/automatic reply|out of office|^ooo\b/i.test(subj)) return "autoreply";
+    if (msgs.some((m: any) => /no-reply@sinch\.cz/i.test(String(m.from || "")))) return "onsinch portal notice";
+    if (!inb.length) return "no inbound (Spartan-only thread)";
+    const text = `${subj} ${inb.map((m: any) => m.body).join(" ")}`.slice(0, 4000);
+    return CREW.test(text) || CREW_SUBJ.test(subj) ? (WHEN.test(text) ? "JOB-SHAPED" : "other") : "other";
+  };
+  const shapes: Record<string, number> = {};
+  for (const g of gap) { const k = shapeOf(g); shapes[k] = (shapes[k] || 0) + 1; }
 
   console.log(`\ndata/testset/threads.jsonl   ${states.length} live threads`);
   for (const [k, v] of Object.entries(byStatus).sort((a, b) => b[1] - a[1])) console.log(`   ${k.padEnd(12)} ${v}`);
   if (WITH_ONSINCH) console.log(`   bound to an order that still exists: ${bound}   order id gone from OnSinch: ${missing}`);
-  console.log(`\ndata/testset/recall.jsonl    ${gap.length} thread(s) swept since ${String(liveFrom).slice(0, 10)} that the engine never saw`);
-  console.log(`   (${sweptInWindow} swept in that window in total — if this is 0 the sweep has not covered the live period yet,`);
-  console.log(`    and a recall of "0 missed" would mean nothing at all)`);
+  console.log(`\ndata/testset/recall.jsonl    ${gap.length} of ${sweptInWindow} thread(s) swept since ${liveFrom} that the engine never saw`);
+  if (!sweptInWindow) {
+    console.log(`   0 swept in that window — the sweep has not covered it, so "0 missed" would mean nothing at all.`);
+    console.log(`   Run: node scripts/install-sweep-workflow.mjs --since ${liveFrom} --step 7`);
+  } else {
+    console.log(`   intake recall ${(100 * (sweptInWindow - gap.length) / sweptInWindow).toFixed(1)}%`);
+    for (const [k, v] of Object.entries(shapes).sort((a, b) => b[1] - a[1])) console.log(`   ${String(v).padStart(4)}  ${k}`);
+  }
 }
 
 main().catch((e) => { console.error(e); process.exitCode = 1; });
