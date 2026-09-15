@@ -52,8 +52,8 @@
       "name": "List Window",
       "credentials": {
         "gmailOAuth2": {
-          "id": "hGFZ7vGl625ZeExK",
-          "name": "Spartan Crew 8/27/26"
+          "id": "6Ab8OMlONlOA9vtG",
+          "name": "Gmail account 14"
         }
       }
     },
@@ -91,8 +91,8 @@
       "name": "Get Thread",
       "credentials": {
         "gmailOAuth2": {
-          "id": "hGFZ7vGl625ZeExK",
-          "name": "Spartan Crew 8/27/26"
+          "id": "6Ab8OMlONlOA9vtG",
+          "name": "Gmail account 14"
         }
       },
       "onError": "continueRegularOutput",

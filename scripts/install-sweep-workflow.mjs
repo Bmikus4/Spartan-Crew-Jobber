@@ -13,6 +13,21 @@
 //   node scripts/install-sweep-workflow.mjs --activate      # + activate (the webhook needs this)
 //   node scripts/install-sweep-workflow.mjs --run 3         # + sweep the month 3 months back
 //   node scripts/install-sweep-workflow.mjs --status         # what is installed, and corpus size
+//   node scripts/install-sweep-workflow.mjs --recreate       # delete and re-POST, to change a credential
+//   node scripts/install-sweep-workflow.mjs --since 2026-08-01 --step 7   # walk windows up to now
+//
+// WHY --step, AND WHY 7 IS NOT ARBITRARY. One month of this mailbox is 179 MB of thread
+// bodies in a single n8n execution, and the execution CRASHES on memory before a single
+// thread reaches the ingest — status "crashed", runData empty, nothing stored, no error
+// message to read. A week is ~40 MB and survives. If a window ever crashes again the
+// answer is a smaller step, not a retry.
+//
+// WHY --recreate EXISTS. A PUT applies a credential change on an httpRequest node and
+// SILENTLY IGNORES it on a native typed node; both return 200. Every Gmail node here is
+// native, so an update can never move this workflow off a dead credential — it will read
+// back with the old id and sweep nothing. A POST of a whole new workflow does carry the
+// credential, even one owned by another n8n user. So changing the credential means delete
+// and create, not update.
 // ============================================================================
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -25,9 +40,12 @@ const SECRET = requireEnv("N8N_WEBHOOK_SECRET");
 const h = { "X-N8N-API-KEY": KEY, "content-type": "application/json" };
 
 const argv = process.argv.slice(2);
-const ACTIVATE = argv.includes("--activate") || argv.includes("--run");
+const ACTIVATE = argv.includes("--activate") || argv.includes("--run") || argv.includes("--since");
 const STATUS_ONLY = argv.includes("--status");
+const RECREATE = argv.includes("--recreate");
 const RUN_MONTH = argv.includes("--run") ? Number(argv[argv.indexOf("--run") + 1]) : null;
+const SINCE = argv.includes("--since") ? argv[argv.indexOf("--since") + 1] : null;
+const STEP_DAYS = argv.includes("--step") ? Number(argv[argv.indexOf("--step") + 1]) : 7;
 const WF_NAME = "Spartan Sweep — 12 months to corpus";
 const INGEST = "https://spartan-crew-jobber.vercel.app/api/sweep-ingest";
 
@@ -72,7 +90,14 @@ if (!injected) throw new Error("no x-webhook-secret header found to inject — c
 const body = { name: spec.name, nodes: spec.nodes, connections: spec.connections, settings: spec.settings };
 
 let wf;
-if (existing) {
+if (existing && RECREATE) {
+  // See the header: a PUT cannot move a native Gmail node onto a different credential.
+  // n8n refuses to delete a published workflow (409), so deactivate first.
+  if (existing.active) await api(`/workflows/${existing.id}/deactivate`, { method: "POST" });
+  await api(`/workflows/${existing.id}`, { method: "DELETE" });
+  console.log(`deleted ${existing.id} so the credential in the JSON is actually applied`);
+}
+if (existing && !RECREATE) {
   // Deactivate first. Updating a workflow while it is active leaves the previously
   // registered version answering the webhook, so the next call runs the OLD nodes —
   // which is exactly how a fixed bug appeared to survive its fix.
@@ -116,4 +141,49 @@ if (RUN_MONTH !== null) {
   const after = await corpus();
   console.log(`corpus before: ${before.threads} threads / ${before.messages} messages`);
   console.log(`corpus after : ${after.threads} threads / ${after.messages} messages`);
+}
+
+// ---------------------------------------------------------------------------
+// Walk windows from --since up to now, one at a time. Each webhook call returns
+// immediately ("Workflow was started"), so the only honest way to know a window
+// finished is to watch its execution — and a crashed one stores NOTHING, so a
+// driver that fired the next window on a timer would quietly skip a week.
+// ---------------------------------------------------------------------------
+if (SINCE) {
+  if (!live.active) throw new Error("workflow is not active, so its production webhook is not listening");
+  const running = async () => {
+    const j = await api(`/executions?status=running&limit=50`);
+    return (j.data || []).filter((e) => e.workflowId === live.id);
+  };
+  const lastExec = async () => {
+    const j = await api(`/executions?workflowId=${live.id}&limit=1`);
+    return (j.data || [])[0] || null;
+  };
+  const stepMs = STEP_DAYS * 86_400_000;
+  let cursor = Date.parse(`${SINCE}T00:00:00Z`);
+  if (!Number.isFinite(cursor)) throw new Error(`--since needs a date, got ${SINCE}`);
+  const stop = Date.now();
+  while (cursor < stop) {
+    const after = new Date(cursor).toISOString();
+    const before = new Date(Math.min(cursor + stepMs, stop)).toISOString();
+    const b4 = await corpus();
+    await fetch(hookUrl, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ after, before }) });
+    const t0 = Date.now();
+    // Poll the execution rather than the corpus: a window that legitimately holds no
+    // new threads leaves the corpus unchanged, which is indistinguishable from a crash.
+    let seen = null;
+    for (;;) {
+      await new Promise((r) => setTimeout(r, 15_000));
+      const rs = await running();
+      if (rs.length) { seen = rs[0]; continue; }
+      if (seen || Date.now() - t0 > 60_000) break;
+    }
+    const done = await lastExec();
+    const af = await corpus();
+    console.log(`${after.slice(0, 10)} .. ${before.slice(0, 10)}  ${String(done?.status ?? "?").padEnd(8)} ${Math.round((Date.now() - t0) / 1000)}s  corpus ${b4.threads} -> ${af.threads} (+${af.threads - b4.threads})`);
+    if (done?.status === "crashed") console.log(`   CRASHED — that window stored nothing. Re-run it with a smaller --step.`);
+    cursor += stepMs;
+  }
+  console.log(`
+final corpus: ${JSON.stringify(await corpus())}`);
 }
