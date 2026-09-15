@@ -267,6 +267,34 @@ const HELD = { size: 4, beginning: `${DAY}T09:30:00+00:00`, end: `${DAY}T14:00:0
     ok(outcomes[1].action === "holds", "and the next one still ran", outcomes[1].action);
   }
 
+  console.log("\n[9] the limit counts threads that COST a read, not threads visited");
+  {
+    /**
+     * Why this matters more than it looks. The store returns threads most-recently-updated
+     * first, and 219 of the 287 live bindings are decided from the state row alone — no
+     * desired shape, or the job is already past — without touching OnSinch. When those
+     * counted against the limit, a scheduled run of 40 spent its entire budget on rows it
+     * never read, stopped, and came back to the same 40 next time. The bookings it could
+     * never reach were the quiet ones, which are the only ones this sweep is watching.
+     */
+    const { deps } = fakeDeps({ orders: [LIVE_ORDER], slot: HELD });
+    // Twelve rows with nothing to reconcile, then two real ones behind them.
+    const free = Array.from({ length: 12 }, (_, i) => {
+      const s = stateBound({ thread_id: `T-free-${i}` });
+      s.desired_order = undefined;
+      s.last_ordered_teams = undefined;
+      return s;
+    });
+    const real = [stateBound({ thread_id: "T-real-1" }), stateBound({ thread_id: "T-real-2" })];
+    const { swept, outcomes } = await sweepAll([...free, ...real], deps, { todayISO: TODAY, limit: 2 });
+    ok(swept === 2, "the budget is spent on the two that needed reading", String(swept));
+    ok(outcomes.length === 14, "and every free row was still visited", String(outcomes.length));
+    ok(
+      outcomes.filter((o) => o.action !== "skipped").map((o) => o.thread_id).join(",") === "T-real-1,T-real-2",
+      "so a limit smaller than the free head still reaches the threads behind it"
+    );
+  }
+
   console.log(fails ? `\n${fails} FAILED` : "\nALL PASS");
   process.exit(fails ? 1 : 0);
 })();

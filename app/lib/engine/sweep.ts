@@ -323,8 +323,16 @@ export async function reconcileThread(
  * Every bound thread, swept.
  *
  * `limit` exists because a serverless function has a wall clock and each thread costs two
- * reads. Threads are taken in the order the store returns them — most recently updated
- * first — so a run that runs out of time has covered the ones most likely to matter.
+ * reads. It counts threads that COST something, not threads visited, and the difference
+ * is what makes a scheduled sweep cover the population rather than the same head of it
+ * forever: the store returns threads most-recently-updated first, and 219 of 287 live
+ * rows are decided from the state row alone — no desired shape, or the job is already in
+ * the past — for no reads at all. Counting those against the limit meant a run of 40
+ * spent its whole budget on rows it never read, stopped 40 threads in, and came back to
+ * the same 40 on the next run. The threads it could never reach that way are the quiet
+ * ones, and quiet is the condition this sweep exists for: lead time to the job is a
+ * median of 7 days and a p90 of 199, so a booking spends most of its life with nobody
+ * emailing about it.
  */
 export async function sweepAll(
   states: ConversationState[],
@@ -335,14 +343,18 @@ export async function sweepAll(
   let swept = 0;
   for (const s of states) {
     if (opts.limit && swept >= opts.limit) break;
-    swept++;
+    let outcome: SweepOutcome;
     try {
-      outcomes.push(await reconcileThread(s, deps, { todayISO: opts.todayISO }));
+      outcome = await reconcileThread(s, deps, { todayISO: opts.todayISO });
     } catch (err: any) {
       // One thread's failure must never end the sweep. The whole point of a cadence is
       // that the next run picks up whatever this one dropped.
-      outcomes.push({ thread_id: s.thread_id, action: "error", detail: String(err?.message ?? err) });
+      outcome = { thread_id: s.thread_id, action: "error", detail: String(err?.message ?? err) };
     }
+    outcomes.push(outcome);
+    // A "skipped" thread was decided before any OnSinch read — see the note above on why
+    // those must be free. Everything else spent the wall clock the limit is protecting.
+    if (outcome.action !== "skipped") swept++;
   }
   return { swept, outcomes };
 }
