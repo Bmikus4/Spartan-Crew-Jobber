@@ -52,6 +52,10 @@ const WATCH: Array<{ match: RegExp; label: string; cost: string; staleMins: numb
   { match: /^Spartan Engine — Manual Tag$/i, label: "gmail labels", cost: "threads are not labelled", staleMins: 0 },
   { match: /^Spartan Engine — Reply Draft$/i, label: "client reply drafts", cost: "deliberately off — not a fault", staleMins: 0 },
   { match: /^Spartan Intake Watchdog$/i, label: "intake watchdog", cost: "a silent intake outage goes unreported", staleMins: 40 },
+  // Daily, so 26 hours of grace. Until this exists and is active, nothing re-reads a
+  // booking after the conversation goes quiet: an order staff deleted leaves the thread
+  // pointing at nothing, and a shape OnSinch silently did not take is never noticed.
+  { match: /^Spartan Reconciliation Sweep$/i, label: "reconciliation sweep", cost: "deleted orders are never re-bound and silent write failures are never caught", staleMins: 26 * 60 },
 ];
 
 (async () => {

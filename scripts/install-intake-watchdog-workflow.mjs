@@ -54,8 +54,8 @@ const TO = process.env.ERROR_ALERT_TO || "ben@samuraisolutions.co.uk, samuraisol
  *  happens these ids move together with the other installers'. Same default as
  *  install-manual-tag-workflow.mjs deliberately — one place to change, not two. */
 const GMAIL_CRED = {
-  id: process.env.GMAIL_CRED_ID || "hGFZ7vGl625ZeExK",
-  name: process.env.GMAIL_CRED_NAME || "Spartan Crew 8/27/26",
+  id: process.env.GMAIL_CRED_ID || "6Ab8OMlONlOA9vtG",
+  name: process.env.GMAIL_CRED_NAME || "Gmail account 14",
 };
 
 const nodes = [

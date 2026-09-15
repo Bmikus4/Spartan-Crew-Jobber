@@ -85,8 +85,8 @@ const PATH = "spartan-manual-tag";
  * type. Measured 2026-08-27 — the bookings workflow took the swap, these three did not.
  */
 const GMAIL_CRED = {
-  id: process.env.GMAIL_CRED_ID || "hGFZ7vGl625ZeExK",
-  name: process.env.GMAIL_CRED_NAME || "Spartan Crew 8/27/26",
+  id: process.env.GMAIL_CRED_ID || "6Ab8OMlONlOA9vtG",
+  name: process.env.GMAIL_CRED_NAME || "Gmail account 14",
 };
 
 async function api(path, init = {}) {
