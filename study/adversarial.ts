@@ -41,6 +41,15 @@
 //   identity across orders  the fixture holds no prior orders for the client, so
 //                      matchExistingOrder has nothing to pick between. It is
 //                      scored on real data by scripts/score-successor-recovery.ts
+//   the four labels    NOT YET WRITTEN, and it is the one mechanism in §4's table
+//                      that no instrument covers. The case to write is a thread
+//                      that finishes clean still wearing "Order Needs Built" —
+//                      `needs_label` on the state row is what decides it.
+//
+// So §4's mechanism table is covered by THREE instruments, not one: this file for
+// classification, dates, venue, shape and the amendability hard gate; the live
+// test set for company matching and intake recall; score-successor-recovery.ts for
+// identity. Anything claiming a single end-to-end number has to say which.
 //
 //   npx tsx study/adversarial.ts
 //   npx tsx study/adversarial.ts --only=dates
