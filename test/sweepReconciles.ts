@@ -281,7 +281,7 @@ const HELD = { size: 4, beginning: `${DAY}T09:30:00+00:00`, end: `${DAY}T14:00:0
     // Twelve rows with nothing to reconcile, then two real ones behind them.
     const free = Array.from({ length: 12 }, (_, i) => {
       const s = stateBound({ thread_id: `T-free-${i}` });
-      s.desired_order = undefined;
+      s.desired_order = null;
       s.last_ordered_teams = undefined;
       return s;
     });

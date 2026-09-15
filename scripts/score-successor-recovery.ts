@@ -55,7 +55,7 @@ interface Row {
     location_text: string | null;
     requests: Array<{ date?: string }>;
     onsinch_order_id: number | null;
-    order_action_log: Array<{ kind?: string; ok?: boolean }>;
+    order_action_log: Array<{ kind?: string; ok?: boolean; ts?: number }>;
   };
 }
 
@@ -106,6 +106,14 @@ const CONFIGS: Config[] = [
   // day is one where finding nothing is the CORRECT answer, and folding it in would
   // reward the matcher for the tenant being empty.
   let hasSuccessor = 0, noSuccessor = 0, skipped = 0;
+  const gaps: Record<string, number> = {
+    "raised BEFORE ours — a DUPLICATE, not a recovery": 0,
+    "same day (0-24h after ours)": 0,
+    "1-3 days after": 0,
+    "4-14 days after": 0,
+    "more than 14 days after": 0,
+  };
+  const duplicates: string[] = [];
   const recoverable: string[] = [];
   const invented: string[] = [];
   const lines: string[] = [];
@@ -145,6 +153,35 @@ const CONFIGS: Config[] = [
       tally[c.label][v]++;
     }
 
+    // WHEN was the successor raised, relative to our order? This is the answer to "does
+    // the rule only cope with a job created a day later" — it has no time window at all.
+    // Candidates are every order the client has ever had and the filter is the WORK day
+    // (`happening`) against the dates the thread asked for; when an order was created is
+    // never consulted. Measured: 45 of 55 binds are to an order raised within 24 hours.
+    //
+    // A successor raised BEFORE ours is a different animal and the more expensive one:
+    // staff already had the booking and the engine created a second one beside it. That
+    // is a duplicate, not a recovery, and it means the inbound path failed to match at
+    // create time.
+    const best2 = verdicts[CONFIGS[CONFIGS.length - 1].label];
+    if (best2 === "found") {
+      const m = matchExistingOrder(days.slice().sort()[0], orders, {
+        days, location_text: r.engine.location_text ?? undefined, place_id: r.engine.place_id ?? null,
+        places, r_numbers: rNumbersIn((r.messages || []).map((m2) => `${m2.subject ?? ""} ${m2.body ?? ""}`).join("\n")),
+      });
+      const succ = m && "order_id" in m ? orders.find((o) => Number(o.id) === m.order_id) : undefined;
+      const ourTs = (r.engine.order_action_log || []).find((a) => a.kind === "create" && a.ok !== false)?.ts;
+      const succTs = Date.parse(String((succ as any)?.created ?? ""));
+      if (ourTs && Number.isFinite(succTs)) {
+        const hours = (succTs - Number(ourTs)) / 3_600_000;
+        gaps[hours < 0 ? "raised BEFORE ours — a DUPLICATE, not a recovery"
+          : hours < 24 ? "same day (0-24h after ours)"
+          : hours < 72 ? "1-3 days after"
+          : hours < 336 ? "4-14 days after" : "more than 14 days after"]++;
+        if (hours < 0) duplicates.push(`   ${r.thread_id}  staff had #${(succ as any)?.number} "${String((succ as any)?.name).slice(0, 44)}" ${(-hours).toFixed(0)}h earlier; the engine created ${r.engine.onsinch_order_id} anyway`);
+      }
+    }
+
     const shipped = verdicts[CONFIGS[0].label];
     const best = verdicts[CONFIGS[CONFIGS.length - 1].label];
     if (truth && shipped !== "found" && best === "found") {
@@ -177,6 +214,12 @@ const CONFIGS: Config[] = [
         `      finds nothing           ${String(t.nothing).padStart(3)}  ${pct(t.nothing, scored)}`
     );
   }
+
+  console.log(`\nWHEN the successor was raised, relative to our order (${Object.values(gaps).reduce((a, b) => a + b, 0)} binds):`);
+  for (const [k, v] of Object.entries(gaps)) console.log(`   ${String(v).padStart(3)}  ${k}`);
+
+  console.log(`\nDUPLICATE CREATES — staff already had the booking and the engine raised a second one: ${duplicates.length}`);
+  console.log(duplicates.join("\n") || "   none");
 
   console.log(`\nRECOVERABLE — a successor exists, the shipped call misses it, the fullest call finds it: ${recoverable.length}`);
   console.log(recoverable.slice(0, 25).join("\n") || "   none");
