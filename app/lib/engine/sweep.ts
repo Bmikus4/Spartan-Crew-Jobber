@@ -177,10 +177,30 @@ export async function reconcileThread(
 
     // ---- 2. it is gone. what did it become? -----------------------------------------
     const days = (state.facts?.requests ?? []).map((r) => r.date).filter((d): d is string => !!d);
+    /**
+     * THE PLACE LIST IS NOT OPTIONAL HERE, and leaving it out was silently disabling the
+     * only venue comparison strong enough to refuse on. Without it `venueVerdict` falls
+     * back to matching two raw strings, which never returns "differ-id" — so this branch
+     * could not refuse a sole candidate however wrong it was. On the live set that is a
+     * measured wrong bind: thread "PO - Tottenham Hotspur Stadium - 02/09/26" takes
+     * "Blackout - MCS Prods @ The Tower Hotel", because it is the only order that client
+     * has on the day, and a stadium crew change lands on a hotel.
+     *
+     * It is one extra read, and only on the branch where the order is already gone.
+     *
+     * R numbers still come from the SUBJECT alone rather than the message bodies, because
+     * no message text is on the state row and this function is deliberately free of
+     * model calls and thread reads. 83% of threads name no number at all, and over the
+     * 96 deleted-order threads the fuller text moved exactly two of them, so the read is
+     * not yet worth its cost — see scripts/score-successor-recovery.ts.
+     */
+    let places;
+    try { places = await onsinch.allPlaces(); } catch { places = undefined; }
     const found = matchExistingOrder(days.sort()[0], orders, {
       days,
       location_text: state.facts?.location_text,
       place_id: state.place_id ? Number(state.place_id) : null,
+      places,
       r_numbers: rNumbersIn(String(state.subject ?? "")),
     });
     if (found && "order_id" in found) {

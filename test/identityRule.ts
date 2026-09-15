@@ -184,5 +184,69 @@ console.log("\n[7] the overwhelming case: no number named at all, and it changes
   ok(bound(m) === 5008, "and the venue alone still lands it on the right one of two", `by ${how(m)}`);
 }
 
+console.log("\n[8] two place IDS are only a disagreement when they are two BUILDINGS");
+{
+  /**
+   * WHY THIS SECTION EXISTS, measured 2026-09-15 on the 96 threads whose order staff
+   * deleted (`npx tsx scripts/score-successor-recovery.ts`). Handing the rule the place
+   * list took successor binds from 60 to 42 — it refused 18 more. Reading all 18: ONE is
+   * a genuine disagreement (Tottenham Hotspur Stadium against The Tower Hotel, case [4]),
+   * two are arguable, and the rest are the tenant holding several rows for one venue, or
+   * one side resolving to a placeholder.
+   *
+   *   ours 758 "Rose Court"                 vs order 639 "Rose Court"
+   *   ours 6262 "Harrods - Knightsbridge"   vs order  15 "Harrods"
+   *   ours 6922 "No Location"               vs order 544 "The Roof Gardens"
+   *   ours  356 "Hilton London Heathrow T5" vs order 6896 "London"
+   *
+   * None of those is evidence that the thread and the order are different jobs, and
+   * refusing on them costs ~14 correct binds to prevent one wrong one. So `differ-id` now
+   * requires that BOTH rows say where they are and that they are not the same venue
+   * recorded twice.
+   */
+  const DUPES: PlaceCandidate[] = [
+    { id: 758, name: "Rose Court", address: "2 Southwark Bridge Road", city: "London", active: true },
+    { id: 639, name: "Rose Court", address: "Southwark Bridge Rd", city: "London", active: true },
+    { id: 15, name: "Harrods", address: "87-135 Brompton Road", city: "London", active: true },
+    { id: 6262, name: "Harrods - Knightsbridge", address: "87-135 Brompton Rd", city: "London", active: true },
+    // The placeholders the engine reaches for when a thread names no venue. They carry
+    // nothing but a name, which is what makes them unusable as evidence.
+    { id: 6922, name: "No Location", active: true },
+    { id: 544, name: "The Roof Gardens", address: "99 Kensington High Street", city: "London", active: true },
+  ];
+  const on = (id: number, name: string): OrderRec[] => [
+    { id, number: String(id), happening: "2026-03-09T08:00:00+00:00", name: `Acme @ ${name}`, Job: [{ id: id + 1 }] },
+  ];
+
+  const twice = matchExistingOrder("2026-03-09", on(6001, "Rose Court"), {
+    location_text: "Rose Court, 2 Southwark Bridge Road, SE1 9HS", place_id: 758, places: DUPES,
+  });
+  ok(bound(twice) === 6001, "the same venue held under two place rows is not a disagreement", `by ${how(twice)}`);
+
+  const shorter = matchExistingOrder("2026-03-09", on(6002, "Harrods"), {
+    location_text: "Harrods Knightsbridge", place_id: 6262, places: DUPES,
+  });
+  ok(bound(shorter) === 6002, "one row's name contained in the other's is the same venue", `by ${how(shorter)}`);
+
+  // Our side sank to a placeholder because the thread named no venue at all. A row that
+  // does not say where it is cannot contradict one that does.
+  const ourShell = matchExistingOrder("2026-03-09", on(6003, "The Roof Gardens"), {
+    location_text: undefined, place_id: 6922, places: DUPES,
+  });
+  ok(bound(ourShell) === 6003, "a placeholder on our side never refuses", `by ${how(ourShell)}`);
+
+  const theirShell = matchExistingOrder("2026-03-09", on(6004, "No Location"), {
+    location_text: "The Roof Gardens", place_id: 544, places: DUPES,
+  });
+  ok(bound(theirShell) === 6004, "a placeholder on the order's side never refuses", `by ${how(theirShell)}`);
+
+  // And the case the refusal exists for is untouched: two rows that both say where they
+  // are, naming two different buildings.
+  const real = matchExistingOrder("2026-03-09", on(6005, "Harrods"), {
+    location_text: "Rose Court, 2 Southwark Bridge Road, SE1 9HS", place_id: 758, places: DUPES,
+  });
+  ok(!!real && "ambiguous" in real, "two informative rows for two different buildings still refuse");
+}
+
 console.log(fails ? `\n${fails} FAILED` : "\nALL PASS");
 process.exit(fails ? 1 : 0);

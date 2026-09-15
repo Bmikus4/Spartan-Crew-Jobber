@@ -498,6 +498,37 @@ function venueOfOrder(name: unknown): string {
  */
 type VenueVerdict = "agree" | "differ-id" | "differ-text" | "unreadable";
 
+/**
+ * A place row that does not say where it is. `placeContext` counts the fields that carry
+ * location — address, city, zip, alias, coordinates, note, region — and a row with none
+ * of them is a name and nothing else. The bare city and placeholder names are listed
+ * separately because they DO sometimes carry an address and are still not a venue: the
+ * engine reaches for 2069 "London", 6922 "No Location", 87 "Location" and 6581
+ * "warehouse" whenever a thread names no venue, and on the live set 25 of 290 resolutions
+ * land on one of them.
+ */
+const PLACEHOLDER_NAME = /^(no\s+)?location$|^placeholder$|^warehouse$|^office$|^venue$|^site$|^tbc$|^various(\s+locations?)?$|^london$|^manchester$|^birmingham$/i;
+
+function uninformativePlace(p: PlaceCandidate | undefined): boolean {
+  if (!p) return true;
+  if (PLACEHOLDER_NAME.test(String(p.name ?? "").trim())) return true;
+  return placeContext(p) === 0;
+}
+
+/**
+ * Are these two place ids the same building recorded twice? This tenant holds several
+ * rows per venue — 632 of them are ExCeL — so two different ids are routinely two
+ * spellings rather than two places: 758 and 639 are both "Rose Court", 15 is "Harrods"
+ * and 6262 is "Harrods - Knightsbridge".
+ */
+function sameVenueRecord(a: PlaceCandidate | undefined, b: PlaceCandidate | undefined): boolean {
+  if (!a || !b) return false;
+  const an = normAddr(a.name), bn = normAddr(b.name);
+  if (an && bn && (an === bn || (an.length >= 5 && bn.startsWith(an)) || (bn.length >= 5 && an.startsWith(bn)))) return true;
+  const aa = normAddr(a.address), ba = normAddr(b.address);
+  return !!aa && !!ba && (aa === ba || (aa.length >= 6 && ba.startsWith(aa)) || (ba.length >= 6 && aa.startsWith(ba)));
+}
+
 function venueVerdict(o: OrderRec, opts: MatchOpts): VenueVerdict {
   const orderVenue = venueOfOrder(o.name);
   if (!orderVenue) return "unreadable";
@@ -507,7 +538,29 @@ function venueVerdict(o: OrderRec, opts: MatchOpts): VenueVerdict {
   // each side went through the same function against the same 5,627 rows.
   if (opts.place_id && opts.places?.length) {
     const resolved = matchPlace(orderVenue, opts.places);
-    if (resolved != null) return Number(resolved) === Number(opts.place_id) ? "agree" : "differ-id";
+    if (resolved != null) {
+      if (Number(resolved) === Number(opts.place_id)) return "agree";
+      /**
+       * TWO IDS ARE NOT YET A DISAGREEMENT, and treating them as one cost 14 correct
+       * binds to prevent a single wrong one. Measured 2026-09-15 over the 96 threads
+       * whose order staff deleted (`scripts/score-successor-recovery.ts`): handing this
+       * function the place list took successor binds from 60 to 42. Reading all 18 extra
+       * refusals — ONE was a real disagreement, the rest were the tenant holding several
+       * rows for one venue ("Rose Court" 758 against "Rose Court" 639, "Harrods -
+       * Knightsbridge" 6262 against "Harrods" 15) or one side sitting on a placeholder
+       * ("No Location" 6922 against "The Roof Gardens" 544).
+       *
+       * A row that does not say where it is cannot contradict one that does, and neither
+       * can the same building written down twice. Both demote to the WEAK verdict rather
+       * than to "agree", so the venue still cannot pick this order out of several — it
+       * simply stops being grounds for refusing the only one.
+       */
+      const ours = opts.places.find((p) => Number(p.id) === Number(opts.place_id));
+      const theirs = opts.places.find((p) => Number(p.id) === Number(resolved));
+      if (uninformativePlace(ours) || uninformativePlace(theirs)) return "differ-text";
+      if (sameVenueRecord(ours, theirs)) return "agree";
+      return "differ-id";
+    }
   }
 
   // Fallback, for a thread whose venue never resolved: substring either way round,
