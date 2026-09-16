@@ -51,11 +51,17 @@ export function coerceThread(body: unknown): HydratedThread | null {
   const rawMsgs = Array.isArray(b.messages) ? b.messages : [];
   let messages: ThreadMessage[] = rawMsgs.map((m) => {
     const r = (m ?? {}) as Record<string, unknown>;
-    const from = addrOf(r.from ?? r.fromAddress);
+    // `from_address`/`to_addresses` are the COLUMN names, and they arrive here whenever a
+    // thread is rebuilt from storage rather than posted (threadMessagesDb.rebuildThread).
+    // Its docstring claimed it emitted the shape this function accepts; it did not, and
+    // nothing noticed until /api/mail-inbound became the first caller to feed one through
+    // — every message then coerced with an empty sender and was filtered before the model
+    // as "no sender or no body". A replay of any stored thread would have done the same.
+    const from = addrOf(r.from ?? r.fromAddress ?? r.from_address);
     return {
       message_id: String(r.message_id ?? r.messageId ?? r.id ?? ""),
       from,
-      to: addrList(r.to ?? r.toRecipients),
+      to: addrList(r.to ?? r.toRecipients ?? r.to_addresses),
       date_iso: String(r.date_iso ?? r.dateIso ?? r.date ?? r.sentDateTime ?? new Date().toISOString()),
       subject: String(r.subject ?? ""),
       body: String(r.body ?? r.text ?? r.bodyContent ?? ""),

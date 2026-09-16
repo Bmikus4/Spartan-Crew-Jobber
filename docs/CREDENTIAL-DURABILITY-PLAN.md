@@ -160,10 +160,31 @@ What that buys, and it is the whole ask:
 
 What it does not do, stated plainly:
 
-- **It delivers messages, not threads.** Threading is reconstructed from `Message-ID`,
-  `In-Reply-To` and `References`, which every real client sets. The engine already keys on a
-  thread identity and stores messages individually, so this is a mapping change rather than a
-  redesign — but it is the one piece of real work in the option.
+- **It delivers messages, not threads.** Gmail's `threadId` never arrives, and everything
+  downstream keys on a thread. **Measured before it was built**, because it was the one
+  assumption that could have sunk the option: `scripts/probe-threading.mjs` asks Gmail for
+  its own grouping *and* the RFC headers for the same mail, and
+  `scripts/score-header-threading.mjs` clusters from the headers alone and scores the
+  disagreement. Over 298 messages in 40 threads, every one carrying a `Message-ID`:
+
+  | population | split | merged |
+  | --- | --- | --- |
+  | whole thread — every message Gmail holds | 1 of 40 (2.5%) | **0** |
+  | inbound only — what a rule on an inbound recipient delivers | 3 of 39 (7.7%) | **0** |
+
+  The two errors are not equally expensive. A **split** opens a second conversation for a job
+  we already have: it costs continuity, and the identity rule (client + date + venue + times)
+  still recognises the job. A **merge** puts two jobs on one conversation and applies one
+  booking's crew change to another. Zero merges is the result that made this buildable, and
+  the rule that produces it is *join only to a reference we actually hold* — never key a
+  thread on an id nobody has, or two replies to the same absent parent fuse into one.
+
+  **Route outbound as well as inbound.** Every inbound-only split had one cause: a client
+  replying to a message we never received, because Spartan's own replies were not delivered.
+  "Crew for Monsoon at Christie's" fractured into eight clusters for exactly that reason. The
+  same routing rule matches outbound mail, which puts it back at the whole-thread figure —
+  and the remaining split there is five OnSinch portal notices that Gmail groups on subject
+  alone while they reference nothing, which the engine ignores anyway.
 - **It cannot WRITE to Gmail.** The four labels and the reply drafts still need an OAuth
   token, because there is no inbound path that writes.
 
@@ -171,6 +192,51 @@ That split is the point rather than a compromise. **Reading is the half that mus
 fail; writing a label is cosmetic.** Put intake on routing, where nothing can revoke it, and
 leave the labels on OAuth, where a dead token degrades a nicety and heals itself on the next
 reconnect. Today the two are fused, which is why a credential event costs bookings.
+
+### Built. What is left is two things only an admin can do
+
+The receiving half exists and is tested: **`POST /api/mail-inbound`**, with
+`app/lib/mail/{rfc822,threading,providers}.ts` and `test/mailInbound.ts` (61 assertions,
+offline). It accepts raw RFC 822 in whatever envelope the provider uses, rebuilds the thread
+from headers, stores the message, and hands the rebuilt thread to the same `handleThread`
+the n8n route uses — so nothing downstream changes.
+
+**Raw MIME is the one contract.** Every provider also offers parsed JSON of its own design;
+taking it would mean five dialects to be wrong about instead of one parser with one set of
+tests, and several of those payloads drop the very headers that rebuild the conversation.
+
+1. **A provider account**, configured to forward **raw** mail:
+
+   | provider | setting that matters | field the raw mail arrives in |
+   | --- | --- | --- |
+   | SendGrid Inbound Parse | tick "POST the raw, full MIME message" | `email` (multipart) |
+   | Mailgun routes | `store(notify)` with raw MIME | `body-mime` (multipart) |
+   | Postmark inbound | tick "Include raw email content" | `RawEmail` (JSON) |
+   | CloudMailin | message format **raw** | the whole body |
+
+   The webhook URL carries the secret, because none of these can add a request header:
+   `https://<host>/api/mail-inbound?k=<MAIL_INBOUND_SECRET>`, or the same secret as the
+   password half of HTTP Basic credentials in the URL. Set `MAIL_INBOUND_SECRET` in Vercel
+   (it falls back to `N8N_WEBHOOK_SECRET`); with neither set the route refuses everything in
+   production, which is deliberate.
+
+2. **The Workspace routing rule**, which needs a super-admin. Admin console → Apps → Google
+   Workspace → Gmail → **Routing** → Add. Match envelope recipient
+   `bookings@spartancrew.co.uk`; tick **Inbound** *and* **Outbound** (see the split numbers
+   above); action **add more recipients**, pointing at the provider's address.
+
+Then `node scripts/verify-mail-inbound.mjs` proves the deployed route end to end: the door
+refuses an unauthenticated caller, all four provider shapes are read, a reply finds its
+parent and lands on the same thread, a reply to a message nobody holds opens its own, and
+the database agrees with what the route said. It is safe against production because every
+message it posts is *from* a `spartancrew.co.uk` address — the route stores outbound for
+threading and returns before the engine, so nothing classifies, composes or writes to
+OnSinch.
+
+**The cutover is one change, not two.** The two intakes key a message differently — Gmail's
+id in the n8n route, the RFC `Message-ID` here — so the same mail arriving down both paths
+is two rows, two thread ids and two conversations for one enquiry. Disable the n8n Gmail
+trigger in the same change that enables the routing rule.
 
 ### So the architecture that actually sits above credential changes
 
