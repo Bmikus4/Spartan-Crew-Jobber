@@ -595,6 +595,23 @@ function compare(std: any, eng: any, portal = false) {
   return { d, comparable: true };
 }
 
+/**
+ * THE IDENTITY OF A DISAGREEMENT, not of the thread it happened on.
+ *
+ * A ruling is an answer to "which of these two answers does the mail support".
+ * Change either answer and the old ruling is about a question nobody asked. The
+ * settle cache was keyed on the thread id alone, so once the engine's answer
+ * moved the stale ruling was reused and the engine was scored on an answer it
+ * no longer gives — 20 such rulings were live on the 2026-09-16 run, 11 of them
+ * counted against the engine, and the headline read 2 points low as a result.
+ *
+ * The worse half is what it does to a BEFORE/AFTER comparison: a fix that makes
+ * a thread agree leaves the "standard wins" ruling untouched, so the fix scores
+ * exactly zero. Every stage-2 change would have measured as no change.
+ */
+const disputeSig = (d: any) =>
+  Object.keys(d ?? {}).sort().map((k) => k + "=" + JSON.stringify(d[k])).join(";");
+
 const SETTLE_SYSTEM = `You are settling a disagreement about one email conversation from a crew-hire company's bookings inbox.
 
 Two readers have read the same thread and answered differently. You are shown answer A and answer B. You are NOT told which reader produced which, and you must not guess — decide only which answer the EMAIL supports.
@@ -646,17 +663,30 @@ async function settle() {
   const byId = new Map(threads.map((t) => [t.thread_id, t]));
   const std = new Map<string, any>(readFileSync(STANDARD, "utf8").trim().split("\n").filter(Boolean).map((l) => { const o = JSON.parse(l); return [o.thread_id, o] as [string, any]; }));
   const eng = new Map<string, any>(readFileSync(ENGINE, "utf8").trim().split("\n").filter(Boolean).map((l) => { const o = JSON.parse(l); return [o.thread_id, o] as [string, any]; }));
-  const done = existsSync(SETTLED)
-    ? new Set(readFileSync(SETTLED, "utf8").trim().split("\n").filter(Boolean).map((l) => JSON.parse(l).thread_id))
-    : new Set<string>();
+  // Keyed by the DISAGREEMENT, not the thread — see disputeSig. The file is
+  // append-only and the report reads the last row per thread, so re-settling a
+  // moved thread simply supersedes the old ruling and keeps it as evidence.
+  const done = new Map<string, string>();
+  if (existsSync(SETTLED)) {
+    for (const l of readFileSync(SETTLED, "utf8").trim().split("\n").filter(Boolean)) {
+      const o = JSON.parse(l);
+      done.set(o.thread_id, disputeSig(o.disputed));
+    }
+  }
 
   const disputes: Array<{ id: string; d: any; std: any; eng: any }> = [];
+  let resettle = 0;
   for (const [id, e] of eng) {
     const s = std.get(id);
     const { d, comparable } = compare(s?.standard, e, isPortalNotification(byId.get(id)));
-    if (comparable && Object.keys(d).length && !done.has(id)) disputes.push({ id, d, std: s.standard, eng: e });
+    if (!comparable || !Object.keys(d).length) continue;
+    const prev = done.get(id);
+    if (prev === disputeSig(d)) continue;
+    if (prev !== undefined) resettle++;
+    disputes.push({ id, d, std: s.standard, eng: e });
   }
-  console.log(disputes.length + " thread(s) with a disagreement to settle (" + done.size + " already done)");
+  console.log(disputes.length + " thread(s) with a disagreement to settle (" + done.size
+    + " already ruled on, " + resettle + " of which the engine has since answered differently)");
 
   let n = 0, usd = 0;
   for (let i = 0; i < disputes.length; i += 3) {
@@ -792,12 +822,41 @@ function report() {
   } else {
     const tally: Record<string, { engine: number; standard: number; ambiguous: number }> = {};
     const engineWrongThreads = new Set<string>();
-    for (const [id, row] of settled) {
-      if (row.error) continue;
+    /**
+     * A RULING ONLY COUNTS AGAINST THE ANSWER IT WAS MADE ABOUT.
+     *
+     * The settle cache was keyed on the thread id, so a ruling survived the
+     * engine changing its mind and was still applied. That is the same shape as
+     * guard 2 — a stored verdict the engine is scored on regardless of what it
+     * actually said — and it fails in both directions: an old "standard wins"
+     * marks a thread wrong that now agrees, and a fix that lands is invisible
+     * because the ruling against it never moves.
+     *
+     * So every ruling is re-checked against what the two sides say TODAY, and a
+     * disagreement with no ruling that matches is reported as UNRULED rather
+     * than passed over — an unadjudicated disagreement scored as clean is a
+     * free mark, which is the same lie with the sign flipped.
+     */
+    const fresh = new Map<string, any[]>();
+    const stale: Array<{ id: string; field: string; stored: any; now: any }> = [];
+    const unruled = new Map<string, string[]>();
+    for (const id of usable) {
       // A ruling made before the portal class was understood is a ruling about
       // an email whose meaning is not in the email. Discarded, not re-scored.
       if (isPortalNotification(byId.get(id))) continue;
-      for (const r of row.rulings ?? []) {
+      const { d } = compare(std.get(id).standard, eng.get(id), false);
+      const row = settled.get(id);
+      const rulings: any[] = row && !row.error ? row.rulings ?? [] : [];
+      const keep: any[] = [];
+      for (const r of rulings) {
+        const stored = row.disputed?.[r.field];
+        if (d[r.field] && JSON.stringify(d[r.field]) === JSON.stringify(stored)) keep.push(r);
+        else stale.push({ id, field: r.field, stored, now: d[r.field] ?? null });
+      }
+      fresh.set(id, keep);
+      const missing = Object.keys(d).filter((f) => !keep.some((r) => r.field === f));
+      if (missing.length) unruled.set(id, missing);
+      for (const r of keep) {
         tally[r.field] ??= { engine: 0, standard: 0, ambiguous: 0 };
         if (r.winner === "engine") tally[r.field].engine++;
         else if (r.winner === "standard") { tally[r.field].standard++; engineWrongThreads.add(id); }
@@ -847,6 +906,24 @@ function report() {
     console.log(`  EXCLUDING HARD GATES      ${pct(excl.length, usable.length)}   ${excl.length}/${usable.length}  <-- the figure the 99% target is about`);
     const strict = usable.filter((id) => (perThread[id] ?? []).length === 0);
     console.log(`  (strict, no adjudication) ${pct(strict.length, usable.length)}   ${strict.length}/${usable.length} threads where the two readings agreed outright`);
+
+    if (stale.length) {
+      console.log(`\n  ${stale.length} ruling(s) IGNORED as stale — made about an answer the engine no longer gives:`);
+      for (const s of stale.slice(0, 12)) {
+        console.log(`    ${s.id}  ${s.field}`);
+        console.log(`       ruled on: ${JSON.stringify(s.stored)}`);
+        console.log(`       today   : ${s.now ? JSON.stringify(s.now) : "(no longer disputed)"}`);
+      }
+      if (stale.length > 12) console.log(`    ... and ${stale.length - 12} more`);
+    }
+    if (unruled.size) {
+      console.log(`\n  ${unruled.size} thread(s) DISAGREE TODAY WITH NO RULING — run --settle.`);
+      console.log(`  The two figures above are an UPPER BOUND until these are settled: an`);
+      console.log(`  unadjudicated disagreement counts as clean, so up to ${unruled.size} of them are free marks.`);
+      for (const [id, fs] of unruled) {
+        console.log(`    ${id}  ${fs.join(", ").padEnd(24)} "${(byId.get(id)?.subject ?? "").slice(0, 44)}"`);
+      }
+    }
     if (gated.size) {
       console.log(`\n  ${gated.size} thread(s) held by a HARD GATE, excluded from the figure above:`);
       for (const [id, why] of gated) console.log(`    ${id}  ${why}`);
@@ -857,14 +934,15 @@ function report() {
 
     console.log("\n" + line() + "\n  WHERE THE ENGINE WAS RULED WRONG\n" + line());
     let shown = 0;
-    for (const [id, row] of settled) {
-      const bad = (row.rulings ?? []).filter((r: any) => r.winner === "standard");
+    for (const [id, keep] of fresh) {
+      const row = settled.get(id);
+      const bad = keep.filter((r: any) => r.winner === "standard");
       if (!bad.length || shown >= 20) continue;
       shown++;
       const t = byId.get(id)!;
       console.log(`\n  ${id} [${t.stratum}, ${t.message_count} msg] "${t.subject.slice(0, 58)}"`);
       for (const r of bad) {
-        const d = row.disputed?.[r.field];
+        const d = row?.disputed?.[r.field];
         console.log(`     ${r.field}: engine ${JSON.stringify(d?.engine)} / reading ${JSON.stringify(d?.standard)}`);
         console.log(`       -> ${r.reason}`);
       }

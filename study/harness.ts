@@ -172,6 +172,32 @@ function selftest(): void {
     console.log("  SKIP  fewer than 20 scored threads on disk — run a labelled run first");
   }
 
+  console.log("\n[6] no ruling is applied to an answer the engine no longer gives");
+  // The settle cache was keyed on the thread id, so a ruling outlived the answer it was
+  // about. On the 2026-09-16 run 20 rulings were stale, 11 of them scored against the
+  // engine, and the headline read 2 points low. The direction that matters more is the
+  // other one: a fix that makes a thread agree leaves the old "standard wins" in place,
+  // so the fix measures as zero and stage 2 cannot be evaluated at all.
+  if (ids.length >= 20 && existsSync(join(TMP, "real-settled.jsonl"))) {
+    const r = spawnSync("npx", ["tsx", join(ROOT, "study", "real.ts"), "--report"],
+                        { encoding: "utf8", shell: true, cwd: ROOT });
+    const out = r.stdout ?? "";
+    const staleN = Number(/(\d+) ruling\(s\) IGNORED as stale/.exec(out)?.[1] ?? 0);
+    const unruledN = Number(/(\d+) thread\(s\) DISAGREE TODAY WITH NO RULING/.exec(out)?.[1] ?? 0);
+    ok(/REAL-MAIL ACCURACY/.test(out), "the report runs and produces a figure");
+    // A ruling about a disagreement that has since evaporated is obsolete, not a fault:
+    // there is no question left to put to a judge, and the report already drops it. The
+    // count is printed because a file that keeps growing them is worth seeing.
+    console.log(`     ${staleN} obsolete ruling(s) on disk, ignored by the report (a thread that now agrees)`);
+    // This is the assertion. A disagreement with no ruling that matches today's answers
+    // scores as clean, so every one of them is a free mark the engine did not earn.
+    ok(unruledN === 0, "every live disagreement has a ruling made about the answers now given",
+       unruledN ? `${unruledN} unruled — the figure is an UPPER BOUND. Run: npx tsx study/real.ts --settle`
+                : "none unruled");
+  } else {
+    console.log("  SKIP  no settled file on disk — run a labelled run first");
+  }
+
   console.log(`\n${fails === 0 ? "ALL GUARDS PASS — a number from this harness is worth reading." :
     `${fails} GUARD(S) FAILED — DO NOT QUOTE ANY NUMBER FROM THIS HARNESS UNTIL THEY PASS.`}\n`);
   if (fails) process.exit(1);
