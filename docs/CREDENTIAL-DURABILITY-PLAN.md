@@ -134,6 +134,55 @@ are a product feature and keep working. What changes is that nothing depends on 
 know whether a message has been seen. That is what `inbound_raw` and `message_ledger` are
 for, and they already exist.
 
+## 3b. The version with no credential in it at all: receive the mail, do not fetch it
+
+Everything above still asks Gmail for mail, so everything above still has a token in the
+path that matters. There is a way to take the token out of it entirely, and for a
+multi-tenant product it is cheaper than the OAuth it replaces.
+
+**A Google Workspace admin routing rule delivers a copy of inbound mail to an address you
+control.** Admin console → Apps → Google Workspace → Gmail → **Routing**, matching envelope
+recipient `bookings@spartancrew.co.uk`, action "add more recipients". Point it at an address
+handled by an inbound-mail webhook (Cloudflare Email Routing, Postmark inbound, SendGrid
+Inbound Parse, Mailgun routes), which POSTs the raw message to an endpoint on this app.
+
+What that buys, and it is the whole ask:
+
+- **There is no OAuth token in the intake path.** Nothing to expire, revoke, reconnect or
+  re-consent. A password change is irrelevant. So is the 100-refresh-token ceiling, the
+  7-day Testing clock and the restricted-scope review.
+- **It is an admin-level rule, not a user grant.** It survives the mailbox owner changing
+  their password, losing their phone, or leaving the company.
+- **For Kairo's multi-tenancy it is dramatically cheaper.** A tenant's admin adds one routing
+  rule. No Google verification, no CASA security assessment, no annual renewal — none of
+  which is avoidable if a multi-tenant app asks for restricted Gmail scopes.
+- **Latency drops from a 3-minute poll to seconds.**
+
+What it does not do, stated plainly:
+
+- **It delivers messages, not threads.** Threading is reconstructed from `Message-ID`,
+  `In-Reply-To` and `References`, which every real client sets. The engine already keys on a
+  thread identity and stores messages individually, so this is a mapping change rather than a
+  redesign — but it is the one piece of real work in the option.
+- **It cannot WRITE to Gmail.** The four labels and the reply drafts still need an OAuth
+  token, because there is no inbound path that writes.
+
+That split is the point rather than a compromise. **Reading is the half that must never
+fail; writing a label is cosmetic.** Put intake on routing, where nothing can revoke it, and
+leave the labels on OAuth, where a dead token degrades a nicety and heals itself on the next
+reconnect. Today the two are fused, which is why a credential event costs bookings.
+
+### So the architecture that actually sits above credential changes
+
+| leg | auth | what a credential failure costs |
+| --- | --- | --- |
+| inbound mail | **none** — admin routing rule → webhook | nothing; there is no credential |
+| reconciliation / backfill | OAuth, cursor-based (§3) | latency: the next run is bigger |
+| labels and drafts | OAuth, `gmail.modify` | a label is late; no booking is lost |
+
+Each leg fails independently and none of them loses mail. That is the property Ben asked
+for, and no amount of scoping a single OAuth grant produces it.
+
 ## 4. Scoping the OAuth so re-consent is rare and cheap
 
 The token will still die occasionally. Make that rare, obvious, and a ten-second fix.
