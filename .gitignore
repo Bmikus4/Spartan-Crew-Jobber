@@ -13,7 +13,13 @@ tsconfig.tsbuildinfo
 .env*.local
 
 # derived rate data (regenerable; contains client billing patterns)
-data/
+# `data/*` and not `data/`, because git cannot re-include anything under an excluded
+# DIRECTORY — the negation below is silently dead against `data/`. The corpus and test set
+# are large and regenerable; a Leg C result is neither. The 2026-09-03 run's number was
+# bought with real model calls, written to .tmp-data, wiped, and six weeks later nobody
+# could find it, so the study was nearly re-run from scratch for an answer already paid for.
+data/*
+!data/study/
 
 # import-ready workflow with secret baked in (never commit)
 n8n/*.local.json

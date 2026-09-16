@@ -1,0 +1,46 @@
+
+==============================================================================
+  LEG C — REAL CLIENT MAIL, ENGINE vs AN INDEPENDENT READING
+==============================================================================
+
+  threads sampled            100
+  both sides answered        100
+  engine threw               0
+  OnSinch portal notices     8   (standard overruled to not-a-job — see isPortalNotification)
+
+------------------------------------------------------------------------------
+  WHAT IT IS — independent reading (rows) vs engine (columns)
+------------------------------------------------------------------------------
+                         new-job    update confirmat not-a-job
+  new-job (24)                23         1         0         0
+  update (22)                 10        12         0         0
+  confirmation-only (5)         3         0         2         0
+  not-a-job (49)               3         0         1        45
+
+  agreement on what the thread IS:  82.0%  (82/100)
+  a booking raised on a thread that is not one: 6
+  a real request read as not-a-job / an ack:    0
+
+------------------------------------------------------------------------------
+  DISAGREEMENT BY FIELD — before anybody ruled on who is right
+------------------------------------------------------------------------------
+  classification   agree  82.0%  (82/100)   disagreed on 18
+  bookable         agree  91.0%  (91/100)   disagreed on 9
+  headcount        agree  90.3%  (28/31)   disagreed on 3
+  blocks           agree  80.6%  (25/31)   disagreed on 6
+  dates            agree  77.4%  (24/31)   disagreed on 7
+  windows          agree  96.8%  (30/31)   disagreed on 1
+
+------------------------------------------------------------------------------
+  WHO WAS RIGHT — every disagreement put to a third reading of the mail
+------------------------------------------------------------------------------
+  field             engine right  engine wrong   ambiguous
+  classification               3            12           2
+  bookable                     3             4           2
+  dates                        0             4           3
+  blocks                       1             2           3
+  headcount                    0             0           3
+  windows                      0             0           1
+
+  REAL-MAIL ACCURACY         82.0%   82/100 threads with nothing ruled against the engine
+  (strict, no adjudication)  71.0%   71/100 threads where the two readings agreed outright
