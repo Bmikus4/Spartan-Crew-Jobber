@@ -820,9 +820,40 @@ function report() {
      * scoring it as one would inflate the fault list with work nobody can do.
      */
     const clean = usable.filter((id) => !engineWrongThreads.has(id));
+
+    /**
+     * HARD GATES ARE THEIR OWN BUCKET, because Ben's 99% excludes them and folding
+     * them into the error rate scores the engine for something the API forbids.
+     *
+     * Each pattern names a refusal the OnSinch API makes unavoidable, and each is
+     * matched against the engine's OWN note rather than inferred from the outcome —
+     * a hold with no stated reason is a miss, not a gate. Adding a pattern here
+     * REMOVES threads from the fault list, so the bar for adding one is that the
+     * engine could not have done better with perfect reading.
+     */
+    const HARD_GATES: Array<{ re: RegExp; why: string }> = [
+      { re: /update NOT applied\b[\s\S]*applied by hand/i,
+        why: "the order's blocks are unstaffed, so attendance returns no rows and they cannot be paired — see handoff §4" },
+    ];
+    const gated = new Map<string, string>();
+    for (const id of engineWrongThreads) {
+      const notes: string[] = eng.get(id)?.notes ?? [];
+      const hit = HARD_GATES.find((g) => notes.some((n) => g.re.test(n)));
+      if (hit) gated.set(id, hit.why);
+    }
+    const excl = usable.filter((id) => !engineWrongThreads.has(id) || gated.has(id));
+
     console.log(`\n  REAL-MAIL ACCURACY        ${pct(clean.length, usable.length)}   ${clean.length}/${usable.length} threads with nothing ruled against the engine`);
+    console.log(`  EXCLUDING HARD GATES      ${pct(excl.length, usable.length)}   ${excl.length}/${usable.length}  <-- the figure the 99% target is about`);
     const strict = usable.filter((id) => (perThread[id] ?? []).length === 0);
     console.log(`  (strict, no adjudication) ${pct(strict.length, usable.length)}   ${strict.length}/${usable.length} threads where the two readings agreed outright`);
+    if (gated.size) {
+      console.log(`\n  ${gated.size} thread(s) held by a HARD GATE, excluded from the figure above:`);
+      for (const [id, why] of gated) console.log(`    ${id}  ${why}`);
+    } else {
+      console.log(`\n  No thread was held by a hard gate. If that is a surprise, check HARD_GATES —`);
+      console.log(`  an empty bucket and a bucket whose patterns no longer match look identical.`);
+    }
 
     console.log("\n" + line() + "\n  WHERE THE ENGINE WAS RULED WRONG\n" + line());
     let shown = 0;

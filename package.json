@@ -62,7 +62,9 @@
     "verify:mail": "node scripts/verify-mail-inbound.mjs",
     "verify:mail:engine": "tsx scripts/verify-mail-inbound-engine.ts",
     "score:e2e": "tsx study/scoreE2E.ts",
-    "score:naj": "tsx study/najFalsifier.ts"
+    "score:naj": "tsx study/najFalsifier.ts",
+    "harness": "tsx study/harness.ts",
+    "harness:selftest": "tsx study/harness.ts --selftest"
   },
   "dependencies": {
     "@neondatabase/serverless": "^0.10.4",

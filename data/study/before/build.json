@@ -1,0 +1,7 @@
+{
+ "label": "before",
+ "at": "2026-09-16T00:00:00.000Z",
+ "head": "ad79f5f",
+ "dirty": false,
+ "note": "Copied from seeded-2026-09-16 rather than produced by --label, because it is the run that established the baseline. Every later run comes from `npx tsx study/harness.ts --label=<name>` and gets this file written for it automatically."
+}
