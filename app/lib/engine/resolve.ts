@@ -413,8 +413,22 @@ export interface OrderRec {
 
 export type OrderMatch =
   | { order_id: number; order_number?: string; job_id?: number; by: "date" | "date+venue" | "date+r-number" }
-  /** Several orders fit and nothing separates them. Never guessed at. */
-  | { ambiguous: number; day: string };
+  /**
+   * No order on the day may be bound to. Never guessed at.
+   *
+   * `differentJob` separates the two reasons for that, which are not the same refusal
+   * and must not have the same consequence. Without it the rule knows nothing: several
+   * orders fit, none can be told apart, and stopping is all there is. With it the rule
+   * knows something specific — every candidate is at a building the thread did not name
+   * — and a job that is none of the existing ones is a job that has to be raised.
+   *
+   * It is set only where the evidence is the strong kind (both sides resolved, through
+   * the tenant's own alias list, to different informative rows) and only where EVERY
+   * candidate is that kind. One unreadable or placeholder row withholds it, because our
+   * own venue resolution is the softer side of the comparison and creating on a weak
+   * disagreement raises a duplicate beside a real booking.
+   */
+  | { ambiguous: number; day: string; differentJob?: true };
 
 /**
  * Every R number a thread names - "R10687", "r 10687", "Ref R10687".
@@ -692,18 +706,33 @@ export function matchExistingOrder(
     // as if the thread had named no number at all.
   }
 
+  const verdicts = sameDay.map((o) => venueVerdict(o, opts));
+
+  /**
+   * EVERY candidate is at a building the thread did not name.
+   *
+   * This is the one refusal that carries information rather than the absence of it,
+   * and the caller acts on it differently - see OrderMatch.differentJob. It stays a
+   * refusal to BIND either way: the "Tottenham Hotspur Stadium" thread must not land on
+   * "@ The Tower Hotel" whatever else happens. What it stops being is a refusal to act.
+   *
+   * "differ-id" is the only verdict admitted. "differ-text" is our own resolution
+   * failing, "unreadable" is an order we named ourselves carrying no venue at all, and
+   * neither is the client saying this is somewhere else.
+   */
+  const differentJob = verdicts.length > 0 && verdicts.every((v) => v === "differ-id");
+
   if (sameDay.length === 1) {
     // A sole candidate binds unless the disagreement is the strong kind - see the
-    // "Tottenham Hotspur Stadium" case in the header. Refusing leaves the thread unbound
-    // and blocked, so nothing is created beside the job that already exists.
-    if (venueVerdict(sameDay[0], opts) === "differ-id") return { ambiguous: 1, day };
+    // "Tottenham Hotspur Stadium" case in the header.
+    if (verdicts[0] === "differ-id") return { ambiguous: 1, day, differentJob: true };
     return { order_id: sameDay[0].id, order_number: sameDay[0].number, job_id: sameDay[0].Job?.[0]?.id, by: "date" };
   }
 
   // More than one. Only the venue can separate them, and only if the thread names one.
-  const hits = sameDay.filter((o) => venueVerdict(o, opts) === "agree");
+  const hits = sameDay.filter((o, i) => verdicts[i] === "agree");
   if (hits.length === 1) {
     return { order_id: hits[0].id, order_number: hits[0].number, job_id: hits[0].Job?.[0]?.id, by: "date+venue" };
   }
-  return { ambiguous: sameDay.length, day };
+  return differentJob ? { ambiguous: sameDay.length, day, differentJob: true } : { ambiguous: sameDay.length, day };
 }

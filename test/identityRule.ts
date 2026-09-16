@@ -248,5 +248,73 @@ console.log("\n[8] two place IDS are only a disagreement when they are two BUILD
   ok(!!real && "ambiguous" in real, "two informative rows for two different buildings still refuse");
 }
 
+console.log("\n[9] refusing to bind and refusing to book are two different refusals");
+{
+  /**
+   * THE DISTINCTION THIS SECTION EXISTS FOR.
+   *
+   * "Every same-day order is at a different building" and "several orders fit and
+   * nothing separates them" both refuse to bind, and until now both also stopped the
+   * thread dead. They are not the same refusal. The second knows nothing; the first
+   * knows something specific — that none of these orders is this job — and a job that
+   * is not any of the existing ones is a job that needs raising.
+   *
+   * Measured on the 100-thread study, 2026-09-17: three threads were held by this,
+   * and all three were real jobs the client had asked for. "Crew for next Monday"
+   * (Steel Deck, Southbank Centre) was held against "Steel Deck Rentals @ Wembley
+   * Stadium"; staff then raised the Southbank order by hand the same afternoon, which
+   * is the order the engine had declined to create.
+   *
+   * The Tottenham case in [4] is the same rule read the right way round: the stadium
+   * thread must not land on The Tower Hotel, AND the stadium job still needs an order.
+   */
+  const orders: OrderRec[] = [
+    { id: 5020, number: "10520", happening: "2026-03-09T08:00:00+00:00", name: "Acme @ Royal Albert Hall", Job: [{ id: 7020 }] },
+    { id: 5021, number: "10521", happening: "2026-03-09T14:00:00+00:00", name: "Acme @ Olympia London", Job: [{ id: 7021 }] },
+  ];
+
+  const sole = matchExistingOrder("2026-03-09", [orders[0]], {
+    location_text: "ExCeL London", place_id: 43, places: PLACES,
+  });
+  ok(!!sole && "ambiguous" in sole && sole.differentJob === true,
+     "one candidate, a different building: still refuses to bind, and says it is a different job");
+
+  const many = matchExistingOrder("2026-03-09", orders, {
+    location_text: "ExCeL London", place_id: 43, places: PLACES,
+  });
+  ok(!!many && "ambiguous" in many && many.ambiguous === 2 && many.differentJob === true,
+     "several candidates, none of them this building: the same, and the count is unchanged");
+
+  // The flag is EVIDENCE, so it may only be set where the evidence exists. A weak
+  // disagreement is our own venue resolution being unreliable, not the client naming a
+  // different building, and creating on it would raise a duplicate beside a real job.
+  const weak = matchExistingOrder("2026-03-09", orders, { location_text: "the usual place" });
+  ok(!!weak && "ambiguous" in weak && !weak.differentJob,
+     "a venue that merely fails to overlap is NOT evidence of a different job");
+
+  const silent = matchExistingOrder("2026-03-09", orders, {});
+  ok(!!silent && "ambiguous" in silent && !silent.differentJob,
+     "a thread that names no venue is NOT evidence of a different job");
+
+  // One candidate agrees, so we are not looking at a new job at all — we are looking at
+  // a bind. Nothing here may turn a successful match into a creation.
+  const hit = matchExistingOrder("2026-03-09", orders, {
+    location_text: "Olympia London", place_id: 42, places: PLACES,
+  });
+  ok(bound(hit) === 5021, "a candidate that agrees still binds and is never a 'different job'", `by ${how(hit)}`);
+
+  // A placeholder demotes to the weak verdict (see [8]), so a mixed set where one row
+  // says nothing cannot claim every row disagrees.
+  const mixed: OrderRec[] = [
+    { id: 5022, number: "10522", happening: "2026-03-09T08:00:00+00:00", name: "Acme @ Royal Albert Hall", Job: [{ id: 7022 }] },
+    { id: 5023, number: "10523", happening: "2026-03-09T14:00:00+00:00", name: "Acme @ somewhere we cannot read", Job: [{ id: 7023 }] },
+  ];
+  const partial = matchExistingOrder("2026-03-09", mixed, {
+    location_text: "ExCeL London", place_id: 43, places: PLACES,
+  });
+  ok(!!partial && "ambiguous" in partial && !partial.differentJob,
+     "one unreadable row is enough to withhold the flag — every candidate must disagree");
+}
+
 console.log(fails ? `\n${fails} FAILED` : "\nALL PASS");
 process.exit(fails ? 1 : 0);

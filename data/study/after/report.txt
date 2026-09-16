@@ -1,0 +1,164 @@
+
+==============================================================================
+  LEG C — REAL CLIENT MAIL, ENGINE vs AN INDEPENDENT READING
+==============================================================================
+
+  threads sampled            100
+  both sides answered        99
+  engine threw               1
+  OnSinch portal notices     8   (standard overruled to not-a-job — see isPortalNotification)
+      199f2c70356ba547: OpenRouter (anthropic/claude-opus-4.6) timed out after 25000ms
+
+------------------------------------------------------------------------------
+  WHAT IT IS — independent reading (rows) vs engine (columns)
+------------------------------------------------------------------------------
+                         new-job    update confirmat not-a-job
+  new-job (23)                22         1         0         0
+  update (22)                 10        12         0         0
+  confirmation-only (5)         3         0         2         0
+  not-a-job (49)               2         0         2        45
+
+  agreement on what the thread IS:  81.8%  (81/99)
+  a booking raised on a thread that is not one: 5
+  a real request read as not-a-job / an ack:    0
+
+------------------------------------------------------------------------------
+  DISAGREEMENT BY FIELD — before anybody ruled on who is right
+------------------------------------------------------------------------------
+  classification   agree  81.8%  (81/99)   disagreed on 18
+  bookable         agree  89.9%  (89/99)   disagreed on 10
+  headcount        agree  88.9%  (24/27)   disagreed on 3
+  blocks           agree  85.2%  (23/27)   disagreed on 4
+  dates            agree  74.1%  (20/27)   disagreed on 7
+  windows          agree  96.3%  (26/27)   disagreed on 1
+
+------------------------------------------------------------------------------
+  WHO WAS RIGHT — every disagreement put to a third reading of the mail
+------------------------------------------------------------------------------
+  field             engine right  engine wrong   ambiguous
+  classification               4            12           1
+  bookable                     2             7           1
+  dates                        0             6           1
+  blocks                       0             1           3
+  windows                      0             1           0
+  headcount                    0             0           3
+
+  REAL-MAIL ACCURACY         77.8%   77/99 threads with nothing ruled against the engine
+  EXCLUDING HARD GATES       79.8%   79/99  <-- the figure the 99% target is about
+  (strict, no adjudication)  70.7%   70/99 threads where the two readings agreed outright
+
+  5 ruling(s) IGNORED as stale — made about an answer the engine no longer gives:
+    19df745a6624daba  bookable
+       ruled on: {"engine":"ordered (would book)","standard":false}
+       today   : (no longer disputed)
+    19abab4cc8f0ea7a  bookable
+       ruled on: {"engine":"ordered (would book)","standard":false}
+       today   : (no longer disputed)
+    19a3ae5b38c4dc18  bookable
+       ruled on: {"engine":"ordered (would book)","standard":false}
+       today   : (no longer disputed)
+    19f1c92218d5627f  bookable
+       ruled on: {"engine":"needs-info (would not)","standard":true}
+       today   : (no longer disputed)
+    19f219cf59c264e6  bookable
+       ruled on: {"engine":"needs-info (would not)","standard":true}
+       today   : (no longer disputed)
+
+  2 thread(s) held by a HARD GATE, excluded from the figure above:
+    19d8be6fd6ecc0a0  the order's blocks are unstaffed, so attendance returns no rows and they cannot be paired — see handoff §4
+    19a78da0058585c2  the order's blocks are unstaffed, so attendance returns no rows and they cannot be paired — see handoff §4
+
+------------------------------------------------------------------------------
+  WHERE THE ENGINE WAS RULED WRONG
+------------------------------------------------------------------------------
+
+  19ce187aaa4b00e4 [1, 1 msg] "I'm currently out of office Re: Essential AV crew for Shan"
+     classification: engine "new-job" / reading "not-a-job"
+       -> The email is an out-of-office auto-reply, not a job request. It contains no booking details, just a redirect to other contacts.
+
+  19eb5edfaae2a13c [2-3, 2 msg] "Additions - Tomorrow"
+     bookable: engine "needs-info (would not)" / reading true
+       -> Client requests 2 more crew for a specific shift, date, time, and location. The company replies "No problem, we'll begin working on that right now," confirming acceptance.
+
+  19f469fc8c60bce7 [2-3, 2 msg] "Stoke Park SAA Bday Event July 2026 Updated Crew Info docu"
+     classification: engine "new-job" / reading "update"
+       -> Client says "Please see attached version 2 (update) of the Crew Information document," indicating this updates an existing booking, not a new job.
+
+  19d8be6fd6ecc0a0 [2-3, 3 msg] "Changes"
+     classification: engine "new-job" / reading "update"
+       -> Client says "We've had quite a few changes to our event" and references existing PO E13862, indicating this is an update to an existing booking.
+     bookable: engine "needs-info (would not)" / reading true
+       -> The client provides dates, headcounts, shift lengths, start times, venue, contacts, and PO number. All info needed to book is present; Tracy confirmed it's updated.
+
+  19a97d640fb2fd1b [2-3, 2 msg] "E14528"
+     classification: engine "new-job" / reading "confirmation-only"
+       -> The email from the company confirms an existing crew arrangement. The client simply replies "Thank you for the arrangement." No new job is being requested—just a confirmation of a schedule update.
+
+  19e989ab89415bcb [2-3, 3 msg] "9th and 10th June"
+     bookable: engine "ordered (would book)" / reading false
+       -> The client's final message says "stand down, don't worry about the booking," explicitly cancelling the request. It is not bookable.
+
+  19a78da0058585c2 [2-3, 2 msg] "Changes & Additions"
+     bookable: engine "needs-info (would not)" / reading true
+       -> The client provides all needed details (dates, headcounts, hours, start times, contacts, PO numbers, venues). The company confirms: "I've made those changes in our system and created that job."
+
+  19e1bb8e33c3082b [2-3, 2 msg] "RE: Price quote - R9437 Blackout warehouse @ HQ - 8.6.2026"
+     classification: engine "new-job" / reading "not-a-job"
+       -> The client hasn't confirmed the booking. She says "we won't know if we need these crew" and asks about cancellation policy. The order remains provisional with no commitment.
+
+  19f1e0a9a4e42a92 [4-9, 8 msg] "Van and Crew requirement | 2nd July 2026"
+     classification: engine "new-job" / reading "update"
+       -> The thread ends with the client cancelling/apologizing and the company standing the driver down. The final message is an update to an existing inquiry, not a new job.
+     bookable: engine "ordered (would book)" / reading false
+       -> Tracy says "we've stood the driver down" and Leon apologizes saying "the Client was messing about." The job was cancelled, so it is not bookable.
+
+  199cdf9ae2a2f0df [4-9, 8 msg] "J44321 - 12th and 13th October // Nike Oxford Circus"
+     classification: engine "new-job" / reading "update"
+       -> The thread includes a post-booking update: client reports a no-show and requests a quote adjustment. The final PO reflects this change, making it an "update."
+
+  19cdd9b56d8d4e7a [4-9, 8 msg] "Local crew for 19 + 20 March"
+     bookable: engine "ordered (would book)" / reading false
+       -> The client cancelled in message 5 ("please could I cancel this?") and Tracy confirmed the cancellation in message 6. The booking is cancelled, so bookable is false.
+
+  19adea87248e221c [4-9, 9 msg] "Guildhall - 3rd Dec (tomorrow) - Derig"
+     dates: engine "2026-12-03" / reading "2025-12-03"
+       -> Client's message 1 says "Weds 3rd Dec" sent on 2025-12-02, and the subject says "3rd Dec (tomorrow)." The year is clearly 2025.
+
+  19b6af0f18e1f15e [4-9, 8 msg] "2512NYE02 JF"
+     classification: engine "new-job" / reading "update"
+       -> Message 5 asks to "add one more Spartan" to the existing confirmed booking 2512NYE02 JF. This is an update to an already-confirmed job, not a new job.
+
+  19957df1e0b364a5 [4-9, 6 msg] "Friday 19th"
+     classification: engine "update" / reading "new-job"
+       -> The thread starts with a brand-new request: "any chance you would have crew available this Friday please?" This is a new job, not an update to an existing one.
+
+  199570328cc1df53 [4-9, 9 msg] "J43612 - 21/09/25 and 25/09/25 @ Sea Containers London"
+     classification: engine "new-job" / reading "update"
+       -> The initial booking was made in message 1. Message 5 amends the breakdown crew timing: "send four of the crew to de rig at 10:30am and then the last two at 19:00pm." This is an update to an existing job.
+
+  19bbc2415878dfba [4-9, 6 msg] "Crew quote request - 26th Jan - The Connaught"
+     dates: engine "2026-01-26~2026-01-26~2026-01-26" / reading "2026-01-26~2026-01-26~2026-01-27"
+       -> The third shift is 01:00–04:00 on 26/01. Since the first shift starts at 09:00 on the 26th, the 01:00–04:00 shift must be the following night, i.e., 2026-01-27.
+
+  19ae42de2b6878b9 [10+, 15 msg] "UKLE25-2934 // ★LOCAL CREW★ // Spartan Crew // January"
+     dates: engine "2026-01-11~2026-01-11~2026-01-13~2026-01-15" / reading "2026-01-11~2026-01-11~2026-01-13~2026-01-15~2026-01-15"
+       -> The client's final confirmed booking (message 7) lists 5 shifts across dates: 11 Jan (General), 15 Jan (General), 11 Jan (Breakouts), 13 Jan (Breakouts), 15 Jan (Breakouts) — five entries, with Jan 11 and Jan 15 each appearing twice.
+
+  19f5fe5970a36166 [10+, 10 msg] "Crew quote request - 15 & 17 July"
+     dates: engine "2026-07-15~2026-07-16~2026-07-17~2026-07-17" / reading "2026-07-17~2026-07-17"
+       -> The disputed field likely concerns the second confirmed job. The 17/07 job has two shifts: 14:00-17:00 on 17 Jul and 23:59-03:59 crossing into 18 Jul. Answer A includes 15-16 Jul dates from the first job, but B's "2026-07-17~2026-07-17" matches the second booking alone. However, both jobs were confirmed, so this is ambiguous—but A's dates (15~16~17~17) mix both jobs while B focuses on the second. The email confirms both jobs, making A's inclusion of all dates arguably correct too. Actually, re-examining: A lists 4 dates spanning both jobs while B lists only the Jul 17 job. Since both were confirmed, A seems more complete. But the question is what the booking record should contain. This is ambiguous.
+
+  19aa5a6b9816c17a [10+, 26 msg] "Quote - Forta Warehouse / Feb"
+     classification: engine "new-job" / reading "confirmation-only"
+       -> Message 25 sends an "updated Purchase Order" for already-completed and quoted work. No new job is being requested; this is confirmation only.
+     blocks: engine 8 / reading 11
+       -> Counting distinct shift blocks: Jan 23, 27, 29, 30, Feb 1, Feb 2, Feb 3, Feb 11 (Wed), Feb 12, Feb 13 (Thu+Fri). Plus the extra person on Feb 13. That yields 11 blocks, matching A.
+     dates: engine "2026-01-23~2026-01-27~2026-01-29~2026-01-30~2026-02-01~2026-02-11~2026-02-13~2026-02-16" / reading "2026-01-23~2026-01-27~2026-01-29~2026-01-30~2026-02-01~2026-02-02~2026-02-03~2026-02-11~2026-02-12~2026-02-13~2026-02-13"
+       -> A includes Feb 2, 3 (from msg 4), Feb 12 (from msg 21 "add one person tomorrow"), and Feb 13 twice (Thu+Fri existing shifts). B omits several confirmed dates.
+     windows: engine "06:00-10:00~08:00-15:00~09:00-17:00~09:00-17:00~11:00-17:00~12:00-17:00~13:00-18:00~16:00-20:00" / reading "06:00-10:00~06:00-18:00~08:00-15:00~09:00-17:00~09:00-17:00~09:00-17:00~09:00-17:00~11:00-17:00~12:00-17:00~13:00-18:00~16:00-20:00"
+       -> A lists 11 windows matching 11 blocks including 06:00-18:00 (Feb 2 amended in msg 4) and duplicate 09:00-17:00 entries for multiple dates. B's 8 windows omit several shifts.
+
+  19f27a13b0e86a33 [10+, 18 msg] "Visual Elements. 18th and 20th July 2026"
+     bookable: engine "needs-info (would not)" / reading true
+       -> PO was sent (msg 14), booking confirmed by Spartan (msg 15: "I have confirmed the booking"), and onsite contact provided (msg 17). All info is complete.
+

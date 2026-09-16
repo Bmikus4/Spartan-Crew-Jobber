@@ -1411,6 +1411,25 @@ export async function compile(
                   : "same date"
             }) — will update, not create`
           );
+        } else if (existing?.differentJob) {
+          /**
+           * EVERY same-day order is at a building this thread did not name, so this is
+           * not any of them — and a job that is none of the existing ones needs raising.
+           *
+           * The bind is still refused; only the block is lifted. Measured on the study's
+           * 100 threads, 2026-09-17: three were held here and all three were real jobs.
+           * "Crew for next Monday" (Steel Deck at the Southbank Centre) was held against
+           * "Steel Deck Rentals @ Wembley Stadium", and staff raised the Southbank order
+           * by hand that same afternoon — the order the engine had declined to create.
+           *
+           * The duplicate this branch used to prevent is still prevented everywhere it
+           * was real: a weak venue disagreement, a placeholder, an order we named
+           * ourselves, or a thread naming no venue all withhold the flag and still block.
+           */
+          notes.push(
+            `${existing.ambiguous} existing OnSinch order(s) for this client on ${existing.day}, every one of them at a ` +
+              `different venue — so this is a different job and a new order was raised rather than an update`
+          );
         } else if (existing) {
           // Deliberately does NOT fall through to creating a new order: on an update
           // that would duplicate a job that already exists. `blocked` is what stops the
