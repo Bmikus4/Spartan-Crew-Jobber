@@ -138,8 +138,17 @@ console.log("\n[5] the fail-open shape is gone from every route, and stays gone"
     // `if (!secret) return true` and `if (secret && ...)` — both mean "no secret, no gate".
     const failsOpen = /!secret\s*\)\s*return\s+true/.test(src) || /if\s*\(\s*secret\s*&&/.test(src);
     ok(!failsOpen, `${r}: no "unconfigured means allowed" branch`);
-    const usesTheRule = /decideMachineCall|authorizeMachineCall/.test(src);
-    ok(usesTheRule, `${r}: defers to the shared rule rather than re-deciding`);
+    // Named functions were listed here until /api/mail-inbound needed a third — its
+    // caller is a mail provider that cannot set a header, so the secret arrives in the
+    // URL. A list of approved names says a route may only use the gates that existed
+    // when this was written; what actually matters is that the DECISION is imported
+    // from apiAuth rather than made here, so that is what is checked. A route defining
+    // its own authorizeAnything() locally still fails, which is the point.
+    const importsTheRule = /import\s*\{([^}]*)\}\s*from\s*["'][^"']*lib\/apiAuth["']/.exec(src);
+    const gate = (importsTheRule?.[1] ?? "").split(",").map((s) => s.trim()).filter(Boolean);
+    const usesTheRule = gate.some((g) => new RegExp(`\\b${g}\\s*\\(`).test(src));
+    ok(usesTheRule, `${r}: defers to the shared rule rather than re-deciding`,
+       gate.length ? gate.join(", ") : "nothing imported from lib/apiAuth");
     }
   }
 }

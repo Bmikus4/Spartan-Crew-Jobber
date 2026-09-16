@@ -160,6 +160,67 @@ export async function storeThreadMessages(payload: unknown):
 }
 
 /**
+ * Store one message. The routing-rule intake receives messages, not threads, so it
+ * has nothing to hand storeThreadMessages — and inventing a one-message payload just
+ * to take it apart again would put the shape-guessing of messagesFromPayload on a path
+ * that already knows exactly what it has.
+ *
+ * Returns false when the row was already there, which is how a provider retry (Mailgun
+ * retries for eight hours) costs nothing.
+ */
+export async function storeMessage(m: StoredMessage): Promise<{ ok: boolean; inserted: boolean }> {
+  const sql = db();
+  if (!sql) return { ok: false, inserted: false };
+  try {
+    await ensure(sql);
+    const rows = (await sql`
+      INSERT INTO thread_messages
+        (message_id, thread_id, from_address, to_addresses, date_iso, subject, body, is_from_spartan)
+      VALUES (${m.message_id}, ${m.thread_id}, ${m.from_address},
+              ${JSON.stringify(m.to_addresses ?? [])}, ${m.date_iso}, ${m.subject},
+              ${m.body}, ${m.is_from_spartan})
+      ON CONFLICT (message_id) DO NOTHING
+      RETURNING message_id`) as { message_id: string }[];
+    return { ok: true, inserted: rows.length > 0 };
+  } catch (err) {
+    console.error("[thread_messages] store one failed", err);
+    return { ok: false, inserted: false };
+  }
+}
+
+/**
+ * Which thread holds any of these message ids — answering for the FIRST one present,
+ * in the order given.
+ *
+ * Order is the whole point and is the caller's, not the database's: referenceIdsOf
+ * hands them over nearest ancestor first, so when a chain crosses two stored threads
+ * the closer one wins. Returning whatever Postgres happened to sort first would make
+ * that arbitrary, and fusing both would be a merge — two jobs on one conversation.
+ */
+export async function threadIdForMessageIds(ids: string[]):
+  Promise<{ id: string; thread_id: string } | null> {
+  if (!ids.length) return null;
+  const sql = db();
+  if (!sql) return null;
+  try {
+    await ensure(sql);
+    const rows = (await sql`
+      SELECT message_id, thread_id FROM thread_messages
+      WHERE message_id = ANY(${ids})`) as { message_id: string; thread_id: string }[];
+    if (!rows.length) return null;
+    const byId = new Map(rows.map((r) => [r.message_id, r.thread_id]));
+    for (const id of ids) {
+      const t = byId.get(id);
+      if (t) return { id, thread_id: t };
+    }
+    return null;
+  } catch (err) {
+    console.error("[thread_messages] reference lookup failed", err);
+    return null;
+  }
+}
+
+/**
  * Rebuild a thread in the exact shape engine/intake.ts coerceThread accepts, so a replay
  * does not need the original POST body. This is what makes storing the payload N times
  * unnecessary.

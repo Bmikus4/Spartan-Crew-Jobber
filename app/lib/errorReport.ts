@@ -37,13 +37,17 @@ export type Severity = "alert" | "log";
  * not running cannot report that it is not running. It is asked from outside on a schedule —
  * see app/api/health/intake. The other three are the engine reporting on itself.
  */
-export type Route = "booking-lost" | "write-unconfirmed" | "engine-threw" | "intake-quiet";
+export type Route = "booking-lost" | "write-unconfirmed" | "engine-threw" | "intake-quiet" | "mail-undeliverable";
 
 const ROUTE_TITLE: Record<Route, string> = {
   "booking-lost": "A BOOKING WAS LOST",
   "write-unconfirmed": "A WRITE COULD NOT BE CONFIRMED",
   "engine-threw": "THE ENGINE THREW",
   "intake-quiet": "THE INTAKE WENT QUIET",
+  // The routing-rule intake received a delivery with no raw MIME in it, which means the
+  // provider is configured for its own parsed JSON. Mail keeps arriving and keeps being
+  // shelved unread, so this is silent without a report.
+  "mail-undeliverable": "MAIL ARRIVED IN A SHAPE WE CANNOT READ",
 };
 
 /** Default gap between emails about the same thing. Long enough to stop a flood, short enough

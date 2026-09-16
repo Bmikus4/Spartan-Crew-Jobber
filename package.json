@@ -57,7 +57,9 @@
     "backfill:messages": "node scripts/backfill-thread-messages.mjs",
     "backfill:envelope": "node scripts/backfill-envelope.mjs",
     "db:reclaim": "node scripts/db-reclaim.mjs",
-    "verify:e2e": "node scripts/verify-intake-e2e.mjs"
+    "verify:e2e": "node scripts/verify-intake-e2e.mjs",
+    "test:mail": "tsx test/mailInbound.ts",
+    "verify:mail": "node scripts/verify-mail-inbound.mjs"
   },
   "dependencies": {
     "@neondatabase/serverless": "^0.10.4",

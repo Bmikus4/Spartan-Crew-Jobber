@@ -22,7 +22,11 @@ import { safeEqual } from "./app/lib/safeEqual";
 //    that is not running cannot report that it is not running. Read-only: one MAX() over
 //    inbound_raw.received_at, and it refuses an unconfigured caller in production like
 //    every other machine route.
-const SKIP = ["/api/auth", "/api/n8n-inbound", "/api/dedupe", "/api/sweep-ingest", "/api/health"];
+//  - /api/mail-inbound   the routing-rule intake. Its caller is a mail provider, which
+//    POSTs a fixed request shape and cannot add a custom header — so it authenticates on
+//    a secret inside the webhook URL (HTTP Basic, or ?k=) and the route does that check
+//    itself. Same fail-closed-in-production rule as the others.
+const SKIP = ["/api/auth", "/api/n8n-inbound", "/api/mail-inbound", "/api/dedupe", "/api/sweep-ingest", "/api/health"];
 
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;

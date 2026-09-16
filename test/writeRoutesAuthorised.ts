@@ -49,9 +49,12 @@ const WRITES = /export\s+async\s+function\s+(POST|PUT|PATCH|DELETE)\b/;
  * with no credentials at all; either would let something that is not a person record a
  * terms acceptance, or a profile, IN A NAMED PERSON'S NAME. Every row that route writes is
  * filed under the caller's own email, so the caller has to be somebody.
+ *
+ * authorizeMailWebhook is the machine rule again with the secret read from the URL instead
+ * of a header, because a mail provider POSTs a fixed request shape and cannot add one.
  */
 const AUTHORITY =
-  /authorizeAction|authorizeMachineCall|ADMIN_SECRET|WEBHOOK_SECRET|INTERNAL_API_SECRET|safeEqual|getIronSession/;
+  /authorizeAction|authorizeMachineCall|authorizeMailWebhook|ADMIN_SECRET|WEBHOOK_SECRET|INTERNAL_API_SECRET|safeEqual|getIronSession/;
 
 console.log("\n[1] the sweep found the routes");
 ok(routes.length >= 8, `${routes.length} route files under app/api`, routes.join(" "));
