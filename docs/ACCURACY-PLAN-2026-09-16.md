@@ -30,7 +30,7 @@ refuses to quote it.
 | venue *text* (adjudicated by hand) | **122/124, 98.4%** | — | 2 real misses |
 | linking — one order, two different jobs | **0 of 178** | — | bar met on this population |
 | binds pointing at a deleted order | **109 of 287, 38%** | — | **the largest number in the system** |
-| classification | **unmeasured** | — | 256 of 638 called `not-a-job` on no evidence |
+| classification, `not-a-job` | **0 of 63 falsified** | pos. control 58% | ceiling ~4.8%, on 25% of the population |
 | crew / block shape | **unmeasurable** | — | hard API gate |
 | the four labels | **unmeasured, no instrument** | — | |
 
@@ -69,22 +69,37 @@ only measured number that represents *work a human had to redo*.
 
 **Estimated ceiling:** unknown until the sweep is scored. **Cost:** one scoring run, free.
 
-### 2. Classification — 256 of 638 threads called `not-a-job`, on no evidence at all
+### 2. Classification — built and run 2026-09-16; the answer is better than expected
 
-**Nothing measures this.** OnSinch holds no opinion about whether a thread was a job, and
-labels produced by a model and scored by a model are a mirror. `data/testset/truth.jsonl`
-holds 11 classification rows read by hand — a sample, not a measurement.
+This was ranked second as the highest-value instrument still unbuilt. It is now built
+(`study/najFalsifier.ts`, `npm run score:naj`) and the result changes the ranking.
 
-It sits second because of its size: 40% of every thread the engine sees ends here, and a
-`not-a-job` is silent. A wrong `new-job` gets noticed when an order appears; a wrong
-`not-a-job` is a booking that never happened and nobody knows.
+The question needs no labels: *does this thread's client have an order in OnSinch on a date
+the thread itself names?* The client comes from a sender-domain map learned from the
+engine's own successful resolutions; the dates come from explicit text only.
 
-**The falsifier that would work, and does not need labels:** a thread called `not-a-job`
-whose client has an order in OnSinch on a date the thread names. That is objective, needs
-only a full order pull, and would put a floor under the error rate. **This is the single
-highest-value instrument still unbuilt.**
+| | |
+| --- | --- |
+| positive control — the same question on `new-job` / `update` threads | **29/50, 58%** |
+| `not-a-job` | **0/63, 0%** |
+| control, the same dates asked of a different client | 3.2% |
+| control, the same client a year earlier | 0% |
 
-**Cost:** one order pull plus a date/company join. No model calls.
+The positive control is the whole instrument. A threshold that never fires and one that
+fires correctly on nothing look identical from outside; this one demonstrably finds orders
+58% of the time when they are there, and finds none here. **0 of 63 puts the 95% upper
+bound on the miss rate at about 4.8% over this population.** A ceiling, not a score.
+
+**What it cannot see, and this is now the open question rather than classification itself:**
+171 of the 256 `not-a-job` threads have a sender domain mapping to no known client, and 22
+name no explicit date. So this covers 25% of the population, and **a missed booking from a
+brand-new client falls in exactly the blind spot** — a client with no history has no
+domain mapping, which is precisely the thread that is hardest and most valuable to get
+right.
+
+**The work that follows, and it is small:** widen the domain map using OnSinch's own client
+contact emails (`companyClients`) rather than only the engine's prior resolutions. That
+converts a large part of the 171 into askable threads and is one API pull.
 
 ### 3. The four labels — the one mechanism in §4's table covered by nothing
 
@@ -147,8 +162,10 @@ be made, and not because the engine misses — because three of the eight mechan
 table have no instrument at all**, and one of them (classification) decides the fate of 40%
 of all traffic.
 
-So the next work is not accuracy work. It is **two cheap instruments** — the `not-a-job`
-falsifier and the label check — and **one scoring run** against the 109 dead binds. Only
-after those does it make sense to spend a day on the resolver.
+So the next work is not accuracy work. The `not-a-job` falsifier is now built and returned
+a clean zero against a working control. What remains is **one cheap instrument** — the label
+check — **one scoring run** against the 109 dead binds, and **one API pull** to widen the
+falsifier's domain map from 25% of the population to most of it. Only after those does it
+make sense to spend a day on the resolver.
 
 **Nothing in this file is a reason to change engine behaviour yet.** Measure first.
