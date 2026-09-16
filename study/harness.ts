@@ -29,6 +29,7 @@
 import { existsSync, mkdirSync, readFileSync, copyFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
+import { engineBuildId } from "./buildid";
 
 const ROOT = join(import.meta.dirname, "..");
 const TMP = join(ROOT, ".tmp-data", "study");
@@ -170,6 +171,26 @@ function selftest(): void {
        `gap ${(rp - sp).toFixed(1)} points`);
   } else {
     console.log("  SKIP  fewer than 20 scored threads on disk — run a labelled run first");
+  }
+
+  console.log("\n[7] the answers on disk were produced by the build about to be scored");
+  // The engine leg resumes by thread id so a dead run need not be re-bought. Keyed on
+  // the id alone it also resumed across a CODE CHANGE: the 2026-09-17 --label=after run
+  // made zero model calls, wrote a file byte-identical to --label=before, and reported
+  // the same 79% for a build that had changed. A before/after that cannot see a change
+  // is worse than no harness, because it reads as a finding.
+  {
+    const rows = jsonl(join(TMP, "real-engine.jsonl"));
+    if (!rows.length) {
+      console.log("  SKIP  no engine answers on disk — run a labelled run first");
+    } else {
+      const want = engineBuildId(ROOT);
+      const builds = new Set(rows.map((r) => String(r.build ?? "(none)")));
+      ok(builds.size === 1, "every answer came from ONE build", [...builds].join(", "));
+      ok(builds.has(want), "and that build is the engine source as it stands now",
+         builds.has(want) ? `build ${want}`
+                          : `on disk ${[...builds].join(",")} vs source ${want} — re-run the engine leg`);
+    }
   }
 
   console.log("\n[6] no ruling is applied to an answer the engine no longer gives");

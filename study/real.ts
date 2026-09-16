@@ -35,6 +35,7 @@
 import { createReadStream, existsSync, mkdirSync, readFileSync, writeFileSync, appendFileSync } from "node:fs";
 import { createInterface } from "node:readline";
 import { join } from "node:path";
+import { engineBuildId } from "./buildid";
 
 const argv = process.argv.slice(2);
 const has = (f: string) => argv.includes(f);
@@ -48,6 +49,7 @@ const CEILING = numOf("ceiling", 6);
 
 const ROOT = join(import.meta.dirname, "..");
 const OUT = join(ROOT, ".tmp-data", "study");
+
 mkdirSync(OUT, { recursive: true });
 const SAMPLE = join(OUT, "real-sample.json");
 const STANDARD = join(OUT, "real-standard.jsonl");
@@ -331,11 +333,25 @@ async function engineRun() {
   console.log(`engine: ${model} — ${places.length} places, ${companies.length} companies`);
 
   const threads: RealThread[] = JSON.parse(readFileSync(SAMPLE, "utf8")).slice(0, N);
-  const done = existsSync(ENGINE)
-    ? new Set(readFileSync(ENGINE, "utf8").trim().split("\n").filter(Boolean).map((l) => JSON.parse(l).thread_id))
-    : new Set<string>();
+  // Resume ONLY within the same engine build — see engineBuildId. An answer from
+  // another build is not a saving, it is the previous run's result wearing this run's
+  // label. Rows with no build at all predate the fingerprint and count as another build.
+  const build = engineBuildId();
+  let rows: any[] = existsSync(ENGINE)
+    ? readFileSync(ENGINE, "utf8").trim().split("\n").filter(Boolean).map((l) => JSON.parse(l))
+    : [];
+  const foreign = rows.filter((r) => r.build !== build).length;
+  if (foreign) {
+    // Rewriting the file rather than filtering in memory: the answers being discarded
+    // describe a build that no longer exists, and leaving them on disk invites the next
+    // reader to average two engines together.
+    rows = rows.filter((r) => r.build === build);
+    writeFileSync(ENGINE, rows.map((r) => JSON.stringify(r)).join("\n") + (rows.length ? "\n" : ""), "utf8");
+  }
+  const done = new Set(rows.map((r) => r.thread_id));
   const todo = threads.filter((t) => !done.has(t.thread_id));
-  console.log(`  ${threads.length} threads, ${done.size} already done`);
+  console.log(`  ${threads.length} threads, ${done.size} already done on build ${build}`);
+  if (foreign) console.log(`  ${foreign} answer(s) discarded — they came from a different engine build and will be re-run`);
 
   const page = (rows: unknown[]) => ({ status: 200, data: { data: rows, pagination: { count: rows.length, pageCount: 1, nextPage: false } } });
 
@@ -483,7 +499,7 @@ async function engineRun() {
           size: x.size, profession_id: x.profession_id, place_id: x.place_id, beginning: x.beginning, end: x.end,
         }));
         appendFileSync(ENGINE, JSON.stringify({
-          thread_id: t.thread_id, stratum: t.stratum,
+          thread_id: t.thread_id, stratum: t.stratum, build,
           classification: state.classification, cancellation: state.cancellation ?? false,
           status: state.status, needs_human: state.needs_human,
           place_id: state.place_id ?? null, company_id: state.company_id ?? null,
@@ -491,7 +507,7 @@ async function engineRun() {
           provisioned, wire,
         }) + "\n");
       } catch (e) {
-        appendFileSync(ENGINE, JSON.stringify({ thread_id: t.thread_id, stratum: t.stratum, error: String((e as Error).message).slice(0, 400) }) + "\n");
+        appendFileSync(ENGINE, JSON.stringify({ thread_id: t.thread_id, stratum: t.stratum, build, error: String((e as Error).message).slice(0, 400) }) + "\n");
       }
       n++;
     }));
