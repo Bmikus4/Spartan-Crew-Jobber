@@ -319,6 +319,7 @@ async function engineRun() {
   const { DEFAULT_SETTINGS } = await import("../app/lib/engine/types");
   const { createOpenRouterReasoner, createVenueJudge } = await import("../app/lib/engine/reason");
   const { guardReasoner } = await import("../app/lib/engine/spend");
+  const { amendOrderInPlace } = await import("../app/lib/engine/amendOrder");
   const { loadPlaces, loadProfessions } = await import("./rig");
   const { createHash } = await import("node:crypto");
 
@@ -337,6 +338,43 @@ async function engineRun() {
   console.log(`  ${threads.length} threads, ${done.size} already done`);
 
   const page = (rows: unknown[]) => ({ status: 200, data: { data: rows, pagination: { count: rows.length, pageCount: 1, nextPage: false } } });
+
+  // -------------------------------------------------------------------------
+  // THE STANDING ORDERS THE ENGINE IS ALLOWED TO SEE.
+  //
+  // This fixture answered /orders with an empty list, so every thread arrived in a
+  // world where the tenant had never booked anything. matchExistingOrder had nothing
+  // to bind to and the linking step — the one the "wrong less than 1% of the time"
+  // bar is written about — could not be exercised at all. rates.ts was equally blind:
+  // with no order history every company drew an assumed rate card, which is the gate
+  // that holds a booking, so the study held far more threads than production would.
+  //
+  // THE CUTOFF IS THE WHOLE INTEGRITY OF THIS. Serving today's orders would hand the
+  // engine the answer: for most of these threads the order that exists now is the one
+  // a human raised IN RESPONSE to this very mail, and the engine would "find" it and
+  // score a free link. That is the same self-answering failure this leg was built to
+  // avoid, arriving through the back door.
+  //
+  // So the cutoff is the thread's FIRST message, and orders are served only if they
+  // were created strictly before it. A genuine standing order — the booking an
+  // `update` thread is about — was raised in response to some EARLIER conversation and
+  // predates this one. Anything created after this thread opened is either the thread's
+  // own consequence or news the engine could not have had.
+  // -------------------------------------------------------------------------
+  const ORDERS_CACHE = join(ROOT, ".tmp-data", "orders-with-job.json");
+  if (!existsSync(ORDERS_CACHE)) {
+    throw new Error(`no order cache at ${ORDERS_CACHE} — run: npx tsx study/najFalsifier.ts (it pulls and caches them)`);
+  }
+  const allOrders: any[] = JSON.parse(readFileSync(ORDERS_CACHE, "utf8")).orders ?? [];
+  const ordersByCompany = new Map<number, any[]>();
+  for (const o of allOrders) {
+    const cid = Number(o.company_id);
+    if (!Number.isFinite(cid)) continue;
+    if (!ordersByCompany.has(cid)) ordersByCompany.set(cid, []);
+    ordersByCompany.get(cid)!.push(o);
+  }
+  console.log(`standing orders: ${allOrders.length} across ${ordersByCompany.size} companies, served only where created < the thread's first message`);
+  let servedTotal = 0, servedThreads = 0;
   let n = 0, usd = 0;
 
   for (let i = 0; i < todo.length; i += 3) {
@@ -345,6 +383,10 @@ async function engineRun() {
       const wire: string[] = [];
       const provisioned: Array<{ id: number; name: string }> = [];
       let nextPlace = 990000;
+      // The thread's FIRST message, not its last. See the note on the order fixture:
+      // an order created after this conversation opened is either its own consequence
+      // or news the engine could not have had.
+      const cutoff = Date.parse(t.messages[0]?.date_iso || t.first_date || "2026-01-01T00:00:00Z") || 0;
       __resetListCache();
       const transport: any = async (method: string, path: string, body: unknown) => {
         if (method !== "GET") wire.push(`${method} ${path.split("?")[0]}`);
@@ -360,7 +402,21 @@ async function engineRun() {
         if (path.startsWith("/attendance")) return page([]);
         if (path.startsWith("/places")) return page(places);
         if (path.startsWith("/companies")) return page(companies);
-        if (path.startsWith("/orders")) return page([]);
+        if (path.startsWith("/orders")) {
+          // Only ever answers for a NAMED company, which is what companyOrdersWithJob
+          // asks. An unfiltered /orders would hand over the whole tenant, and nothing in
+          // the engine wants that — a fixture more generous than the API teaches the
+          // engine habits production will not support.
+          const cid = Number(new URLSearchParams(path.split("?")[1] ?? "").get("company_id"));
+          if (!Number.isFinite(cid)) return page([]);
+          const rows = (ordersByCompany.get(cid) ?? []).filter((o) => {
+            const at = Date.parse(String(o.created ?? ""));
+            return Number.isFinite(at) && at < cutoff;
+          });
+          servedTotal += rows.length;
+          if (rows.length) servedThreads++;
+          return page(rows);
+        }
         return page([]);
       };
       const onsinch = new OnsinchClient(transport);
@@ -370,9 +426,15 @@ async function engineRun() {
       // roll every unyeared date forward a year and score the engine wrong for
       // an artefact of when the study happened to run.
       let clock = Date.parse(t.messages[t.messages.length - 1]?.date_iso || t.last_date || "2026-09-01T09:00:00Z") || Date.now();
+      let lastSeen = 0;
       const guarded = guardReasoner(createOpenRouterReasoner({ apiKey, model }), {
         model, label: `real ${t.thread_id}`, limit: 10,
-        onCall: (r: any) => { usd = Math.max(usd, usd); },
+        // `usd = Math.max(usd, usd)` — a no-op, so --ceiling did nothing on this leg and
+        // its only real protection was guardReasoner's per-thread limit of 10 calls. A
+        // hundred threads could therefore have spent a thousand calls before anything
+        // complained, which is the exact shape of the $57 night in August. Each thread's
+        // guard reports its OWN running estimate, so the deltas accumulate, never the totals.
+        onCall: (r: any) => { const e = Number(r?.estimatedUsd) || 0; usd += Math.max(0, e - lastSeen); lastSeen = e; },
       });
       const deps: any = {
         reasoner: guarded, onsinch, now: () => ++clock, store: new InMemoryStore(),
@@ -386,7 +448,26 @@ async function engineRun() {
           createInternalDraft: async () => "no-draft",
           createOrder: async (order: any) => createOrderWithPlace(onsinch, order),
           patchOrder: async () => [],
-          amendOrderInPlace: async () => ({ declined: true }),
+          /**
+           * THE REAL amendOrderInPlace, not a stub that always declines.
+           *
+           * It was `async () => ({ declined: true })`, which is a fixture that hands the
+           * engine a guaranteed failure. It cost nothing while /orders answered empty —
+           * with no standing order to match, the amend path was never reached. The moment
+           * real orders were seeded it became six of the eleven threads that stopped
+           * booking, every one of them reported as "update NOT applied ... must be applied
+           * by hand" and scored against the ENGINE. That is the harness failing and the
+           * engine taking the blame, which is the one failure this whole leg exists to
+           * avoid, arriving through the fixture instead of through the answer.
+           *
+           * The transport above already answers PATCH 204 and POST /slotTeams 201, so the
+           * production function runs against it exactly as it runs against OnSinch.
+           */
+          amendOrderInPlace: async (p: any) => amendOrderInPlace(
+            onsinch,
+            { order_id: p.order_id, previous: p.previous, desired: p.desired, alreadyCreated: p.alreadyCreated, known: p.known },
+            { onCreated: p.onCreated }
+          ),
           replaceOrder: async () => ({ created: null }),
           identifiersForOrder: async () => ({}),
         },
