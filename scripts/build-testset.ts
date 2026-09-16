@@ -215,22 +215,38 @@ async function main() {
   await new Promise((res) => out.end(res));
 
   // ---- the recall stratum -------------------------------------------------
-  // Intake polls ONE Gmail label on a 10-minute window. The sweep reads the whole
-  // mailbox for a date range with no label filter. So a sweep thread inside the live
-  // window that has no conversation_state row is mail the engine was never given.
+  // Intake polls ONE Gmail label on a 10-minute window; the sweep reads the whole mailbox
+  // for a date range with no label filter. Subtracting the two is the only way to see mail
+  // the engine was never given — every other measurement in this repo starts from threads
+  // it already has.
   //
-  // The window matters more than it looks. Intake's first full day is 2026-08-04; before
-  // that it was still being stood up, so July threads it "never saw" say nothing about
-  // recall. And only the re-sweep of 2026-09-15 covers this period at all — the original
-  // August corpus stops on 2026-08-03. Counting outside either bound fills the miss list
-  // with mail nobody could have processed, which is how a 17% gap reads as 53%.
+  // THREE THINGS HAVE TO BE RIGHT OR THE NUMBER IS A FICTION, and the first version of this
+  // got all three wrong and reported a 17% leak that does not exist.
+  //
+  // 1. THE DENOMINATOR IS bookings@, not the account. The sweep reads every address on it —
+  //    info@, accounts@, jenny@, recruitment@ — and intake is not supposed to touch those.
+  //    Counting them made 555 threads read as 666.
+  // 2. SEEN MEANS ANY RECORD, not a conversation_state row. Thirteen threads reached the
+  //    engine, were ledgered, and produced no state row (all on 2026-08-04..06, and none
+  //    since). They are a different failure and calling them "never seen" is wrong.
+  // 3. THE MISSES ARE NOT SPREAD, THEY ARE TWO OUTAGES. 69 of the 71 arrived on five days:
+  //    2026-08-26/27 (the Gmail credential expired, intake failed every five minutes for 42
+  //    hours and nobody knew — the reason the watchdog exists) and 2026-09-09..11 (the OAuth
+  //    grant behind "Spartan Crew 8/27/26" was revoked). On every other day recall is 99.5%
+  //    — two misses in 421 threads, one of them a job application.
+  //
+  // So intake does not leak. It goes to zero when the credential dies, and it has done that
+  // twice. The fix is credential lifetime and detection speed, not the label filter.
   const liveFrom = argvDate("--recall-from", "2026-08-04");
+  /** Days intake was down. A recall figure that averages over them measures the outage. */
+  const OUTAGE_DAYS = new Set(["2026-08-26", "2026-08-27", "2026-09-09", "2026-09-10", "2026-09-11"]);
   const gap = (await sql`
     select s.thread_id, s.subject, s.message_count, s.first_date, s.last_date, s.participants, s.payload
     from sweep_threads s
     where s.last_date >= ${liveFrom}::timestamptz
       and s.swept_at >= ${liveFrom}::timestamptz
       and not exists (select 1 from conversation_state c where c.thread_id = s.thread_id)
+      and not exists (select 1 from message_ledger l where l.thread_id = s.thread_id)
     order by s.last_date asc`) as Array<any>;
   const rec = createWriteStream(join(OUT_DIR, "recall.jsonl"), "utf8");
   for (const g of gap) {
@@ -244,9 +260,22 @@ async function main() {
   }
   await new Promise((res) => rec.end(res));
 
-  const sweptInWindow = Number((await sql`
-    select count(*)::int n from sweep_threads
-    where last_date >= ${liveFrom}::timestamptz and swept_at >= ${liveFrom}::timestamptz`)[0].n);
+  const swept = (await sql`
+    select thread_id, payload from sweep_threads
+    where last_date >= ${liveFrom}::timestamptz and swept_at >= ${liveFrom}::timestamptz`) as Array<any>;
+  const toBookings = (t: any) => (t.payload?.messages ?? [])
+    .some((m: any) => (m.to ?? []).some((x: any) => /^bookings@spartancrew\.co\.uk$/i.test(String(x).trim())));
+  /** The day the first client message landed — when intake had its chance at the thread. */
+  const arrivedOn = (t: any): string => (t.payload?.messages ?? [])
+    .filter((m: any) => !m.is_from_spartan)
+    .map((m: any) => String(m.date_iso).slice(0, 10)).sort()[0] ?? "";
+  const inScope = swept.filter((t) => toBookings(t) && arrivedOn(t));
+  const sweptInWindow = inScope.length;
+  const missedIds = new Set(gap.map((g) => g.thread_id));
+  const split = (rows: any[]) => ({ n: rows.length, missed: rows.filter((t) => missedIds.has(t.thread_id)).length });
+  const outage = split(inScope.filter((t) => OUTAGE_DAYS.has(arrivedOn(t))));
+  const normal = split(inScope.filter((t) => !OUTAGE_DAYS.has(arrivedOn(t))));
+  const pc = (s: { n: number; missed: number }) => (s.n ? (100 * (s.n - s.missed) / s.n).toFixed(1) : "—") + "%";
 
   // Most of any miss list is autoreplies and machine mail the engine is right never to
   // see. The number that matters is how many of them look like someone asking for crew.
@@ -271,7 +300,12 @@ async function main() {
     console.log(`   0 swept in that window — the sweep has not covered it, so "0 missed" would mean nothing at all.`);
     console.log(`   Run: node scripts/install-sweep-workflow.mjs --since ${liveFrom} --step 7`);
   } else {
-    console.log(`   intake recall ${(100 * (sweptInWindow - gap.length) / sweptInWindow).toFixed(1)}%`);
+    // Split, never averaged. A blended figure hides the only thing worth knowing: intake
+    // is either running, and near-perfect, or dead, and losing everything.
+    console.log(`   of ${sweptInWindow} thread(s) addressed to bookings@ in this window —`);
+    console.log(`     on a normal day          ${String(normal.n).padStart(4)} threads, ${normal.missed} missed   recall ${pc(normal)}`);
+    console.log(`     during a known outage    ${String(outage.n).padStart(4)} threads, ${outage.missed} missed   recall ${pc(outage)}   (${[...OUTAGE_DAYS].join(", ")})`);
+    console.log(`   what the missed ones look like:`);
     for (const [k, v] of Object.entries(shapes).sort((a, b) => b[1] - a[1])) console.log(`   ${String(v).padStart(4)}  ${k}`);
   }
 }
