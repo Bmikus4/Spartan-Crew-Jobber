@@ -59,7 +59,8 @@
     "db:reclaim": "node scripts/db-reclaim.mjs",
     "verify:e2e": "node scripts/verify-intake-e2e.mjs",
     "test:mail": "tsx test/mailInbound.ts",
-    "verify:mail": "node scripts/verify-mail-inbound.mjs"
+    "verify:mail": "node scripts/verify-mail-inbound.mjs",
+    "verify:mail:engine": "tsx scripts/verify-mail-inbound-engine.ts"
   },
   "dependencies": {
     "@neondatabase/serverless": "^0.10.4",
