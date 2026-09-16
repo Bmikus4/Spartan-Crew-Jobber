@@ -62,8 +62,44 @@ intake. The list carries **no exemption for Internal apps, for Workspace domains
 admin-trusted clients**; it was checked for one. So no OAuth configuration, however well
 scoped, makes the token immortal.
 
+**It is a Workspace policy with no admin override**, set out in
+[Automatic OAuth 2.0 token revocation upon password change](https://support.google.com/a/answer/6328616):
+tokens issued for access to certain products are revoked automatically when a user changes
+their password, and third-party mail apps "and other applications that use mail scopes to
+access a user's mail" stop syncing until a new token is granted. The exceptions it lists are
+narrow and none of them is ours — Apps Script projects, Android account sync where the
+password change originated on that same device, and OAuth-authenticated Gmail IMAP sessions
+(which survive only for the access token's ~1 hour anyway). The admin FAQ answers whether
+re-setting an identical password counts (no, via Directory API with the same hash and salt)
+and whether Less Secure Apps affects it (it does not). **There is no setting that turns it
+off.**
+
+**This is a narrow exception to a correct general rule.** OAuth is right, and it is right for
+exactly the reason it is usually given: refresh tokens renew access without anyone
+re-entering a password, which app passwords and static IMAP credentials cannot do. That
+holds for every Google scope except this one case — mail scopes plus a password change — and
+this one case is the one Spartan lives in.
+
 **Therefore "sits above any credential changes" cannot mean the token never dies.** It has
 to mean the engine does not LOSE anything when it does.
+
+### What is NOT established, and how to settle it in two minutes
+
+The *mechanism* above is documented and certain. That a password change caused **these two
+outages** is inferred, not proved, and the inference should not be repeated as fact. Other
+entries on Google's list fit the evidence too — in particular **"the user account has
+exceeded a maximum number of granted (live) refresh tokens"** (the limit is 100, and older
+tokens then become invalid), which is a live risk here: this n8n instance holds eleven
+`gmailOAuth2` credentials and each reconnect mints another token for the same client and
+user. The credential named "Spartan Crew 8/27/26" was created the day after the August
+outage and died around 09-09 — roughly 13 days, which rules out the 7-day Testing clock but
+does not choose between the remaining causes.
+
+**Google Admin console → Reporting → Audit and investigation → Login audit log** records
+password changes, and the Token audit log records grants and revocations for a client id.
+Ten minutes there names the cause outright, and it is worth doing before building anything,
+because "too many live refresh tokens" is fixed by pruning credentials rather than by any of
+this.
 
 ## 3. The design: make completeness independent of uptime
 
