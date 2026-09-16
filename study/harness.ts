@@ -10,6 +10,7 @@
 //   npx tsx study/harness.ts --selftest             the leak guards. FREE. Run first.
 //   npx tsx study/harness.ts --label=before         full run, stored in data/study/before
 //   npx tsx study/harness.ts --label=after
+//   npx tsx study/harness.ts --label=X --fresh      re-buy the engine leg on an UNCHANGED build
 //   npx tsx study/harness.ts --diff=before,after    what actually moved, thread by thread
 //   npx tsx study/harness.ts --label=X --report     re-report a stored run, free
 //
@@ -17,6 +18,25 @@
 // which is wiped, so six weeks later it could not be found and was nearly re-bought.
 // A run that cannot be pointed at afterwards is an anecdote. --label is the whole
 // feature: it puts the raw output somewhere permanent next to the build that produced it.
+//
+// THE NOISE FLOOR, MEASURED 2026-09-16 — read this before believing any before/after.
+// Two runs of the SAME build (03826d0e9507), the engine leg re-bought both times:
+//
+//     after   77/99  = 77.8%        noise   79/100 = 79.0%
+//
+// THREE threads of 100 changed fault status with nothing whatsoever different, so the
+// band on the headline is about +/- 1.2 points and a change smaller than that CANNOT be
+// seen by one before/after pair, however real it is. Quote thread-level movement, not
+// the headline, until the change is bigger than the band.
+//
+// Where the three came from matters more than the count. The engine's own answer — what
+// it decided the thread WAS and whether it would book — differed on exactly ONE, and
+// that one was an OpenRouter timeout, not a judgement. The other two were fact
+// EXTRACTION moving underneath an unchanged verdict: "Quote - Forta Warehouse / Feb"
+// went from four field faults to one and "UKLE25-2934" from one to none, both of them
+// long many-block threads scored on dates, blocks and windows. Classification and
+// bookable are steady; the block-level extraction on long threads is not, and that is
+// where a variance-reduction effort belongs.
 //
 // THE THING THIS HARNESS IS DEFENDING AGAINST. Every previous accuracy number in this
 // repo was eventually found to be the test handing the engine its own answer — a 98.7%
@@ -26,7 +46,7 @@
 // engine. --selftest exists because that failure is not detectable by reading the
 // number. It has to be attacked.
 // ============================================================================
-import { existsSync, mkdirSync, readFileSync, copyFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, copyFileSync, writeFileSync, statSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 import { engineBuildId } from "./buildid";
@@ -173,6 +193,54 @@ function selftest(): void {
     console.log("  SKIP  fewer than 20 scored threads on disk — run a labelled run first");
   }
 
+  console.log("\n[8] every tenant cache is at least as new as the world the fixture serves");
+  /**
+   * THE CACHES DESCRIBE THE TENANT AT FOUR DIFFERENT DATES.
+   *
+   * Orders, companies, places and professions are four separate pulls, and on
+   * 2026-09-16 they were 22 days apart. The engine resolves a venue against the PLACES
+   * snapshot and then compares that answer to a venue written inside an ORDER name, so
+   * a place created between the two pulls is invisible on one side and present on the
+   * other. venueVerdict demotes what it cannot resolve to a weak verdict, which is the
+   * safe direction, but it is silent: the study would simply link less well than
+   * production and report it as engine accuracy.
+   *
+   * The bar is not "recent". It is that each cache covers the world the fixture
+   * actually serves, which the /orders cutoff bounds precisely: every order served was
+   * created before some thread's FIRST message, so no served order can post-date the
+   * latest first-message in the sample. A cache older than that horizon is scoring the
+   * engine against rows it was never shown.
+   */
+  {
+    const sample: any[] = existsSync(join(TMP, "real-sample.json"))
+      ? JSON.parse(readFileSync(join(TMP, "real-sample.json"), "utf8")) : [];
+    const cachePath = join(ROOT, ".tmp-data", "orders-with-job.json");
+    if (!sample.length || !existsSync(cachePath)) {
+      console.log("  SKIP  no sample or order cache on disk — run a labelled run first");
+    } else {
+      const day = (s: unknown) => String(s ?? "").slice(0, 10);
+      const at = (p: string) => (existsSync(p) ? statSync(p).mtime.toISOString().slice(0, 10) : "");
+      // Every order the fixture can serve was created before SOME thread's first message.
+      const horizon = sample.map((t) => day(t.messages?.[0]?.date_iso || t.first_date)).sort().pop()!;
+      // And the thread's later messages are answered in a world the cache must still cover.
+      const lastMsg = sample.map((t) => day(t.last_date)).sort().pop()!;
+
+      for (const [name, file] of [["places", "places.json"], ["companies", "companies.json"], ["professions", "professions.json"]] as const) {
+        const stamp = at(join(ROOT, ".tmp-data", file));
+        const days = stamp ? Math.round((Date.parse(stamp) - Date.parse(horizon)) / 864e5) : 0;
+        ok(!!stamp && stamp >= horizon, `${name} covers the newest order the fixture can serve`,
+           stamp ? `pulled ${stamp}, horizon ${horizon}, ${days >= 0 ? `${days}d of margin` : `${-days}d SHORT — re-pull it`}`
+                 : "cache missing");
+      }
+
+      const orders: any[] = JSON.parse(readFileSync(cachePath, "utf8")).orders ?? [];
+      const newest = orders.map((o) => day(o.created)).filter(Boolean).sort().pop() ?? "";
+      const days = newest ? Math.round((Date.parse(newest) - Date.parse(lastMsg)) / 864e5) : 0;
+      ok(orders.length > 0 && newest >= lastMsg, "the order cache runs past the last message in the sample",
+         `${orders.length} orders to ${newest}, sample ends ${lastMsg}, ${days >= 0 ? `${days}d of margin` : `${-days}d SHORT`}`);
+    }
+  }
+
   console.log("\n[7] the answers on disk were produced by the build about to be scored");
   // The engine leg resumes by thread id so a dead run need not be re-bought. Keyed on
   // the id alone it also resumed across a CODE CHANGE: the 2026-09-17 --label=after run
@@ -225,9 +293,28 @@ function selftest(): void {
 }
 
 // ---------------------------------------------------------------------------
-function runLabelled(label: string, reportOnly: boolean): void {
+function runLabelled(label: string, reportOnly: boolean, fresh = false): void {
   const dir = join(STORE, label);
   mkdirSync(dir, { recursive: true });
+
+  /**
+   * --fresh: RE-BUY THE ENGINE LEG ON A BUILD THAT HAS NOT CHANGED.
+   *
+   * Guard 7 makes a changed build re-run. Nothing makes an UNCHANGED build re-run, and
+   * it should not by default — that resume is what stops a crashed run costing twice.
+   * But it also means the harness can never be run twice on one build, and running it
+   * twice on one build is the only way to learn what the number does when NOTHING is
+   * different. That figure bounds every before/after this harness will ever produce: a
+   * change smaller than the spread between two identical runs cannot be seen by one
+   * pair, however real it is. Measured 2026-09-16 — see the header.
+   */
+  if (fresh && !reportOnly) {
+    const p = join(TMP, "real-engine.jsonl");
+    if (existsSync(p)) {
+      rmSync(p);
+      console.log("--fresh: discarded the engine answers on disk; this run re-buys all of them");
+    }
+  }
 
   if (reportOnly) {
     // Restore the stored run into the working files so --report reads THAT run and not
@@ -322,7 +409,7 @@ else if (flag("diff")) {
   if (!a || !b) throw new Error("--diff=before,after");
   diff(a, b);
 } else if (flag("label")) {
-  runLabelled(String(flag("label")), has("report"));
+  runLabelled(String(flag("label")), has("report"), has("fresh"));
 } else {
   console.log(readFileSync(join(ROOT, "study", "harness.ts"), "utf8").split("\n").slice(0, 28).join("\n"));
 }
