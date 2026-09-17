@@ -1,0 +1,1490 @@
+{
+ "deleted_at": "2026-09-17T00:31:56.620Z",
+ "why": "Ben, 2026-09-16, instruction given twice: remove the engine's unactioned To Confirm orders.",
+ "note": "OnSinch keeps no audit row for a delete and reuses order numbers. This file is the only record. Per-block SlotTeam rows are NOT captured -- unreadable without a service key -- but each order carries its Job row: headcount and venue in Job.name, plus min_beginning, max_end and pricelist_category_id.",
+ "count": 39,
+ "orders": [
+  {
+   "order": {
+    "id": 16096,
+    "company_id": 129,
+    "user_id": 2257,
+    "agency_invoice_address_id": 10,
+    "order_manager_id": 2257,
+    "name": "Encore at The Brewery — setup crew at The Brewery, 17 Sep",
+    "specification": "17 Sep - 4 crew 07:00-11:00 (Setup) + 2 crew 11:00-15:00 (Setup) at The Brewery -&gt; UPDATED: client requesting availability for updated times/date; second block now 4 hours from 11:00 (end 15:00)",
+    "number": "11084",
+    "status": 0,
+    "quote": false,
+    "provisional": false,
+    "reverse_charge": false,
+    "happening": "2026-09-17T06:00:00+00:00",
+    "created": "2026-09-16T19:53:21+00:00",
+    "modified": "2026-09-16T21:55:51+00:00",
+    "creator": 2257,
+    "modifier": 2257,
+    "intern_name": "PMi Awards 26-18461",
+    "request_approval": "1",
+    "Job": [
+     {
+      "id": 16153,
+      "order_id": 16096,
+      "supervisor_id": null,
+      "name": "4 at The Brewery, 52 Chiswell Street, London EC1Y 4SD on 2026-09-17",
+      "created": "2026-09-16T19:53:21+00:00",
+      "modified": "2026-09-16T19:53:21+00:00",
+      "creator": 2257,
+      "modifier": 2257,
+      "pricelist_category_id": 315,
+      "min_beginning": "2026-09-17T06:00:00+00:00",
+      "max_end": "2026-09-17T14:00:00+00:00"
+     }
+    ]
+   }
+  },
+  {
+   "order": {
+    "id": 16094,
+    "company_id": 353,
+    "user_id": 2257,
+    "agency_invoice_address_id": 10,
+    "order_manager_id": 2257,
+    "name": "IET — equipment move and build, 17 Sep",
+    "specification": "17th Sep 16:30-19:30 - 6 crew moving/building equipment at 2 Savoy Place WC2R 0BL -&gt; UPDATED: location confirmed as 2 Savoy Place WC2R 0BL, report to front entrance desk, onsite contacts Alex +44 7796 141375 / Josh +44 7712 522212",
+    "number": "11082",
+    "status": 0,
+    "quote": false,
+    "provisional": false,
+    "reverse_charge": false,
+    "happening": "2026-09-17T15:00:00+00:00",
+    "created": "2026-09-16T17:10:45+00:00",
+    "modified": "2026-09-16T17:40:59+00:00",
+    "creator": 2257,
+    "modifier": 2257,
+    "intern_name": null,
+    "request_approval": "1",
+    "Job": [
+     {
+      "id": 16151,
+      "order_id": 16094,
+      "supervisor_id": null,
+      "name": "4 at TBC on 2026-09-17",
+      "created": "2026-09-16T17:10:45+00:00",
+      "modified": "2026-09-16T17:10:45+00:00",
+      "creator": 2257,
+      "modifier": 2257,
+      "pricelist_category_id": 315,
+      "min_beginning": "2026-09-17T15:00:00+00:00",
+      "max_end": "2026-09-17T18:00:00+00:00"
+     }
+    ]
+   }
+  },
+  {
+   "order": {
+    "id": 16092,
+    "company_id": 697,
+    "user_id": 2257,
+    "agency_invoice_address_id": 10,
+    "order_manager_id": 2257,
+    "name": "Imagine X Global — load in & de-rig at 116 Pall Mall, 19 Sep",
+    "specification": "19 Sep 2026 - 2 crew load in 10:00-14:00, 2 crew de-rig 23:00-02:00 at 116 Pall Mall, London SW1Y 5ED",
+    "number": "11080",
+    "status": 0,
+    "quote": false,
+    "provisional": false,
+    "reverse_charge": false,
+    "happening": "2026-09-19T09:00:00+00:00",
+    "created": "2026-09-16T16:24:04+00:00",
+    "modified": "2026-09-16T16:24:04+00:00",
+    "creator": 2257,
+    "modifier": 2257,
+    "intern_name": null,
+    "request_approval": "1",
+    "Job": [
+     {
+      "id": 16149,
+      "order_id": 16092,
+      "supervisor_id": null,
+      "name": "2 at 116 Pall Mall, London, SW1Y 5ED on 2026-09-19",
+      "created": "2026-09-16T16:24:04+00:00",
+      "modified": "2026-09-16T16:24:04+00:00",
+      "creator": 2257,
+      "modifier": 2257,
+      "pricelist_category_id": 315,
+      "min_beginning": "2026-09-19T09:00:00+00:00",
+      "max_end": "2026-09-20T01:00:00+00:00"
+     }
+    ]
+   }
+  },
+  {
+   "order": {
+    "id": 16090,
+    "company_id": 852,
+    "user_id": 2257,
+    "agency_invoice_address_id": 10,
+    "order_manager_id": 2257,
+    "name": "Cogs and Marvel — local crew at Tobacco Dock, 4–6 Oct",
+    "specification": "4-6 Oct at Tobacco Dock, London E1W 2SF - 4th: 7am-4pm 1 crew chief + 11 crew, then 4pm-9pm 1 crew chief + 6 crew; 5th: 7am-7pm 1 crew chief + 6 crew; 6th: 5pm-1am (into 7th) 1 crew chief + 11 crew. Provisional numbers, quote requested.",
+    "number": "11078",
+    "status": 0,
+    "quote": false,
+    "provisional": false,
+    "reverse_charge": false,
+    "happening": "2026-10-04T06:00:00+00:00",
+    "created": "2026-09-16T16:19:06+00:00",
+    "modified": "2026-09-16T16:19:06+00:00",
+    "creator": 2257,
+    "modifier": 2257,
+    "intern_name": null,
+    "request_approval": "1",
+    "Job": [
+     {
+      "id": 16147,
+      "order_id": 16090,
+      "supervisor_id": null,
+      "name": "12 at Tobacco Dock, London, E1W 2SF on 2026-10-04",
+      "created": "2026-09-16T16:19:06+00:00",
+      "modified": "2026-09-16T16:19:06+00:00",
+      "creator": 2257,
+      "modifier": 2257,
+      "pricelist_category_id": 315,
+      "min_beginning": "2026-10-04T06:00:00+00:00",
+      "max_end": "2026-10-07T00:00:00+00:00"
+     }
+    ]
+   }
+  },
+  {
+   "order": {
+    "id": 16088,
+    "company_id": 594,
+    "user_id": 2257,
+    "agency_invoice_address_id": 10,
+    "order_manager_id": 2257,
+    "name": "OtherStuff — truck unload & load-in at 55 Bryanston Street, 17 Sep",
+    "specification": "Thursday 17.09.26 14:00-17:00 - 1 crew at 55 Bryanston Street, London W1H 7AP - unloading truck, lifting plinths/flats into venue (F&amp;F / Frameless Event Load-in)",
+    "number": "11076",
+    "status": 0,
+    "quote": false,
+    "provisional": false,
+    "reverse_charge": false,
+    "happening": "2026-09-17T13:00:00+00:00",
+    "created": "2026-09-16T16:14:08+00:00",
+    "modified": "2026-09-16T16:14:08+00:00",
+    "creator": 2257,
+    "modifier": 2257,
+    "intern_name": null,
+    "request_approval": "1",
+    "Job": [
+     {
+      "id": 16145,
+      "order_id": 16088,
+      "supervisor_id": null,
+      "name": "1 at 55 Bryanston Street London W1H 7AP on 2026-09-17",
+      "created": "2026-09-16T16:14:08+00:00",
+      "modified": "2026-09-16T16:14:08+00:00",
+      "creator": 2257,
+      "modifier": 2257,
+      "pricelist_category_id": 315,
+      "min_beginning": "2026-09-17T13:00:00+00:00",
+      "max_end": "2026-09-17T16:00:00+00:00"
+     }
+    ]
+   }
+  },
+  {
+   "order": {
+    "id": 16087,
+    "company_id": 298,
+    "user_id": 2257,
+    "agency_invoice_address_id": 10,
+    "order_manager_id": 2257,
+    "name": "TBA / Project 30 — NFL banksman & crew at Trafalgar Square, 7–11 Oct",
+    "specification": "Banksman + crew for NFL event at Trafalgar Square: Banks person Wed 07/10 07:00-19:00, Thurs 08/10 07:00-19:00, Sun 11/10 12:00-20:00; Crew x6 (inc crew boss) Thurs 08/10 09:00-18:00 and Sat 10/10 20:00-04:00 (overnight). Quote requested.",
+    "number": "11075",
+    "status": 0,
+    "quote": false,
+    "provisional": false,
+    "reverse_charge": false,
+    "happening": "2026-10-07T06:00:00+00:00",
+    "created": "2026-09-16T15:27:06+00:00",
+    "modified": "2026-09-16T15:27:07+00:00",
+    "creator": 2257,
+    "modifier": 2257,
+    "intern_name": null,
+    "request_approval": "1",
+    "Job": [
+     {
+      "id": 16144,
+      "order_id": 16087,
+      "supervisor_id": null,
+      "name": "1 at Trafalgar Square on 2026-10-07",
+      "created": "2026-09-16T15:27:06+00:00",
+      "modified": "2026-09-16T15:27:06+00:00",
+      "creator": 2257,
+      "modifier": 2257,
+      "pricelist_category_id": 197,
+      "min_beginning": "2026-10-07T06:00:00+00:00",
+      "max_end": "2026-10-11T19:00:00+00:00"
+     }
+    ]
+   }
+  },
+  {
+   "order": {
+    "id": 16079,
+    "company_id": 218,
+    "user_id": 2257,
+    "agency_invoice_address_id": 10,
+    "order_manager_id": 2257,
+    "name": "LUX Technical — de-rig at JP Morgan Victoria Embankment, 24 Sep",
+    "specification": "Crew member for de-rig on evening of 26th at JP Morgan Victoria Embankment -&gt; UPDATED: shift de-rig to evening of 24th; same or another approved (permitted) crew member requested. Note: no order in thread yet, but this references a prior booking made by Maddy (OOO).",
+    "number": "11068",
+    "status": 0,
+    "quote": false,
+    "provisional": false,
+    "reverse_charge": false,
+    "happening": "2026-09-24T07:00:00+00:00",
+    "created": "2026-09-16T13:56:01+00:00",
+    "modified": "2026-09-16T13:56:01+00:00",
+    "creator": 2257,
+    "modifier": 2257,
+    "intern_name": null,
+    "request_approval": "1",
+    "Job": [
+     {
+      "id": 16136,
+      "order_id": 16079,
+      "supervisor_id": null,
+      "name": "1 at JP Morgan Victoria Embankment on 2026-09-24",
+      "created": "2026-09-16T13:56:01+00:00",
+      "modified": "2026-09-16T13:56:01+00:00",
+      "creator": 2257,
+      "modifier": 2257,
+      "pricelist_category_id": 315,
+      "min_beginning": "2026-09-24T07:00:00+00:00",
+      "max_end": "2026-09-24T17:00:00+00:00"
+     }
+    ]
+   }
+  },
+  {
+   "order": {
+    "id": 16078,
+    "company_id": 61,
+    "user_id": 2257,
+    "agency_invoice_address_id": 10,
+    "order_manager_id": 2257,
+    "name": "Blackout — 2 crew at Freemasons Hall, 20 Sep",
+    "specification": "Sunday 20th September 2026 07:30 - 2 crew at Freemasons Hall - 6 hour shift. Site contact: Toby Bale 07948 379903",
+    "number": "11067",
+    "status": 0,
+    "quote": false,
+    "provisional": false,
+    "reverse_charge": false,
+    "happening": "2026-09-20T06:30:00+00:00",
+    "created": "2026-09-16T13:42:49+00:00",
+    "modified": "2026-09-16T13:42:49+00:00",
+    "creator": 2257,
+    "modifier": 2257,
+    "intern_name": null,
+    "request_approval": "1",
+    "Job": [
+     {
+      "id": 16135,
+      "order_id": 16078,
+      "supervisor_id": null,
+      "name": "2 at Freemasons Hall on 2026-09-20",
+      "created": "2026-09-16T13:42:49+00:00",
+      "modified": "2026-09-16T13:42:49+00:00",
+      "creator": 2257,
+      "modifier": 2257,
+      "pricelist_category_id": 315,
+      "min_beginning": "2026-09-20T06:30:00+00:00",
+      "max_end": "2026-09-20T12:30:00+00:00"
+     }
+    ]
+   }
+  },
+  {
+   "order": {
+    "id": 16077,
+    "company_id": 157,
+    "user_id": 2257,
+    "agency_invoice_address_id": 10,
+    "order_manager_id": 2257,
+    "name": "Forta Productions — crew at The Berkeley, 26 Sep",
+    "specification": "26/09/26 - 2 crew 07:30-13:30 and 3 crew 17:30-20:30 at The Berkeley, Wilton Pl, London SW1X 7RL",
+    "number": "11066",
+    "status": 0,
+    "quote": false,
+    "provisional": false,
+    "reverse_charge": false,
+    "happening": "2026-09-26T06:30:00+00:00",
+    "created": "2026-09-16T13:33:02+00:00",
+    "modified": "2026-09-16T13:33:02+00:00",
+    "creator": 2257,
+    "modifier": 2257,
+    "intern_name": null,
+    "request_approval": "1",
+    "Job": [
+     {
+      "id": 16134,
+      "order_id": 16077,
+      "supervisor_id": null,
+      "name": "2 at The Berkeley, Wilton Pl, London SW1X 7RL on 2026-09-26",
+      "created": "2026-09-16T13:33:02+00:00",
+      "modified": "2026-09-16T13:33:02+00:00",
+      "creator": 2257,
+      "modifier": 2257,
+      "pricelist_category_id": 315,
+      "min_beginning": "2026-09-26T06:30:00+00:00",
+      "max_end": "2026-09-26T19:30:00+00:00"
+     }
+    ]
+   }
+  },
+  {
+   "order": {
+    "id": 16076,
+    "company_id": 146,
+    "user_id": 2257,
+    "agency_invoice_address_id": 10,
+    "order_manager_id": 2257,
+    "name": "RG Jones — 3 crew truck tips at 16 Endeavour Way, 17 Sep",
+    "specification": "Thursday 17th September 9:30am (3hr call) - 3 crew at RG Jones, 16 Endeavour Way, Wimbledon SW19 8UH - truck tips. RGJ site contact: Sam Taylor 07944 232298",
+    "number": "11065",
+    "status": 0,
+    "quote": false,
+    "provisional": false,
+    "reverse_charge": false,
+    "happening": "2026-09-17T08:30:00+00:00",
+    "created": "2026-09-16T12:50:51+00:00",
+    "modified": "2026-09-16T12:50:51+00:00",
+    "creator": 2257,
+    "modifier": 2257,
+    "intern_name": null,
+    "request_approval": "1",
+    "Job": [
+     {
+      "id": 16133,
+      "order_id": 16076,
+      "supervisor_id": null,
+      "name": "3 at 16 Endeavour Way, London SW19 8UH on 2026-09-17",
+      "created": "2026-09-16T12:50:51+00:00",
+      "modified": "2026-09-16T12:50:51+00:00",
+      "creator": 2257,
+      "modifier": 2257,
+      "pricelist_category_id": 197,
+      "min_beginning": "2026-09-17T08:30:00+00:00",
+      "max_end": "2026-09-17T11:30:00+00:00"
+     }
+    ]
+   }
+  },
+  {
+   "order": {
+    "id": 16071,
+    "company_id": 851,
+    "user_id": 2257,
+    "agency_invoice_address_id": 10,
+    "order_manager_id": 2257,
+    "name": "Samurai Events — crew at 60 Great Queen Street, 17 Sep",
+    "specification": "17 Sep - 2 crew 07:00-11:00 and 3 crew 12:00-17:00 at 60 Great Queen Street -&gt; UPDATED: client (Leslie) pushes back on last-minute change, asks to confirm 3 crew already booked",
+    "number": "11061",
+    "status": 0,
+    "quote": false,
+    "provisional": false,
+    "reverse_charge": false,
+    "happening": "2026-09-17T06:00:00+00:00",
+    "created": "2026-09-16T11:38:06+00:00",
+    "modified": "2026-09-16T12:16:58+00:00",
+    "creator": 2257,
+    "modifier": 2257,
+    "intern_name": null,
+    "request_approval": "1",
+    "Job": [
+     {
+      "id": 16128,
+      "order_id": 16071,
+      "supervisor_id": null,
+      "name": "2 at 60 Great Queen Street, London, WC2B 5AZ on 2026-09-17",
+      "created": "2026-09-16T11:38:06+00:00",
+      "modified": "2026-09-16T11:38:06+00:00",
+      "creator": 2257,
+      "modifier": 2257,
+      "pricelist_category_id": 315,
+      "min_beginning": "2026-09-17T06:00:00+00:00",
+      "max_end": "2026-09-17T15:00:00+00:00"
+     }
+    ]
+   }
+  },
+  {
+   "order": {
+    "id": 16069,
+    "company_id": 8,
+    "user_id": 2257,
+    "agency_invoice_address_id": 10,
+    "order_manager_id": 2257,
+    "name": "LWE — show crew at Tobacco Dock, 29 Apr–3 May 2027",
+    "specification": "Tobacco Dock show 29 Apr - 3 May 2027 - multiple blocks: Thu 29 Apr 14 crew + 2 teledrivers (08:00-20:00); Fri 30 Apr 3 crew + 1 teledriver (08:00-16:00); Sat 1 May 2 crew (08:00-14:00); Sun 2 May 2 crew (08:00-14:00) + overnight 8 crew (23:00-08:00); Mon 3 May 10 crew + 2 teledrivers (08:00-13:00) and 4 crew + 2 teledrivers (13:00-20:00). Quote requested.",
+    "number": "11059",
+    "status": 0,
+    "quote": false,
+    "provisional": false,
+    "reverse_charge": false,
+    "happening": "2027-04-29T07:00:00+00:00",
+    "created": "2026-09-16T10:18:54+00:00",
+    "modified": "2026-09-16T10:18:55+00:00",
+    "creator": 2257,
+    "modifier": 2257,
+    "intern_name": null,
+    "request_approval": "1",
+    "Job": [
+     {
+      "id": 16126,
+      "order_id": 16069,
+      "supervisor_id": null,
+      "name": "14 at Tobacco Dock on 2027-04-29",
+      "created": "2026-09-16T10:18:54+00:00",
+      "modified": "2026-09-16T10:18:54+00:00",
+      "creator": 2257,
+      "modifier": 2257,
+      "pricelist_category_id": 342,
+      "min_beginning": "2027-04-29T07:00:00+00:00",
+      "max_end": "2027-05-03T19:00:00+00:00"
+     }
+    ]
+   }
+  },
+  {
+   "order": {
+    "id": 16065,
+    "company_id": 135,
+    "user_id": 2257,
+    "agency_invoice_address_id": 10,
+    "order_manager_id": 2257,
+    "name": "Westfield White City — local crew at Service Yard A, 17–18 Sept",
+    "specification": "Fri 18 Sep 10:00-13:00, 2 local crew -&gt; UPDATED: cancel one crew on the 10:00 Friday morning call (in-house guy covering), leaving 1. PO L5228 to follow (existing ref Q21176).",
+    "number": "11056",
+    "status": 0,
+    "quote": false,
+    "provisional": false,
+    "reverse_charge": false,
+    "happening": "2026-09-17T20:30:00+00:00",
+    "created": "2026-09-16T09:55:09+00:00",
+    "modified": "2026-09-16T14:42:05+00:00",
+    "creator": 2257,
+    "modifier": 2257,
+    "intern_name": "Q21176",
+    "request_approval": "1",
+    "Job": [
+     {
+      "id": 16122,
+      "order_id": 16065,
+      "supervisor_id": null,
+      "name": "6 at Westfield White City - Service Yard A on 2026-09-17",
+      "created": "2026-09-16T09:55:09+00:00",
+      "modified": "2026-09-16T09:55:09+00:00",
+      "creator": 2257,
+      "modifier": 2257,
+      "pricelist_category_id": 315,
+      "min_beginning": "2026-09-17T20:30:00+00:00",
+      "max_end": "2026-09-18T23:00:00+00:00"
+     }
+    ]
+   }
+  },
+  {
+   "order": {
+    "id": 16062,
+    "company_id": 51,
+    "user_id": 2257,
+    "agency_invoice_address_id": 10,
+    "order_manager_id": 2257,
+    "name": "Bespoke — crew at NHM, 17–18 Sep",
+    "specification": "17/9 5:30pm-8:30pm - 4 crew at NHM; 18/9 12:30am-3:30am - 6 crew at NHM (ref: 2689)",
+    "number": "11054",
+    "status": 0,
+    "quote": false,
+    "provisional": false,
+    "reverse_charge": false,
+    "happening": "2026-09-17T16:30:00+00:00",
+    "created": "2026-09-16T09:33:05+00:00",
+    "modified": "2026-09-16T09:33:06+00:00",
+    "creator": 2257,
+    "modifier": 2257,
+    "intern_name": "2689",
+    "request_approval": "1",
+    "Job": [
+     {
+      "id": 16119,
+      "order_id": 16062,
+      "supervisor_id": null,
+      "name": "4 at NHM on 2026-09-17",
+      "created": "2026-09-16T09:33:05+00:00",
+      "modified": "2026-09-16T09:33:05+00:00",
+      "creator": 2257,
+      "modifier": 2257,
+      "pricelist_category_id": 315,
+      "min_beginning": "2026-09-17T16:30:00+00:00",
+      "max_end": "2026-09-18T02:30:00+00:00"
+     }
+    ]
+   }
+  },
+  {
+   "order": {
+    "id": 16060,
+    "company_id": 741,
+    "user_id": 2257,
+    "agency_invoice_address_id": 10,
+    "order_manager_id": 2257,
+    "name": "Steeldeck — 2 crew at Olympia London, 17 Sep",
+    "specification": "Thursday 17/09 08:00-11:00 - 2 crew at Olympia London, Hammersmith Road, W14 8UX - onsite contact Kyle Saxton 07877868598",
+    "number": "11052",
+    "status": 0,
+    "quote": false,
+    "provisional": false,
+    "reverse_charge": false,
+    "happening": "2026-09-17T07:00:00+00:00",
+    "created": "2026-09-16T09:14:02+00:00",
+    "modified": "2026-09-16T09:14:02+00:00",
+    "creator": 2257,
+    "modifier": 2257,
+    "intern_name": null,
+    "request_approval": "1",
+    "Job": [
+     {
+      "id": 16117,
+      "order_id": 16060,
+      "supervisor_id": null,
+      "name": "2 at Olympia London, Hammersmith Road, London, W14 8UX on 2026-09-17",
+      "created": "2026-09-16T09:14:02+00:00",
+      "modified": "2026-09-16T09:14:02+00:00",
+      "creator": 2257,
+      "modifier": 2257,
+      "pricelist_category_id": 315,
+      "min_beginning": "2026-09-17T07:00:00+00:00",
+      "max_end": "2026-09-17T10:00:00+00:00"
+     }
+    ]
+   }
+  },
+  {
+   "order": {
+    "id": 16056,
+    "company_id": 291,
+    "user_id": 2257,
+    "agency_invoice_address_id": 10,
+    "order_manager_id": 2257,
+    "name": "Storm Lighting — 3 crew at Woking warehouse, 18 Sep",
+    "specification": "Friday 18th Sept 0900-1700 - 3 crew at Storm Lighting warehouse (GU21 5EN) - includes 1hr lunch within the shift",
+    "number": "11048",
+    "status": 0,
+    "quote": false,
+    "provisional": false,
+    "reverse_charge": false,
+    "happening": "2026-09-18T08:00:00+00:00",
+    "created": "2026-09-16T07:55:07+00:00",
+    "modified": "2026-09-16T07:55:07+00:00",
+    "creator": 2257,
+    "modifier": 2257,
+    "intern_name": null,
+    "request_approval": "1",
+    "Job": [
+     {
+      "id": 16113,
+      "order_id": 16056,
+      "supervisor_id": null,
+      "name": "3 at Warwick House, Monument Way West, Woking, Surrey, GU21 5EN on 2026-09-18",
+      "created": "2026-09-16T07:55:07+00:00",
+      "modified": "2026-09-16T07:55:07+00:00",
+      "creator": 2257,
+      "modifier": 2257,
+      "pricelist_category_id": 315,
+      "min_beginning": "2026-09-18T08:00:00+00:00",
+      "max_end": "2026-09-18T16:00:00+00:00"
+     }
+    ]
+   }
+  },
+  {
+   "order": {
+    "id": 16053,
+    "company_id": 771,
+    "user_id": 2257,
+    "agency_invoice_address_id": 10,
+    "order_manager_id": 2257,
+    "name": "Wise Productions — 4 crew at Frameless, Marble Arch, 18 Sep",
+    "specification": "2026-09-18 16:00 - 4 crew at Frameless Immersive Art Experience, Marble Arch - 2hr call (ends 18:00)",
+    "number": "11046",
+    "status": 0,
+    "quote": false,
+    "provisional": false,
+    "reverse_charge": false,
+    "happening": "2026-09-18T15:00:00+00:00",
+    "created": "2026-09-15T17:45:18+00:00",
+    "modified": "2026-09-15T17:45:18+00:00",
+    "creator": 2257,
+    "modifier": 2257,
+    "intern_name": null,
+    "request_approval": "1",
+    "Job": [
+     {
+      "id": 16110,
+      "order_id": 16053,
+      "supervisor_id": null,
+      "name": "4 at Frameless Immersive Art Experience, Marble Arch on 2026-09-18",
+      "created": "2026-09-15T17:45:18+00:00",
+      "modified": "2026-09-15T17:45:18+00:00",
+      "creator": 2257,
+      "modifier": 2257,
+      "pricelist_category_id": 315,
+      "min_beginning": "2026-09-18T15:00:00+00:00",
+      "max_end": "2026-09-18T17:00:00+00:00"
+     }
+    ]
+   }
+  },
+  {
+   "order": {
+    "id": 16052,
+    "company_id": 771,
+    "user_id": 2257,
+    "agency_invoice_address_id": 10,
+    "order_manager_id": 2257,
+    "name": "Wise Productions — multi-day crew, 17–20 Sep",
+    "specification": "Wise Productions 9172, 17-20 Sep multi-day crew at 60 Great Queen St -&gt; UPDATED: client confirms cancellation of ALL dates (17th, 18th, 19th, 20th Sep). Full job cancelled.",
+    "number": "11045",
+    "status": 0,
+    "quote": false,
+    "provisional": false,
+    "reverse_charge": false,
+    "happening": "2026-09-17T06:00:00+00:00",
+    "created": "2026-09-15T17:39:17+00:00",
+    "modified": "2026-09-16T13:14:58+00:00",
+    "creator": 2257,
+    "modifier": 2257,
+    "intern_name": "9172",
+    "request_approval": "1",
+    "Job": [
+     {
+      "id": 16109,
+      "order_id": 16052,
+      "supervisor_id": null,
+      "name": "2 at TBC on 2026-09-17",
+      "created": "2026-09-15T17:39:17+00:00",
+      "modified": "2026-09-15T17:39:17+00:00",
+      "creator": 2257,
+      "modifier": 2257,
+      "pricelist_category_id": 315,
+      "min_beginning": "2026-09-17T06:00:00+00:00",
+      "max_end": "2026-09-20T11:00:00+00:00"
+     }
+    ]
+   }
+  },
+  {
+   "order": {
+    "id": 16047,
+    "company_id": 137,
+    "user_id": 2257,
+    "agency_invoice_address_id": 10,
+    "order_manager_id": 2257,
+    "name": "Event Concept — night warehouse unload at Galleywall Trading Estate, 16–17 Sep",
+    "specification": "Wed 16th 21:00-02:00 - 2 crew unloading vehicles at EC warehouse; Thu 17th 21:00-03:00 - 2 crew. Contact Enoch 07592 253189",
+    "number": "11040",
+    "status": 0,
+    "quote": false,
+    "provisional": false,
+    "reverse_charge": false,
+    "happening": "2026-09-16T20:00:00+00:00",
+    "created": "2026-09-15T15:30:24+00:00",
+    "modified": "2026-09-15T15:30:24+00:00",
+    "creator": 2257,
+    "modifier": 2257,
+    "intern_name": null,
+    "request_approval": "1",
+    "Job": [
+     {
+      "id": 16104,
+      "order_id": 16047,
+      "supervisor_id": null,
+      "name": "2 at Units B2-B4 Galleywall Trading Estate London SE16 3PB on 2026-09-16",
+      "created": "2026-09-15T15:30:24+00:00",
+      "modified": "2026-09-15T15:30:24+00:00",
+      "creator": 2257,
+      "modifier": 2257,
+      "pricelist_category_id": 315,
+      "min_beginning": "2026-09-16T20:00:00+00:00",
+      "max_end": "2026-09-18T02:00:00+00:00"
+     }
+    ]
+   }
+  },
+  {
+   "order": {
+    "id": 16045,
+    "company_id": 128,
+    "user_id": 2257,
+    "agency_invoice_address_id": 10,
+    "order_manager_id": 2257,
+    "name": "Dreamtek — setup & breakdown crew at Twickenham Stadium, 21–23 Sep",
+    "specification": "21/09/26 08:00 - 6 setup crew at Twickenham Stadium (8hr call), meet Gate D, onsite Luke W 07837 731341. AND 23/09/26 15:00 - 6 breakdown crew (4hr call), meet Gate D, onsite TBC",
+    "number": "11038",
+    "status": 0,
+    "quote": false,
+    "provisional": false,
+    "reverse_charge": false,
+    "happening": "2026-09-21T07:00:00+00:00",
+    "created": "2026-09-15T14:44:33+00:00",
+    "modified": "2026-09-15T14:44:33+00:00",
+    "creator": 2257,
+    "modifier": 2257,
+    "intern_name": "J45894",
+    "request_approval": "1",
+    "Job": [
+     {
+      "id": 16102,
+      "order_id": 16045,
+      "supervisor_id": null,
+      "name": "6 at Twickenham Stadium, 200 Whitton Rd, Twickenham TW2 7BA on 2026-09-21",
+      "created": "2026-09-15T14:44:33+00:00",
+      "modified": "2026-09-15T14:44:33+00:00",
+      "creator": 2257,
+      "modifier": 2257,
+      "pricelist_category_id": 323,
+      "min_beginning": "2026-09-21T07:00:00+00:00",
+      "max_end": "2026-09-23T18:00:00+00:00"
+     }
+    ]
+   }
+  },
+  {
+   "order": {
+    "id": 16043,
+    "company_id": 347,
+    "user_id": 2257,
+    "agency_invoice_address_id": 10,
+    "order_manager_id": 2257,
+    "name": "Light Motif — event crew at Design Museum, 18 Sep",
+    "specification": "Friday 18th September 06:00-18:00 - 2 crew at Design Museum - short notice event support",
+    "number": "11036",
+    "status": 0,
+    "quote": false,
+    "provisional": false,
+    "reverse_charge": false,
+    "happening": "2026-09-18T05:00:00+00:00",
+    "created": "2026-09-15T14:21:29+00:00",
+    "modified": "2026-09-15T14:21:29+00:00",
+    "creator": 2257,
+    "modifier": 2257,
+    "intern_name": null,
+    "request_approval": "1",
+    "Job": [
+     {
+      "id": 16100,
+      "order_id": 16043,
+      "supervisor_id": null,
+      "name": "2 at Design Museum on 2026-09-18",
+      "created": "2026-09-15T14:21:29+00:00",
+      "modified": "2026-09-15T14:21:29+00:00",
+      "creator": 2257,
+      "modifier": 2257,
+      "pricelist_category_id": 315,
+      "min_beginning": "2026-09-18T05:00:00+00:00",
+      "max_end": "2026-09-18T17:00:00+00:00"
+     }
+    ]
+   }
+  },
+  {
+   "order": {
+    "id": 16040,
+    "company_id": 635,
+    "user_id": 2257,
+    "agency_invoice_address_id": 10,
+    "order_manager_id": 2257,
+    "name": "Full Tilt — Ronan SS27 crew at 135 Highgate Rd, 20–21 Sep",
+    "specification": "Sunday 20th Sep 12:00-16:00 - 2 crew at 135 Highgate Rd, London NW5 1LE; Monday 21st Sep 12:00-15:00 - 2 crew at same venue",
+    "number": "11033",
+    "status": 0,
+    "quote": false,
+    "provisional": false,
+    "reverse_charge": false,
+    "happening": "2026-09-20T11:00:00+00:00",
+    "created": "2026-09-15T13:33:20+00:00",
+    "modified": "2026-09-15T13:33:20+00:00",
+    "creator": 2257,
+    "modifier": 2257,
+    "intern_name": null,
+    "request_approval": "1",
+    "Job": [
+     {
+      "id": 16097,
+      "order_id": 16040,
+      "supervisor_id": null,
+      "name": "2 at 135 Highgate Rd London NW5 1LE on 2026-09-20",
+      "created": "2026-09-15T13:33:20+00:00",
+      "modified": "2026-09-15T13:33:20+00:00",
+      "creator": 2257,
+      "modifier": 2257,
+      "pricelist_category_id": 315,
+      "min_beginning": "2026-09-20T11:00:00+00:00",
+      "max_end": "2026-09-21T14:00:00+00:00"
+     }
+    ]
+   }
+  },
+  {
+   "order": {
+    "id": 16036,
+    "company_id": 635,
+    "user_id": 2257,
+    "agency_invoice_address_id": 10,
+    "order_manager_id": 2257,
+    "name": "Full Tilt — truss derig at Saatchi Gallery, 17 Sep",
+    "specification": "Thursday 17th Sep 9AM-2PM - 4 crew at Saatchi Gallery - truss derig",
+    "number": "11030",
+    "status": 0,
+    "quote": false,
+    "provisional": false,
+    "reverse_charge": false,
+    "happening": "2026-09-17T08:00:00+00:00",
+    "created": "2026-09-15T13:24:16+00:00",
+    "modified": "2026-09-15T13:24:16+00:00",
+    "creator": 2257,
+    "modifier": 2257,
+    "intern_name": null,
+    "request_approval": "1",
+    "Job": [
+     {
+      "id": 16093,
+      "order_id": 16036,
+      "supervisor_id": null,
+      "name": "4 at Saatchi Gallery on 2026-09-17",
+      "created": "2026-09-15T13:24:16+00:00",
+      "modified": "2026-09-15T13:24:16+00:00",
+      "creator": 2257,
+      "modifier": 2257,
+      "pricelist_category_id": 315,
+      "min_beginning": "2026-09-17T08:00:00+00:00",
+      "max_end": "2026-09-17T13:00:00+00:00"
+     }
+    ]
+   }
+  },
+  {
+   "order": {
+    "id": 16028,
+    "company_id": 267,
+    "user_id": 2257,
+    "agency_invoice_address_id": 10,
+    "order_manager_id": 2257,
+    "name": "Salesforce — bar service at Salesforce Tower Level 36, 24 Sep",
+    "specification": "2026-09-24 16:30-20:30 - 2 bar staff at Level 36, Salesforce Tower, 110 Bishopsgate, EC2N 4AY - beer/wines/soft drinks, all equipment provided, bar service 5:00pm-8:00pm. Risk Assessment with date of service requested.",
+    "number": "11024",
+    "status": 0,
+    "quote": false,
+    "provisional": false,
+    "reverse_charge": false,
+    "happening": "2026-09-24T15:30:00+00:00",
+    "created": "2026-09-15T10:55:36+00:00",
+    "modified": "2026-09-15T10:55:36+00:00",
+    "creator": 2257,
+    "modifier": 2257,
+    "intern_name": null,
+    "request_approval": "1",
+    "Job": [
+     {
+      "id": 16085,
+      "order_id": 16028,
+      "supervisor_id": null,
+      "name": "2 at Level 36, Salesforce Tower, 110 Bishopsgate, EC2N 4AY on 2026-09-24",
+      "created": "2026-09-15T10:55:36+00:00",
+      "modified": "2026-09-15T10:55:36+00:00",
+      "creator": 2257,
+      "modifier": 2257,
+      "pricelist_category_id": 315,
+      "min_beginning": "2026-09-24T15:30:00+00:00",
+      "max_end": "2026-09-24T19:30:00+00:00"
+     }
+    ]
+   }
+  },
+  {
+   "order": {
+    "id": 16024,
+    "company_id": 218,
+    "user_id": 2257,
+    "agency_invoice_address_id": 10,
+    "order_manager_id": 2257,
+    "name": "LUX Technical — crew at Village Underground, 17 Sep",
+    "specification": "Thursday 17 Sept 22:00-00:00 - 1 crew at Village Underground, 54 Holywell Lane, London EC2A 3PQ - on-site contact Tom 07932 679672",
+    "number": "11021",
+    "status": 0,
+    "quote": false,
+    "provisional": false,
+    "reverse_charge": false,
+    "happening": "2026-09-17T21:00:00+00:00",
+    "created": "2026-09-15T10:41:28+00:00",
+    "modified": "2026-09-15T10:41:28+00:00",
+    "creator": 2257,
+    "modifier": 2257,
+    "intern_name": null,
+    "request_approval": "1",
+    "Job": [
+     {
+      "id": 16081,
+      "order_id": 16024,
+      "supervisor_id": null,
+      "name": "1 at Village Underground 54 Holywell Lane London EC2A 3PQ on 2026-09-17",
+      "created": "2026-09-15T10:41:28+00:00",
+      "modified": "2026-09-15T10:41:28+00:00",
+      "creator": 2257,
+      "modifier": 2257,
+      "pricelist_category_id": 315,
+      "min_beginning": "2026-09-17T21:00:00+00:00",
+      "max_end": "2026-09-17T23:00:00+00:00"
+     }
+    ]
+   }
+  },
+  {
+   "order": {
+    "id": 16022,
+    "company_id": 850,
+    "user_id": 2257,
+    "agency_invoice_address_id": 10,
+    "order_manager_id": 2257,
+    "name": "Nice Shirt Films — filming crew at National Liberal Club, 19–21 Sep",
+    "specification": "Sat 19 Sep - 6 crew ~5hrs (start TBC 08:00 or 12:00) at National Liberal Club, Whitehall Place; Sun 20 Sep - 2 crew 4hr min (likely 08:00 start TBC); Mon 21 Sep 15:00-20:00 - 6 crew strike/load-out. Equipment handling up spiral staircase (no lift), manual-handling trained crew required. NDA to be signed by all crew. Start times TBC.",
+    "number": "11019",
+    "status": 0,
+    "quote": false,
+    "provisional": false,
+    "reverse_charge": false,
+    "happening": "2026-09-19T07:00:00+00:00",
+    "created": "2026-09-15T10:23:38+00:00",
+    "modified": "2026-09-15T10:23:39+00:00",
+    "creator": 2257,
+    "modifier": 2257,
+    "intern_name": null,
+    "request_approval": "1",
+    "Job": [
+     {
+      "id": 16079,
+      "order_id": 16022,
+      "supervisor_id": null,
+      "name": "6 at National Liberal Club, Whitehall Place, London on 2026-09-19",
+      "created": "2026-09-15T10:23:38+00:00",
+      "modified": "2026-09-15T10:23:38+00:00",
+      "creator": 2257,
+      "modifier": 2257,
+      "pricelist_category_id": 315,
+      "min_beginning": "2026-09-19T07:00:00+00:00",
+      "max_end": "2026-09-21T19:00:00+00:00"
+     }
+    ]
+   }
+  },
+  {
+   "order": {
+    "id": 16021,
+    "company_id": 146,
+    "user_id": 2257,
+    "agency_invoice_address_id": 10,
+    "order_manager_id": 2257,
+    "name": "RG Jones — setup & de-rig at Guildhall, 17–18 Nov",
+    "specification": "17 Nov 2026 setup + 18 Nov take down/collection, 4 crew each at Guildhall -&gt; UPDATED: client clarifies the take down/collection crew should run 13:00-14:30 to help with packdown and loading the van (times differ from prior 01:00-03:00 blocks)",
+    "number": "11018",
+    "status": 0,
+    "quote": false,
+    "provisional": false,
+    "reverse_charge": false,
+    "happening": "2026-11-17T16:00:00+00:00",
+    "created": "2026-09-15T10:16:40+00:00",
+    "modified": "2026-09-16T11:57:06+00:00",
+    "creator": 2257,
+    "modifier": 2257,
+    "intern_name": null,
+    "request_approval": "1",
+    "Job": [
+     {
+      "id": 16078,
+      "order_id": 16021,
+      "supervisor_id": null,
+      "name": "4 at Guildhall, Gresham Street, London, EC2V 7HH on 2026-11-17",
+      "created": "2026-09-15T10:16:40+00:00",
+      "modified": "2026-09-15T10:16:40+00:00",
+      "creator": 2257,
+      "modifier": 2257,
+      "pricelist_category_id": 197,
+      "min_beginning": "2026-11-17T16:00:00+00:00",
+      "max_end": "2026-11-18T03:00:00+00:00"
+     }
+    ]
+   }
+  },
+  {
+   "order": {
+    "id": 16017,
+    "company_id": 171,
+    "user_id": 2257,
+    "agency_invoice_address_id": 10,
+    "order_manager_id": 2257,
+    "name": "Halo Lighting — rig & de-rig at Motel Studios Hoxton, 17 Sep",
+    "specification": "Thu 17 Sep 2026, 1 crew rig 08:30-13:00 &amp; de-rig 22:00-00:00 at Motel Studios -&gt; UPDATED: rig call-time changed to start 09:00",
+    "number": "11015",
+    "status": 0,
+    "quote": false,
+    "provisional": false,
+    "reverse_charge": false,
+    "happening": "2026-09-17T07:30:00+00:00",
+    "created": "2026-09-15T09:58:37+00:00",
+    "modified": "2026-09-15T14:07:24+00:00",
+    "creator": 2257,
+    "modifier": 2257,
+    "intern_name": "2609P71 MF",
+    "request_approval": "1",
+    "Job": [
+     {
+      "id": 16074,
+      "order_id": 16017,
+      "supervisor_id": null,
+      "name": "1 at Motel Studios, 406-408 Long St, Hoxton, London, E2 8HG on 2026-09-17",
+      "created": "2026-09-15T09:58:37+00:00",
+      "modified": "2026-09-15T09:58:37+00:00",
+      "creator": 2257,
+      "modifier": 2257,
+      "pricelist_category_id": 307,
+      "min_beginning": "2026-09-17T07:30:00+00:00",
+      "max_end": "2026-09-17T23:00:00+00:00"
+     }
+    ]
+   }
+  },
+  {
+   "order": {
+    "id": 16015,
+    "company_id": 317,
+    "user_id": 2257,
+    "agency_invoice_address_id": 10,
+    "order_manager_id": 2257,
+    "name": "Video Illusions — LED screen derig at Spitalfields Market, 22 Sep",
+    "specification": "Mon 22 Sep 2026 08:00-12:00 - 2 AV crew at Spitalfields market for LED screen/box structure derig -&gt; UPDATED: client moving the derig date from 22nd; new date TBC, awaiting confirmation from Chris",
+    "number": "11013",
+    "status": 0,
+    "quote": false,
+    "provisional": false,
+    "reverse_charge": false,
+    "happening": "2026-09-22T07:00:00+00:00",
+    "created": "2026-09-15T09:12:20+00:00",
+    "modified": "2026-09-15T16:50:25+00:00",
+    "creator": 2257,
+    "modifier": 2257,
+    "intern_name": null,
+    "request_approval": "1",
+    "Job": [
+     {
+      "id": 16072,
+      "order_id": 16015,
+      "supervisor_id": null,
+      "name": "2 at Spitalfields market (in the square: ///always/tunes/acted) on 2026-09-22",
+      "created": "2026-09-15T09:12:20+00:00",
+      "modified": "2026-09-15T09:12:20+00:00",
+      "creator": 2257,
+      "modifier": 2257,
+      "pricelist_category_id": 315,
+      "min_beginning": "2026-09-22T07:00:00+00:00",
+      "max_end": "2026-09-22T11:00:00+00:00"
+     }
+    ]
+   }
+  },
+  {
+   "order": {
+    "id": 16014,
+    "company_id": 347,
+    "user_id": 2257,
+    "agency_invoice_address_id": 10,
+    "order_manager_id": 2257,
+    "name": "Light Motif — truck load/unload at Bellingham warehouse, 16–17 Sep",
+    "specification": "16th Sep 4 crew 14:00-18:00 &amp; 17th Sep 2 crew 12:00-18:00 -&gt; UPDATED: times changed to 09:00-18:00 on both days (crew numbers unchanged), awaiting client PO to confirm",
+    "number": "11012",
+    "status": 0,
+    "quote": false,
+    "provisional": false,
+    "reverse_charge": false,
+    "happening": "2026-09-16T13:00:00+00:00",
+    "created": "2026-09-15T09:00:33+00:00",
+    "modified": "2026-09-15T11:43:24+00:00",
+    "creator": 2257,
+    "modifier": 2257,
+    "intern_name": null,
+    "request_approval": "1",
+    "Job": [
+     {
+      "id": 16071,
+      "order_id": 16014,
+      "supervisor_id": null,
+      "name": "4 at 5 Bellingham Trading Estate, Franthorne Way, London, SE6 3BX on 2026-09-16",
+      "created": "2026-09-15T09:00:33+00:00",
+      "modified": "2026-09-15T09:00:33+00:00",
+      "creator": 2257,
+      "modifier": 2257,
+      "pricelist_category_id": 315,
+      "min_beginning": "2026-09-16T13:00:00+00:00",
+      "max_end": "2026-09-17T17:00:00+00:00"
+     }
+    ]
+   }
+  },
+  {
+   "order": {
+    "id": 16012,
+    "company_id": 684,
+    "user_id": 2257,
+    "agency_invoice_address_id": 10,
+    "order_manager_id": 2257,
+    "name": "Events Crew — overnight crew at Market St, Manchester, 21 Sep",
+    "specification": "Mon 21 Sep 2026 00:30-04:30 - 3 overnight crew at Market St, Manchester -&gt; UPDATED: confirmed booking; amend timings to 01:00 on site for a 5-hour call (01:00-06:00). PPE required: full orange hi-viz incl trousers and hard hats; client requests crew names and NI numbers for site security.",
+    "number": "11010",
+    "status": 0,
+    "quote": false,
+    "provisional": false,
+    "reverse_charge": false,
+    "happening": "2026-09-20T23:30:00+00:00",
+    "created": "2026-09-15T08:53:29+00:00",
+    "modified": "2026-09-16T13:12:00+00:00",
+    "creator": 2257,
+    "modifier": 2257,
+    "intern_name": null,
+    "request_approval": "1",
+    "Job": [
+     {
+      "id": 16069,
+      "order_id": 16012,
+      "supervisor_id": null,
+      "name": "3 at Market St, Manchester M1 1WA on 2026-09-21",
+      "created": "2026-09-15T08:53:29+00:00",
+      "modified": "2026-09-15T08:53:29+00:00",
+      "creator": 2257,
+      "modifier": 2257,
+      "pricelist_category_id": 312,
+      "min_beginning": "2026-09-20T23:30:00+00:00",
+      "max_end": "2026-09-21T03:30:00+00:00"
+     }
+    ]
+   }
+  },
+  {
+   "order": {
+    "id": 16011,
+    "company_id": 727,
+    "user_id": 2257,
+    "agency_invoice_address_id": 10,
+    "order_manager_id": 2257,
+    "name": "Opulent Productions — crew at The Tramp, 15–16 Sep",
+    "specification": "Today 15 Sep 16:00 for 4 hours - 2 crew at The Tramp, London SW1Y 6DN; AND tomorrow 16 Sep 08:00 for 2 hours - 1 crew at The Tramp, London SW1Y 6DN. Last-minute same-day request.",
+    "number": "11009",
+    "status": 0,
+    "quote": false,
+    "provisional": false,
+    "reverse_charge": false,
+    "happening": "2026-09-15T15:00:00+00:00",
+    "created": "2026-09-15T08:49:29+00:00",
+    "modified": "2026-09-15T08:49:29+00:00",
+    "creator": 2257,
+    "modifier": 2257,
+    "intern_name": null,
+    "request_approval": "1",
+    "Job": [
+     {
+      "id": 16068,
+      "order_id": 16011,
+      "supervisor_id": null,
+      "name": "2 at The Tramp, London, SW1Y 6DN on 2026-09-15",
+      "created": "2026-09-15T08:49:29+00:00",
+      "modified": "2026-09-15T08:49:29+00:00",
+      "creator": 2257,
+      "modifier": 2257,
+      "pricelist_category_id": 315,
+      "min_beginning": "2026-09-15T15:00:00+00:00",
+      "max_end": "2026-09-16T09:00:00+00:00"
+     }
+    ]
+   }
+  },
+  {
+   "order": {
+    "id": 16006,
+    "company_id": 848,
+    "user_id": 2257,
+    "agency_invoice_address_id": 10,
+    "order_manager_id": 2257,
+    "name": "MLCCL — de-rig at Royal Gardens Hotel Kensington, 17 Sep",
+    "specification": "Thursday 17th Sept 23:00-01:00 (2hr overnight de-rig) - 4 crew at Royal Gardens Hotel Kensington",
+    "number": "11005",
+    "status": 0,
+    "quote": false,
+    "provisional": false,
+    "reverse_charge": false,
+    "happening": "2026-09-17T22:00:00+00:00",
+    "created": "2026-09-14T17:40:53+00:00",
+    "modified": "2026-09-14T17:40:53+00:00",
+    "creator": 2257,
+    "modifier": 2257,
+    "intern_name": null,
+    "request_approval": "1",
+    "Job": [
+     {
+      "id": 16063,
+      "order_id": 16006,
+      "supervisor_id": null,
+      "name": "4 at Royal Gardens Hotel Kensington, 2-24 Kensington High Street, on 2026-09-17",
+      "created": "2026-09-14T17:40:53+00:00",
+      "modified": "2026-09-14T17:40:53+00:00",
+      "creator": 2257,
+      "modifier": 2257,
+      "pricelist_category_id": 315,
+      "min_beginning": "2026-09-17T22:00:00+00:00",
+      "max_end": "2026-09-18T00:00:00+00:00"
+     }
+    ]
+   }
+  },
+  {
+   "order": {
+    "id": 16003,
+    "company_id": 732,
+    "user_id": 2257,
+    "agency_invoice_address_id": 10,
+    "order_manager_id": 2257,
+    "name": "Backstage Global — 2 crew for 3 missions at Mare Street Studios, 15–18 Sep",
+    "specification": "2 crew for 3 missions (15/16/18 Sep) -&gt; UPDATED: crew asked to stay an extra hour on the current day (15 Sep) - new end time not confirmed (approx 15:30 if from 14:30)",
+    "number": "11002",
+    "status": 0,
+    "quote": false,
+    "provisional": false,
+    "reverse_charge": false,
+    "happening": "2026-09-15T11:30:00+00:00",
+    "created": "2026-09-14T16:15:41+00:00",
+    "modified": "2026-09-15T13:42:14+00:00",
+    "creator": 2257,
+    "modifier": 2257,
+    "intern_name": null,
+    "request_approval": "1",
+    "Job": [
+     {
+      "id": 16060,
+      "order_id": 16003,
+      "supervisor_id": null,
+      "name": "2 at Mare Street Studios, 203/213 Mare Street, London E8 3LY on 2026-09-15",
+      "created": "2026-09-14T16:15:41+00:00",
+      "modified": "2026-09-14T16:15:41+00:00",
+      "creator": 2257,
+      "modifier": 2257,
+      "pricelist_category_id": 197,
+      "min_beginning": "2026-09-15T11:30:00+00:00",
+      "max_end": "2026-09-18T10:30:00+00:00"
+     }
+    ]
+   }
+  },
+  {
+   "order": {
+    "id": 15996,
+    "company_id": 146,
+    "user_id": 2257,
+    "agency_invoice_address_id": 10,
+    "order_manager_id": 2257,
+    "name": "RG Jones — 2 local crew at Wimbledon warehouse, 15 Sep",
+    "specification": "2026-09-15 10:30-12:30 - 2 crew at 16 Endeavour Way, Wimbledon -&gt; UPDATED: PO number provided RGJ_PO_148594 and quote confirmed",
+    "number": "10996",
+    "status": 0,
+    "quote": false,
+    "provisional": false,
+    "reverse_charge": false,
+    "happening": "2026-09-15T09:30:00+00:00",
+    "created": "2026-09-14T15:23:24+00:00",
+    "modified": "2026-09-14T16:49:21+00:00",
+    "creator": 2257,
+    "modifier": 2257,
+    "intern_name": "RGJ_PO_148594",
+    "request_approval": "1",
+    "Job": [
+     {
+      "id": 16053,
+      "order_id": 15996,
+      "supervisor_id": null,
+      "name": "2 at 16 Endeavour Way, Wimbledon, London, SW19 8UH on 2026-09-15",
+      "created": "2026-09-14T15:23:24+00:00",
+      "modified": "2026-09-14T15:23:24+00:00",
+      "creator": 2257,
+      "modifier": 2257,
+      "pricelist_category_id": 197,
+      "min_beginning": "2026-09-15T09:30:00+00:00",
+      "max_end": "2026-09-15T11:30:00+00:00"
+     }
+    ]
+   }
+  },
+  {
+   "order": {
+    "id": 15995,
+    "company_id": 844,
+    "user_id": 2257,
+    "agency_invoice_address_id": 10,
+    "order_manager_id": 2257,
+    "name": "Agency Eleven — 3 crew at Truman Brewery, 17 Sep",
+    "specification": "Thursday 17 Sep 13:00-16:00 - 3 crew at Truman Brewery",
+    "number": "10995",
+    "status": 0,
+    "quote": false,
+    "provisional": false,
+    "reverse_charge": false,
+    "happening": "2026-09-17T12:00:00+00:00",
+    "created": "2026-09-14T15:21:59+00:00",
+    "modified": "2026-09-14T15:22:00+00:00",
+    "creator": 2257,
+    "modifier": 2257,
+    "intern_name": null,
+    "request_approval": "1",
+    "Job": [
+     {
+      "id": 16052,
+      "order_id": 15995,
+      "supervisor_id": null,
+      "name": "3 at Truman Brewery on 2026-09-17",
+      "created": "2026-09-14T15:21:59+00:00",
+      "modified": "2026-09-14T15:21:59+00:00",
+      "creator": 2257,
+      "modifier": 2257,
+      "pricelist_category_id": 341,
+      "min_beginning": "2026-09-17T12:00:00+00:00",
+      "max_end": "2026-09-17T15:00:00+00:00"
+     }
+    ]
+   }
+  },
+  {
+   "order": {
+    "id": 15977,
+    "company_id": 723,
+    "user_id": 2257,
+    "agency_invoice_address_id": 10,
+    "order_manager_id": 2257,
+    "name": "Present Communications — monitor setup at 15 Hatfields Conference Centre, 15 Sep",
+    "specification": "Tuesday 15th 4pm-6pm - 1 crew at 15 Hatfields Conference Centre, London - setting up 35 monitors",
+    "number": "10979",
+    "status": 0,
+    "quote": false,
+    "provisional": false,
+    "reverse_charge": false,
+    "happening": "2026-09-15T15:00:00+00:00",
+    "created": "2026-09-14T10:00:28+00:00",
+    "modified": "2026-09-14T10:00:28+00:00",
+    "creator": 2257,
+    "modifier": 2257,
+    "intern_name": "26-0460",
+    "request_approval": "1",
+    "Job": [
+     {
+      "id": 16034,
+      "order_id": 15977,
+      "supervisor_id": null,
+      "name": "1 at 15 Hatfields Conference Centre 15 Hatfields SE1 8DJ London on 2026-09-15",
+      "created": "2026-09-14T10:00:28+00:00",
+      "modified": "2026-09-14T10:00:28+00:00",
+      "creator": 2257,
+      "modifier": 2257,
+      "pricelist_category_id": 315,
+      "min_beginning": "2026-09-15T15:00:00+00:00",
+      "max_end": "2026-09-15T17:00:00+00:00"
+     }
+    ]
+   }
+  },
+  {
+   "order": {
+    "id": 15976,
+    "company_id": 347,
+    "user_id": 2257,
+    "agency_invoice_address_id": 10,
+    "order_manager_id": 2257,
+    "name": "Light Motif — install crew at Design Museum, 17 Sep",
+    "specification": "Thursday 17th Sept 09:00-18:00 - 4 crew at Design Museum - install, short notice",
+    "number": "10978",
+    "status": 0,
+    "quote": false,
+    "provisional": false,
+    "reverse_charge": false,
+    "happening": "2026-09-17T08:00:00+00:00",
+    "created": "2026-09-14T09:54:15+00:00",
+    "modified": "2026-09-14T09:54:15+00:00",
+    "creator": 2257,
+    "modifier": 2257,
+    "intern_name": null,
+    "request_approval": "1",
+    "Job": [
+     {
+      "id": 16033,
+      "order_id": 15976,
+      "supervisor_id": null,
+      "name": "4 at Design Museum on 2026-09-17",
+      "created": "2026-09-14T09:54:15+00:00",
+      "modified": "2026-09-14T09:54:15+00:00",
+      "creator": 2257,
+      "modifier": 2257,
+      "pricelist_category_id": 315,
+      "min_beginning": "2026-09-17T08:00:00+00:00",
+      "max_end": "2026-09-17T17:00:00+00:00"
+     }
+    ]
+   }
+  },
+  {
+   "order": {
+    "id": 15974,
+    "company_id": 585,
+    "user_id": 2257,
+    "agency_invoice_address_id": 10,
+    "order_manager_id": 2257,
+    "name": "Clownfish Events — crew at Noisy Oyster seafood bistro, 16 Sep",
+    "specification": "16/09/26 08:00-15:30 - 1 team at Noisy Oyster seafood bistro -&gt; UPDATED: booking cancelled by client, not going ahead",
+    "number": "10976",
+    "status": 0,
+    "quote": false,
+    "provisional": false,
+    "reverse_charge": false,
+    "happening": "2026-09-16T07:00:00+00:00",
+    "created": "2026-09-14T09:31:31+00:00",
+    "modified": "2026-09-14T15:04:45+00:00",
+    "creator": 2257,
+    "modifier": 2257,
+    "intern_name": null,
+    "request_approval": "1",
+    "Job": [
+     {
+      "id": 16031,
+      "order_id": 15974,
+      "supervisor_id": null,
+      "name": "1 at Noisy Oyster seafood bistro on 2026-09-16",
+      "created": "2026-09-14T09:31:31+00:00",
+      "modified": "2026-09-14T09:31:31+00:00",
+      "creator": 2257,
+      "modifier": 2257,
+      "pricelist_category_id": 315,
+      "min_beginning": "2026-09-16T07:00:00+00:00",
+      "max_end": "2026-09-16T14:30:00+00:00"
+     }
+    ]
+   }
+  }
+ ]
+}
