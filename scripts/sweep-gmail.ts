@@ -20,6 +20,7 @@
 // ============================================================================
 import { loadEnv, requireEnv } from "./_env.mjs";
 import { storeSweptThread, sweepStats } from "../app/lib/sweepDb";
+import { gmailAccessToken } from "../app/lib/mail/gmailAuth";
 
 loadEnv();
 const argv = process.argv.slice(2);
@@ -33,9 +34,14 @@ const PAGE_CAP = Number(process.env.SWEEP_PAGE_CAP) || 40;   // 40 x 500 = 20k m
 // sign-in, and a Web client cannot serve the loopback login here. GMAIL_OAUTH_*
 // is the sweep's own client when they differ; GOOGLE_* is used when one client
 // covers both.
-const CLIENT_ID = (process.env.GMAIL_OAUTH_CLIENT_ID || "").trim() || requireEnv("GOOGLE_CLIENT_ID");
-const CLIENT_SECRET = (process.env.GMAIL_OAUTH_CLIENT_SECRET || "").trim() || requireEnv("GOOGLE_CLIENT_SECRET");
-const REFRESH = requireEnv("GMAIL_REFRESH_TOKEN");
+// LAZY, because a service-account deployment holds none of these and requireEnv throws
+// at module load. Reading them eagerly would make the durable credential impossible to
+// use without also keeping the fragile one around to satisfy an import.
+const oauthEnv = () => ({
+  clientId: (process.env.GMAIL_OAUTH_CLIENT_ID || "").trim() || requireEnv("GOOGLE_CLIENT_ID"),
+  clientSecret: (process.env.GMAIL_OAUTH_CLIENT_SECRET || "").trim() || requireEnv("GOOGLE_CLIENT_SECRET"),
+  refresh: requireEnv("GMAIL_REFRESH_TOKEN"),
+});
 
 // Overridable so the sweep can be run against a stand-in Gmail (test/sweepGmail.ts).
 // A 12-month live sweep is the one run you cannot rehearse, so the paging, the month
@@ -44,19 +50,37 @@ const API_BASE = (process.env.GMAIL_API_BASE || "https://gmail.googleapis.com/gm
 const TOKEN_URL = process.env.GMAIL_TOKEN_URL || "https://oauth2.googleapis.com/token";
 
 // ---------------------------------------------------------------- auth
+//
+// THE ONE FUNCTION THAT HAD TO MOVE. Everything below — the paging, the month windows,
+// the backoff, Gmail's habit of signalling its rate limit as a 403 — is unchanged and
+// does not know or care which credential produced the token. A service account is
+// preferred the moment GMAIL_SA_* are set, and a mailbox password change stops being an
+// intake outage. See app/lib/mail/gmailAuth.ts for why there is no fallback on failure.
 let token: string | null = null;
 let tokenExpiry = 0;
+let announced = false;
 async function accessToken() {
   if (token && Date.now() < tokenExpiry - 60_000) return token;
-  const r = await fetch(TOKEN_URL, {
-    method: "POST",
-    headers: { "content-type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({ client_id: CLIENT_ID, client_secret: CLIENT_SECRET, refresh_token: REFRESH, grant_type: "refresh_token" }),
+  const got = await gmailAccessToken({
+    refreshToken: async () => {
+      const { clientId, clientSecret, refresh } = oauthEnv();
+      const r = await fetch(TOKEN_URL, {
+        method: "POST",
+        headers: { "content-type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({ client_id: clientId, client_secret: clientSecret, refresh_token: refresh, grant_type: "refresh_token" }),
+      });
+      const j = await r.json();
+      if (!r.ok || !j.access_token) throw new Error(`refresh failed ${r.status}: ${JSON.stringify(j).slice(0, 300)}`);
+      // The refresh grant's own expiry; the service-account path caches inside its module.
+      tokenExpiry = Date.now() + (Number(j.expires_in) || 3600) * 1000;
+      return j.access_token as string;
+    },
   });
-  const j = await r.json();
-  if (!r.ok || !j.access_token) throw new Error(`refresh failed ${r.status}: ${JSON.stringify(j).slice(0, 300)}`);
-  token = j.access_token;
-  tokenExpiry = Date.now() + (Number(j.expires_in) || 3600) * 1000;
+  // Said out loud once per run. A silent credential is how the last outage stayed
+  // invisible for 42 hours — nothing reported which one was carrying the mail.
+  if (!announced) { console.log(`  gmail credential: ${got.source}`); announced = true; }
+  token = got.token;
+  if (got.source === "service-account") tokenExpiry = Date.now() + 3600_000;
   return token;
 }
 
