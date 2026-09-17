@@ -26,7 +26,7 @@ import { safeEqual } from "./app/lib/safeEqual";
 //    POSTs a fixed request shape and cannot add a custom header — so it authenticates on
 //    a secret inside the webhook URL (HTTP Basic, or ?k=) and the route does that check
 //    itself. Same fail-closed-in-production rule as the others.
-const SKIP = ["/api/auth", "/api/n8n-inbound", "/api/mail-inbound", "/api/dedupe", "/api/sweep-ingest", "/api/health"];
+const SKIP = ["/api/auth", "/api/n8n-inbound", "/api/mail-inbound", "/api/mail-poll", "/api/dedupe", "/api/sweep-ingest", "/api/health"];
 
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;

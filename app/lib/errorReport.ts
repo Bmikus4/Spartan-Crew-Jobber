@@ -37,7 +37,7 @@ export type Severity = "alert" | "log";
  * not running cannot report that it is not running. It is asked from outside on a schedule —
  * see app/api/health/intake. The other three are the engine reporting on itself.
  */
-export type Route = "booking-lost" | "write-unconfirmed" | "engine-threw" | "intake-quiet" | "mail-undeliverable";
+export type Route = "booking-lost" | "write-unconfirmed" | "engine-threw" | "intake-quiet" | "mail-undeliverable" | "mail-pull-failed";
 
 const ROUTE_TITLE: Record<Route, string> = {
   "booking-lost": "A BOOKING WAS LOST",
@@ -48,6 +48,11 @@ const ROUTE_TITLE: Record<Route, string> = {
   // provider is configured for its own parsed JSON. Mail keeps arriving and keeps being
   // shelved unread, so this is silent without a report.
   "mail-undeliverable": "MAIL ARRIVED IN A SHAPE WE CANNOT READ",
+  // The pull itself failed -- Gmail unreachable, or the credential is not working. This
+  // is NOT "intake-quiet": that one says no mail arrived and could be a quiet afternoon,
+  // while this says we could not go and look, which is never benign and has a different
+  // remedy. Separating them is what stops a broken credential reading as a slow Tuesday.
+  "mail-pull-failed": "THE MAILBOX COULD NOT BE READ",
 };
 
 /** Default gap between emails about the same thing. Long enough to stop a flood, short enough

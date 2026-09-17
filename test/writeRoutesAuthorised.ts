@@ -52,9 +52,19 @@ const WRITES = /export\s+async\s+function\s+(POST|PUT|PATCH|DELETE)\b/;
  *
  * authorizeMailWebhook is the machine rule again with the secret read from the URL instead
  * of a header, because a mail provider POSTs a fixed request shape and cannot add one.
+ *
+ * authorizeCronCall is the same rule once more, for a Vercel cron: it presents
+ * `Authorization: Bearer $CRON_SECRET` and can add no header of ours either. All three
+ * defer to decideMachineCall; only how the secret arrives differs.
+ *
+ * This list is the weakness test/machineRouteAuth.ts deliberately gave up on -- naming
+ * the gates that existed when it was written means a NEW shared gate reads as no gate at
+ * all. It stays here because this file also covers session-authed human routes, where
+ * there is no single shared decision to point at. Adding a name is expected; widening
+ * this to anything that merely looks like a check is not.
  */
 const AUTHORITY =
-  /authorizeAction|authorizeMachineCall|authorizeMailWebhook|ADMIN_SECRET|WEBHOOK_SECRET|INTERNAL_API_SECRET|safeEqual|getIronSession/;
+  /authorizeAction|authorizeMachineCall|authorizeMailWebhook|authorizeCronCall|ADMIN_SECRET|WEBHOOK_SECRET|INTERNAL_API_SECRET|safeEqual|getIronSession/;
 
 console.log("\n[1] the sweep found the routes");
 ok(routes.length >= 8, `${routes.length} route files under app/api`, routes.join(" "));

@@ -146,3 +146,33 @@ export function authorizeMailWebhook(request: Request): Caller {
     isProduction: process.env.NODE_ENV === "production",
   });
 }
+
+/**
+ * The same decision for a VERCEL CRON, which cannot send `x-webhook-secret` either.
+ *
+ * Vercel invokes a cron with `Authorization: Bearer $CRON_SECRET` and no way to add a
+ * header of our own, so — exactly as with the mail webhook — only the PRESENTATION of
+ * the secret is re-implemented and the decision itself stays in decideMachineCall. A
+ * manual trigger carrying `x-webhook-secret` is still accepted, because being able to
+ * run the poll by hand is how it gets tested.
+ *
+ * CRON_SECRET is Vercel's own variable name and it sets it automatically on Pro; the
+ * shared machine secret is accepted as well so a deployment that has one but not the
+ * other is not silently unreachable.
+ */
+export function authorizeCronCall(request: Request): Caller {
+  const cronSecret = (process.env.CRON_SECRET || "").trim();
+  const machineSecret = (process.env.N8N_WEBHOOK_SECRET || "").trim();
+
+  const presented: string[] = [request.headers.get("x-webhook-secret") || ""];
+  const auth = request.headers.get("authorization") || "";
+  if (/^bearer /i.test(auth)) presented.push(auth.slice(7).trim());
+
+  const secrets = [cronSecret, machineSecret].filter(Boolean);
+  return decideMachineCall({
+    secretMatches: secrets.some((s) => presented.some((p) => p !== "" && safeEqual(p, s))),
+    secretConfigured: secrets.length > 0,
+    authRequired: process.env.AUTH_REQUIRED === "true",
+    isProduction: process.env.NODE_ENV === "production",
+  });
+}
