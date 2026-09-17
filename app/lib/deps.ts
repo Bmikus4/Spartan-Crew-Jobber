@@ -12,6 +12,7 @@ import { OnsinchClient, httpTransport } from "./engine/onsinch";
 import { normName, normAddr } from "./engine/resolve";
 import { createOpenRouterReasoner, createVenueJudge, type Reasoner } from "./engine/reason";
 import { guardReasoner } from "./engine/spend";
+import { serviceAccountConfigured } from "./mail/gmailAuth";
 import { tieredReasoner } from "./engine/tiered";
 import { logKeyBalanceOnce } from "./engine/keyBalance";
 import { buildOrderBody, buildSlotTeamBody } from "./engine/format";
@@ -87,6 +88,28 @@ async function readOrderIdentifiers(
  * marker unset so the next email retries, instead of recording a tag never applied.
  */
 async function postTag<T extends { label: string }>(body: T): Promise<void> {
+  /**
+   * THE LABEL IS APPLIED HERE NOW, not by n8n, whenever a service account exists.
+   *
+   * The decision has always been pipeline.ts's; n8n only carried it out, which put the
+   * mailbox's one visible signal behind a Gmail OAuth credential that has been dead since
+   * 2026-09-09. With delegation there is no webhook, no canvas, and no second secret.
+   *
+   * `state: "cleared"` REMOVES the label rather than applying it — the reason for a
+   * "Needs" tag has gone. It deliberately does not put a different one on: a thread may
+   * end up wearing none of the four, and inventing a replacement would assert a
+   * conclusion the engine has not reached.
+   */
+  if (serviceAccountConfigured()) {
+    const { gmailWriter } = await import("./mail/gmailClient");
+    const { applyThreadLabel, clearThreadLabel } = await import("./mail/gmailWrite");
+    const api = gmailWriter();
+    const b = body as unknown as { label: string; thread_id: string; state?: string };
+    if (b.state === "cleared") await clearThreadLabel(api, b.thread_id, b.label as never);
+    else await applyThreadLabel(api, b.thread_id, b.label as never);
+    return;
+  }
+
   const hook = process.env.MANUAL_TAG_WEBHOOK;
   if (!hook) return;
   const res = await fetch(hook, {
@@ -353,6 +376,62 @@ export function executor(client: OnsinchClient): Executor {
      * secret between this app and its own workflows, in both directions.
      */
     async createReplyDraft(a) {
+      /**
+       * DRAFTED HERE NOW, not by n8n, whenever a service account exists.
+       *
+       * The action carries only the parent's Message-ID, so the Gmail thread and the
+       * person to answer are both resolved from it with `rfc822msgid:` — one extra read,
+       * on a path that runs rarely, in exchange for the engine's contract not changing.
+       *
+       * Resolving the recipient from the PARENT rather than from anything the model
+       * produced is deliberate: the reply goes to whoever actually wrote, and an address
+       * can never be invented by a composition step.
+       *
+       * Still a DRAFT and never a send. A human sends.
+       */
+      if (serviceAccountConfigured()) {
+        try {
+          const { gmailWriter } = await import("./mail/gmailClient");
+          const { createDraft } = await import("./mail/gmailWrite");
+          const { BOOKINGS_MAILBOX } = await import("./mail/gmailAuth");
+          const api = gmailWriter();
+
+          const found = await api("GET", `messages?q=${encodeURIComponent(`rfc822msgid:${a.in_reply_to.replace(/^<|>$/g, "")}`)}&maxResults=1`);
+          const hit = found?.messages?.[0];
+          if (!hit?.id) {
+            // Without the parent there is no thread to hang the reply on, and a draft in
+            // its own conversation is an orphan email about a job mid-discussion.
+            void reportError({
+              route: "engine-threw", where: "deps/gmail-draft",
+              what: "the message being replied to could not be found in the mailbox",
+              detail: `in_reply_to ${a.in_reply_to} — a reply was composed and not drafted.`,
+            });
+            return "draft-failed";
+          }
+          const parent = await api("GET", `messages/${hit.id}?format=metadata&metadataHeaders=From&metadataHeaders=To`);
+          const from = (parent?.payload?.headers ?? []).find((h: any) => /^from$/i.test(h?.name))?.value ?? "";
+          const to = /<([^>]+)>/.exec(from)?.[1] ?? from.trim();
+          if (!to) return "draft-failed";
+
+          const id = await createDraft(api, {
+            threadId: String(hit.threadId ?? ""),
+            to,
+            from: BOOKINGS_MAILBOX,
+            subject: a.subject,
+            html: a.html,
+            inReplyTo: a.in_reply_to,
+          });
+          return id ?? "draft-failed";
+        } catch (err) {
+          void reportError({
+            route: "engine-threw", where: "deps/gmail-draft",
+            what: "drafting through the service account failed",
+            detail: String((err as Error)?.message ?? err).slice(0, 300),
+          });
+          return "draft-failed";
+        }
+      }
+
       const hook = process.env.GMAIL_DRAFT_WEBHOOK;
       if (!hook) return "return-to-caller"; // caller drafts from the response
       try {

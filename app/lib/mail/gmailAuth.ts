@@ -26,6 +26,14 @@ export const BOOKINGS_MAILBOX = process.env.GMAIL_SUBJECT?.trim() || "bookings@s
 
 export const GMAIL_READ_SCOPES = ["https://www.googleapis.com/auth/gmail.readonly"];
 
+/**
+ * Labels and drafts. `gmail.modify` covers reading too, so a deployment that writes needs
+ * only this one — but delegation matches scope strings CHARACTER FOR CHARACTER, so the
+ * admin grant must list exactly what is asked for here. Granting readonly and later
+ * wanting modify means editing the grant, not the code.
+ */
+export const GMAIL_WRITE_SCOPES = ["https://www.googleapis.com/auth/gmail.modify"];
+
 export type TokenSource = "service-account" | "refresh-token";
 
 type Env = { readonly [key: string]: string | undefined };

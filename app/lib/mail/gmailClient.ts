@@ -14,7 +14,7 @@
 // `status` is attached to the thrown error because gmailCursor keys on it: a 404 from
 // history.list is an expired cursor and a normal event, and anything else is not.
 // ============================================================================
-import { gmailAccessToken, GMAIL_READ_SCOPES } from "./gmailAuth";
+import { gmailAccessToken, GMAIL_READ_SCOPES, GMAIL_WRITE_SCOPES } from "./gmailAuth";
 
 const API_BASE = (process.env.GMAIL_API_BASE || "https://gmail.googleapis.com/gmail/v1/users/me").replace(/\/$/, "");
 
@@ -70,4 +70,43 @@ export async function getRawMessage(get: (path: string) => Promise<any>, id: str
   const msg = await get(`messages/${encodeURIComponent(id)}?format=RAW`);
   if (!msg?.raw) return null;
   return { raw: Buffer.from(String(msg.raw), "base64url").toString("utf8"), threadId: String(msg.threadId ?? "") };
+}
+
+/**
+ * A Gmail client that can also WRITE — labels and drafts.
+ *
+ * Separate from gmailClient because the SCOPE is different and domain-wide delegation
+ * matches scope strings character for character: asking for modify on a grant made for
+ * readonly fails with invalid_scope, and the remedy is an admin edit rather than a code
+ * change. Keeping the two apart means a read-only deployment stays read-only rather than
+ * silently requesting a permission it was never given.
+ */
+export function gmailWriter(opts: GmailClientOpts = {}) {
+  const scopes = opts.scopes ?? GMAIL_WRITE_SCOPES;
+
+  return async function api(method: string, path: string, body?: any, attempt = 0): Promise<any> {
+    const { token } = await gmailAccessToken({ scopes, refreshToken: opts.refreshToken });
+    const res = await fetch(`${API_BASE}/${path}`, {
+      method,
+      headers: { Authorization: `Bearer ${token}`, ...(body ? { "content-type": "application/json" } : {}) },
+      body: body ? JSON.stringify(body) : undefined,
+    });
+
+    let text = "";
+    let rateLimited403 = false;
+    if (res.status === 403) {
+      text = await res.text();
+      rateLimited403 = /rateLimitExceeded|userRateLimitExceeded|backendError/i.test(text);
+    }
+    if (res.status === 429 || res.status >= 500 || rateLimited403) {
+      if (attempt >= 3) throw Object.assign(new Error(`gmail ${method} ${path} -> ${res.status}`), { status: res.status });
+      await new Promise((r) => setTimeout(r, 2 ** attempt * 1000));
+      return api(method, path, body, attempt + 1);
+    }
+    if (!res.ok) {
+      const detail = text || (await res.text().catch(() => ""));
+      throw Object.assign(new Error(`gmail ${method} ${path} -> ${res.status}: ${detail.slice(0, 300)}`), { status: res.status });
+    }
+    return res.status === 204 ? null : res.json();
+  };
 }
