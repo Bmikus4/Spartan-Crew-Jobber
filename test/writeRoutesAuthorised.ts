@@ -106,5 +106,32 @@ console.log("\n[4] the onboarding write demands a person, not a secret");
     "and it establishes WHO is calling before it reads what they asked for");
 }
 
+console.log("\n[5] a machine gate the middleware never lets you reach is not a gate");
+{
+  // The reconciliation sweep ran for a day answering 401 to its own scheduler. Its route
+  // was correct -- it called authorizeMachineCall and n8n sent the right secret -- but
+  // /api/reconcile was not in middleware's SKIP list, so the session check answered first
+  // and the route never executed. Deleted orders went un-rebound and silent write
+  // failures uncaught, with nothing in the route itself to suggest why.
+  //
+  // The two 401s are distinguishable only by case: middleware says "Unauthorized",
+  // a route's own gate says "unauthorized". That is far too fine a thread to hang a day
+  // of lost sweeps on, so the pairing is asserted here instead of left to be noticed.
+  const mw = readFileSync("middleware.ts", "utf8");
+  const skip = (mw.match(/const SKIP = \[([^\]]*)\]/)?.[1] ?? "")
+    .split(",").map((s) => s.trim().replace(/^["']|["']$/g, "")).filter(Boolean);
+  ok(skip.length > 0, "the SKIP list was found and parsed", skip.join(" "));
+
+  const covered = (path: string) => skip.some((p) => path === p || path.startsWith(p + "/"));
+
+  for (const file of routes) {
+    const src = readFileSync(file, "utf8");
+    if (!/authorizeMachineCall|authorizeCronCall/.test(src)) continue;
+    const url = "/" + file.replace(/^app\//, "").replace(/\/route\.ts$/, "");
+    ok(covered(url), `${url} carries a machine gate and middleware lets it through`,
+      covered(url) ? "" : "-- add it to SKIP in middleware.ts or its gate can never run");
+  }
+}
+
 console.log(fails ? `\n${fails} FAILED\n` : "\nALL PASS\n");
 process.exit(fails ? 1 : 0);
