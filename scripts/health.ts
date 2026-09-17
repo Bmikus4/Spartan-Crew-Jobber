@@ -55,7 +55,12 @@ const WATCH: Array<{ match: RegExp; label: string; cost: string; staleMins: numb
   // Daily, so 26 hours of grace. Until this exists and is active, nothing re-reads a
   // booking after the conversation goes quiet: an order staff deleted leaves the thread
   // pointing at nothing, and a shape OnSinch silently did not take is never noticed.
-  { match: /^Spartan Reconciliation Sweep$/i, label: "reconciliation sweep", cost: "deleted orders are never re-bound and silent write failures are never caught", staleMins: 26 * 60 },
+  //
+  // 3h, not the 26h this was when the sweep ran daily. The sweep now runs hourly because
+  // it covers a rotation of 30 threads at a time -- see app/api/reconcile/route.ts -- so
+  // 26h would let it be dead for a full day and most of another before saying anything.
+  // Three missed runs is the alarm; one transient failure is not.
+  { match: /^Spartan Reconciliation Sweep$/i, label: "reconciliation sweep", cost: "deleted orders are never re-bound and silent write failures are never caught", staleMins: 3 * 60 },
 ];
 
 (async () => {
