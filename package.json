@@ -64,7 +64,8 @@
     "score:e2e": "tsx study/scoreE2E.ts",
     "score:naj": "tsx study/najFalsifier.ts",
     "harness": "tsx study/harness.ts",
-    "harness:selftest": "tsx study/harness.ts --selftest"
+    "harness:selftest": "tsx study/harness.ts --selftest",
+    "verify:gmail:sa": "tsx scripts/verify-gmail-sa.ts"
   },
   "dependencies": {
     "@neondatabase/serverless": "^0.10.4",
