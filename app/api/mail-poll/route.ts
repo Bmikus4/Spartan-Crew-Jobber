@@ -56,6 +56,26 @@ const BATCH = Math.max(1, Number(process.env.MAIL_POLL_BATCH || 20));
 async function poll(): Promise<Response> {
   const mailbox = BOOKINGS_MAILBOX;
   const started = Date.now();
+
+  /**
+   * IDLE, NOT BROKEN, until the service account exists.
+   *
+   * The cron ships with the code; the credential is an admin action that happens later.
+   * Between the two this route would otherwise throw every two minutes and file an error
+   * report each time -- hundreds of identical alarms for a thing nobody has got to yet,
+   * which is how real alarms stop being read. Silence here is wrong too, so it answers
+   * plainly and says what is missing.
+   */
+  if (tokenSource() !== "service-account") {
+    return Response.json({
+      ok: true,
+      idle: true,
+      mailbox,
+      credential: tokenSource(),
+      note: "no service account configured: set GMAIL_SA_CLIENT_EMAIL and GMAIL_SA_PRIVATE_KEY (and GMAIL_SUBJECT) to start pulling. The n8n intake is unaffected.",
+    });
+  }
+
   try {
     const get = gmailClient();
     const cursor = await readCursor(mailbox);
