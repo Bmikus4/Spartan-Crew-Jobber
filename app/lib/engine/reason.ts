@@ -196,7 +196,72 @@ export function createOpenRouterReasoner(cfg: OpenRouterConfig): Reasoner {
       ? [{ type: "text", text: system, cache_control: { type: "ephemeral" } }]
       : system;
 
+  /**
+   * RETRIES, AND WHY THE BUDGET IS SHARED RATHER THAN PER CALL.
+   *
+   * One OpenRouter timeout lost a whole thread in the 2026-09-16 study: the engine threw,
+   * the thread left the denominator, and the headline moved a point on nothing. There was
+   * no retry here at all, so a single slow response loses the email — and in production
+   * the Gmail label is already stripped by then, so nothing tries again.
+   *
+   * WHICH FAILURES. The line is drawn at transport versus answer. Every call here READS
+   * the model's opinion, so repeating one cannot double-book anything the way a repeated
+   * POST to OnSinch could — but a repeat only helps where the request never got an
+   * answer. A 401/402/403 is fatal for the whole run by design and asking again just
+   * makes it fatal three times; an ordinary 4xx is a malformed request; and a reply with
+   * no tool_call is a real answer of the wrong shape, which at temperature 0 will come
+   * back identical, so retrying it spends money to hide a schema bug.
+   *
+   * WHY ONE SHARED BUDGET. guardReasoner ceilings LOGICAL calls at 25 and cannot see
+   * inside this function, so a per-call retry would silently turn that ceiling into 75.
+   * A corpus script spent $57 in one night in this account and capped the key. Sharing a
+   * small budget across the reasoner's life keeps the worst case at ceiling + budget:
+   * a rare timeout is absorbed, and something systematically broken burns the budget in
+   * the first second and then fails loudly, which is the behaviour worth having.
+   */
+  // A malformed env var must fall back, never disable. Read plainly, `Number("")` is 0
+  // and `Number("two")` is NaN, and an attempt ceiling of either is a reasoner that
+  // never calls the model at all — it would fail every thread while looking configured.
+  const num = (v: string | undefined, d: number) => {
+    const n = Number(v);
+    return Number.isFinite(n) && n > 0 ? n : d;
+  };
+  const ATTEMPTS = Math.max(1, num(process.env.REASONER_ATTEMPTS, 3));
+  const BACKOFF_MS = (process.env.REASONER_BACKOFF_MS || "400,1200").split(",").map((s) => num(s, 400));
+  let retryBudget = Number.isFinite(Number(process.env.REASONER_RETRY_BUDGET))
+    ? Math.max(0, Number(process.env.REASONER_RETRY_BUDGET))
+    : 8;
+
+  /** Did the request fail to get an answer? Only then is asking again worth anything. */
+  const transient = (e: unknown) => {
+    const err = e as Error & { status?: number; transient?: boolean };
+    if (err instanceof ReasonerAuthError) return false;
+    if (err?.transient === true) return true;
+    if (typeof err?.status === "number") return err.status === 429 || (err.status >= 500 && err.status !== 501);
+    return false;
+  };
+
   async function call(system: string, user: string, schema: object) {
+    let last: unknown;
+    for (let attempt = 1; attempt <= ATTEMPTS; attempt++) {
+      try {
+        return await callOnce(system, user, schema);
+      } catch (err) {
+        last = err;
+        if (attempt === ATTEMPTS || !transient(err) || retryBudget <= 0) break;
+        retryBudget--;
+        await new Promise((r) => setTimeout(r, BACKOFF_MS[Math.min(attempt - 1, BACKOFF_MS.length - 1)] ?? 400));
+      }
+    }
+    // The attempt count goes in the message because "timed out" and "timed out three
+    // times over ninety seconds" call for different responses from whoever reads it.
+    if (last instanceof ReasonerAuthError) throw last;
+    const e = last as Error;
+    const tried = transient(last) ? ` (gave up after ${ATTEMPTS} attempts)` : "";
+    throw Object.assign(new Error(`${e?.message ?? String(last)}${tried}`), { status: (last as any)?.status });
+  }
+
+  async function callOnce(system: string, user: string, schema: object) {
     let res: Response;
     try {
       res = await fetch(`${baseUrl}/chat/completions`, {
@@ -227,7 +292,13 @@ export function createOpenRouterReasoner(cfg: OpenRouterConfig): Reasoner {
       });
     } catch (err) {
       const timedOut = (err as Error)?.name === "TimeoutError" || (err as Error)?.name === "AbortError";
-      throw new Error(timedOut ? `OpenRouter (${model}) timed out after ${TIMEOUT_MS}ms` : `OpenRouter (${model}) failed: ${(err as Error)?.message}`);
+      // Only `fetch` is inside the try, so anything thrown here is the request never
+      // reaching an answer. Marked rather than sniffed by name downstream, because the
+      // rewrap below loses the original name and that is what the retry keys on.
+      throw Object.assign(
+        new Error(timedOut ? `OpenRouter (${model}) timed out after ${TIMEOUT_MS}ms` : `OpenRouter (${model}) failed: ${(err as Error)?.message}`),
+        { transient: true }
+      );
     }
     if (!res.ok) {
       const detail = (await res.text()).slice(0, 300);
@@ -236,7 +307,7 @@ export function createOpenRouterReasoner(cfg: OpenRouterConfig): Reasoner {
       if (res.status === 401 || res.status === 402 || res.status === 403) {
         throw new ReasonerAuthError(res.status, detail);
       }
-      throw new Error(`OpenRouter ${res.status}: ${detail}`);
+      throw Object.assign(new Error(`OpenRouter ${res.status}: ${detail}`), { status: res.status });
     }
     const j = await res.json();
     const args = j.choices?.[0]?.message?.tool_calls?.[0]?.function?.arguments;
