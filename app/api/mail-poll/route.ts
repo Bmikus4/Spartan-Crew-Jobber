@@ -25,6 +25,40 @@ export const maxDuration = 60;
 // The INTAKE_PATH interlock still governs whether the engine runs at all, so this can be
 // left polling in shadow — storing and threading, writing nothing to OnSinch — until it
 // is deliberately handed the engine.
+//
+// ----------------------------------------------------------------------------
+// DORMANT, 2026-09-17. NOT DEAD — BLOCKED ON ONE ADMIN GRANT.
+// ----------------------------------------------------------------------------
+// This whole path is built, tested and deployed, and it does nothing, because the
+// credential it needs cannot be created yet: domain-wide delegation must be granted by a
+// super-admin INSIDE spartancrew.co.uk, and a personal @gmail.com account cannot
+// administer that domain however much it owns the Cloud project. Until someone with a
+// @spartancrew.co.uk super-admin does it, n8n remains the intake and nothing here runs.
+//
+// It is gated by ABSENCE rather than by a switch, which is why nothing had to be
+// reverted: with GMAIL_SA_* unset, serviceAccountConfigured() is false, so this route
+// answers {idle:true}, deps.ts posts labels and drafts to the n8n webhooks exactly as
+// before, and gmailAuth falls back to the refresh token. There is no half-on state.
+//
+// TO TURN IT ON, in this order:
+//   1. a @spartancrew.co.uk super-admin grants delegation for Client ID
+//      104025308997865565766 at admin.google.com -> Security -> Access and data control
+//      -> API controls -> Domain-wide delegation, with BOTH scopes in one entry,
+//      comma-separated, matched character for character:
+//        https://www.googleapis.com/auth/gmail.readonly,https://www.googleapis.com/auth/gmail.modify
+//   2. enable the Gmail API on the Cloud project (a separate click from the grant)
+//   3. npm run verify:gmail:sa   — proves read, impersonation and a real label change
+//   4. set GMAIL_SA_CLIENT_EMAIL, GMAIL_SA_PRIVATE_KEY, GMAIL_SUBJECT in Vercel
+//   5. restore vercel.json, which was REMOVED so these would not fire against the n8n
+//      workflows they duplicate — /api/health/intake is already driven by the Intake
+//      Watchdog and /api/reconcile by the Reconciliation Sweep, and two of each is worse
+//      than one:
+//        { "$schema": "https://openapi.vercel.sh/vercel.json",
+//          "crons": [ { "path": "/api/mail-poll",      "schedule": "*/2 * * * *"  },
+//                     { "path": "/api/health/intake",  "schedule": "*/15 * * * *" },
+//                     { "path": "/api/reconcile",      "schedule": "0 3 * * *"    } ] }
+//      and set CRON_SECRET, without which every cron 401s — fail-closed, deliberately.
+//   6. watch it in shadow, then INTAKE_PATH=routing to hand it the engine.
 // ============================================================================
 
 import { authorizeCronCall } from "../../lib/apiAuth";

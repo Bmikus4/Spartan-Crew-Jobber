@@ -318,3 +318,53 @@ The 44.8% recall during an outage is an availability number and says nothing abo
 the engine reads email. Venue resolution, the stale-year rule and the
 classification-contradicts-the-facts case are untouched by any of this, and they are the
 larger body of work.
+
+---
+
+## Status, 2026-09-17: the service-account path is BUILT and DORMANT
+
+Ben chose a Google service account with domain-wide delegation over a mail provider and
+a routing rule — "we need to build this in code, ourselves". It is written, tested and
+deployed, and it is switched off, because the grant it needs cannot be made yet.
+
+**The blocker is not technical.** Domain-wide delegation must be authorised by a
+super-admin *inside* `spartancrew.co.uk`. A personal `@gmail.com` account can own the
+Cloud project and create the service account, but it has no standing to administer that
+Workspace domain, so `admin.google.com` will not let it near the delegation screen.
+Until a `@spartancrew.co.uk` super-admin does that one paste, n8n stays the intake.
+
+**Nothing was reverted, because the path is gated by ABSENCE rather than by a flag.**
+With `GMAIL_SA_CLIENT_EMAIL` / `GMAIL_SA_PRIVATE_KEY` unset:
+
+| component | behaviour today |
+| --- | --- |
+| `app/lib/mail/gmailAuth.ts` | reports `refresh-token`; the old credential is used |
+| `app/lib/deps.ts` labels | posts to `MANUAL_TAG_WEBHOOK` — the n8n Manual Tag workflow |
+| `app/lib/deps.ts` drafts | posts to `GMAIL_DRAFT_WEBHOOK` — the n8n Reply Draft workflow |
+| `/api/mail-poll` | answers `{idle:true}` and reads nothing |
+| `INTAKE_PATH` (unset) | `/api/n8n-inbound` owns the engine |
+
+There is no half-on state: `test/intakePath.ts` pins that exactly one intake may ever run
+the engine, and `test/gmailAuth.ts` pins that a half-configured service account counts as
+none at all.
+
+`vercel.json` was **removed**. Its crons duplicated live n8n workflows — `/api/health/intake`
+is already called every 15 minutes by the Intake Watchdog and `/api/reconcile` by the
+Reconciliation Sweep — and two of each is worse than one. The exact file to restore is in
+the header of `app/api/mail-poll/route.ts`, alongside the rest of the switch-on sequence.
+
+**What exists, and is worth not rebuilding:**
+
+- `app/lib/mail/serviceAccountToken.ts` — RS256 via `node:crypto`, no dependency added.
+  Refuses an empty subject, and names `unauthorized_client` / `invalid_scope` /
+  `invalid_grant` for the admin mistakes they actually are.
+- `app/lib/mail/gmailAuth.ts` — prefers the service account, never falls back on failure.
+- `app/lib/mail/gmailCursor.ts` — a cursor, not a stream; an expired history id re-anchors.
+- `app/lib/mail/cursorDb.ts` — `mail_cursor` and `mail_seen`, the latter carrying partial
+  progress so a backlog drains without skipping or looping.
+- `app/lib/mail/gmailWrite.ts` — the four labels, mutually exclusive in one request, plus
+  drafts threaded on `In-Reply-To` and `References`.
+- `scripts/verify-gmail-sa.ts` (`npm run verify:gmail:sa`) — proves the grant end to end,
+  including a real label change, safely against the live mailbox.
+
+Client ID for the grant, when someone can make it: **104025308997865565766**.
