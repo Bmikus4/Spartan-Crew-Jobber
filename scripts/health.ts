@@ -86,7 +86,7 @@ const WATCH: Array<{ match: RegExp; label: string; cost: string; staleMins: numb
     let why = `${full.active ? "active" : "INACTIVE"}, ${proj}, last ${last ? `${last.status} ${ago(last.startedAt)}` : "never run"}`;
     if (!full.active) verdict = "DOWN";
     else if (!last) verdict = "UNKNOWN";
-    else if (last.status === "error") { verdict = "DOWN"; why += `, ${errs}/5 recent failed — ${w.cost}`; }
+    else if (last.status === "error") { verdict = "DOWN"; why += `, ${errs}/${ex.length} recent failed — ${w.cost}`; }
     else if (w.staleMins && mins(last.startedAt) > w.staleMins) { verdict = "WARN"; why += `, expected every ~${w.staleMins}m`; }
     if (verdict === "DOWN" && /deliberately off/.test(w.cost)) { verdict = "WARN"; why += " (expected)"; }
     say(w.label, verdict, why);
