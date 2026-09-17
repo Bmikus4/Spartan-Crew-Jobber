@@ -36,6 +36,7 @@ import { extractRawMail } from "../../lib/mail/providers";
 import { storeMessage, threadIdForMessageIds, rebuildThread } from "../../lib/threadMessagesDb";
 import { captureInboundRaw } from "../../lib/inboundRawDb";
 import { handleThread } from "../../lib/engine/pipeline";
+import { activeIntake, mayRunEngine } from "../../lib/intakePath";
 import { coerceThread } from "../../lib/engine/intake";
 import { buildDeps } from "../../lib/deps";
 import { replyDeliveryForWire } from "../../lib/settingsDb";
@@ -113,6 +114,19 @@ export async function POST(request: Request): Promise<Response> {
   // by reading the NEWEST message, and the newest message being our own reply would
   // have it answer itself.
   if (isFromSpartan) return Response.json({ ...base, engine: "skipped", reason: "outbound, stored for threading" });
+
+  /**
+   * SHADOW MODE — the routing rule may be live long before the engine moves here.
+   *
+   * The message is already stored above, so the thread is being rebuilt, the history is
+   * accumulating and the intake watchdog is being fed; only the engine is withheld. That
+   * is what lets the Workspace rule be switched on early and watched against the live
+   * n8n path for as long as it takes to believe it, with no possibility of one enquiry
+   * becoming two orders in the meantime. See app/lib/intakePath.ts.
+   */
+  if (!mayRunEngine("routing")) {
+    return Response.json({ ...base, engine: "skipped", reason: `shadow mode — INTAKE_PATH is ${activeIntake()}, so n8n-inbound still owns the engine` });
+  }
 
   const thread = await rebuildThread(hit.thread_id);
   if (!thread) {

@@ -11,6 +11,7 @@ export const maxDuration = 60;
 
 import { authorizeMachineCall } from "../../lib/apiAuth";
 import { handleThread } from "../../lib/engine/pipeline";
+import { activeIntake, mayRunEngine } from "../../lib/intakePath";
 import { coerceThread } from "../../lib/engine/intake";
 import { buildDeps } from "../../lib/deps";
 import { captureInboundRaw } from "../../lib/inboundRawDb";
@@ -36,6 +37,31 @@ export async function POST(request: Request): Promise<Response> {
 
   // Durable capture FIRST — no inbound is ever lost, and re-posts dedupe.
   const cap = await captureInboundRaw(payload, "n8n");
+
+  /**
+   * AFTER THE CUTOVER THIS ROUTE IS INERT, and does not depend on n8n being switched off.
+   *
+   * The Workspace routing rule and the n8n trigger live in different systems, so there is
+   * no single click that moves both. If this route kept working, the window between the
+   * two clicks would put the same enquiry down both paths — two thread ids, two
+   * conversations, two orders for one job, at 16 orders a day. Closing it here rather
+   * than in a runbook means the order of the clicks stops mattering.
+   *
+   * The payload is captured above before this returns, so nothing is lost and the intake
+   * watchdog still sees mail arriving. 200 rather than an error code: n8n retries a 4xx
+   * for hours and alarms on it, and there is nothing wrong — this route is simply no
+   * longer the one that acts.
+   */
+  if (!mayRunEngine("n8n")) {
+    return Response.json({
+      ok: true,
+      captured: cap.captured,
+      stored: true,
+      engine: "skipped",
+      note: `INTAKE_PATH is ${activeIntake()} — /api/mail-inbound owns the engine now. Kept for the record; turn this workflow off in n8n when convenient.`,
+      dedup_key: cap.dedup_key,
+    });
+  }
 
   const thread = coerceThread(payload);
   if (!thread) {
