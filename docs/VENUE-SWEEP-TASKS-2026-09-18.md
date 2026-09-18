@@ -15,6 +15,7 @@
 - **`6922 "No Location"` is exempt from every phase.** Never delete, never deactivate, never merge. It is `PLACEHOLDER_PLACE_NAME` in `compiler.ts:296` and the engine looks it up by name.
 - **There must be exactly one row named "No Location".** Any duplicate of it is bucket D.
 - **Never overwrite a populated field** in a union PATCH. Merging adds information only.
+- **An in-use venue is not automatically kept.** Usage never exempts a row from duplicate analysis. `classify` cannot see reference count at all — it is not a parameter. A busy row can be a loser; its usage only forces deactivate instead of delete.
 - **Zero references is permission to delete, never a reason to.** A row is removed only when every condition holds: its bucket's action is removal, a person marked it, it is not the survivor, and it is not the sentinel. Only then does the reference count choose between delete and deactivate. Default is keep. Most of the tenant is unreferenced and most of it is fine.
 - **Reference count, not OnSinch's refusal, separates delete from deactivate.** `DELETE /places` has been caught reporting success without deleting (`4f0f795`).
 - **`with=Job` returns Job as an ARRAY.** `order.Job.min_beginning` is undefined on every order in this tenant.
@@ -169,8 +170,8 @@ git commit -m "Deleting a venue is gated on who points at it, not on OnSinch's r
 - Test: `test/venueClassify.ts`
 
 **Interfaces:**
-- Consumes: `scanReferences` from Task 1, `.tmp-data/venue-sweep-2026-09-18/{snapshot,references}.json`.
-- Produces: `classify(places: any[], refs: Map<number, number>): Classified` where
+- Consumes: `.tmp-data/venue-sweep-2026-09-18/snapshot.json` **only**. It deliberately does NOT consume `references.json`.
+- Produces: `classify(places: any[]): Classified` where
 
 ```typescript
 export type Bucket = "identical" | "same-name-diff-postcode" | "shell-into-locatable" | "generic-bare" | "generic-with-data" | "sentinel" | "untouched";
@@ -207,7 +208,7 @@ const P = [
   { id: 49, name: "ExCel London", zip: "E16 1XL", address: "1 Western Gateway", active: true },
 ];
 
-const c = classify(P, new Map([[9, 40], [8, 5], [6922, 120]]));
+const c = classify(P);
 
 ok(c.byId.get(6922) === "sentinel", "No Location is the sentinel");
 ok(!c.deletions.includes(6922), "the sentinel is never deleted");
@@ -223,6 +224,17 @@ ok(fair?.members.length === 3, "all three Fairmont rows are in one group");
 
 const bat = c.groups.find((g) => g.members.includes(312));
 ok(bat?.bucket === "same-name-diff-postcode", "different postcodes never land in identical");
+
+// An in-use venue is not automatically kept — it is still examined for duplicates, and
+// it may lose. Row 6835 below stands in for a heavily-booked duplicate: classification
+// never sees usage, so it is grouped like any other row. What its usage decides is only
+// HOW it is removed, and removalFor (Task 4) answers "deactivate", never "delete".
+ok(fair?.members.includes(6835), "a busy duplicate is still grouped for merging");
+ok(fair?.survivor === 9, "the survivor is the row with the most data, not the one most booked");
+// classify's signature takes no reference map, so usage CANNOT gate this. The guarantee
+// is structural, not a promise in a comment. If someone later adds a refs parameter,
+// this line stops compiling, which is the alarm.
+ok(classify.length === 1, "classify takes exactly one argument and cannot see usage");
 
 console.log(fails ? `\n${fails} FAILED` : "\nall passed");
 process.exit(fails ? 1 : 0);
@@ -268,7 +280,20 @@ function elect(members: any[]): number {
   return [...members].sort((a, b) => richness(b) - richness(a) || Number(a.id) - Number(b.id))[0].id;
 }
 
-export function classify(places: any[], refs: Map<number, number>): Classified {
+/**
+ * REFERENCE COUNT IS NOT A PARAMETER HERE, AND THAT IS THE POINT.
+ *
+ * Ben, 2026-09-18: "an in use venue is not automatically kept. instead, we must still
+ * look at it for duplicates."
+ *
+ * A venue being booked says nothing about whether it is a duplicate — the tenant's most
+ * heavily used ExCeL row and its 800 clones are all "in use". If this function could see
+ * usage it would eventually be tempted to skip the busy rows, which are exactly the rows
+ * where a duplicate costs the most. It cannot see usage, so it cannot skip them.
+ * Reference count enters in exactly one place, `removalFor`, where all it may decide is
+ * delete versus deactivate.
+ */
+export function classify(places: any[]): Classified {
   const byId = new Map<number, Bucket>();
   const groups: Group[] = [];
   const deletions: number[] = [];
