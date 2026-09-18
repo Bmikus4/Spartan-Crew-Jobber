@@ -15,7 +15,8 @@
 - **`6922 "No Location"` is exempt from every phase.** Never delete, never deactivate, never merge. It is `PLACEHOLDER_PLACE_NAME` in `compiler.ts:296` and the engine looks it up by name.
 - **There must be exactly one row named "No Location".** Any duplicate of it is bucket D.
 - **Never overwrite a populated field** in a union PATCH. Merging adds information only.
-- **Deletion is gated on reference count, not on OnSinch's refusal.** `DELETE /places` has been caught reporting success without deleting (`4f0f795`).
+- **Zero references is permission to delete, never a reason to.** A row is removed only when every condition holds: its bucket's action is removal, a person marked it, it is not the survivor, and it is not the sentinel. Only then does the reference count choose between delete and deactivate. Default is keep. Most of the tenant is unreferenced and most of it is fine.
+- **Reference count, not OnSinch's refusal, separates delete from deactivate.** `DELETE /places` has been caught reporting success without deleting (`4f0f795`).
 - **`with=Job` returns Job as an ARRAY.** `order.Job.min_beginning` is undefined on every order in this tenant.
 - **Similarity is never the merge test.** Use the leave-one-out resolver test from the spec §3.
 - **Batch size 50, stop after 5 unexpected failures, log every write before sending it.**
@@ -30,7 +31,18 @@
 
 **Files:**
 - Create: `scripts/venue-sweep.ts`
+- Modify: `app/lib/engine/onsinch.ts` — add a public `allOrders()`
 - Test: `test/venueReferenceScan.ts`
+
+**Note:** `listAll` is `private` (`onsinch.ts:728`), so `client.listAll(...)` will not
+compile. Add a public wrapper beside `allPlaces()`, matching that pattern:
+
+```typescript
+/** Every order with its Jobs, for the venue reference scan. ~7,066 today, paged. */
+async allOrders() {
+  return this.listAll("/orders", { with: "Job" });
+}
+```
 
 **Interfaces:**
 - Produces: `scanReferences(orders: any[]): Map<number, number>` — place id -> count of live order references. Exported from `scripts/venue-sweep.ts` for the test.
@@ -115,7 +127,7 @@ async function snapshot() {
   fs.writeFileSync(path.join(OUT, "snapshot.json"), JSON.stringify(places, null, 1));
   console.log(`snapshot: ${places.length} places`);
 
-  const orders = await client.listAll("/orders", { with: "Job" });
+  const orders = await client.allOrders();
   const refs = scanReferences(orders);
   if (refs.size === 0) {
     console.log("FATAL: scanned " + orders.length + " orders and found zero place references — refusing to write a reference file that would licence deleting everything");
@@ -226,7 +238,7 @@ Expected: FAIL — `classify` is not exported.
 Append to `scripts/venue-sweep.ts`:
 
 ```typescript
-export type Bucket = "identical" | "same-name-diff-postcode" | "shell-into-locatable" | "generic-bare" | "generic-with-data" | "sentinel" | "untouched";
+export type Bucket = "identical" | "same-name-diff-postcode" | "shell-into-locatable" | "shell-group" | "generic-bare" | "generic-with-data" | "sentinel" | "untouched";
 export interface Group { bucket: Bucket; survivor: number; members: number[]; }
 export interface Classified { groups: Group[]; deletions: number[]; byId: Map<number, Bucket>; }
 
@@ -299,11 +311,19 @@ export function classify(places: any[], refs: Map<number, number>): Classified {
     if (members.length < 2) { byId.set(Number(members[0].id), "untouched"); continue; }
     const zips = new Set(members.map((m) => String(m.zip ?? "").replace(/\s+/g, "").toUpperCase()).filter(Boolean));
     const locatable = members.filter((m) => m.zip || m.lat);
+    /**
+     * The no-locatable-member case is NOT "different postcodes" — it is August's
+     * `would_point_at_another_shell` class, 2,130 rows, the second largest thing this
+     * sweep exists to fix. Several rows share a name and not one of them can locate a
+     * job. Collapsing them to the oldest is right (it is the tenant's only record of
+     * that name), but it does not make the survivor locatable, so the group is marked
+     * as such and the doc shows it that way.
+     */
     const bucket: Bucket =
       locatable.length > 1 && zips.size > 1 ? "same-name-diff-postcode"
       : locatable.length > 1 ? "identical"
-      : zips.size === 1 && locatable.length === 1 ? "shell-into-locatable"
-      : "same-name-diff-postcode";
+      : locatable.length === 1 ? "shell-into-locatable"
+      : "shell-group";
     const survivor = elect(members);
     groups.push({ bucket, survivor, members: members.map((m) => Number(m.id)) });
     for (const m of members) byId.set(Number(m.id), bucket);
@@ -403,9 +423,21 @@ ok(patch.note === "gate code 1234", "notes are carried across too");
 ok(patch.zip === undefined, "a POPULATED field is never overwritten, even by a different value");
 ok(patch.city === undefined, "an unchanged populated field is not re-sent");
 
-ok(removalFor(6835, new Map([[6835, 0]])) === "delete", "an unreferenced row is deleted");
-ok(removalFor(6837, new Map([[6837, 3]])) === "deactivate", "a referenced row is deactivated, never deleted");
-ok(removalFor(1234, new Map()) === "delete", "absent from the reference map means zero references");
+// Zero references is PERMISSION to delete, never a reason. Every other condition must
+// pass first, and the default is to keep the row.
+const R = (o: Partial<Parameters<typeof removalFor>[0]>) =>
+  removalFor({ id: 1, bucket: "identical", mark: "merge", isSurvivor: false, refs: new Map(), ...o } as any);
+
+ok(R({}) === "delete", "a marked loser with no references is deleted");
+ok(R({ refs: new Map([[1, 3]]) }) === "deactivate", "a marked loser WITH references is deactivated, never deleted");
+ok(R({ mark: undefined }) === "keep", "an unmarked row is kept however many zero references it has");
+ok(R({ mark: "skip" }) === "keep", "a skipped row is kept");
+ok(R({ mark: "keep-separate" }) === "keep", "keep-separate means keep");
+ok(R({ isSurvivor: true }) === "keep", "the survivor of a merge is never removed");
+ok(R({ bucket: "sentinel", mark: "delete" }) === "keep", "the sentinel is kept even if marked for deletion");
+ok(R({ bucket: "generic-with-data", mark: "delete" }) === "keep", "a generic row carrying data is never deleted");
+ok(R({ bucket: "untouched", mark: "delete" }) === "keep", "an untouched row is not in scope at all");
+ok(R({ bucket: "generic-bare", mark: "delete" }) === "delete", "generic AND bare AND marked AND unreferenced");
 
 console.log(fails ? `\n${fails} FAILED` : "\nall passed");
 process.exit(fails ? 1 : 0);
@@ -433,9 +465,42 @@ export function unionPatch(survivor: any, losers: any[]): Record<string, unknown
   return patch;
 }
 
-/** Reference count decides, not OnSinch's refusal. DELETE /places has been caught
- *  reporting success on rows it did not delete (4f0f795). */
-export function removalFor(id: number, refs: Map<number, number>): "delete" | "deactivate" {
+export type Mark = "merge" | "keep-separate" | "delete" | "skip";
+export type Removal = "keep" | "deactivate" | "delete";
+
+/**
+ * ZERO REFERENCES IS PERMISSION TO DELETE, NOT A REASON TO.
+ *
+ * Most of the tenant is unreferenced — a venue nobody has booked yet is unreferenced,
+ * and it is a perfectly good row. Deletion needs EVERY condition: the row is in a
+ * bucket whose action is removal, a person marked it, it is not the survivor, it is not
+ * the sentinel, and only then does the reference count choose between delete and
+ * deactivate. The default is keep, and anything unrecognised falls through to it.
+ *
+ * Reference count, not OnSinch's refusal, is what separates delete from deactivate —
+ * DELETE /places has been caught reporting success on rows it did not delete (4f0f795).
+ */
+export function removalFor(args: {
+  id: number;
+  bucket: Bucket;
+  mark: Mark | undefined;
+  isSurvivor: boolean;
+  refs: Map<number, number>;
+}): Removal {
+  const { id, bucket, mark, isSurvivor, refs } = args;
+
+  if (bucket === "sentinel") return "keep";
+  if (bucket === "generic-with-data") return "keep";
+  if (bucket === "untouched") return "keep";
+  if (isSurvivor) return "keep";
+  if (mark === undefined || mark === "skip" || mark === "keep-separate") return "keep";
+
+  const removable =
+    (mark === "delete" && bucket === "generic-bare") ||
+    (mark === "merge" && (bucket === "identical" || bucket === "same-name-diff-postcode" ||
+                          bucket === "shell-into-locatable" || bucket === "shell-group"));
+  if (!removable) return "keep";
+
   return (refs.get(Number(id)) ?? 0) > 0 ? "deactivate" : "delete";
 }
 ```
@@ -474,7 +539,7 @@ Run `npm run harness` (or the free study leg per `study/`) and record the venue 
 ### Task 5: One not-found exit, with the address preserved
 
 **Files:**
-- Modify: `app/lib/engine/compiler.ts:379-402` (`unresolvedVenue`)
+- Modify: `app/lib/engine/compiler.ts:379-402` (`unresolvedVenue`) and the `resolvePlace` return type at `compiler.ts:657-663`, which must gain `venue_text?: string` or `venue_text` will not survive the call
 - Modify: `test/venueCreatesOnUnresolved.ts` (its ruling changes for the third time)
 - Test: `test/venueHoldsAndKeepsTheAddress.ts`
 
