@@ -181,12 +181,32 @@ not-found exits the engine produces.**
 |---|---|---|
 | `missingVenue` | `holdAtPlaceholder` | unchanged |
 | text names no building | `holdAtPlaceholder` | unchanged |
-| **text names a building, unmatched** | **provisions a new venue** | **`holdAtPlaceholder`** |
+| **text names a building, unmatched** | **provisions a new venue** | **`holdAtPlaceholder` + the wording rides on the job** |
 
-The third exit is deleted. The engine stops creating venues entirely; `6922 "No Location"`
-becomes the sole terminus of every unresolved path. This is the change that stops the pool
-regrowing, and the repo's own measurement says it costs one genuinely-new venue in
-nineteen.
+The third exit stops creating rows. The engine stops creating venues entirely;
+`6922 "No Location"` becomes the sole terminus of every unresolved path. This is the change
+that stops the pool regrowing, and the repo's own measurement says it costs one
+genuinely-new venue in nineteen.
+
+**But it must not throw the client's address away, and that is not a detail.** This
+behaviour has been ruled on three times. `test/venueCreatesOnUnresolved.ts` was
+`venueNeverProvisions.ts` under Ben's 2026-08-31 ruling, and his 2026-09-03 reversal is on
+the record:
+
+> "Parking a miss on 'No Location' throws the client's address away: the booker opens the
+> job and has nothing to work from but a note. Creating a row keeps it, on the job, in the
+> field a job sheet prints. A duplicate is a row a person merges; a discarded address is a
+> phone call."
+
+That argument is correct and survives this change. The two goals are separable: the reason
+to create a row was to keep the address **on the job**, not to own a venue row. So the
+third exit resolves `place_id` to the placeholder **and writes the client's venue wording
+into the slot-team `description`**, which already carries overflow text onto the team
+(`compose.ts:413-416`) and is already in `TEAM_FIELDS`, so it amends and reads back like
+any other field.
+
+One venue row, address preserved, no phone call. A ruling that reverses twice is a sign
+the two costs were entangled; this separates them so neither has to lose.
 
 Also in this phase, and nothing more — the choice was "rebuild the search index only", so
 there is no curated table and no new storage:
