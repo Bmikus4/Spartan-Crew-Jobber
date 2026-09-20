@@ -783,6 +783,18 @@ export class OnsinchClient {
     return listAllCached("places", () => this.listAll("/places")) as Promise<PlaceCandidate[]>;
   }
 
+  /**
+   * Every order with its Jobs. ~7,066 today, ~71 pages, slow and read-only.
+   *
+   * Exists for the venue sweep, which has to know which places an order still
+   * stands on before it may delete one. Deliberately NOT cached: it is run once by
+   * a script, and caching a pull this size in a warm lambda would cost more than it
+   * ever saves. `Job` comes back as an ARRAY — see the note on getOrders.
+   */
+  async allOrders() {
+    return this.listAll("/orders", { with: "Job" });
+  }
+
   /** A company's Client contacts (the valid user_ids for its orders). */
   async companyClients(company_id: number): Promise<any[]> {
     const r = await this.t("GET", "/companies" + qs({ id: company_id, with: "Client" }));
