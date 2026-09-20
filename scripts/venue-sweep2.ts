@@ -100,6 +100,22 @@ const INVENTED =
   /\b(main street|river street|business road|conference street|innovation (drive|way|avenue)|network street|event way|heritage crescent|tech city)\b/i;
 
 /**
+ * House number 123. Ben, 2026-09-20: "anything with an address as 123 should be
+ * deleted."
+ *
+ * It is the number a model reaches for when it needs one. Measured on the pool: 668
+ * rows carry a "123 <street>" and 667 of them are bare, across names like
+ * `Riverside Conference Hall, 123 River Street` x150 and `The Grand Plaza, 123
+ * Business Road` x130.
+ *
+ * It reads the NAME only, never the `address` column, and that is the whole safety of
+ * it. The one row of the 668 that carries real data is `LinkedIn`, whose address
+ * genuinely is 123 Farringdon Road EC1R 3DA — a real building on a real street. The
+ * fabricated rows put the address IN the name; a real venue puts it in the field.
+ */
+const HOUSE_123 = /(^|,)\s*123[a-z]?\s+\S/i;
+
+/**
  * Structural proof of fabrication, independent of the n8n log.
  *
  * It matters because n8n retention is nine days deep. The generator ran for months;
@@ -116,7 +132,9 @@ export function fabricationEvidence(name: unknown): string | null {
     if (!AREAS.has(area)) return `${code}: "${area}" is not a real UK postcode area`;
   }
   const m = s.match(INVENTED);
-  return m ? `"${m[0]}" is an invented street` : null;
+  if (m) return `"${m[0]}" is an invented street`;
+  if (HOUSE_123.test(s)) return `house number 123 — the number a model writes when it needs one`;
+  return null;
 }
 
 export type ProvKind = "n8n-exact" | "n8n-family" | "fabricated-address";
@@ -178,6 +196,15 @@ export interface Member {
 }
 
 export interface Decision {
+  /**
+   * Unique, and stable across re-plans so marks survive one.
+   *
+   * `key` alone is NOT unique: a name split across several postcodes emits one
+   * decision per postcode plus a `hold` summary, and all of them share the key. Marks
+   * keyed on `key` silently collapsed five decisions into four and the review showed
+   * two cards writing to one mark.
+   */
+  id: string;
   key: string;
   stratum: Stratum;
   survivor: number | null;
@@ -303,6 +330,7 @@ export function plan({ places, hits, referenced }: PlanInput): Decision[] {
       if (loose.length) emit(loose, true);
       if (parts.size > 1) {
         decisions.push({
+          id: `${key}#postcodes`,
           key,
           stratum: "hold",
           survivor: null,
@@ -342,7 +370,22 @@ function build(
    * takes the group out of this branch and into an ordinary election, so a fabricated
    * name that somebody later filled in is a venue record now and survives as one.
    */
-  const allFabricated = bare && provs.length === members.length && members.length > 0;
+  /**
+   * ONE convicted member condemns an all-bare group, not all of them.
+   *
+   * Requiring every member to be convicted left three fabricated rows alive in the
+   * 09-20 run. "Tech Convention Center, 123 Innovation Way, London, WC2N 5DU" is
+   * convicted; its siblings "Tech Convention Center, London" are not, because a bare
+   * name with no address trips no rule. So the group was not "all fabricated", an
+   * election ran, and it elected the convicted row itself — the sweep kept the fake.
+   *
+   * These rows share a lead name and not one of them carries an address, city,
+   * postcode or coordinate. If any of them is provably the generator's, the NAME is
+   * the generator's, and a barer row of the same name is the same fiction with less
+   * typing. `bare` remains the guard: one member holding any real field takes the
+   * group out of this branch entirely and back into an ordinary election.
+   */
+  const allFabricated = bare && provs.length > 0 && members.length > 0;
 
   /**
    * Generic AND bare is the 391-row class the 09-18 handoff settled: 210 rows named
@@ -462,7 +505,8 @@ function build(
         `fabricated, keeping one row keeps one fake venue`
     );
 
-  return { key, stratum, survivor, members: list, homogeneous, survivorBare, evidence };
+  const id = `${key}#${Math.min(...members.map((m) => Number(m.id)))}`;
+  return { id, key, stratum, survivor, members: list, homogeneous, survivorBare, evidence };
 }
 
 // ---------------------------------------------------------------- the bound

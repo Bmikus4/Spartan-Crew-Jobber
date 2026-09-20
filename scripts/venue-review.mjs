@@ -35,7 +35,7 @@ const writeMarks = (m) => fs.writeFileSync(MARKS, JSON.stringify(m, null, 1));
 async function apply() {
   const { decisions, places } = JSON.parse(fs.readFileSync(DECISIONS, "utf8"));
   const marks = readMarks();
-  const approved = decisions.filter((d) => marks[d.key]?.mark === "approve");
+  const approved = decisions.filter((d) => marks[d.id]?.mark === "approve");
 
   const del = [];
   const deact = [];
@@ -70,37 +70,65 @@ async function apply() {
     console.log(`  deactivated ${batch.length}`);
   }
 
-  for (const batch of chunk(del, 50)) {
-    await c.deletePlaces(batch);
-    process.stdout.write(".");
-  }
-  console.log(`\nsent ${del.length} deletes — now reading the pool back`);
-
   /**
-   * DELETE /places reported success on rows it had not deleted (4f0f795), so the
-   * count that goes in the log is the one the tenant agrees with.
+   * Deleting is a LOOP, not a pass, and the reason is measured.
    *
-   * The read-back is ONE full pull rather than a per-id probe: 3,000 probes is an
-   * hour and a cached list is 69 pages. __resetListCache matters — allPlaces() is
-   * memoised and would otherwise hand back the pre-delete snapshot and report a
-   * clean run every time.
+   * On 2026-09-20 a single pass of 50-row batches reported success on all 3,179 rows
+   * and left 229 of them present. Retried individually they deleted without complaint,
+   * so they were never refused — a batch silently drops rows. Worse, OnSinch 400s an
+   * ENTIRE batch if one id in it is already gone ("Records with specified IDs not
+   * found"), so a naive retry of a partly-applied batch fails wholesale.
+   *
+   * Hence: re-read the pool each round, send only what is still there, and on a batch
+   * failure fall back to one id at a time so a single bad id cannot mask the rest.
+   * Stop when a round makes no progress, which is the signal that what remains is
+   * genuinely undeletable rather than merely unlucky.
    */
   const { __resetListCache } = await import("../app/lib/engine/onsinch.ts");
-  __resetListCache();
-  const after = await c.allPlaces();
-  const alive = new Set(after.map((p) => Number(p.id)));
-  const stuck = del.filter((id) => alive.has(id));
-  const stillActive = after.filter((p) => deact.includes(Number(p.id)) && p.active);
+  const pool = async () => { __resetListCache(); return await c.allPlaces(); };
 
-  console.log(`deleted ${del.length - stuck.length} of ${del.length}` +
-    (stuck.length ? ` — ${stuck.length} STILL PRESENT` : ""));
-  if (stuck.length) console.log(`  stuck ids: ${stuck.slice(0, 50).join(", ")}`);
-  console.log(`deactivated ${deact.length - stillActive.length} of ${deact.length}` +
-    (stillActive.length ? ` — ${stillActive.length} still active` : ""));
-  console.log(`pool: ${places.length} -> ${after.length}`);
+  let after = await pool();
+  for (let round = 1; round <= 8; round++) {
+    const alive = new Set(after.map((p) => Number(p.id)));
+    const todo = del.filter((id) => alive.has(id));
+    if (!todo.length) break;
+    for (const b of chunk(todo, 10)) {
+      try { await c.deletePlaces(b); }
+      catch { for (const id of b) { try { await c.deletePlaces([id]); } catch {} } }
+    }
+    after = await pool();
+    const left = del.filter((id) => new Set(after.map((p) => Number(p.id))).has(id));
+    console.log(`  round ${round}: ${todo.length} sent, ${left.length} still present, pool ${after.length}`);
+    if (left.length === todo.length) { console.log("  no progress — the rest will not delete"); break; }
+  }
+
+  /**
+   * Whatever OnSinch will not delete is DEACTIVATED instead. Those rows are almost
+   * always duplicates of real venues with a live job standing on them, which is the
+   * API protecting them. Deactivation still takes them out of the matcher's candidate
+   * pool, which is what the sweep actually needs.
+   */
+  const alive = new Set(after.map((p) => Number(p.id)));
+  const undeletable = del.filter((id) => alive.has(id));
+  if (undeletable.length) {
+    for (const b of chunk(undeletable, 25))
+      await c.patchPlaces(b.map((id) => ({ id, active: false })));
+    after = await pool();
+    console.log(`  ${undeletable.length} undeletable rows deactivated instead`);
+  }
+
+  const stillActive = after.filter((p) => deact.includes(Number(p.id)) && p.active);
+  const active = after.filter((p) => p.active).length;
+  const sentinel = after.find((p) => String(p.name).toLowerCase().trim() === "no location");
+  console.log(`\ndeleted ${del.length - undeletable.length} of ${del.length} marked delete`);
+  console.log(`deactivated ${deact.length - stillActive.length} of ${deact.length} marked deactivate`);
+  console.log(`pool: ${places.length} -> ${after.length}  (${active} active, ${after.length - active} inactive)`);
+  console.log(`sentinel: ${sentinel ? `id ${sentinel.id}, active=${sentinel.active}` : "*** MISSING — STOP ***"}`);
   fs.writeFileSync(path.join(OUT, "applied.json"),
-    JSON.stringify({ at: new Date().toISOString(), del, deact, stuck,
-      stillActive: stillActive.map((p) => p.id), before: places.length, after: after.length }, null, 1));
+    JSON.stringify({ at: new Date().toISOString(), del, deact, undeletable,
+      stillActive: stillActive.map((p) => p.id), before: places.length,
+      after: after.length, active }, null, 1));
+  fs.writeFileSync(path.join(OUT, "after.json"), JSON.stringify(after, null, 1));
 }
 
 const chunk = (a, n) => Array.from({ length: Math.ceil(a.length / n) }, (_, i) => a.slice(i * n, i * n + n));
@@ -305,8 +333,8 @@ async function boot(){
 function shown(){
   const q=DATA.queue;
   if(FILTER==='queue')return q;
-  if(FILTER==='left')return q.filter(d=>!MARKS[d.key]);
-  if(FILTER==='deny')return q.filter(d=>MARKS[d.key]?.mark==='deny');
+  if(FILTER==='left')return q.filter(d=>!MARKS[d.id]);
+  if(FILTER==='deny')return q.filter(d=>MARKS[d.id]?.mark==='deny');
   return q.filter(d=>d.stratum===FILTER);
 }
 
@@ -329,7 +357,7 @@ function stats(){
     const s=(by[d.stratum] ??= {rows:0,sizes:[],G:0,g:0,k:0,audited:0});
     const rows=rowsOf(d);
     s.rows+=rows; s.G++;
-    const m=MARKS[d.key]?.mark;
+    const m=MARKS[d.id]?.mark;
     if(m){s.g++; s.audited+=rows; if(m==='deny')s.k++}
     else s.sizes.push(rows);
   }
@@ -340,11 +368,11 @@ function stats(){
     const worst=s.sizes.sort((a,b)=>b-a).slice(0,wrong).reduce((a,b)=>a+b,0);
     // a denied decision's own rows are known-bad, not merely possible-bad
     const denied=DATA.decisions.filter(d=>d.stratum &&
-      MARKS[d.key]?.mark==='deny').filter(d=>by[d.stratum]===s);
+      MARKS[d.id]?.mark==='deny').filter(d=>by[d.stratum]===s);
     D+=worst+denied.reduce((a,d)=>a+rowsOf(d),0);
   }
-  const marked=DATA.decisions.filter(d=>MARKS[d.key]).length;
-  const denied=DATA.decisions.filter(d=>MARKS[d.key]?.mark==='deny').length;
+  const marked=DATA.decisions.filter(d=>MARKS[d.id]).length;
+  const denied=DATA.decisions.filter(d=>MARKS[d.id]?.mark==='deny').length;
   return {N,D:Math.min(D,N),audited,marked,denied,
     rate:N?Math.min(D,N)/N:1,total:DATA.decisions.length};
 }
@@ -373,7 +401,7 @@ function fieldsOf(p){
 
 function card(d,i,focused){
   const surv=d.survivor?BYID.get(d.survivor):null;
-  const m=MARKS[d.key];
+  const m=MARKS[d.id];
   // collapse losers to distinct shapes — 180 identical rows is one line, not 180
   const groups=new Map();
   for(const mem of d.members){
@@ -385,7 +413,7 @@ function card(d,i,focused){
     g.ids.push(mem.id); groups.set(sig,g);
   }
   const rows=[...groups.values()].sort((a,b)=>b.ids.length-a.ids.length);
-  return '<div class="card'+(m?' done':'')+(focused?' focus':'')+'" data-k="'+esc(d.key)+'" id="c'+i+'">'
+  return '<div class="card'+(m?' done':'')+(focused?' focus':'')+'" data-k="'+esc(d.id)+'" id="c'+i+'">'
    +'<div class="top"><span class="key">'+esc(d.key)+'</span>'
    +'<span class="badge '+d.stratum+'">'+d.stratum+'</span>'
    +(d.survivorBare?'<span class="badge risk">survivor locates nothing</span>':'')
@@ -436,7 +464,7 @@ document.addEventListener('click',async e=>{
 async function mark_(key,mark){
   if(mark===null)delete MARKS[key];
   else MARKS[key]={mark,note:'',at:new Date().toISOString()};
-  const list=shown(); const at=list.findIndex(d=>d.key===key);
+  const list=shown(); const at=list.findIndex(d=>d.id===key);
   if(at>=0&&mark)FOCUS=Math.min(list.length-1,at+1);
   render();
   document.getElementById('c'+FOCUS)?.scrollIntoView({block:'center',behavior:'smooth'});
@@ -448,8 +476,8 @@ document.addEventListener('keydown',e=>{
   if(e.target.tagName==='INPUT'||e.metaKey||e.ctrlKey)return;
   const list=shown(); const d=list[FOCUS]; if(!d)return;
   const k=e.key.toLowerCase();
-  if(k==='a'){e.preventDefault();mark_(d.key,'approve')}
-  else if(k==='d'){e.preventDefault();mark_(d.key,'deny')}
+  if(k==='a'){e.preventDefault();mark_(d.id,'approve')}
+  else if(k==='d'){e.preventDefault();mark_(d.id,'deny')}
   else if(k==='j'||e.key==='ArrowDown'){e.preventDefault();FOCUS=Math.min(list.length-1,FOCUS+1);render();
     document.getElementById('c'+FOCUS)?.scrollIntoView({block:'center'})}
   else if(k==='k'||e.key==='ArrowUp'){e.preventDefault();FOCUS=Math.max(0,FOCUS-1);render();

@@ -151,6 +151,16 @@ ok(fabricationEvidence("The Grand Plaza, 123 Business Road, London, EC1A 1BB")
   ?.includes("documentation"), "EC1A 1BB is a documentation postcode");
 ok(fabricationEvidence("Westbridge Manor Hall, 32 High Street, Westbridge, AB12 3CD")
   ?.includes("documentation"), "AB12 3CD is a documentation postcode");
+ok(fabricationEvidence("Riverside Conference Hall, 123 River Street, London, LN5 3RT") !== null,
+  "the 150-row Riverside family is convicted (by the river-street rule, before 123 is reached)");
+ok(fabricationEvidence("The Grand Pavilion, 123 City Road, Manchester, M1 2AB")
+  ?.includes("123"), "house number 123 convicts where no other rule fires — real area, real street");
+ok(fabricationEvidence("Grand City Hall, 123 Innovation Road")?.includes("123"),
+  "...with no postcode present at all");
+ok(fabricationEvidence("LinkedIn") === null,
+  "LinkedIn is NOT convicted — its real 123 Farringdon Road lives in the address column, not the name");
+ok(fabricationEvidence("Studio 123 Gallery") === null,
+  "a 123 that is not a house number does not convict");
 ok(fabricationEvidence("Royal Albert Hall") === null, "a real venue name is not convicted");
 ok(fabricationEvidence("Tobacco Dock Ltd, 50 Porters Walk, London, E1W 2SF") === null,
   "a real address with a real area is not convicted");
@@ -167,6 +177,28 @@ ok(fabHits.length === 2 && fabHits[0].kind === "fabricated-address",
 const fabPlan = plan({ places: FAB, hits: fabHits, referenced: new Set() });
 ok(fabPlan[0].survivor === null && fabPlan[0].members.every((m) => m.action === "delete"),
   "a wholly fabricated family elects nobody — no surviving fake venue");
+
+// one convicted member condemns an all-bare family
+const MIXED = [
+  { id: 2038, name: "Tech Convention Center, 123 Innovation Way, London, WC2N 5DU", active: true },
+  { id: 5988, name: "Tech Convention Center, London", active: true },
+  { id: 5989, name: "Tech Convention Center, London", active: true },
+];
+const mixedPlan = plan({ places: MIXED, hits: provenanceHits(MIXED, []), referenced: new Set() });
+ok(mixedPlan[0].survivor === null,
+  "one convicted row condemns the whole all-bare family — a barer sibling is the same fiction");
+ok(mixedPlan[0].members.every((m) => m.action === "delete"),
+  "...so the convicted row cannot be elected as the survivor");
+
+const MIXED_REAL = [
+  { id: 300, name: "Tech Convention Center, 123 Innovation Way, London, WC2N 5DU", active: true },
+  { id: 301, name: "Tech Convention Center", zip: "WC2N 5DU", city: "London", active: true },
+];
+const mixedReal = plan({ places: MIXED_REAL, hits: provenanceHits(MIXED_REAL, []), referenced: new Set() });
+ok(mixedReal[0].survivor === 301,
+  "one member carrying real data takes the group OUT of the fabricated branch");
+ok(mixedReal[0].members.find((m) => m.id === 300)!.action === "delete",
+  "...and the fabricated row is the one that goes");
 
 // generic and bare
 console.log("\ngeneric placeholder words");
