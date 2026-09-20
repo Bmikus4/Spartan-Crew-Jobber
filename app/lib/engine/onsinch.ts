@@ -708,6 +708,33 @@ export class OnsinchClient {
     return true;
   }
 
+  /**
+   * PATCH /places — the deactivation route for the venue sweep.
+   *
+   * Deactivation exists because DELETE is not reversible and a venue row is shared by
+   * every order that ever pointed at it. A row that loses a merge but carries data, or
+   * that an engine order stands on, is deactivated instead: the pool shrinks, the
+   * history stays, and a mistake is one PATCH away from undone.
+   *
+   * `name` is refused here. Merging adds information; it never chooses between two
+   * facts, and renaming a row silently reassigns every order standing on it.
+   */
+  async patchPlaces(patches: Array<{ id: number } & Record<string, unknown>>) {
+    if (!patches.length) return true;
+    for (const p of patches) {
+      if (!Number.isInteger(Number(p.id)) || Number(p.id) <= 0)
+        throw new Error(`patchPlaces: ${JSON.stringify(p)} carries no place id`);
+      if (Object.keys(p).length < 2)
+        throw new Error(`patchPlaces: place ${p.id} carries no fields to change`);
+      if ("name" in p)
+        throw new Error(`patchPlaces: refusing to rename place ${p.id} — every order standing on the row would follow the new name`);
+    }
+    const r = await this.t("PATCH", "/places", patches);
+    if (r.status !== 204 && r.status !== 200)
+      throw new Error(`patchPlaces ${r.status}: ${JSON.stringify(r.data?.validationErrors ?? r.data)}`);
+    return true;
+  }
+
   /** PATCH /orders — array w/ id, returns 204 no body. */
   async patchOrder(patch: Array<{ id: number } & Record<string, unknown>>) {
     const r = await this.t("PATCH", "/orders", patch);
