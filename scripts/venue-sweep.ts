@@ -251,7 +251,16 @@ function classifyPhase() {
   console.log(`  sentinel: id ${sentinels[0][0]} — exempt from every phase`);
 }
 
-if (process.argv.includes("--snapshot")) snapshot();
-else if (process.argv.includes("--classify")) classifyPhase();
-else if (process.argv[1]?.includes("venue-sweep"))
-  console.log("pick a phase: --snapshot (live, read-only) or --classify (offline)");
+/**
+ * Guarded on the ENTRY file, not just on the flags.
+ *
+ * venue-sweep2.ts imports GENERIC and SENTINEL_NAME from here so the two sweeps
+ * cannot disagree about what is generic. Without this guard that import re-ran this
+ * file's dispatch: `npx tsx scripts/venue-sweep2.ts --snapshot` fired BOTH snapshots,
+ * and the v1 one overwrote the 09-18 snapshot on its way to exiting non-zero.
+ */
+if (/venue-sweep\.[tj]s$/.test(process.argv[1] ?? "")) {
+  if (process.argv.includes("--snapshot")) snapshot();
+  else if (process.argv.includes("--classify")) classifyPhase();
+  else console.log("pick a phase: --snapshot (live, read-only) or --classify (offline)");
+}
