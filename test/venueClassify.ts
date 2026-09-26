@@ -69,7 +69,7 @@ const fair = c.groups.find((g) => g.members.includes(6835));
 ok(fair?.bucket === "identical", "same name + same postcode is the identical bucket");
 ok(fair?.survivor === 9, "the survivor is the row with the most data");
 ok(fair?.members.length === 3, "all three Fairmont rows are in one group");
-ok(fair?.members.includes(6835), "a duplicate is grouped regardless of how booked it is");
+ok(fair?.members.includes(6835) === true, "a duplicate is grouped regardless of how booked it is");
 
 const bat = c.groups.find((g) => g.members.includes(312));
 ok(bat?.bucket === "same-name-diff-postcode", "different postcodes never land in identical");

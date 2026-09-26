@@ -146,16 +146,16 @@ ok(HOMO[0].homogeneous === true, "identical losers are homogeneous — one audit
 // ------------------------------------------------- structural fabrication
 console.log("\nfabricated addresses (the n8n log is only nine days deep)");
 ok(fabricationEvidence("Grand Exhibition Hall, 45 Innovation Avenue, Tech City, TX12 4RT")
-  ?.includes("TX12"), "TX12 is not a real postcode area");
+  ?.includes("TX12") === true, "TX12 is not a real postcode area");
 ok(fabricationEvidence("The Grand Plaza, 123 Business Road, London, EC1A 1BB")
-  ?.includes("documentation"), "EC1A 1BB is a documentation postcode");
+  ?.includes("documentation") === true, "EC1A 1BB is a documentation postcode");
 ok(fabricationEvidence("Westbridge Manor Hall, 32 High Street, Westbridge, AB12 3CD")
-  ?.includes("documentation"), "AB12 3CD is a documentation postcode");
+  ?.includes("documentation") === true, "AB12 3CD is a documentation postcode");
 ok(fabricationEvidence("Riverside Conference Hall, 123 River Street, London, LN5 3RT") !== null,
   "the 150-row Riverside family is convicted (by the river-street rule, before 123 is reached)");
 ok(fabricationEvidence("The Grand Pavilion, 123 City Road, Manchester, M1 2AB")
-  ?.includes("123"), "house number 123 convicts where no other rule fires — real area, real street");
-ok(fabricationEvidence("Grand City Hall, 123 Innovation Road")?.includes("123"),
+  ?.includes("123") === true, "house number 123 convicts where no other rule fires — real area, real street");
+ok(fabricationEvidence("Grand City Hall, 123 Innovation Road")?.includes("123") === true,
   "...with no postcode present at all");
 ok(fabricationEvidence("LinkedIn") === null,
   "LinkedIn is NOT convicted — its real 123 Farringdon Road lives in the address column, not the name");
