@@ -45,6 +45,13 @@ export type SweepAction =
   | "rebound"
   | "lost"
   | "unreconciled"
+  /**
+   * Distinct from `unreconciled` on purpose. `unreconciled` means the engine sent a
+   * change three times and OnSinch did not take it — a fact about OnSinch. This means
+   * the engine had no way to send it at all, which is a fact about the engine's own
+   * record of the order, and the two want different answers from a person.
+   */
+  | "unactionable"
   | "error";
 
 export interface SweepOutcome {
@@ -261,6 +268,41 @@ export async function reconcileThread(
   const attempts = (same ? state.reconcile!.attempts : 0) + 1;
   state.reconcile = { order_id, key, attempts, first_ts: same ? state.reconcile!.first_ts : now() };
 
+  /**
+   * CAN THIS SWEEP MOVE WHAT IT FOUND? Measured 2026-09-26: six of the eight live
+   * `amend-refused` threads could not, and never could have.
+   *
+   * The job window is DERIVED. `Job.min_beginning`/`max_end` are the envelope of every
+   * block on the order and nothing in this engine writes them; the only lever on the
+   * window is the blocks underneath it. `amendOrderInPlace` is the only thing that
+   * writes blocks and it is skipped outright unless `last_ordered_teams` records which
+   * blocks are ours — so on a thread holding none, a window difference is not a write
+   * that failed. It is a write that was never attempted, and re-sending it hourly moves
+   * the attempt counter and nothing else.
+   *
+   * Order-level fields go through `patchOrder`, which needs no block record, so drift
+   * naming one still has a lever and still earns its three attempts.
+   */
+  const lever = drift.some((d) => d.where === "order") || !!state.last_ordered_teams?.length;
+  if (!lever) {
+    state.needs_human = true;
+    state.review_only = false;
+    state.notes = [
+      ...state.notes,
+      `order #${order_id}: this engine holds no record of which blocks on it are its own, ` +
+        `so it cannot move the job window — ${describeDrift(drift)}`,
+    ];
+    logAction(state, now, {
+      ts: now(),
+      kind: "amend-refused",
+      order_id,
+      ok: false,
+      error: "no block correspondence — a derived window cannot be written",
+    });
+    await store.put(state);
+    return { thread_id, order_id, action: "unactionable", detail: describeDrift(drift) };
+  }
+
   if (attempts > SWEEP_RECONCILE_CEILING) {
     state.needs_human = true;
     state.review_only = false;
@@ -308,6 +350,39 @@ export async function reconcileThread(
     state.notes = [...state.notes, `re-assertion against order #${order_id} failed: ${String(err?.message ?? err)}`];
     await store.put(state);
     return { thread_id, order_id, action: "error", detail: String(err?.message ?? err) };
+  }
+
+  /**
+   * A RE-ASSERT THAT SENT NOTHING IS NOT A RE-ASSERT.
+   *
+   * This logged `amend ok=true` unconditionally, including when the amendment declined
+   * every block and `patchOrder` found no safe field — so the health row counted writes
+   * that never left the process, and three of them had to accrue before the thread said
+   * anything. Of 27 `amend ok=true` entries in the seven days to 2026-09-26, an unknown
+   * number are this.
+   *
+   * A decline is deterministic: `amendOrderInPlace` refused because it could not pair
+   * our blocks to OnSinch's, and the next hour presents it with the identical problem.
+   * So this is a dead end on the spot rather than after three more reads of an order
+   * nothing is going to be written to.
+   */
+  if (applied === 0) {
+    state.needs_human = true;
+    state.review_only = false;
+    state.notes = [
+      ...state.notes,
+      `order #${order_id}: the amendment could not pair any block on it to this thread, ` +
+        `so nothing was sent — ${describeDrift(drift)}`,
+    ];
+    logAction(state, now, {
+      ts: now(),
+      kind: "amend-refused",
+      order_id,
+      ok: false,
+      error: "amendment declined every block — nothing was sent",
+    });
+    await store.put(state);
+    return { thread_id, order_id, action: "unactionable", detail: describeDrift(drift) };
   }
 
   logAction(state, now, { ts: now(), kind: "amend", order_id, ok: true });

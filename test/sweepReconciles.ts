@@ -295,6 +295,74 @@ const HELD = { size: 4, beginning: `${DAY}T09:30:00+00:00`, end: `${DAY}T14:00:0
     );
   }
 
+  /**
+   * The eight live `amend-refused` threads, measured 2026-09-26. Six carried a window
+   * difference and NO record of which blocks on the order were the engine's own, so
+   * `amendOrderInPlace` was skipped, nothing was ever sent, and the thread still burned
+   * three hourly reads before saying anything -- under a note blaming OnSinch for not
+   * taking a change it was never offered.
+   */
+  console.log("\n[10] a window difference with no block record is unactionable, not unreconciled");
+  {
+    const NARROW = { ...LIVE_ORDER, Job: [{ id: 16055, min_beginning: DAY + "T09:30:00+00:00", max_end: DAY + "T11:00:00+00:00" }] };
+    const { deps, writes } = fakeDeps({ orders: [NARROW] });
+    const s = stateBound();
+    s.last_ordered_teams = undefined;
+    s.last_ordered_team_ids = undefined;
+    const r = await reconcileThread(s, deps, { todayISO: TODAY });
+    ok(r.action === "unactionable", "reported as unactionable", r.action);
+    ok(writes.length === 0, "and NOTHING was sent, because nothing could be", JSON.stringify(writes));
+    ok(s.reconcile?.attempts === 1, "on the FIRST pass -- the ceiling is not burned on a write that cannot happen", String(s.reconcile?.attempts));
+    ok(s.needs_human === true, "the thread asks for a person");
+    const last = s.order_action_log?.[s.order_action_log.length - 1] as any;
+    ok(last?.kind === "amend-refused" && last?.ok === false, "logged as a refusal", String(last?.kind));
+    ok(/no block correspondence/.test(String(last?.error)), "naming the real reason, not OnSinch", String(last?.error));
+    ok(!s.notes.some((n) => /has not taken this change/.test(n)),
+      "and NEVER says OnSinch refused a change the engine never sent");
+  }
+
+  console.log("\n[11] order-level drift still has a lever, so it still gets its attempts");
+  {
+    const { deps, writes } = fakeDeps({ orders: [{ ...LIVE_ORDER, specification: "" }], slot: HELD });
+    const s = stateBound();
+    s.last_ordered_teams = undefined;
+    s.last_ordered_team_ids = undefined;
+    (s.desired_order as any).specification = "Crew for the 20th at HQ";
+    const r = await reconcileThread(s, deps, { todayISO: TODAY });
+    ok(r.action === "reasserted", "re-asserted rather than abandoned", r.action);
+    ok(writes.some((w) => /patchOrder/.test(w)), "patchOrder needs no block record and still runs", JSON.stringify(writes));
+  }
+
+  /**
+   * `logAction(kind: "amend", ok: true)` fired unconditionally after the try block, so a
+   * pass in which the amendment declined every block and patchOrder found no safe field
+   * still counted as a write. The health row read 27 successful amends in the seven days
+   * to 2026-09-26 and an unknown number of them had left the process empty-handed.
+   */
+  console.log("\n[12] a re-assert that sent nothing is not logged as a write");
+  {
+    const { deps } = fakeDeps({ orders: [LIVE_ORDER], slot: { ...HELD, size: 2 } });
+    (deps as any).executor.amendOrderInPlace = async () => ({ declined: "no block could be paired" });
+    (deps as any).executor.patchOrder = async () => [];
+    const s = stateBound();
+    const r = await reconcileThread(s, deps, { todayISO: TODAY });
+    ok(r.action === "unactionable", "a declined amendment is a dead end, not a success", r.action);
+    const kinds = (s.order_action_log ?? []).map((e: any) => e.kind + ":" + e.ok);
+    ok(!kinds.includes("amend:true"), "and is NOT counted as an amend that worked", JSON.stringify(kinds));
+    const last = s.order_action_log?.[s.order_action_log.length - 1] as any;
+    ok(/nothing was sent/.test(String(last?.error)), "the log says so plainly", String(last?.error));
+  }
+
+  console.log("\n[13] the healthy re-assert is unchanged");
+  {
+    const { deps } = fakeDeps({ orders: [LIVE_ORDER], slot: { ...HELD, size: 2 } });
+    const s = stateBound();
+    const r = await reconcileThread(s, deps, { todayISO: TODAY });
+    ok(r.action === "reasserted", "a real write still reports as re-asserted", r.action);
+    const last = s.order_action_log?.[s.order_action_log.length - 1] as any;
+    ok(last?.kind === "amend" && last?.ok === true, "and IS logged as an amend that worked", String(last?.kind));
+  }
+
   console.log(fails ? `\n${fails} FAILED` : "\nALL PASS");
   process.exit(fails ? 1 : 0);
 })();
