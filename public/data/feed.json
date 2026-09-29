@@ -80,5 +80,25 @@
    "app/lib/engine/venueSearch.ts:156 \u2014 V3 already ranked on active alone, no guard, no disagreement",
    "test/venueActivePreference.ts \u2014 [1] fails if the guard ever did anything; [3] pins retired-only booking"
   ]
+ },
+ {
+  "id": "S-0005",
+  "ts": "2026-09-29T03:14:16+00:00",
+  "kind": "decision",
+  "headline": "Drafts are dropped at the one ingest chokepoint (messagesFromPayload), and both sweeps now carry labelIds so the guard can see them. Dropped rather than flagged: a draft keeps its message id when sent, and ON CONFLICT DO NOTHING would have frozen a real reply as a draft forever. The n8n workflow edit is in-repo and UNDEPLOYED \u2014 the sweep path stays blind until an n8n key exists; test [5] pins that hole",
+  "subject": "An unsent Gmail draft stored as a Spartan reply and inverted whose turn it was",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 117,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  },
+  "sources": [
+   "app/lib/threadMessagesDb.ts isAnUnsentDraft \u2014 the guard and why it drops",
+   "test/draftIsNotAMessage.ts [2] \u2014 the inversion, [5] \u2014 the uncovered sweep path",
+   "n8n/spartan-sweep.workflow.json Build Sweep Payload \u2014 never read labelIds",
+   "probe 2026-09-29: draft r1748036216280915079 is live on a client thread and is the fixture"
+  ]
  }
 ]

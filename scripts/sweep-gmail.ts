@@ -156,6 +156,11 @@ function toPayload(thread: any) {
       subject: String(h.subject || ""),
       body: bodyOf(m.payload) || String(m.snippet || ""),
       is_from_spartan: SPARTAN.test(from),
+      // A DRAFT IS NOT A MESSAGE. Gmail returns unsent drafts on the thread, and a
+      // draft of ours has From bookings@ — so without this it stores as
+      // is_from_spartan:true and a client waiting on US reads as us waiting on THEM.
+      // threadMessagesDb drops them, but only when it is told; this is the telling.
+      labelIds: Array.isArray(m.labelIds) ? m.labelIds : [],
     };
   });
   return { thread_id: String(thread.id), messages, sweep: { mailbox: MAILBOX, swept: true } };

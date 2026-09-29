@@ -95,6 +95,40 @@ function addrList(v: unknown): string[] {
  * Tolerant of the same three spellings engine/intake.ts accepts — the workflow was copied
  * from House of Hud and still mixes Gmail, normalized and Outlook names.
  */
+/**
+ * A DRAFT IS NOT A MESSAGE.
+ *
+ * Gmail keeps a draft on its thread and hands it back beside the real mail. Its From
+ * is bookings@spartancrew.co.uk, so `is_from_spartan` comes out true — accurate, and
+ * completely misleading: the client never saw it. Every reader downstream then
+ * believes Spartan answered, and the direction of the thread inverts, turning a
+ * client waiting on us into us waiting on the client. That fact cannot be rebuilt
+ * later: once further mail lands, the tail of the thread no longer shows who was owed
+ * a reply.
+ *
+ * DROPPED, NOT FLAGGED, and the reason is the ON CONFLICT clause below. A draft keeps
+ * its message id when it is sent. Stored-and-flagged, the send hits
+ * `ON CONFLICT (message_id) DO NOTHING`, changes nothing, and the row stays marked a
+ * draft for good — a real reply permanently invisible. Never stored, the send inserts
+ * cleanly as a first sighting.
+ *
+ * MEMBERSHIP, NOT EQUALITY: a draft also wears INBOX and whatever else the thread
+ * carries. And several spellings are accepted because the callers differ — the poller
+ * sends Gmail's own `labelIds`, an n8n Code node may send `labels`, and a caller that
+ * has already decided can send `is_draft` outright.
+ *
+ * WHAT THIS CANNOT DO: invent a signal nobody sent. The n8n sweep's payload builder
+ * never reads `labelIds`, so its messages arrive with no label information and are
+ * stored exactly as before. That path stays blind until the workflow is redeployed;
+ * test/draftIsNotAMessage.ts [5] pins the hole so it is not mistaken for coverage.
+ */
+function isAnUnsentDraft(r: Record<string, unknown>): boolean {
+  if (typeof r.is_draft === "boolean") return r.is_draft;
+  const labels = r.labelIds ?? r.label_ids ?? r.labels;
+  if (!Array.isArray(labels)) return false;
+  return labels.some((l) => String(l).trim().toUpperCase() === "DRAFT");
+}
+
 export function messagesFromPayload(payload: unknown): StoredMessage[] {
   if (!payload || typeof payload !== "object") return [];
   const b = payload as Record<string, unknown>;
@@ -113,6 +147,7 @@ export function messagesFromPayload(payload: unknown): StoredMessage[] {
     const r = (m ?? {}) as Record<string, unknown>;
     const message_id = String(r.message_id ?? r.messageId ?? r.id ?? r.email_id ?? "").trim();
     if (!message_id) continue;          // no id means no identity means not storable
+    if (isAnUnsentDraft(r)) continue;   // the client never saw it — see the note above
     const from = addrOf(r.from ?? r.fromAddress);
     out.push({
       message_id,

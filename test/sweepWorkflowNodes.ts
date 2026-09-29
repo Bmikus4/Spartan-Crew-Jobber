@@ -171,7 +171,10 @@ console.log("\n[3] Build Sweep Payload matches what the terminal sweep produces"
   ok("sweep marker set for the store", p.sweep?.mailbox === "bookings@spartancrew.co.uk" && p.sweep?.swept === true);
 
   // Same field set as the terminal sweep builds, so the two routes fill one corpus.
-  const expectedFields = ["message_id", "from", "to", "date_iso", "subject", "body", "is_from_spartan"].sort();
+  // HAND-KEPT, and weaker than it reads: this list is a mirror of the object literal
+  // in scripts/sweep-gmail.ts, not a reading of it. Adding a field here without adding
+  // it there leaves the two sweeps disagreeing and this test still green. Change both.
+  const expectedFields = ["message_id", "from", "to", "date_iso", "subject", "body", "is_from_spartan", "labelIds"].sort();
   ok("message fields identical to scripts/sweep-gmail.ts", JSON.stringify(Object.keys(first).sort()) === JSON.stringify(expectedFields), Object.keys(first).sort().join(","));
 }
 
