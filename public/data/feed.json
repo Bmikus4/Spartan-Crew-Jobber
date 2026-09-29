@@ -174,5 +174,23 @@
    "test/depsForwardsReasoner.ts \u2014 new: counts arguments that arrive, not methods that exist",
    "test/followupCompose.ts [2] \u2014 live thread 1a0662d09571ad87, the nag that was nearly sent"
   ]
+ },
+ {
+  "id": "S-0008",
+  "ts": "2026-09-29T03:41:06+00:00",
+  "kind": "decision",
+  "headline": "outstandingAsk scanned quoted text: two of fourteen live drafts asked the client for something THEY had asked US. Quoted lines and everything below an attribution line are now dropped, and the phrase matcher reads the cleaned body rather than the raw one \u2014 the second leak survived the first fix because only the question scan had been moved. Drafts on threads 1a0662d09571ad87 and 1a08baf3b26360a8 are wrong and need deleting by hand",
+  "subject": "A chase asked the client to answer their own quoted question",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 119,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  },
+  "sources": [
+   "test/followupCompose.ts [5] \u2014 both live thread ids, pinned",
+   "app/lib/followup/compose.ts outstandingAsk \u2014 QUOTED, ATTRIBUTION, and PHRASES against cleaned"
+  ]
  }
 ]

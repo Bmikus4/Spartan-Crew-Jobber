@@ -90,8 +90,28 @@ export function outstandingAsk(lastSpartanBody: string): string | null {
   const PLEASANTRY =
     /\b(how (are|did|is|was|it|everything)|hope (you|the|it|this)|just (wanted|checking|thought)|all (well|good)|everything (ok|okay|went|go)|any (news|joy)|touching base|checking in)\b/i;
 
-  const cleaned = b
-    .split(/\r?\n/)
+  /**
+   * QUOTED TEXT IS NOT OURS TO CHASE, and this cost two real drafts before it was
+   * caught. A reply carries the client's message quoted beneath it, so scanning the
+   * whole body found "> > Do you have a contact number?" — the CLIENT asking US — and
+   * produced a chase asking them to answer their own question. The most embarrassing
+   * possible follow-up, and invisible until you read the ask rather than the email.
+   *
+   * Everything from a quote marker onward is somebody else's words. Also drops the
+   * "On <date> X wrote:" attribution line that introduces it, which carries no marker.
+   */
+  const QUOTED = /^\s*>+/;
+  const ATTRIBUTION = /^\s*(on\s.+\swrote:|from:\s|sent:\s|-{2,}\s*original message)/i;
+
+  /**
+   * An attribution line introduces a quoted block, and that block often carries NO
+   * marker at all. Cutting the attribution alone leaves the other party's words
+   * looking like ours, so everything from it onward goes.
+   */
+  const allLines = b.split(/\r?\n/);
+  const cut = allLines.findIndex((line) => ATTRIBUTION.test(line));
+  const cleaned = (cut === -1 ? allLines : allLines.slice(0, cut))
+    .filter((line) => !QUOTED.test(line))
     .filter((line) => !GREETING.test(line.trim()))
     .join(" ")
     .replace(/\s+/g, " ")
@@ -113,6 +133,12 @@ export function outstandingAsk(lastSpartanBody: string): string | null {
     [/\bhow many\b|\bcrew numbers?\b|\bnumber of crew\b/i, "the crew numbers"],
     [/\bconfirm\b/i, "confirmation so the job can be booked in"],
   ];
-  for (const [re, ask] of PHRASES) if (re.test(b)) return ask;
+  /**
+   * AGAINST `cleaned`, NOT `b`. Tested against the raw body, a quoted "Do you have a
+   * contact number?" from the client matched the site-contact phrase and produced a
+   * chase for something they had asked US — the same defect as the question scan, one
+   * line further down, and it survived the first fix because only the scan was moved.
+   */
+  for (const [re, ask] of PHRASES) if (re.test(cleaned)) return ask;
   return null;
 }

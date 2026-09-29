@@ -124,4 +124,25 @@ async function main() {
   }
 }
 
-main().catch((e) => { console.error(e); process.exit(1); });
+/**
+ * The dashboard's own view, through the same code the API serves — so a number on
+ * the screen and a number here can never be two different calculations.
+ */
+async function board() {
+  const { followupBoard } = await import("../app/lib/followup/board");
+  const i = process.argv.indexOf("--at");
+  const b = await followupBoard(i > -1 ? new Date(process.argv[i + 1]) : new Date());
+  console.log(`\nalerts: ${b.alerts.length}   dormant: ${b.dormant_count} (over ${b.dormant_days} days)`);
+  const linked = b.alerts.filter((a) => a.thread_url).length;
+  console.log(`thread links: ${linked} real, ${b.alerts.length - linked} fall back to search\n`);
+  for (const a of b.alerts.slice(0, 10)) {
+    console.log(`  ${a.direction_label.padEnd(27)} ${String(a.overdue_hours).padStart(5)}h overdue  ${a.company_name ?? a.contact_email ?? "?"}`);
+    console.log(`      ${a.subject.slice(0, 74)}`);
+  }
+}
+
+if (process.argv.includes("--board")) {
+  board().catch((e) => { console.error(e); process.exit(1); });
+} else {
+  main().catch((e) => { console.error(e); process.exit(1); });
+}

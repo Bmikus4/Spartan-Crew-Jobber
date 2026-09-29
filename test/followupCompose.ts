@@ -52,7 +52,29 @@ console.log("\n[4] a statement can still name what is outstanding");
     === "confirmation so the job can be booked in", "so is a confirmation");
 }
 
-console.log("\n[5] nothing identifiable means nothing is sent");
+console.log("\n[5] a quoted question belongs to whoever wrote it, not to us");
+{
+  /**
+   * MEASURED, NOT IMAGINED. Two of the fourteen drafts generated on 2026-09-29 asked
+   * this way: threads 1a0662d09571ad87 (">>>>>>>>>> How late is late evening?") and
+   * 1a08baf3b26360a8 ("> > Do you have a contact number?"). Both are the CLIENT's own
+   * question quoted inside Spartan's reply, so the chase asked them to answer
+   * themselves.
+   */
+  ok(outstandingAsk("Thanks, noted.\n\n>>>>>>>>>> How late is late evening?") === null,
+    "a quoted client question is not our ask",
+    String(outstandingAsk("Thanks, noted.\n\n>>>>>>>>>> How late is late evening?")));
+  ok(outstandingAsk("Booked in.\n\n> > Do you have a contact number?") === null,
+    "however many quote markers it carries");
+  ok(outstandingAsk("On Mon, 8 Sep 2026 at 10:04, Jo <jo@x.com> wrote:\nWhat time do you need us?") === null,
+    "an attribution line's quoted body is not ours either");
+  ok(outstandingAsk("Could you send the PO number?\n\n> > Do you have a contact number?")
+    === "Could you send the PO number?",
+    "and our own question above the quote still wins",
+    String(outstandingAsk("Could you send the PO number?\n\n> > Do you have a contact number?")));
+}
+
+console.log("\n[6] nothing identifiable means nothing is sent");
 {
   ok(outstandingAsk("") === null, "an empty message asks for nothing");
   ok(outstandingAsk("Thanks, all booked in. See you Friday.") === null,
