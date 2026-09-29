@@ -348,5 +348,52 @@
    "thera-f7 scratchpad successor-shapes-2026-09-29.json \u2014 per-order fate and successor block shapes",
    "app/lib/followup/compose.ts OFFER_COND \u2014 offer-shaped conditionals only"
   ]
+ },
+ {
+  "id": "S-0013",
+  "ts": "2026-09-29T12:21:13+00:00",
+  "kind": "measurement",
+  "headline": "The second and larger half of why engine orders are retyped, and it is not about crew. All 86 carry user_id 2257 \u2014 Ben's own account, the placeholder used when the sender cannot be matched \u2014 and 0 of 45 successors kept it; locally 305 of 431 threads used that placeholder, so contact matching fails on ~71% of orders. The rate card matches in 4 of 45: the house moved to 354 around 09-10 and the engine still sends 315, a default justified by a measurement that predates the move. In 16 of 25 chief-less pairs the block body is IDENTICAL and only the contact, card and names differ. Both fields are PATCHable. Plan reordered: these two now outrank everything, because they affect 100% of orders",
+  "subject": "Every order this engine sends names Ben as the client on a retired rate card",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 121,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  },
+  "measured": {
+   "source_a": "thera-f7, read-only against OnSinch: 86 api_response orders and their 45 readable successors",
+   "source_b": "corroborated locally against conversation_state, 749 rows",
+   "engine_orders_carrying_placeholder_contact_2257": 86,
+   "successors_matching_our_contact": 0,
+   "successors_with_order_manager_id_null": 41,
+   "successors_readable": 45,
+   "local_threads_with_a_recorded_contact": 431,
+   "local_using_placeholder_ben_2257": 305,
+   "local_resolving_a_real_client_contact": 126,
+   "successor_rate_card_matching_ours": 4,
+   "rate_card_flows": "315->342 x25, 315->354 x6, 315->355 x2, 342->354 x2, 197->354 x2",
+   "local_orders_intending_card_315": 142,
+   "local_orders_intending_card_354": 0,
+   "chief_less_pairs_identical_in_headcount_blocks_professions": 16,
+   "chief_less_pairs_total": 25,
+   "note": "Contact matching fails on ~71% of orders, substituting Ben's own account (PLACEHOLDER_CONTACT_ID, compiler.ts:261). The rate card default of 315 is justified in types.ts by a 498-order measurement that predates the house moving to 354 around 09-10; 354 appears nowhere in our data. Both fields are PATCHable, so neither is an API limit."
+  },
+  "deferred": [
+   {
+    "name": "causation",
+    "why": "contact and card are the only content difference present in all 16 clean pairs. That is the strongest available evidence, not proof. Neither thera-f7 nor this session claims causation from them alone."
+   },
+   {
+    "name": "re-measuring the correct rate card",
+    "why": "354 is where human orders moved, but the right default should be re-measured against current orders before the constant changes. Not done here."
+   }
+  ],
+  "sources": [
+   "app/lib/engine/compiler.ts:261 PLACEHOLDER_CONTACT_ID = 2257, and :1598 which already stages on it",
+   "app/lib/engine/types.ts default_rate_card \u2014 the 315 justification, now stale",
+   "docs/RESTART-PLAN-2026-09-29.md \u2014 Stream C and the revised order"
+  ]
  }
 ]

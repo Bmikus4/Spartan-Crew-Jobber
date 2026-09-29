@@ -129,11 +129,41 @@ Two later read-only results narrow the claim, and both cut against the tidy vers
   order name and 0 of 47 kept our job name. That rules naming out as a discriminator in
   either direction — it does not show naming is required, nor that it is cosmetic.
 
-**And the arithmetic does not close.** All 86 died, but only 22 of the 47 successors
-carry a lead position — the other 25 are small crews with no chief at all. Those 25 had
-no chief-shape problem and were retyped anyway. **So the separate Crew Chief team
-cannot be the sole cause; it explains at most half.** Something more general is causing
-engine-created orders to be rebuilt regardless of shape, and it is not yet identified.
+**And the arithmetic does not close on shape.** All 86 died, but only 22 of the 47
+successors carry a lead position — the other 25 are small crews with no chief at all.
+Those 25 had no chief-shape problem and were retyped anyway.
+
+### The other half, and it is the bigger one
+
+Measured read-only by `thera-f7`, corroborated locally here against our own
+`conversation_state`. The remaining cause is **order-level fields, not the block body**.
+
+- **Every order names the wrong client.** All 86 engine creates carry
+  `user_id = 2257` and `order_manager_id = 2257`. 2257 is Ben's own account —
+  `PLACEHOLDER_CONTACT_ID` in `compiler.ts:261`, the stand-in used when the sender
+  cannot be matched to an OnSinch user. **All 45 readable successors carry a real
+  client contact and 0 of 45 match ours**; 41 of 45 have `order_manager_id` null, so
+  ops clear the field Ben asked to have filled on 2026-08-25.
+  Locally: of 431 threads with a recorded contact, **305 used the placeholder and only
+  126 resolved a real client.** Contact matching fails on roughly 71% of orders.
+- **The rate card is stale.** The successor's `Job.pricelist_category_id` matches ours
+  in **4 of 45**. The flows are 315→342 (25), 315→354 (6), 315→355 (2), 342→354 (2),
+  197→354 (2); human orders moved onto **card 354** after about 09-10.
+  Locally: we intended 315 on 142 of the 191 orders carrying a card, and **354 appears
+  nowhere in our data at all.** The justification comment on `default_rate_card` in
+  `types.ts` argues 315 from a measurement of 498 orders that predates the move.
+- **In the chief-less subset, 16 of 25 pairs are identical** in headcount, block count
+  and professions. For those the *only* differences are the contact, the rate card and
+  the names.
+
+Both fields are `PATCH`able (`PATCH /orders` `user_id`, `PATCH /jobs`
+`pricelist_category_id`), so none of this is an API limit.
+
+**So the answer, in one line: an engine order arrives naming Ben as the client on a
+rate card the business no longer uses, and a person has to fix that on every single
+one.** Shape explains the 22 with a chief; this explains all 86. `thera-f7` does not
+claim causation from contact and card alone, and neither do I — but it is the only
+content difference present in all 16 clean pairs.
 
 `thera-f7`'s own caveat, kept verbatim in spirit: shape is demonstrably *one*
 difference; that it is the *only* reason is not proven.
@@ -200,18 +230,37 @@ plan exists to prevent.
 
 ---
 
-## Order, and why
+## Order, and why — REVISED once Stream C answered
 
-1. **Stream A's pure parts** — the runner and label writer against a fake. No
+Stream C was research when this was written and is now the largest known defect in the
+product, so it goes first. The contact and the rate card affect **100% of orders**,
+they are the reason every engine order is retyped, and neither needs a new API
+capability — only correct values in a body we already send.
+
+1. **Contact resolution.** Make `matchContact` succeed, or fail loudly instead of
+   silently substituting Ben. 71% placeholder is not a fallback, it is the norm. Until
+   this lands, every order the engine writes will be corrected by hand no matter what
+   else is fixed — so nothing downstream of it is worth optimising.
+2. **The rate card.** 315 is stale; the house moved to 354 around 09-10. Re-measure
+   against current orders rather than trusting the comment, then change the default and
+   rewrite that comment with the new measurement and its date. The existing "money is
+   the one thing worth a click" staging rule stays.
+3. **Stream A's pure parts** — the runner and label writer against a fake. No
    credential, no live effect, and it finishes the feature that currently only looks
    finished.
-2. **Stream C read-only** — it is free, it answers the oldest question in the project,
-   and its answer determines what Stream D verifies against.
-3. **Stream F** — the carried item, before any restart.
-4. **Stream E** — small, self-contained, and finishes work already applied to the live
+4. **Stream F** — the carried item, before any restart.
+5. **Block shape** (the `role=1` chief inside the crew block, plus the per-position
+   rate the body has no field for) — necessary for 22 of 47, and the larger change of
+   the three. Behind the two that affect everything.
+6. **Stream E** — small, self-contained, and finishes work already applied to the live
    tenant.
-5. **Streams B, D, G** — each blocked on a person: a Gmail credential, an authorised
+7. **Streams B, D, G** — each blocked on a person: a Gmail credential, an authorised
    probe, a conversation with the team.
+
+A note for whoever executes this: items 1 and 2 are small, and their smallness is the
+point. Months of this project's effort went into intake accuracy, venue matching and
+auth while every order it produced was unusable on arrival for two reasons that fit in
+a sentence.
 
 Stream A's Gmail write, Stream B, and anything touching the 39 `proposed` orders wait
 for Ben.
