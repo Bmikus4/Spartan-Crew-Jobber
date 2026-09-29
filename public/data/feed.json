@@ -454,5 +454,24 @@
    "scripts/session.py commit_and_push \u2014 the leftovers warning",
    "test/followupCompose.ts [6] \u2014 stranded by S-0012, landed here"
   ]
+ },
+ {
+  "id": "S-0016",
+  "ts": "2026-09-29T23:37:03+00:00",
+  "kind": "decision",
+  "headline": "Records the reference order created on TEST 515 at Ben's request (R11282, job 16373, blocks 41732/41733) as off-limits, with the verification that nothing here can reach it \u2014 the only app-path delete is driven by a thread's own bound order id and it has no thread. Also records that the five verify-* scripts create REAL orders that land in the api_response cohort, which is how the withdrawn 2% figure got its denominator. And names the lever for Ben's no-confirm-click rule: request_approval, not provisional \u2014 format.ts omits provisional by measurement, and a peer reading provisional=false back from an order posted with request_approval=false conflated the two",
+  "subject": "OnSinch #16315 is a hand-shaped reference order and no sweep may touch it",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 121,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  },
+  "sources": [
+   "app/lib/engine/format.ts:11-34 \u2014 why provisional and quote are not sent, measured on 14868/14869/14870",
+   "app/lib/engine/replaceOrder.ts:236 \u2014 the only delete on the app path",
+   "thera-f7, 2026-09-29 \u2014 created #16315 at Ben's explicit request"
+  ]
  }
 ]

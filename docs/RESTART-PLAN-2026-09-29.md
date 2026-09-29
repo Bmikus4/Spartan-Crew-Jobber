@@ -9,6 +9,36 @@ Each stream expands into a stepped plan when it is chosen.
 
 ---
 
+## Do not touch: OnSinch order #16317
+
+Created 2026-09-29 on TEST company 515 at Ben's explicit request by session `thera-f7`,
+as the reference for the house block schema. **R11284, company 515.** Ben is reshaping
+it by hand into crew + Lead Worker in one block.
+
+**#16315 was the first attempt and is deleted.** It was created with
+`request_approval: false` and so never reached To Confirm, which is where Ben wanted it.
+**`request_approval` cannot be changed after create**: `PATCH /orders`
+`[{id, request_approval: true}]` returns **204 with nothing changed** — the value still
+read `"0"` and `modified` did not move — and the numeric form 400s with "Incorrect type
+(should be boolean)". So it joins `order.specification` (#15805) on the list of fields
+this API accepts and silently ignores. A 204 from this API is not evidence of a write.
+
+Note also that id **16316 was created by somebody else** in between. Our ids are not
+contiguous and nothing may assume they are.
+
+It is linked to no thread and has no `conversation_state` row. Verified that nothing
+here can reach it: the only delete on the app path is `replaceOrder.ts:236`, driven by
+an order id taken from a thread's own state, and every other `deleteOrders` call site is
+a one-off verify script deleting an id it created itself. Recorded here rather than in
+one session's head because a note only one session knows is worth nothing.
+
+**Related hazard:** `verify-shrink-staffed`, `verify-amend-live`, `probe-onsinch-clock`,
+`verify-readback-live` and `verify-mail-inbound-engine` all create REAL orders on the
+live tenant. A run during the pause lands in `order_records` as `id_source='api_response'`
+— the exact cohort the survival measurements are drawn from. That is how the withdrawn
+2% figure got its contaminated denominator. Record any run, or the next person measuring
+survival measures our own test traffic.
+
 ## Global constraints
 
 These bind every task below. Copied verbatim where they are somebody's words.
@@ -18,6 +48,27 @@ These bind every task below. Copied verbatim where they are somebody's words.
   appends a ticket to `public/data/feed.json`, then commits by pathspec and pushes.
 - **Ben, 2026-09-29: no orders awaiting a confirm click, and none sent through.**
   Both directions refused. 39 threads currently sit in `proposed`.
+  **The lever is `request_approval`, not `provisional`.** `format.ts` deliberately omits
+  `provisional` and `quote` because OnSinch's defaults are what Spartan wants — settled
+  by measurement, not inference: 14869 and 14870 were posted to TEST 515 with neither
+  field and both appeared in To Confirm, carrying `request_approval: true`. A peer
+  reading `provisional: false` back from an order it posted with
+  `request_approval: false` concluded omission does not give To Confirm; that conflates
+  the two fields. Whatever satisfies this constraint, it is a change to
+  `request_approval` and `order_mode`, and a one-off sweep of the 39 would be undone by
+  the next run.
+  **MEASURED 2026-09-29, and it makes the existing 39 a purely local matter.** Of the 39
+  `proposed` threads, **15 carry no OnSinch order id at all** and 24 carry one, covering
+  21 distinct ids. Of those, 20 still exist and 1 is gone — and **none of the 20 is an
+  engine creation**: `creator` is 413, 2620 or 2633 (ops staff, never 2257), `user_id` is
+  a real client contact (never the placeholder), and `status` is -2 or -1, finished or
+  cancelled. The engine merely LINKED to human-raised orders that are already closed.
+  Read with "0 of 86 engine creations alive": **nothing in OnSinch is awaiting a confirm
+  click because of us.** The 39 are a queue on our own dashboard. Clearing them needs no
+  OnSinch write — but the posture change is what stops them accruing again.
+  Caveat on the instrument: `request_approval` is returned on some order rows and absent
+  on others rather than reading `"0"`, so absence of that field proves nothing. The
+  conclusion above rests on `creator` and `status`, which are present on every row.
 - **`replies_enabled` stays `false`** until Ben has read 12 drafts in a browser.
 - **Automation is off** and due back ~2026-10-02. Nothing here assumes a restart date.
 - **The job window is derived** — `min_beginning`/`max_end` are the envelope of the
