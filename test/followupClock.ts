@@ -83,6 +83,34 @@ console.log("\n[3] a second message from the SAME waiting party does not reset t
   ], OPEN, when(25)).kind === "apply", "and the label goes on at 25 hours, not 44");
 }
 
+console.log("\n[3b] a courtesy sign-off of ours does not put the client in our debt");
+{
+  /**
+   * MEASURED ON LIVE MAIL, not imagined. Thread 1a0662d09571ad87 ends with Spartan
+   * writing "Just wanted to see how everything went?" after a finished job. A bare
+   * question mark made that an ask, so the board raised a follow-up nobody could
+   * write — outstandingAsk refused to name anything to chase for. needsResponse now
+   * asks outstandingAsk, so the clock and the composer cannot disagree.
+   *
+   * Thread 1a08fd268be97aa8's "let us know if you need any more crew next week" is
+   * the same shape: an open offer, not an outstanding item.
+   */
+  ok(waitingPeriod([
+    client(0, "Can you cover 3 crew on the 19th?"),
+    spartan(1, "All sorted, 3 crew confirmed. Just wanted to see how everything went?"),
+  ]) === null, "a 'how did it go?' after the job leaves nobody waiting");
+
+  ok(waitingPeriod([
+    client(0, "Can you cover 3 crew on the 19th?"),
+    spartan(1, "Please see updated quote attached. Let us know if you need any more crew next week."),
+  ]) === null, "an open offer is not an outstanding item");
+
+  ok(waitingPeriod([
+    client(0, "Can you cover 3 crew on the 19th?"),
+    spartan(1, "Quote attached. If you're happy to confirm please send a PO and a site contact."),
+  ])?.owed_by === "them", "but a real request for a PO still puts the ball in their court");
+}
+
 console.log("\n[4] machine mail satisfies nothing");
 {
   const bounce: ThreadMessage = {

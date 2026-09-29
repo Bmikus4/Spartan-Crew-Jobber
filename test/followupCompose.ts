@@ -74,7 +74,34 @@ console.log("\n[5] a quoted question belongs to whoever wrote it, not to us");
     String(outstandingAsk("Could you send the PO number?\n\n> > Do you have a contact number?")));
 }
 
-console.log("\n[6] nothing identifiable means nothing is sent");
+console.log("\n[6] an open offer places no obligation on anyone");
+{
+  /**
+   * ALL FOUR MEASURED ON LIVE MAIL. The corpus is full of sign-off courtesies that
+   * parse as requests, and each one would have produced an email asking a client
+   * whether they had anything to ask us.
+   *
+   * 19db58a19ee0cbc4 sat "owed" from April on "Please let me know if any is needed or
+   * changed". The footer case is worse: EVERY outbound email this company sends ends
+   * with "…no products or services are reserved until the booking is confirmed with a
+   * Purchase Order", which supplied both a request word and a PO to 448 of 491
+   * threads before the tail was cut.
+   */
+  ok(outstandingAsk("Thanks, all confirmed on our side. Please let me know if any is needed or changed.") === null,
+    "'please let me know if…' is an offer, not a request",
+    String(outstandingAsk("Thanks, all confirmed on our side. Please let me know if any is needed or changed.")));
+  ok(outstandingAsk("Please see updated quote attached. Let us know if you need any more crew.") === null,
+    "'please see' is politeness about a document");
+  ok(outstandingAsk("Quote attached. Please note, all quotes sent from this account are valid for 14 days from the date of issue, and no products or services are reserved until the booking is confirmed with a Purchase Order.") === null,
+    "the standing footer is not a request for a PO",
+    String(outstandingAsk("Quote attached. Please note, all quotes sent from this account are valid for 14 days from the date of issue, and no products or services are reserved until the booking is confirmed with a Purchase Order.")));
+  ok(outstandingAsk("Thank you for the PO, this is now updated on our end. Please confirm the start time.")
+    === "the start time",
+    "and a thing already RECEIVED is not what we chase for",
+    String(outstandingAsk("Thank you for the PO, this is now updated on our end. Please confirm the start time.")));
+}
+
+console.log("\n[7] nothing identifiable means nothing is sent");
 {
   ok(outstandingAsk("") === null, "an empty message asks for nothing");
   ok(outstandingAsk("Thanks, all booked in. See you Friday.") === null,

@@ -256,5 +256,50 @@
    "test/followupSuppression.ts [2] \u2014 the case a thread-level boolean gets wrong",
    "test/writeRoutesAuthorised.ts \u2014 discovers routes, so the new POST is covered automatically"
   ]
+ },
+ {
+  "id": "S-0011",
+  "ts": "2026-09-29T12:05:40+00:00",
+  "kind": "measurement",
+  "headline": "Critique pass over the follow-up work, driven by reading real threads rather than re-running green tests. Four defects, none caught by any test: the draft guard was on the sweep (which cannot yet signal) and missing from the poller (which can and does), and getRawMessage was discarding labelIds so no guard could have read them; needsResponse tested a bare question mark so a courtesy 'how did it go?' raised a follow-up the composer then refused to write; the ask detector read the standing email footer, turning 448 of 491 threads into phantom PO chases; and it matched phrases anywhere in a message, so 'thank you for the PO' became a request for one",
+  "subject": "Two thirds of the mailbox was one email footer read as a request for a PO",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 121,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  },
+  "measured": {
+   "dataset": "thread_messages, 772 threads / 4239 messages, read 2026-09-29",
+   "instrument": "scripts/followup-census.ts and scripts/followup-audit.ts (new) \u2014 one SELECT each, no model calls",
+   "spartan_last_threads": 559,
+   "counted_as_an_ask_before": 491,
+   "counted_as_an_ask_after": 88,
+   "phantom_po_asks_before": 448,
+   "spartan_waiting_for_client_before": 131,
+   "spartan_waiting_for_client_peak_during_fix": 354,
+   "spartan_waiting_for_client_after": 148,
+   "client_waiting_for_spartan": 198,
+   "is_from_spartan_disagrees_with_address": 0,
+   "unparseable_date_iso": 0,
+   "note": "The 131 that stood before this work was arrived at by a rule that was wrong in both directions at once; 148 is the same order of magnitude reached by a rule that survives reading the actual mail. The corpus was audited by hand in two buckets, 6 + 5 threads, and each defect below was found that way rather than by a failing test."
+  },
+  "deferred": [
+   {
+    "name": "the remaining ask classifications",
+    "why": "88 asks over 559 threads were tallied and the top classes sampled, but not every one was read. Two borderline cases were judged acceptable and left: 'Crew list attached, please check that the document corresponds' counts as an ask, which is arguable either way."
+   },
+   {
+    "name": "npm run build",
+    "why": "still cannot run on this machine (EISDIR on readlink, verified identical at HEAD with changes stashed). Unchanged from S-0009."
+   }
+  ],
+  "sources": [
+   "scripts/followup-audit.ts \u2014 prints the verdict beside the real last words, which is how all four were found",
+   "app/lib/followup/compose.ts TAIL \u2014 the footer cut, and why a line-based one cannot work",
+   "test/followupCompose.ts [6] and test/followupClock.ts [3b] \u2014 live thread ids pinned",
+   "app/lib/threadMessagesDb.ts storeMessage \u2014 the second insert, now guarded"
+  ]
  }
 ]

@@ -145,6 +145,8 @@ async function poll(): Promise<Response> {
         subject: mail.subject,
         body: mail.body || null,
         is_from_spartan: isFromSpartan,
+        // A draft of ours is not a reply the client saw. storeMessage refuses it.
+        labelIds: msg.labelIds,
       });
       await captureInboundRaw(
         { thread_id: threadId, message_id: mail.message_id, gmail_id: id, source: "gmail-poll" },

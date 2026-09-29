@@ -36,6 +36,7 @@
 // ============================================================================
 import { isMachineMessage } from "../engine/normalize";
 import type { ThreadMessage } from "../engine/types";
+import { outstandingAsk } from "./compose";
 
 /**
  * "us"   the client spoke last and nobody has answered — Spartan owes a reply.
@@ -143,7 +144,24 @@ export function closureOnly(m: ThreadMessage): boolean {
  */
 export function needsResponse(m: ThreadMessage): boolean {
   if (closureOnly(m)) return false;
-  if (m.is_from_spartan) return ASKS.test(firstLines(m.body));
+  /**
+   * ONE DECISION, NOT TWO. This used to test ASKS directly, and ASKS counts a bare
+   * question mark. Live thread 1a0662d09571ad87 ends with Spartan writing "Just
+   * wanted to see how everything went?" after a finished job — a courtesy, scored as
+   * an ask, so the board raised a follow-up on it. Meanwhile outstandingAsk, which
+   * has to NAME what is outstanding before a chase can be written, correctly refused
+   * it. The clock said chase and the composer said there is nothing to chase.
+   *
+   * So the composer's question is now the clock's question: if we cannot say what we
+   * are waiting for, we are not waiting. The two cannot disagree because there is
+   * only one of them, and it also inherits the quote-stripping — a client's question
+   * quoted in our reply is not us asking anything.
+   *
+   * A CLIENT message keeps the opposite default. Anything they send that is not pure
+   * sign-off is owed an answer, because silence toward a client is the expensive
+   * failure and no phrase list should have to earn that.
+   */
+  if (m.is_from_spartan) return outstandingAsk(m.body) !== null;
   return true;
 }
 

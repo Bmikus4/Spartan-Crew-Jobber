@@ -20,15 +20,25 @@
 // Never stored, the send inserts cleanly as a first sighting. The more sophisticated
 // option is the one that corrupts.
 //
-// THIS IS THE ONLY CHOKEPOINT. Both storeThreadMessages and the sweep-ingest route
-// normalise through messagesFromPayload, so a guard here cannot be walked around by
-// a caller — but it can only act on what the caller sends. The n8n sweep's payload
-// builder does not read labelIds at all, so the sweep path stays blind until that
-// workflow is redeployed. See test [5].
+// THERE ARE TWO INSERTS, NOT ONE. This file first claimed messagesFromPayload was
+// "the only chokepoint". It is not: storeMessage takes a built row and never passes
+// through it, and storeMessage is what the Gmail POLLER calls. So the guard sat on
+// the sweep — which does not send labels yet and therefore could not trigger it —
+// and was missing from the path that reads the very mailbox this engine writes its
+// drafts into. Guarded code covering the case that cannot happen yet, while the case
+// that will happen walked past it.
+//
+// Both are guarded now, and the poller had a second hole behind the first:
+// getRawMessage asked Gmail for format=RAW and threw labelIds away, so even a guard
+// would have had nothing to read. Fixed in the same commit.
+//
+// A guard can still only act on what the caller sends. The n8n sweep's payload
+// builder now carries labelIds in-repo but that workflow is UNDEPLOYED, so the sweep
+// path stays blind until an n8n key exists. See test [5].
 //
 // Run: npx tsx test/draftIsNotAMessage.ts
 // ============================================================================
-import { messagesFromPayload } from "../app/lib/threadMessagesDb";
+import { messagesFromPayload, storeMessage } from "../app/lib/threadMessagesDb";
 
 let fails = 0;
 const ok = (cond: boolean, label: string, extra = "") => {
@@ -136,5 +146,30 @@ console.log("\n[5] no label information means no claim either way");
     `${out.length}`);
 }
 
+(async () => {
+console.log("\n[6] the OTHER insert refuses a draft too — the poller's path");
+{
+  /**
+   * storeMessage is what /api/mail-poll calls, with a row it built by hand. The guard
+   * runs BEFORE the database handle is taken, which is what makes this assertion
+   * possible offline: a draft is refused without a connection, so `ok` comes back
+   * true and `inserted` false. Nothing is written and nothing is attempted.
+   *
+   * Only the draft case is exercised here, deliberately. Calling storeMessage with a
+   * real message would attempt an INSERT wherever DATABASE_URL happens to be set, and
+   * a test that writes a junk row into the production ledger to prove a point is not
+   * a test worth having.
+   */
+  const r = await storeMessage({
+    message_id: "poll-1", thread_id: "gmail:t1", from_address: "bookings@spartancrew.co.uk",
+    to_addresses: ["jo@wall-to-wall.example"], date_iso: "2026-09-18T11:00:00.000Z",
+    subject: "Re: 3 x Crew", body: "never sent", is_from_spartan: true,
+    labelIds: ["DRAFT"],
+  });
+  ok(r.ok === true && r.inserted === false,
+    "a draft is refused before the database is even reached", JSON.stringify(r));
+}
+
 console.log(fails ? `\n${fails} FAILED` : "\nALL PASS");
 process.exit(fails ? 1 : 0);
+})();

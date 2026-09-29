@@ -104,18 +104,73 @@ export function outstandingAsk(lastSpartanBody: string): string | null {
   const ATTRIBUTION = /^\s*(on\s.+\swrote:|from:\s|sent:\s|-{2,}\s*original message)/i;
 
   /**
+   * THE SIGNATURE IS NOT THE MESSAGE, and ignoring that broke everything above it.
+   *
+   * ThreadMessage documents `body` as "cleaned plain text (quotes/signatures
+   * stripped)". It is not: the live rows carry the full sign-off, the sender's title
+   * block, and this company's standing footer — "Please note, all quotes sent from
+   * this account are valid for 14 days…". That footer alone supplies a "please" and
+   * a "PO" to every outbound email ever sent.
+   *
+   * Measured before this cut: of 559 threads whose last message is Spartan's, 491
+   * scored as asking for something, and 448 of those "asks" were the same phantom
+   * purchase order read out of the footer. Two thirds of the mailbox was about to be
+   * chased for a PO nobody had requested.
+   *
+   * Cut at the first sign-off line. Short and on its own line, so "Thanks for
+   * confirming the times" is left alone while "Thanks," ends the message.
+   */
+  const SIGNOFF =
+    /^(kind regards|best regards|warm regards|many thanks|all the best|best wishes|regards|cheers|thanks|thank you|speak soon|sent from my)\b[\s,.!*-]*$/i;
+
+  /**
+   * A LINE-BASED CUT CANNOT WORK ON THESE BODIES, because most of them have no lines.
+   * The sweep's stripHtml collapses every run of whitespace to a single space
+   * (n8n/spartan-sweep.workflow.json), so an HTML email arrives as one continuous
+   * string and every newline heuristic silently does nothing.
+   *
+   * Measured: after the line-based cut, 106 threads still "asked" for a purchase
+   * order, and all five sampled were the same standing footer — "…no products or
+   * services are reserved until the booking is confirmed with a Purchase Order."
+   *
+   * So the tail is cut by CONTENT, at the earliest marker that nothing meaningful
+   * ever follows. The first two are this tenant's own fixed footer and are the
+   * highest-confidence markers available; the rest are sign-offs that no real request
+   * appears after.
+   */
+  const TAIL = [
+    /please note, all quotes sent from this account/i,
+    /we now provide van services/i,
+    /\[image: ?logo\]/i,
+    /\bkind regards\b/i,
+    /\bbest regards\b/i,
+    /\bwarm regards\b/i,
+    /\ball the best\b/i,
+    /\bmany thanks\b[\s,!*]*(?:[A-Z*]|$)/,
+  ];
+
+  /**
    * An attribution line introduces a quoted block, and that block often carries NO
    * marker at all. Cutting the attribution alone leaves the other party's words
    * looking like ours, so everything from it onward goes.
    */
   const allLines = b.split(/\r?\n/);
-  const cut = allLines.findIndex((line) => ATTRIBUTION.test(line));
-  const cleaned = (cut === -1 ? allLines : allLines.slice(0, cut))
+  const stop = allLines.findIndex(
+    (line) => ATTRIBUTION.test(line) || (line.trim().length <= 30 && SIGNOFF.test(line.trim()))
+  );
+  const cleanedRaw = (stop === -1 ? allLines : allLines.slice(0, stop))
     .filter((line) => !QUOTED.test(line))
     .filter((line) => !GREETING.test(line.trim()))
     .join(" ")
     .replace(/\s+/g, " ")
     .trim();
+
+  const tailAt = TAIL.reduce((best, re) => {
+    const i = cleanedRaw.search(re);
+    return i >= 0 && i < best ? i : best;
+  }, cleanedRaw.length);
+  const cleaned = cleanedRaw.slice(0, tailAt).trim();
+  if (!cleaned) return null;
 
   const sentences = cleaned.split(/(?<=[.?!])\s+/);
   const asked = sentences.find(
@@ -123,6 +178,58 @@ export function outstandingAsk(lastSpartanBody: string): string | null {
   );
   if (asked) return asked.trim();
   if (PLEASANTRY.test(cleaned) && !/\?/.test(cleaned.replace(PLEASANTRY, ""))) return null;
+
+  /**
+   * THE PHRASE LIST ONLY RUNS IF THE MESSAGE ASKS FOR SOMETHING AT ALL.
+   *
+   * Measured: without this gate, "Spartan waiting for client" over the live corpus
+   * went from 131 to 354 of 772 threads. The word "confirm" appears in nearly every
+   * outbound email this company sends — "I have confirmed", "confirmed everything is
+   * good to go", and the quote boilerplate on every signature — so a bare \bconfirm\b
+   * matched almost everything and put two thirds of the mailbox in the client's debt.
+   *
+   * The list was written to NAME an ask once we had decided one existed; it is too
+   * tolerant to DECIDE that, and needsResponse now leans on this function for exactly
+   * that decision. So request framing has to be present first, and the phrase list
+   * then says which request it was.
+   */
+  const REQUESTY =
+    /\b(please|could you|can you|would you|will you|we(?:'ll| will) need|before we can|once you|kindly|send (?:me|us|over|through)|let us have|waiting (?:on|for))\b/i;
+
+  /**
+   * THE PHRASE MUST BE IN THE SENTENCE THAT ASKS, not merely somewhere in the email.
+   *
+   * Matching across the whole message read "Thank you for the PO, this is now updated
+   * on our end. Please confirm the start time." as a request for a purchase order —
+   * the PO had ARRIVED, and the thing actually wanted was two sentences later. Worse
+   * was "PO received, thank you", which asks for nothing at all and still scored as a
+   * PO chase. A chase for something the client already sent is the message that makes
+   * them stop reading the ones that matter.
+   */
+  /**
+   * "Please see the attached quote" is politeness about a document, not a request of
+   * the client. A bare `please` counted it, so a message that attached a quote and
+   * offered more crew read as an outstanding ask. Stripped before the test rather
+   * than added to an exclusion list, so "Please could you…" and "Please confirm…"
+   * are untouched.
+   */
+  const PRESENTATIONAL = /\bplease (see|find|note|disregard|ignore|refer to)\b/gi;
+
+  /**
+   * AN OPEN OFFER IS NOT AN OUTSTANDING ITEM, and the "if" is what gives it away.
+   * "Please let me know if anything changes" asks the client to do nothing unless
+   * something happens; chasing it means emailing someone to ask whether they have
+   * anything to ask us. Live thread 19db58a19ee0cbc4 sat "owed" from April on exactly
+   * this sentence. The whole clause goes, not just the verb, or the residue still
+   * reads as a request.
+   */
+  const OPEN_OFFER = /\b(please\s+)?(let (me|us) know if|get in touch if|reach out if|shout if)\b[^.?!]*/gi;
+
+  const asking = sentences.find((s) =>
+    REQUESTY.test(s.replace(PRESENTATIONAL, " ").replace(OPEN_OFFER, " "))
+  );
+  if (!asking) return null;
+  const sentence = asking.trim();
 
   const PHRASES: Array<[RegExp, string]> = [
     [/\bpurchase order\b|\bPO number\b|\bPO\b/i, "the purchase order number"],
@@ -134,11 +241,17 @@ export function outstandingAsk(lastSpartanBody: string): string | null {
     [/\bconfirm\b/i, "confirmation so the job can be booked in"],
   ];
   /**
-   * AGAINST `cleaned`, NOT `b`. Tested against the raw body, a quoted "Do you have a
-   * contact number?" from the client matched the site-contact phrase and produced a
-   * chase for something they had asked US — the same defect as the question scan, one
-   * line further down, and it survived the first fix because only the scan was moved.
+   * Against the ASKING SENTENCE. Two earlier versions of this line were wrong in the
+   * same direction: against the raw body it matched a client's question quoted in our
+   * reply, and against the whole cleaned message it matched "thank you for the PO"
+   * and chased a client for what they had just sent. The scope is the fix, not the
+   * pattern list.
    */
-  for (const [re, ask] of PHRASES) if (re.test(cleaned)) return ask;
-  return null;
+  for (const [re, ask] of PHRASES) if (re.test(sentence)) return ask;
+  /**
+   * A request this list has no name for is still a request. Handing back the sentence
+   * itself is more honest than a generic label and more honest than silence — the
+   * model is told what was asked in the words it was asked in.
+   */
+  return sentence.length <= 200 ? sentence : null;
 }

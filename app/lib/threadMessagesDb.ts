@@ -67,6 +67,15 @@ export interface StoredMessage {
   subject: string;
   body: string | null;
   is_from_spartan: boolean;
+  /**
+   * Gmail's labels, when the caller has them. Present so BOTH inserts can refuse a
+   * draft — `storeMessage` takes a built row and never passes through
+   * messagesFromPayload, so a guard living only there covered the sweep and missed
+   * the poller, which is the path that actually watches the mailbox this engine
+   * writes its drafts into. Optional: a caller with no labels (the Mailgun webhook
+   * has none) makes no claim either way and its message is stored as before.
+   */
+  labelIds?: string[];
 }
 
 /** "Jane <j@x.com>" | {address} -> "j@x.com". Same rule as engine/intake.ts addrOf. */
@@ -204,6 +213,19 @@ export async function storeThreadMessages(payload: unknown):
  * retries for eight hours) costs nothing.
  */
 export async function storeMessage(m: StoredMessage): Promise<{ ok: boolean; inserted: boolean }> {
+  /**
+   * THE GUARD BELONGS ON BOTH INSERTS, and for a while it was on one.
+   *
+   * messagesFromPayload covers the sweep, which does not yet send labels. This path
+   * is the Gmail poller, which reads the very mailbox the engine writes its drafts
+   * into — so it is the path where an unsent draft of ours would actually be seen,
+   * stored with is_from_spartan: true, and read downstream as Spartan having replied.
+   * Guarding only the other one protected the case that could not happen yet and
+   * missed the case that will.
+   */
+  if (isAnUnsentDraft(m as unknown as Record<string, unknown>)) {
+    return { ok: true, inserted: false };
+  }
   const sql = db();
   if (!sql) return { ok: false, inserted: false };
   try {

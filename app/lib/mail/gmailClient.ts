@@ -66,10 +66,21 @@ export function gmailClient(opts: GmailClientOpts = {}) {
  * the case where nobody hands us one; when Gmail does, guessing would be strictly worse
  * (measured: 1 thread in 40 splits on headers alone).
  */
-export async function getRawMessage(get: (path: string) => Promise<any>, id: string): Promise<{ raw: string; threadId: string } | null> {
+export async function getRawMessage(get: (path: string) => Promise<any>, id: string): Promise<{ raw: string; threadId: string; labelIds: string[] } | null> {
   const msg = await get(`messages/${encodeURIComponent(id)}?format=RAW`);
   if (!msg?.raw) return null;
-  return { raw: Buffer.from(String(msg.raw), "base64url").toString("utf8"), threadId: String(msg.threadId ?? "") };
+  return {
+    raw: Buffer.from(String(msg.raw), "base64url").toString("utf8"),
+    threadId: String(msg.threadId ?? ""),
+    /**
+     * CARRIED, and it was being dropped. format=RAW still returns labelIds, and this
+     * threw them away — so the poller could not tell a draft from a sent reply even
+     * though Gmail had just said which it was. The engine writes its drafts into this
+     * same mailbox, so that was the one signal standing between an unsent draft and
+     * being recorded as Spartan having answered.
+     */
+    labelIds: Array.isArray(msg.labelIds) ? msg.labelIds.map(String) : [],
+  };
 }
 
 /**
