@@ -144,8 +144,25 @@ Measured read-only by `thera-f7`, corroborated locally here against our own
   cannot be matched to an OnSinch user. **All 45 readable successors carry a real
   client contact and 0 of 45 match ours**; 41 of 45 have `order_manager_id` null, so
   ops clear the field Ben asked to have filled on 2026-08-25.
-  Locally: of 431 threads with a recorded contact, **305 used the placeholder and only
-  126 resolved a real client.** Contact matching fails on roughly 71% of orders.
+  **CORRECTED, and the first version of this line was wrong.** Ticket `S-0013` says
+  "contact matching fails on roughly 71% of orders". It does not fail — **it is never
+  attempted.** `resolveContact` (`compiler.ts:550-557`) takes four underscore-prefixed
+  unused arguments and returns the placeholder unconditionally. The 71% was an era mix,
+  not a failure rate: by month, 2026-07 is 0 placeholder / 3 real, 2026-08 is 44 / 114,
+  2026-09 is **261 / 9**. The switch lands in late August exactly where the comment
+  above that function says it does, and the "real" contacts are pre-change threads.
+  Since then it is effectively **100% placeholder, by design.**
+
+  **And the fix is already written.** `matchContact` (`resolve.ts:405`) is an exact,
+  case-insensitive match of the sender's email against the company's client users,
+  returning null on no match. It is imported into `compiler.ts:25` and **never
+  called.** The comment justifying the placeholder objects to "whichever contact the
+  company had first" — a guess that put a real named client employee on a booking they
+  had never sent. That objection is sound and does not apply to matching the sender's
+  own address. So: call the function that is already there, keep the placeholder as the
+  fallback when it returns null, and let `compiler.ts:1598` go on staging those for a
+  human. No new capability, no guessing, existing safety preserved.
+  Found by `thera-f7`; era data measured here.
 - **The rate card is stale.** The successor's `Job.pricelist_category_id` matches ours
   in **4 of 45**. The flows are 315→342 (25), 315→354 (6), 315→355 (2), 342→354 (2),
   197→354 (2); human orders moved onto **card 354** after about 09-10.
@@ -180,7 +197,26 @@ Still blocked on: whether `POST/PATCH /slotTeams` can create a `role=1` position
 — undocumented, and settling it needs an authorised probe on TEST 515. `thera-f7` is
 asking Ben. Not ours to run unilaterally, and an empty body is not a no-op on this API.
 
-## Stream D — verify writes instead of trusting them
+## Stream D — verify writes instead of trusting them — **CONSTRAINED**
+
+**Read this before planning any amend work.** `PATCH /slotTeams` returns 400
+*"Shift is not atomic"* on **every block carrying more than one position** — measured
+by `thera-f7` across all six readable team ids in the `order_action_log` atomic errors,
+including one with two staff positions and no chief at all.
+
+A correctly-shaped block — a `role=1` chief beside `role=0` crew — has more than one
+position **by definition**. So **the shape we should be writing is the shape we then
+cannot amend.** Any plan reading "write the right shape, then amend in place" is
+unbuildable as written.
+
+This also reinterprets the 09-28 handoff's "Class B is gone, nothing left to build".
+Those errors stopped appearing because the engine stopped attempting the amendments,
+not because the limit lifted. The constraint was never fixed; it went quiet.
+
+What remains available: reads (`with=Job__SlotTeam__Slot`), single-position edits, and
+replace-the-order. An amend strategy has to be built out of those or not at all.
+
+### The original Stream D, still true where it does not touch amends
 
 Now possible because blocks are readable. Today `amendOrderInPlace` is skipped entirely
 unless `last_ordered_teams` records which blocks are ours, because block structure was

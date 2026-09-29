@@ -395,5 +395,46 @@
    "app/lib/engine/types.ts default_rate_card \u2014 the 315 justification, now stale",
    "docs/RESTART-PLAN-2026-09-29.md \u2014 Stream C and the revised order"
   ]
+ },
+ {
+  "id": "S-0014",
+  "ts": "2026-09-29T12:24:36+00:00",
+  "kind": "withdrawal",
+  "headline": "Withdraws the '71% of orders' figure in S-0013, which mixed two eras rather than measuring failure: by month the placeholder runs 0/3, 44/114, then 261/9, so since late August it is effectively 100% placeholder BY DESIGN. resolveContact ignores all four arguments. matchContact already exists as an exact sender-email match, is imported into compiler.ts, and has zero call sites \u2014 so the fix is to call it and keep the placeholder as the null fallback. Also records that PATCH /slotTeams 400s on every block with more than one position, which means the correctly-shaped block is one the API cannot amend, and that 'Class B is gone' recorded silence rather than a fix. Both found by thera-f7",
+  "subject": "Contact matching does not fail; it is never attempted, and the matcher is already written",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 121,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  },
+  "measured": {
+   "correction_to": "S-0013",
+   "claim_withdrawn": "contact matching fails on roughly 71% of orders",
+   "what_is_true_instead": "no contact matching is attempted at all; resolveContact returns PLACEHOLDER_CONTACT_ID unconditionally, ignoring all four arguments",
+   "contacts_by_month_placeholder_vs_real": "2026-07: 0/3, 2026-08: 44/114, 2026-09: 261/9",
+   "why_the_71_percent_was_wrong": "it mixed two eras. The switch to the unconditional placeholder lands in late August, so the 126 'real' contacts are pre-change threads rather than successful matches.",
+   "matchContact_exists": "resolve.ts:405, exact case-insensitive match on the sender's email, returns null on no match",
+   "matchContact_imported_at": "compiler.ts:25",
+   "matchContact_call_sites": 0,
+   "patch_slotteams_multi_position": "400 Shift is not atomic, on every block with more than one position, across all 6 readable team ids in the atomic-error log",
+   "note": "A correctly-shaped block has more than one position by definition, so the shape the business uses is the shape the API cannot amend. The 09-28 handoff's 'Class B is gone' recorded the errors stopping; they stopped because the engine stopped attempting those amendments, not because the constraint lifted."
+  },
+  "deferred": [
+   {
+    "name": "tracing the 9 real contacts in 2026-09",
+    "why": "resolveContact cannot produce them, so they come from prior state, order matching or ops edits. Not traced."
+   },
+   {
+    "name": "an amend strategy under the atomic constraint",
+    "why": "reads, single-position edits and replace-the-order are what remain. Not designed here."
+   }
+  ],
+  "sources": [
+   "app/lib/engine/compiler.ts:550-557 resolveContact \u2014 four unused arguments",
+   "app/lib/engine/resolve.ts:405 matchContact \u2014 written, imported, never called",
+   "docs/RESTART-PLAN-2026-09-29.md Streams C and D"
+  ]
  }
 ]
