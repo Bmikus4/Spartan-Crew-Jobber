@@ -40,8 +40,16 @@ around on 2026-09-28: the retraction lived in two files and lost to a one-line s
 - **A decline is not a failure, and it is also not a success.** `amendOrderInPlace`
   declining every block is deterministic: never retried on a timer, never logged as an
   amend.
-- **The job window is derived.** `Job.min_beginning` / `max_end` are the envelope of the
-  blocks on the order. Never add a write for them; move blocks.
+- **Never write `Job.min_beginning` / `max_end`.** The rule stands; the REASON given for it
+  no longer does. It was "the window is derived — it is the envelope of the blocks". Measured
+  2026-09-29 on reference order #16317: after positions were added by hand on 2026-10-01, the
+  job window still read 2026-12-07 08:00..20:00. So the envelope is not recomputed on at least
+  some events, and the field can be **stale**. It is a cache, or create-time only, or derived
+  from something other than positions — undetermined.
+  The consequence is not academic: drift detection compares a desired window against the job's,
+  so "window drift" may sometimes be a stale field rather than a real disagreement, and six of
+  eight live amendment refusals were window-drift cases. **Treat the window as unreliable
+  input, not as truth**, until somebody establishes which events recompute it.
 - **`6922 "No Location"` is exempt from every venue phase.** Exactly one may exist, and
   the compiler finds it by name — the id is incidental.
 - **Zero references is permission to delete, never a reason to.**

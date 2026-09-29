@@ -71,8 +71,15 @@ These bind every task below. Copied verbatim where they are somebody's words.
   conclusion above rests on `creator` and `status`, which are present on every row.
 - **`replies_enabled` stays `false`** until Ben has read 12 drafts in a browser.
 - **Automation is off** and due back ~2026-10-02. Nothing here assumes a restart date.
-- **The job window is derived** — `min_beginning`/`max_end` are the envelope of the
-  blocks. Never written directly. A null window means no information, never drift.
+- **Never write `min_beginning`/`max_end`** — but the reason has changed and the old one
+  was wrong. "The window is derived" is **unproven as of 2026-09-29**: on reference order
+  #16317 the window still read 2026-12-07 08:00..20:00 after positions were added on
+  2026-10-01, so it is not recomputed on at least some events. Treat it as possibly
+  stale. A null window still means no information, never drift.
+  **This puts drift detection in question**, since it compares a desired window against
+  the job's, and six of eight live amendment refusals were window-drift cases. The cheap
+  discriminator, if an authorised pass on #16317 is available: change a position's date
+  in the UI and see whether `min_beginning` moves at all.
 - **An empty body is not a no-op on the OnSinch API.** Any probe is a write until
   proven otherwise.
 - **`unreconciled` and `unactionable` are different claims** and must not be merged.

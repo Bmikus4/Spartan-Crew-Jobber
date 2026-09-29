@@ -520,5 +520,43 @@
    "live read of the 21 staged ids with an unfiltered /orders positive control (count 7196)",
    "app/lib/engine/format.ts:33,132 \u2014 request_approval is hardcoded true on creates"
   ]
+ },
+ {
+  "id": "S-0018",
+  "ts": "2026-09-29T23:45:35+00:00",
+  "kind": "withdrawal",
+  "headline": "Qualifies an invariant that every session loads. 'The window is derived from the blocks' is unproven: on reference order #16317 the job window still read 2026-12-07 08:00..20:00 after positions were added on 2026-10-01. The rule not to write it stands; the reason given for it does not, and drift detection compares against that field \u2014 six of eight live amendment refusals were window-drift cases. Also records the not-atomic limit now proven on a controlled order rather than inferred from logs, that profession 36 at role 0 is a chief paid nothing (role 1 is what makes a lead, wage 0 to 21), and that UI edits write common_change rows with old and new values \u2014 which is a better instrument for the retype question than shape diffs",
+  "subject": "The job window can be stale, so drift measured against it may not be drift",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 121,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  },
+  "measured": {
+   "observed_on": "reference order #16317, TEST company 515, by session thera-f7 at Ben's request",
+   "job_window_reads": "2026-12-07 08:00..20:00",
+   "positions_actually_sitting_on": "2026-10-01",
+   "conclusion": "the envelope is NOT recomputed on at least some events, so the window can be stale",
+   "not_atomic_now_proven_on_a_controlled_order": "PATCH /slotTeams on blocks 41734 and 41735 each returned 400 {validationErrors:{<id>:[\"Shift is not atomic: id <id>\"]}} once each held 2 positions \u2014 the same blocks were PATCHable at one position",
+   "profession_36_alone_is_not_a_lead": "a p36 position at role 0 carried wage_h 0 until switched to role 1, which gave wage_h 21 and a new ratelist",
+   "ui_edits_are_auditable": "hand edits write common_create / common_change rows carrying old and new values",
+   "note": "An order body emitting p36 at role 0 produces a chief paid nothing, which is worse than emitting no chief. And since UI edits carry before-and-after values, the 47 successors can be read as a record of what a human actually changed rather than inferred from shape diffs \u2014 a better instrument than anything used so far."
+  },
+  "deferred": [
+   {
+    "name": "which events recompute the job window",
+    "why": "undetermined. Cache, create-time-only, or derived from something other than positions. The discriminator is one UI date change plus a read-back on #16317."
+   },
+   {
+    "name": "re-examining the eight amendment refusals",
+    "why": "six were window-drift cases and drift is compared against a field now known to go stale. Not re-examined."
+   }
+  ],
+  "sources": [
+   "thera-f7 on #16317, at Ben's explicit request",
+   "CLAUDE.md \u2014 the invariant, now qualified rather than deleted"
+  ]
  }
 ]
