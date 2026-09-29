@@ -76,6 +76,12 @@ const CASES: Array<{
     call: (c) => c.createSlotTeam({ name: "Crew", size: 2, job_id: 1 } as never),
   },
   { name: "patchOrder", yieldsId: false, call: (c) => c.patchOrder([{ id: 1, name: "Renamed" }]) },
+  /**
+   * `active` and not `name`: patchPlaces refuses a rename outright, because every order
+   * standing on the row would follow the new name. A case built on a rename would prove
+   * the guard fires rather than that a rejected PATCH throws, which is what [2] asks.
+   */
+  { name: "patchPlaces", yieldsId: false, call: (c) => c.patchPlaces([{ id: 1, active: false }]) },
   { name: "patchSlotTeams", yieldsId: false, call: (c) => c.patchSlotTeams([{ id: 1, size: 3 }]) },
   { name: "patchJob", yieldsId: false, call: (c) => c.patchJob([{ id: 1, pricelist_category_id: 311 }]) },
   { name: "deleteOrders", yieldsId: false, call: (c) => c.deleteOrders([1]) },

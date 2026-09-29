@@ -1,0 +1,46 @@
+[
+ {
+  "id": "S-0001",
+  "kind": "withdrawal",
+  "ts": "2026-09-03T00:00:00+00:00",
+  "recorded_at": "2026-09-28T00:00:00+00:00",
+  "backdated": "ts is the ORIGINAL withdrawal date, 25 days before this feed existed. recorded_at is when it was finally written somewhere append-only.",
+  "headline": "The 2% API-order survival finding is withdrawn: the denominator counted a throwaway probe run",
+  "subject": "Seed entry. The measurement this feed exists because of.",
+  "what_was_claimed": "Of 398 orders created through the API from 2026-08-26, only 8 (2%) still existed in OnSinch, against 51 of 52 (98%) raised in the UI. Measured 2026-09-02.",
+  "why_it_is_wrong": "The numerator and denominator were OnSinch timelineAudits rows with action=order_created_via_api, not engine bookings. 200 of the 252 sampled rows land in a two-hour window on 2026-08-26 02:00-04:00 carrying names like 'ZZ POSTURE TEST A' and 'AMEND MATRIX - safe to delete' \u2014 a probe session created in order to be deleted. The window opens on the largest deliberate throwaway run in the project's history. The engine's own ledger held 90 creates ALL TIME against an audit log claiming 398 in one week. There is no population of 5,693 destroyed bookings.",
+  "what_replaces_it": "105 of 133 engine-created orders were gone from OnSinch as at 2026-09-15, of which 67 have another order for the same company on the same work date living today. A same-company same-date order is a CANDIDATE replacement, not proof of one. The live denominator today is 179 distinct engine-created order ids in conversation_state.state->'order_action_log', spanning 2026-08-06 to 2026-09-18.",
+  "how_it_survived": "The withdrawal was written into the 09-03 handoff and the topic file. It never reached the one-line memory index, which kept asserting the 2% figure as a live unverified claim. On 2026-09-28 that stale line put the withdrawn number at position one of the next session's plan, ahead of four real blockers. A retraction lost to a summary because this repo had nowhere append-only to put a number. That is why this file exists.",
+  "sources": [
+   "~/fleet/resume/Spartan-Jobber-2026-09-02.md:18-30 \u2014 the original measurement",
+   "~/fleet/resume/Spartan-Jobber-2026-09-03.md:192-197 \u2014 'the headline you must not re-litigate'",
+   "scripts/engine-create-ledger.mjs \u2014 header states the wrong-numerator defect",
+   "scripts/build-testset.ts:67-84,204-206 \u2014 the 105/133 instrument and its positive control"
+  ],
+  "confirm": {
+   "result": "not-gated",
+   "why": "written by hand as the seed entry, before the gate's first run. Every entry after this one is written by scripts/session.py and carries a real confirm block."
+  }
+ },
+ {
+  "id": "S-0002",
+  "ts": "2026-09-29T03:00:10+00:00",
+  "kind": "decision",
+  "headline": "Session gate added; its first confirm found writeContract red \u2014 patchPlaces was added by the venue sweep with no write-contract row, so 3 handoffs reported ALL PASS on a red suite",
+  "subject": "A commit now has to pass the suite first, which has been red since c5fb902",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 116,
+   "result": "pass"
+  },
+  "negative_control": {
+   "proven_at": "2026-09-29T02:57:07+00:00",
+   "method": "a test file exiting 1 was added to test/; npm run test:all returned non-zero"
+  },
+  "sources": [
+   "test/writeContract.ts:61-83 \u2014 CASES, the completeness guard",
+   "app/lib/engine/onsinch.ts:722 \u2014 patchPlaces, added in c5fb902"
+  ]
+ }
+]
