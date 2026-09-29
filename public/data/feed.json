@@ -154,5 +154,25 @@
    "test/followupClock.ts [3] the chaser, [6] the clearing reply, [10] the horizon",
    "app/lib/engine/normalize.ts isMachineMessage \u2014 auto-ack/bounce/OOO, already pinned by test/machineMail.ts"
   ]
+ },
+ {
+  "id": "S-0007",
+  "ts": "2026-09-29T03:32:21+00:00",
+  "kind": "decision",
+  "headline": "spend.ts's composeReply forwarder named three parameters and passed three, dropping ReplyContext on every production call \u2014 guardReasoner wraps both branches, so the booking situation and the ask_for list have never once reached the model. depsForwardsReasoner checked that methods EXIST, not that arguments arrive, which is why it passed throughout. Also adds composeChase (the other follow-up direction) through all three wrappers, and outstandingAsk, which refuses to chase when nothing is outstanding",
+  "subject": "Every reply ever composed was told there was nothing to book in the thread",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 119,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  },
+  "sources": [
+   "app/lib/engine/spend.ts composeReply \u2014 was (latest, history, cls)",
+   "app/lib/deps.ts:342 \u2014 the comment warning about exactly this, one layer up",
+   "test/depsForwardsReasoner.ts \u2014 new: counts arguments that arrive, not methods that exist",
+   "test/followupCompose.ts [2] \u2014 live thread 1a0662d09571ad87, the nag that was nearly sent"
+  ]
  }
 ]

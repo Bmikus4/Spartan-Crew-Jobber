@@ -300,7 +300,7 @@ export function buildReasonerForTest(): Reasoner {
   return reasoner();
 }
 
-function reasoner(): Reasoner {
+export function reasoner(): Reasoner {
   let real: Reasoner | null = null;
   const get = (): Reasoner => {
     if (real) return real;
@@ -346,6 +346,7 @@ function reasoner(): Reasoner {
     classify: (...a) => get().classify(...a),
     extractFacts: (...a) => get().extractFacts(...a),
     composeReply: (...a) => get().composeReply(...a),
+    composeChase: (...a) => get().composeChase!(...a),
   };
 }
 

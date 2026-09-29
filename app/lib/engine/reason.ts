@@ -17,6 +17,7 @@ import type {
   ThreadMessage,
 } from "./types";
 import { CLASSIFY_SYSTEM, EXTRACT_SYSTEM, REPLY_SYSTEM } from "./prompts";
+import { CHASE_SYSTEM } from "../followup/compose";
 import { renderConversation } from "./renderThread";
 import { ADJUDICATION_SCHEMA } from "./venueAdjudicate";
 
@@ -101,6 +102,24 @@ export interface Reasoner {
     history: ThreadMessage[],
     classification: Classification,
     context?: ReplyContext
+  ): Promise<ReplyResult>;
+
+  /**
+   * The follow-up chase, for the other direction: Spartan spoke last and the CLIENT
+   * owes the answer. composeReply cannot serve here — pointed at such a thread it
+   * tries to answer Spartan's own message.
+   *
+   * `waitingOn` is worked out from the thread before the model is involved
+   * (followup/compose.ts outstandingAsk) and is not the model's to decide. A model
+   * left to infer what is outstanding invents something plausible, and a client
+   * chased for a purchase order nobody wanted is worse than no chase at all.
+   *
+   * Optional on the interface so every existing mock still satisfies it.
+   */
+  composeChase?(
+    latest: ThreadMessage,
+    history: ThreadMessage[],
+    waitingOn: string
   ): Promise<ReplyResult>;
 }
 
@@ -420,6 +439,15 @@ ${renderConversation(latest, history).text}`,
       return call(
         REPLY_SYSTEM,
         `classification=${classification}\nBOOKING SITUATION: ${situation}${asks}\n\n` + threadText(latest, history),
+        REPLY_SCHEMA
+      );
+    },
+    async composeChase(latest, history, waitingOn) {
+      // Same schema as a reply: a chase is an email with a subject, a body and a
+      // priority, and giving it its own shape would only mean a second renderer.
+      return call(
+        CHASE_SYSTEM,
+        `WHAT SPARTAN IS WAITING ON: ${waitingOn}\n\n` + threadText(latest, history),
         REPLY_SCHEMA
       );
     },

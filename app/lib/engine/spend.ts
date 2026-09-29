@@ -120,6 +120,25 @@ export function guardReasoner(
       : undefined,
     classify: (latest, history, prior) => { charge(size(latest, history)); return inner.classify(latest, history, prior); },
     extractFacts: (latest, history) => { charge(size(latest, history)); return inner.extractFacts(latest, history); },
-    composeReply: (latest, history, cls) => { charge(size(latest, history)); return inner.composeReply(latest, history, cls); },
+    /**
+     * `context` IS FORWARDED, and it was not. This wrapper declared three parameters
+     * and passed three, so the fourth — ReplyContext, carrying the booking situation
+     * and the list of things the client still has to tell us — was dropped on every
+     * production call. guardReasoner wraps both branches in deps.ts, so there is no
+     * path where it survived: every reply this engine has ever composed was told
+     * "There is nothing to book in this thread", and the "asking for what is missing
+     * (CRITICAL)" section of the prompt has never once had anything to ask for.
+     *
+     * ReplyContext exists because a reply drafted "both dates are now booked in" on a
+     * needs-info ticket with no order at all (live thread 19fadd4ff8152dea). That fix
+     * shipped and never ran — the same failure the comment above reasoner() in deps.ts
+     * describes for the combined call, one layer further down. A forwarder that names
+     * its parameters silently truncates the ones it forgot, which is why the rest of
+     * this file now uses `...a`.
+     */
+    composeReply: (...a) => { charge(size(a[0], a[1])); return inner.composeReply(...a); },
+    composeChase: inner.composeChase
+      ? (...a) => { charge(size(a[0], a[1])); return inner.composeChase!(...a); }
+      : undefined,
   };
 }

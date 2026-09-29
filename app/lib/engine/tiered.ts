@@ -127,5 +127,9 @@ export function tieredReasoner(
     classify: (...a) => strong.classify(...a),
     extractFacts: (...a) => strong.extractFacts(...a),
     composeReply: (...a) => strong.composeReply(...a),
+    // A chase is prose a client reads, so it goes to the strong model for the same
+    // reason composeReply does: there is no deterministic check on prose, and nothing
+    // downstream could escalate it after the fact.
+    composeChase: strong.composeChase ? (...a) => strong.composeChase!(...a) : undefined,
   };
 }
