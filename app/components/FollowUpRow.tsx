@@ -47,7 +47,7 @@ interface Alert {
   link_label: string;
   fallback_url: string;
 }
-interface Board { ok: boolean; alerts: Alert[]; dormant_count: number; dormant_days: number }
+interface Board { ok: boolean; alerts: Alert[]; suppressed_count: number; dormant_count: number; dormant_days: number }
 
 /** "3 days overdue" reads; "72h" makes the reader do arithmetic to feel anything. */
 function overdueText(hours: number): string {
@@ -69,6 +69,7 @@ export default function FollowUpRow() {
   const [board, setBoard] = useState<Board | null>(null);
   const [failed, setFailed] = useState(false);
   const [expanded, setExpanded] = useState(false);
+  const [dismissing, setDismissing] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setFailed(false);
@@ -85,6 +86,30 @@ export default function FollowUpRow() {
   }, []);
 
   useEffect(() => { void load(); }, [load]);
+
+  /**
+   * The dismissal names the WAIT, not just the thread — suppressionDb only mutes the
+   * silence that was on screen, so a later message on the same thread raises a fresh
+   * alert rather than being swallowed by an old click.
+   *
+   * Removed from the list immediately and then reloaded. Optimism is safe here: the
+   * worst case is an alert that reappears, which is the correct direction for a
+   * failure in something whose job is to stop work being forgotten.
+   */
+  const dismiss = useCallback(async (a: Alert) => {
+    setDismissing(a.thread_id);
+    setBoard((b) => (b ? { ...b, alerts: b.alerts.filter((x) => x.thread_id !== a.thread_id), suppressed_count: b.suppressed_count + 1 } : b));
+    try {
+      await fetch("/api/followups/suppress", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ thread_id: a.thread_id, waiting_since: a.waiting_since_iso }),
+      });
+    } finally {
+      setDismissing(null);
+      void load();
+    }
+  }, [load]);
 
   const frame = (children: React.ReactNode, tinted: boolean) => (
     <section
@@ -125,7 +150,7 @@ export default function FollowUpRow() {
     );
   }
 
-  const { alerts, dormant_count, dormant_days } = board;
+  const { alerts, suppressed_count, dormant_count, dormant_days } = board;
   const shown = expanded ? alerts : alerts.slice(0, SHOWN);
 
   return frame(
@@ -156,9 +181,12 @@ export default function FollowUpRow() {
         >
           {alerts.length} outstanding
         </span>
-        {dormant_count > 0 && (
+        {(dormant_count > 0 || suppressed_count > 0) && (
           <span style={{ fontSize: 11, color: MUT, marginLeft: "auto" }}>
-            {dormant_count} waiting over {dormant_days} days — not chased automatically
+            {[
+              suppressed_count > 0 ? `${suppressed_count} dismissed` : null,
+              dormant_count > 0 ? `${dormant_count} waiting over ${dormant_days} days — not chased automatically` : null,
+            ].filter(Boolean).join(" · ")}
           </span>
         )}
       </header>
@@ -212,6 +240,14 @@ export default function FollowUpRow() {
                 >
                   {a.link_label}
                 </a>
+                <button
+                  onClick={() => void dismiss(a)}
+                  disabled={dismissing === a.thread_id}
+                  title="Stop chasing this particular wait. A later message starts a fresh one."
+                  style={{ ...btn(false), opacity: dismissing === a.thread_id ? 0.5 : 1 }}
+                >
+                  Dismiss
+                </button>
               </li>
             ))}
           </ul>

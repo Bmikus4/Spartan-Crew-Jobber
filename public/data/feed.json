@@ -237,5 +237,24 @@
    "app/lib/followup/board.ts \u2014 two lists: alerts in red, dormant as a quiet count",
    "test/followupThreadLink.ts \u2014 the spec's 'no working-looking button with a guessed destination'"
   ]
+ },
+ {
+  "id": "S-0010",
+  "ts": "2026-09-29T03:53:53+00:00",
+  "kind": "decision",
+  "headline": "Suppression lands per WAIT, not per thread: a dismissal records the flip point it dismissed, so when anyone speaks the flip point moves, the stored value stops matching, and the thread is live again with a fresh clock. Nothing expires and nobody has to remember to unmute. POST /api/followups/suppress is auth-guarded and REFUSES a dismissal that does not name its wait, because that would mute the thread indefinitely",
+  "subject": "A dismissed follow-up could only be dismissed forever or not at all",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 121,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  },
+  "sources": [
+   "app/lib/followup/suppressionDb.ts \u2014 the per-wait argument in full",
+   "test/followupSuppression.ts [2] \u2014 the case a thread-level boolean gets wrong",
+   "test/writeRoutesAuthorised.ts \u2014 discovers routes, so the new POST is covered automatically"
+  ]
  }
 ]

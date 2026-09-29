@@ -21,6 +21,7 @@
 // ============================================================================
 import { neon, type NeonQueryFunction } from "@neondatabase/serverless";
 import { waitingPeriod, isOverdue, isDormant, DORMANT_AFTER_DAYS, type Owed } from "./clock";
+import { allSuppressions, isSuppressed } from "./suppressionDb";
 import type { ThreadMessage } from "../engine/types";
 
 // Each *Db module here keeps its own lazy accessor rather than sharing one. Following
@@ -57,6 +58,8 @@ export interface FollowupAlert {
 
 export interface FollowupBoard {
   alerts: FollowupAlert[];
+  /** Dismissed by a person, for THIS wait. Reported so the row can say so. */
+  suppressed_count: number;
   dormant_count: number;
   dormant_days: number;
   generated_iso: string;
@@ -91,7 +94,9 @@ type StateRow = { thread_id: string; state: Record<string, unknown> | null };
 
 export async function followupBoard(now: Date = new Date()): Promise<FollowupBoard> {
   const q = db();
-  if (!q) return { alerts: [], dormant_count: 0, dormant_days: DORMANT_AFTER_DAYS, generated_iso: now.toISOString() };
+  if (!q) return { alerts: [], suppressed_count: 0, dormant_count: 0, dormant_days: DORMANT_AFTER_DAYS, generated_iso: now.toISOString() };
+
+  const suppressions = await allSuppressions();
 
   const [msgRows, stateRows] = await Promise.all([
     q`SELECT thread_id, message_id, from_address, to_addresses, date_iso, subject, body, is_from_spartan
@@ -114,10 +119,13 @@ export async function followupBoard(now: Date = new Date()): Promise<FollowupBoa
 
   const alerts: FollowupAlert[] = [];
   let dormant = 0;
+  let suppressed = 0;
 
   for (const [thread_id, msgs] of threads) {
     const w = waitingPeriod(msgs);
     if (!w || !isOverdue(w, now)) continue;
+    // Checked BEFORE dormancy so a dismissal is never miscounted as an old thread.
+    if (isSuppressed(suppressions.get(thread_id), w.since_iso)) { suppressed++; continue; }
     if (isDormant(w, now)) { dormant++; continue; }
 
     const facts = (states.get(thread_id)?.facts ?? {}) as Record<string, unknown>;
@@ -146,5 +154,5 @@ export async function followupBoard(now: Date = new Date()): Promise<FollowupBoa
   // Most overdue first: the oldest deadline is the one somebody should open now.
   alerts.sort((a, b) => a.due_iso.localeCompare(b.due_iso));
 
-  return { alerts, dormant_count: dormant, dormant_days: DORMANT_AFTER_DAYS, generated_iso: now.toISOString() };
+  return { alerts, suppressed_count: suppressed, dormant_count: dormant, dormant_days: DORMANT_AFTER_DAYS, generated_iso: now.toISOString() };
 }
