@@ -22,6 +22,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CHART, GridLine, InfoDot, Plot } from "./charts/chartKit";
 import { BeamRing } from "./BeamRing";
+import FollowUpRow from "./FollowUpRow";
 
 interface Props { isActive: boolean }
 
@@ -562,10 +563,22 @@ export default function DashboardScreen({ isActive, onOpenBoard }: Props & { onO
     <div style={{ display: "flex", flexDirection: "column", height: "100%", minHeight: 0 }}>{body}</div>
   );
 
-  if (loading && !data) return shell(<div style={wrap}><Skeleton /></div>);
+  /**
+   * THE FOLLOW-UP ROW SURVIVES A METRICS FAILURE, which is why it is repeated in all
+   * three branches rather than living in the success path. Metrics are a report on
+   * the past; an overdue reply is work outstanding now, and a broken chart is no
+   * reason to hide it. It fetches its own data and holds its own four states.
+   */
+  if (loading && !data) return shell(
+    <div style={wrap}>
+      <div style={{ marginBottom: 16 }}><FollowUpRow /></div>
+      <Skeleton />
+    </div>
+  );
   if (error || !data) return shell(
-    <div style={{ ...wrap, display: "grid", placeItems: "center" }}>
-      <div style={{ textAlign: "center", color: MUT }}>
+    <div style={wrap}>
+      <div style={{ marginBottom: 16 }}><FollowUpRow /></div>
+      <div style={{ textAlign: "center", color: MUT, paddingTop: 32 }}>
         <p style={{ marginBottom: 12, fontSize: 13 }}>Couldn&apos;t load metrics.</p>
         <button onClick={() => void load()} style={{ background: A, color: "var(--accent-contrast)", border: "none", borderRadius: "var(--radius-sm)", padding: "8px 18px", fontWeight: 700, cursor: "pointer" }}>Retry</button>
       </div>
@@ -592,8 +605,15 @@ export default function DashboardScreen({ isActive, onOpenBoard }: Props & { onO
           </span>
         </header>
 
-        {/* Hours reclaimed is the headline, so it is the first thing on the page and
-            the only card wearing the beam. Ben, 2026-09-02. It used to sit third in
+        {/* First card on the screen. Ben's spec: above other dashboard content, seen
+            on every open. It sits below the page title rather than above it so the
+            screen still says what it is before it says what is wrong. */}
+        <FollowUpRow />
+
+        {/* Hours reclaimed is the headline of what the engine HAS done, and the only
+            card wearing the beam. Ben, 2026-09-02. It led the page until the
+            follow-up row went in above it: work outstanding now outranks a report on
+            the past, and only that outranks it. It used to sit third in
             the bottom row, below two charts and beside a dial — the number the whole
             screen exists to report, ranked under the working detail. */}
         <section className="dash-hero">

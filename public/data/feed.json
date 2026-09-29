@@ -192,5 +192,50 @@
    "test/followupCompose.ts [5] \u2014 both live thread ids, pinned",
    "app/lib/followup/compose.ts outstandingAsk \u2014 QUOTED, ATTRIBUTION, and PHRASES against cleaned"
   ]
+ },
+ {
+  "id": "S-0009",
+  "ts": "2026-09-29T03:48:20+00:00",
+  "kind": "measurement",
+  "headline": "Needs Follow-Up row: first card on the dashboard, in all three states so a metrics failure cannot hide outstanding work. /api/followups is auth-guarded, unlike the three legacy read routes. The board reads the same clock.ts the labeller uses, so the red count and the Gmail label cannot disagree. Thread ids are CHECKED against Gmail's 16-hex shape and anything else is relabelled a search rather than given a link that loads an empty mailbox",
+  "subject": "The dashboard could not say who was owed a reply",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 120,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  },
+  "measured": {
+   "dataset": "thread_messages + conversation_state, read 2026-09-29; corpus stops 2026-09-18T13:33Z where intake paused",
+   "instrument": "scripts/followup-census.ts --board, through app/lib/followup/board.ts \u2014 the same code the API serves",
+   "board_today_alerts": 0,
+   "board_today_dormant": 329,
+   "board_at_pause_alerts": 63,
+   "board_at_pause_dormant": 222,
+   "thread_links_real_gmail_ids": 63,
+   "thread_links_needing_search_fallback": 0,
+   "denominator": 772,
+   "note": "Evaluated today the row reads 'You're all caught up' with a quiet line for 329 dormant threads, which is correct: intake has been paused 11 days and every open wait is past the 7-day horizon. Evaluated at the pause it shows 63 alerts, both directions, most-overdue first, and every one of the 63 resolves to a real Gmail thread id."
+  },
+  "deferred": [
+   {
+    "name": "npm run build",
+    "why": "CANNOT RUN ON THIS MACHINE. Fails with EISDIR on readlink of app/api/auth/google/callback/route.ts, a normal 1470-byte file unmodified since 2026-08-03. Verified identical at HEAD with all changes stashed, so it is the D: exFAT quirk and not this work. Vercel builds the same tree."
+   },
+   {
+    "name": "rendered UI verification",
+    "why": "substituted a dev-server smoke test: GET / returned 200 with 16224 bytes (the row SSRs) and GET /api/followups returned 401 without a session (the guard holds). Visual appearance is unverified locally."
+   },
+   {
+    "name": "venue gold accuracy / venue sink rate / intake recall",
+    "why": "unchanged from S-0006: still deferred, still not claimed as passing."
+   }
+  ],
+  "sources": [
+   "app/components/FollowUpRow.tsx \u2014 four distinct states; error never reads as 'all caught up'",
+   "app/lib/followup/board.ts \u2014 two lists: alerts in red, dormant as a quiet count",
+   "test/followupThreadLink.ts \u2014 the spec's 'no working-looking button with a guessed destination'"
+  ]
  }
 ]
