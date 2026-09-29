@@ -600,5 +600,47 @@
    "thera-f7 \u2014 validation-oracle probe against company 999999, nothing persisted",
    "docs/RESTART-PLAN-2026-09-29.md \u2014 the revised item 5 and the test-traffic record"
   ]
+ },
+ {
+  "id": "S-0020",
+  "ts": "2026-09-29T23:52:48+00:00",
+  "kind": "decision",
+  "headline": "Two things S-0019 needs correcting on. Ben has parked the block-grouping change and kept the old schema, so the drop-the-chief-team proposal is withdrawn as a recommendation \u2014 the evidence stays, only the direction goes, and the decision reached this session via thera-f7 rather than directly. And the window worry is narrower than S-0018 left it: across 388 jobs with positions, 337 match their envelope exactly with 0 mismatches and 51 null, and of the 10 refused orders still alive 9 match while 1 is eleven hours stale. So the field is the envelope when computed, just not always recomputed, and staleness does not explain the refusals. The rule stands anyway: never detect drift from the window, compare positions",
+  "subject": "The stale window does not explain the eight amendment refusals",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 121,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  },
+  "measured": {
+   "decision": "Ben, 2026-09-29: keep the old schema. The block-grouping change is parked and the drop-the-chief-team proposal in S-0019 is withdrawn as a recommendation.",
+   "decision_provenance": "relayed via session thera-f7, not received directly from Ben. Acted on because parking is the conservative direction; correctable in one entry if wrong.",
+   "jobs_with_positions_examined": 388,
+   "window_exactly_equals_positions_envelope": 337,
+   "window_mismatched": 0,
+   "window_null_despite_positions": 51,
+   "refused_orders_still_alive": 10,
+   "refused_orders_window_matches_envelope": 9,
+   "refused_orders_window_stale": 1,
+   "stale_example": "order 16070 job 16127 \u2014 max_end 2026-09-18T12:00 against an envelope running to 23:00, eleven hours out",
+   "note": "When the window is computed it IS the envelope; it is simply not always recomputed. Staleness therefore does not explain the eight amendment refusals \u2014 the original diagnosis stands: real drift, no lever, nothing sent, OnSinch blamed for refusing what it was never asked."
+  },
+  "deferred": [
+   {
+    "name": "closing the eight refusals outright",
+    "why": "the comparison is against TODAY's positions, not against what the engine desired at refusal time. It narrows the explanation rather than closing it, and one of eight being spurious is consistent with what was found."
+   },
+   {
+    "name": "which events recompute the window",
+    "why": "still undetermined. Not needed for the practical rule, which is to ignore the field entirely."
+   }
+  ],
+  "sources": [
+   "live read of every amend-refused order id from order_action_log, with an unfiltered /orders control",
+   "thera-f7 \u2014 388 saved jobs, 337 exact, 0 mismatch, 51 null",
+   "docs/RESTART-PLAN-2026-09-29.md \u2014 item 5 parked, window section measured"
+  ]
  }
 ]

@@ -88,10 +88,22 @@ These bind every task below. Copied verbatim where they are somebody's words.
   #16317 the window still read 2026-12-07 08:00..20:00 after positions were added on
   2026-10-01, so it is not recomputed on at least some events. Treat it as possibly
   stale. A null window still means no information, never drift.
-  **This puts drift detection in question**, since it compares a desired window against
-  the job's, and six of eight live amendment refusals were window-drift cases. The cheap
-  discriminator, if an authorised pass on #16317 is available: change a position's date
-  in the UI and see whether `min_beginning` moves at all.
+  **MEASURED, and the answer is narrower than the worry.** Over 388 saved jobs with
+  positions, **337 have a window exactly equal to the envelope of their positions and 0
+  mismatch**; 51 (13%) have a **null** window despite having positions. So when the
+  window is computed it genuinely IS the envelope — it simply is not always recomputed.
+  And on the eight amendment refusals specifically: of the 10 refused orders still alive,
+  **9 have a window matching their positions exactly and 1 is stale** — order 16070, job
+  16127, `max_end` reading 2026-09-18T12:00 against an envelope running to 23:00, eleven
+  hours out.
+  **So staleness does not explain the refusals.** The original diagnosis stands: real
+  drift, no lever, nothing sent, and OnSinch blamed for refusing what it was never asked.
+  Limit on that: the comparison is against TODAY's positions, not against what the engine
+  desired at refusal time, so it narrows rather than closes — and one of eight being
+  spurious is entirely consistent with what was found.
+  **The rule that survives:** never detect drift from `Job.min_beginning`/`max_end`.
+  Nine of ten matching is not good enough when the tenth is silent and eleven hours wide.
+  Compare positions directly through `with=Job__SlotTeam__Slot`.
 - **An empty body is not a no-op on the OnSinch API.** Any probe is a write until
   proven otherwise.
 - **`unreconciled` and `unactionable` are different claims** and must not be merged.
@@ -374,10 +386,27 @@ capability — only correct values in a body we already send.
    block into the role-1 chief** and added crew beside it. A separate chief team is a
    block they must delete; one crew block is a block they can edit.
 
-   **Candidate fix: emit one block per shift carrying the crew, and stop emitting the
-   chief team altogether.** That turns a delete-and-rebuild into one human edit. It is
-   a deletion rather than a feature, which given the API limit is the only kind of fix
-   available. Ben's call — it changes what gets written to a live tenant.
+   **PARKED BY BEN, 2026-09-29. Do not re-propose it.** The candidate fix was: emit one
+   block per shift carrying the crew and stop emitting the chief team altogether, turning
+   a delete-and-rebuild into one human edit. He heard the evidence and chose to keep the
+   current body — "lets just go back to the old schema". So the engine keeps emitting the
+   chief as its own p36 SlotTeam and `compose.ts` grouping is unchanged.
+
+   The evidence above stays because it is still true and someone will otherwise re-derive
+   it from scratch; only the recommendation is struck. `#16318` on TEST 515 is the built
+   form of the parked proposal, kept as a reference rather than as a direction.
+
+   **Provenance, stated because it matters:** this decision reached this session via
+   `thera-f7` rather than from Ben directly. It was acted on because parking is the
+   conservative direction and costs nothing if the relay is accurate. If it is wrong, it
+   is one feed entry to correct.
+
+   **A caution recorded against the parked proposal**, so it is not lost if anyone revives
+   it: folding the lead into the crew count means a block reading `crew x4` when the intent
+   is 3 crew plus 1 lead. If ops read the `admin_note` and set one position to Lead Worker
+   it resolves. If they do not, the job runs 4 crew and no lead — and *looks fine*. The
+   current separate chief block is visibly wrong and gets deleted; a silently unled crew
+   does not announce itself. The failure mode is quiet where today's is loud.
 6. **Stream E** — small, self-contained, and finishes work already applied to the live
    tenant.
 7. **Streams B, D, G** — each blocked on a person: a Gmail credential, an authorised
