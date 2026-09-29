@@ -473,5 +473,52 @@
    "app/lib/engine/replaceOrder.ts:236 \u2014 the only delete on the app path",
    "thera-f7, 2026-09-29 \u2014 created #16315 at Ben's explicit request"
   ]
+ },
+ {
+  "id": "S-0017",
+  "ts": "2026-09-29T23:40:13+00:00",
+  "kind": "withdrawal",
+  "headline": "Supersedes S-0016: the reference order is #16317, not #16315, because request_approval cannot be changed after create \u2014 PATCH returns 204 and silently ignores it, joining order.specification on that list, so a 204 from this API is not evidence of a write. And measures Ben's queued instruction: of 39 proposed threads, 15 carry no OnSinch order and the 24 that do point at 21 ids of which 20 survive, ALL created by ops staff (413, 2620, 2633, never 2257) with real client contacts and status finished or cancelled. The engine linked to human orders; it has nothing pending. Ids are not contiguous either \u2014 16316 belongs to someone else",
+  "subject": "Nothing in OnSinch is awaiting a confirm click because of this engine",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 121,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  },
+  "measured": {
+   "supersedes": "S-0016, which named #16315 as the reference order",
+   "reference_order_now": "16317 (R11284, company 515); #16315 deleted, created with request_approval false so it never reached To Confirm",
+   "request_approval_patchable": false,
+   "request_approval_patch_result": "204 with nothing changed \u2014 value still read \"0\" and `modified` did not move; the numeric form 400s with 'Incorrect type (should be boolean)'",
+   "silently_ignored_patch_fields": "request_approval, order.specification (#15805)",
+   "ids_are_not_contiguous": "16316 was created by a third party between our two",
+   "proposed_threads": 39,
+   "proposed_with_no_onsinch_order": 15,
+   "proposed_with_an_onsinch_order": 24,
+   "distinct_onsinch_ids": 21,
+   "still_present_in_onsinch": 20,
+   "gone": 1,
+   "of_the_20_created_by_the_engine": 0,
+   "creators_observed": "413, 2620, 2633 \u2014 ops staff; never 2257",
+   "statuses_observed": "-2 finished and -1 cancelled; none open",
+   "note": "Nothing in OnSinch is awaiting a confirm click because of this engine. The 39 proposed are a queue on our own dashboard: 15 have no OnSinch order at all, and the 24 that do point at human-raised orders that are already finished or cancelled. Read with '0 of 86 engine creations alive', the engine's own orders are simply not there to be confirmed."
+  },
+  "deferred": [
+   {
+    "name": "clearing the 39",
+    "why": "Ben's instruction is queued, not actioned. It needs no OnSinch write, but the durable fix is a posture change (request_approval, order_mode) rather than a one-off sweep, which the next run would undo."
+   },
+   {
+    "name": "why request_approval is absent rather than \"0\" on some rows",
+    "why": "the field is returned on some order rows and missing on others. Absence therefore proves nothing, and the conclusion above deliberately rests on creator and status instead."
+   }
+  ],
+  "sources": [
+   "thera-f7 \u2014 PATCH /orders request_approval, 204 no-op with modified unmoved",
+   "live read of the 21 staged ids with an unfiltered /orders positive control (count 7196)",
+   "app/lib/engine/format.ts:33,132 \u2014 request_approval is hardcoded true on creates"
+  ]
  }
 ]
