@@ -49,7 +49,16 @@ NEG_CONTROL = ROOT / "test" / "__gate_negative_control.ts"
 
 
 def run(cmd, **kw):
+    """
+    ENCODING IS NOT A DETAIL HERE. Windows hands subprocess cp1252 by default, the
+    suite prints em-dashes, and the decode raises inside subprocess's own reader
+    THREAD — which does not fail the call. The gate exits 0 and `r.stdout` comes
+    back empty. That is invisible on a green run and catastrophic on a red one:
+    die() prints stdout+stderr, so the first real failure this gate caught would
+    have been reported with no reason attached.
+    """
     return subprocess.run(cmd, cwd=ROOT, shell=True, text=True,
+                          encoding="utf-8", errors="replace",
                           capture_output=True, **kw)
 
 
@@ -61,9 +70,23 @@ def die(step, detail=""):
 
 
 def test_file_count():
-    """What test/all.ts will discover: every .ts in test/ that is not its own runner."""
+    """
+    A FALLBACK, and labelled as one wherever it is used.
+
+    test/all.ts DISCOVERS its files and prints how many it ran. Re-deriving that
+    number here means keeping this filter in step with NOT_A_TEST in that file by
+    hand, which is the exact failure test/all.ts was written to end — and it
+    already happened: the first ticket this gate wrote said 116 because this
+    forgot mocks.ts while the runner ran 115. Read the runner's own count.
+    """
     return len([p for p in (ROOT / "test").glob("*.ts")
-                if p.name not in ("all.ts",) and not p.name.startswith("__")])
+                if p.name not in ("all.ts", "mocks.ts") and not p.name.startswith("__")])
+
+
+def ran_count(output):
+    """The number test/all.ts says it ran. None when it did not say."""
+    m = re.search(r"ALL (\d+) TEST FILES PASS", output)
+    return int(m.group(1)) if m else None
 
 
 # ---------------------------------------------------------------- 1. confirm
@@ -78,13 +101,20 @@ def confirm(skip_suite=False):
         return {"tsc": "clean", "suite": "SKIPPED", "test_files": test_file_count(),
                 "result": "partial"}
 
-    n = test_file_count()
-    print(f"confirm: npm run test:all  ({n} test files)")
+    print(f"confirm: npm run test:all  (~{test_file_count()} test files)")
     r = run("npm run test:all")
     if r.returncode != 0:
         die("suite", r.stdout + r.stderr)
-    print("  all pass")
-    return {"tsc": "clean", "suite": "npm run test:all", "test_files": n, "result": "pass"}
+
+    ran = ran_count(r.stdout)
+    if ran is None:
+        die("suite", "The suite exited 0 but never printed 'ALL <n> TEST FILES PASS'.\n"
+                     "Either the runner's report line changed or its output was not\n"
+                     "captured. Refusing to ticket a test count nothing stated.\n\n"
+                     + (r.stdout or "")[-2000:])
+    print(f"  all pass ({ran} files, as reported by the runner)")
+    return {"tsc": "clean", "suite": "npm run test:all", "test_files": ran,
+            "test_files_source": "reported by test/all.ts", "result": "pass"}
 
 
 # ------------------------------------------------- the negative control (Q4)

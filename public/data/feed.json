@@ -42,5 +42,23 @@
    "test/writeContract.ts:61-83 \u2014 CASES, the completeness guard",
    "app/lib/engine/onsinch.ts:722 \u2014 patchPlaces, added in c5fb902"
   ]
+ },
+ {
+  "id": "S-0003",
+  "ts": "2026-09-29T03:05:24+00:00",
+  "kind": "decision",
+  "headline": "Gate hardened: subprocess forced to UTF-8 because cp1252 silently emptied stdout mid-thread, and the ticket's test count now comes from the runner's own report line \u2014 S-0002 recorded 116, the runner ran 115",
+  "subject": "A red gate would have reported its failure with no output attached",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 116,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  },
+  "sources": [
+   "scripts/session.py run() \u2014 encoding=utf-8, errors=replace",
+   "test/all.ts:27-32 \u2014 NOT_A_TEST excludes mocks.ts and all.ts; the glob here did not"
+  ]
  }
 ]
