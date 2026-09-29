@@ -104,7 +104,15 @@ def confirm(skip_suite=False):
     print(f"confirm: npm run test:all  (~{test_file_count()} test files)")
     r = run("npm run test:all")
     if r.returncode != 0:
-        die("suite", r.stdout + r.stderr)
+        # WHICH FILE FAILED IS THE ONLY LINE THAT MATTERS, and the first time this
+        # gate went red it was buried: the tail showed a stack trace from a test that
+        # throws ON PURPOSE (venueAdjudicate proves a judge that throws falls back),
+        # and the runner's own verdict line had scrolled past. Surface it first.
+        out = (r.stdout or "") + (r.stderr or "")
+        which = re.search(r"^\d+ of \d+ FAILED: .*$", out, re.M)
+        banner = f"\n>>> {which.group(0)}\n" if which else (
+            "\n>>> the runner did not print which file failed; the tail follows\n")
+        die("suite", banner + out)
 
     ran = ran_count(r.stdout)
     if ran is None:

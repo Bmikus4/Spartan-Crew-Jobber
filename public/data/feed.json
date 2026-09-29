@@ -301,5 +301,52 @@
    "test/followupCompose.ts [6] and test/followupClock.ts [3b] \u2014 live thread ids pinned",
    "app/lib/threadMessagesDb.ts storeMessage \u2014 the second insert, now guarded"
   ]
+ },
+ {
+  "id": "S-0012",
+  "ts": "2026-09-29T12:17:36+00:00",
+  "kind": "measurement",
+  "headline": "The oldest open question gets a mechanism and a limit in the same breath: 0 of 86 api_response orders are alive, 45 carried a separate Crew Chief team and 0 successors have a chief-only block, and on the two survivors the team CONVERTED our position into the role-1 chief rather than deleting \u2014 so the retype is a repair, not a rejection. But 25 of 47 successors have no lead at all, so shape explains at most half, rates are carried per position with no field in our body to hold one, and universal renaming discriminates nothing. Found read-only by session thera-f7; reconciled against the older 105/133 cohort here. Also fixes the offer-conditional strip that ate a real request and broke followupClock in the full suite",
+  "subject": "Engine-created orders are not rejected, they are retyped \u2014 but not only for shape",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 121,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  },
+  "measured": {
+   "dataset_a": "order_records id_source='api_response', 86 orders created 2026-09-03..09-18 \u2014 measured by session thera-f7, read-only, with an id[in] positive control returning 2 of 2 known-live",
+   "dataset_b": "conversation_state order_action_log, 133 orders 2026-08-06..09-15 \u2014 the older cohort, stated so the two denominators never fight",
+   "engine_orders_alive_of_86": 0,
+   "with_same_company_same_day_successor": 47,
+   "ours_carrying_a_separate_crew_chief_team": 45,
+   "successors_with_a_chief_only_block": 0,
+   "successors_with_role1_lead_inside_crew_block": 22,
+   "successors_with_no_lead_at_all_small_crews": 25,
+   "successor_blocks_with_lead_and_staff": 43,
+   "of_those_where_lead_pricelist_differs": 40,
+   "successors_keeping_our_order_name": 0,
+   "successors_keeping_our_job_name": 0,
+   "successors_still_alive_on_re_read": 45,
+   "spartan_waiting_for_client_after_offer_fix": 126,
+   "client_waiting_for_spartan": 198,
+   "note": "Shape is a demonstrated difference and a fixable defect. It is NOT the whole answer: 25 of the 47 successors have no lead position at all, so those orders had no chief-shape problem and were rebuilt anyway. The separate Crew Chief team explains at most half. Renaming is universal (0 of 47 kept ours) and therefore discriminates nothing."
+  },
+  "deferred": [
+   {
+    "name": "why a chief-less engine order is still rebuilt",
+    "why": "the remaining half of the question. Not identified. Should be the next read-only enquiry."
+   },
+   {
+    "name": "whether POST/PATCH slotTeams can create a role=1 position",
+    "why": "undocumented; needs an authorised probe on TEST 515 and is Ben's call. An empty body is not a no-op on this API."
+   }
+  ],
+  "sources": [
+   "docs/RESTART-PLAN-2026-09-29.md Stream C \u2014 the finding and the limit",
+   "thera-f7 scratchpad successor-shapes-2026-09-29.json \u2014 per-order fate and successor block shapes",
+   "app/lib/followup/compose.ts OFFER_COND \u2014 offer-shaped conditionals only"
+  ]
  }
 ]

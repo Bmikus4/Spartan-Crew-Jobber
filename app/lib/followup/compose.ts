@@ -223,10 +223,36 @@ export function outstandingAsk(lastSpartanBody: string): string | null {
    * this sentence. The whole clause goes, not just the verb, or the residue still
    * reads as a request.
    */
-  const OPEN_OFFER = /\b(please\s+)?(let (me|us) know if|get in touch if|reach out if|shout if)\b[^.?!]*/gi;
+  const OFFER_IF = /\b(?:please\s+)?(?:let (?:me|us) know|get in touch|reach out|shout)\s+if\b[^.?!]*/gi;
+
+  /**
+   * THE CONDITIONAL COMES FIRST AS OFTEN AS IT COMES SECOND, and only catching one
+   * order left two live drafts chasing on "If you need anything else in the future,
+   * please let me know." OFFER_IF catches "let me know IF x"; these two catch the
+   * inverted form — the conditional clause, then the courtesy trailing at the end of
+   * the sentence with nothing asked for after it.
+   *
+   * OFFER_TRAIL is anchored to the sentence end on purpose: "please let me know the
+   * start time" has an object and survives, which is the whole distinction between a
+   * request and a sign-off.
+   */
+  /**
+   * OFFER-SHAPED CONDITIONALS ONLY. A first version matched any "if you…" and ate
+   * "If you're happy to confirm please send a PO and a site contact" whole — a real
+   * request, stripped because it happened to start with a conditional. The clause has
+   * to be an offer of further help, not merely conditional.
+   */
+  const OFFER_COND =
+    /\bif (?:you need|you require|you want|there(?:'s| is| are)? anything|anything else)\b[^,.?!]*,?\s*/gi;
+  const OFFER_TRAIL = /\b(?:please\s+)?(?:let (?:me|us) know|get in touch|reach out)\s*(?=[.!]?\s*$)/gi;
 
   const asking = sentences.find((s) =>
-    REQUESTY.test(s.replace(PRESENTATIONAL, " ").replace(OPEN_OFFER, " "))
+    REQUESTY.test(
+      s.replace(PRESENTATIONAL, " ")
+        .replace(OFFER_IF, " ")
+        .replace(OFFER_COND, " ")
+        .replace(OFFER_TRAIL, " ")
+    )
   );
   if (!asking) return null;
   const sentence = asking.trim();
