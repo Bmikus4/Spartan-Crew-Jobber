@@ -100,5 +100,59 @@
    "n8n/spartan-sweep.workflow.json Build Sweep Payload \u2014 never read labelIds",
    "probe 2026-09-29: draft r1748036216280915079 is live on a client thread and is the fixture"
   ]
+ },
+ {
+  "id": "S-0006",
+  "ts": "2026-09-29T03:23:14+00:00",
+  "kind": "measurement",
+  "headline": "Follow-up clock: direction, flip point, 24h threshold both ways, +6h send grace, 7-day dormancy horizon. State is DERIVED from the message list, so a chaser cannot reset its own clock and replay cannot corrupt a deadline. Measured over 772 threads: 329 open waits, and the horizon takes the resume burst from 329 to 0",
+  "subject": "Nobody could tell who was waiting for whom, or since when",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 118,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  },
+  "measured": {
+   "dataset": "thread_messages, read 2026-09-29. The corpus stops 2026-09-18T13:33Z, where intake was paused; no message after that exists to measure.",
+   "instrument": "scripts/followup-census.ts \u2014 one SELECT, no model calls, no Gmail, no OnSinch",
+   "threads_with_stored_messages": 772,
+   "no_open_wait": 443,
+   "open_wait": 329,
+   "open_wait_owed_by_spartan": 198,
+   "open_wait_owed_by_client": 131,
+   "overdue_at_the_pause": 285,
+   "overdue_today_ungated": 329,
+   "raised_today_with_horizon": 0,
+   "age_of_wait_at_pause": {
+    "under_2_days": 64,
+    "2_to_7_days": 43,
+    "7_to_30_days": 150,
+    "30_to_90_days": 68,
+    "over_90_days": 4,
+    "denominator": 329
+   },
+   "note": "68% of open waits (222/329) were already older than a week when intake paused. Ungated, resuming would label 329 threads in one tick, some about enquiries 90+ days old. With DORMANT_AFTER_DAYS=7 the day-one burst is zero and the feature starts clean on new mail."
+  },
+  "deferred": [
+   {
+    "name": "venue gold accuracy",
+    "why": "test/venueGold.ts is a pass/fail gate, not a rate, and it passes. A post-sweep ACCURACY figure needs a scored run against the 2,533-row pool that nobody has built. Not measured; not claimed."
+   },
+   {
+    "name": "venue sink rate",
+    "why": "needs scripts/build-testset.ts, whose existence check is a full paged /orders pull against the live tenant. Not run: it is a paid bulk read and nothing in this commit depends on the number."
+   },
+   {
+    "name": "intake recall 99.5% / venue sink 8.6%",
+    "why": "carried from a pre-sweep run over 638 live threads. Stale by construction \u2014 the pool lost 3,122 rows after it was taken. Explicitly NOT presented as passing."
+   }
+  ],
+  "sources": [
+   "app/lib/followup/clock.ts \u2014 pure, no DB, no emit",
+   "test/followupClock.ts [3] the chaser, [6] the clearing reply, [10] the horizon",
+   "app/lib/engine/normalize.ts isMachineMessage \u2014 auto-ack/bounce/OOO, already pinned by test/machineMail.ts"
+  ]
  }
 ]
