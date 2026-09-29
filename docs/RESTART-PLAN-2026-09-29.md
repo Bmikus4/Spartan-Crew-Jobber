@@ -26,6 +26,18 @@ this API accepts and silently ignores. A 204 from this API is not evidence of a 
 Note also that id **16316 was created by somebody else** in between. Our ids are not
 contiguous and nothing may assume they are.
 
+**#16318 (R11285) is test traffic, also on TEST 515**, created 2026-09-29 at Ben's
+request and named "TEST - interim shape built from R11284 - safe to delete". Its body was
+derived programmatically from #16317's read-back: each block became **one** entry with the
+Lead Worker **folded into the crew count** — Install crew x4, Derig crew x3 — plus an
+`admin_note` telling ops to set one position to Lead Worker. It read back as 2 blocks,
+each with a single `role=0` p1 position, `request_approval "1"`. It is the concrete form
+of the candidate fix below, and it is **not in `order_records`**, so no survival
+measurement should count it.
+
+The `admin_note` is worth keeping as a technique in its own right: when the API cannot
+express the shape, the body can still carry the instruction for the person who can.
+
 It is linked to no thread and has no `conversation_state` row. Verified that nothing
 here can reach it: the only delete on the app path is `replaceOrder.ts:236`, driven by
 an order id taken from a thread's own state, and every other `deleteOrders` call site is
@@ -343,9 +355,29 @@ capability — only correct values in a body we already send.
    credential, no live effect, and it finishes the feature that currently only looks
    finished.
 4. **Stream F** — the carried item, before any restart.
-5. **Block shape** (the `role=1` chief inside the crew block, plus the per-position
-   rate the body has no field for) — necessary for 22 of 47, and the larger change of
-   the three. Behind the two that affect everything.
+5. **Stop emitting the Crew Chief team.** NOT "emit the house shape" — that task is
+   **not buildable**. Measured 2026-09-29 with three controls: `role` and `Slot` return
+   **400 Unknown property** on `POST /orders` (inside SlotTeam), on `POST /slotTeams`
+   and on `PATCH /slotTeams`. The same body without them fails only on "Company not
+   found", a junk `ZZZ` field is flagged identically, and a size-only PATCH reaches
+   "Records with specified IDs not found". Nothing was persisted — every request was
+   aimed at company 999999. **A Lead Worker can only come from the UI.**
+
+   So the engine cannot produce the correct shape by any route, and the question is
+   what is least wrong given that. Today it emits a **separate** p36 "Crew Chief"
+   SlotTeam: successors contain a chief-only block **0** times, p36 at role 0 carries
+   **wage_h 0**, and the block cannot be amended once anyone adds a second position. A
+   dedicated block, for a chief paid nothing, in a shape nobody can edit — so ops delete
+   it.
+
+   On the two orders that survived (#15593, #15594) the team **converted our single
+   block into the role-1 chief** and added crew beside it. A separate chief team is a
+   block they must delete; one crew block is a block they can edit.
+
+   **Candidate fix: emit one block per shift carrying the crew, and stop emitting the
+   chief team altogether.** That turns a delete-and-rebuild into one human edit. It is
+   a deletion rather than a feature, which given the API limit is the only kind of fix
+   available. Ben's call — it changes what gets written to a live tenant.
 6. **Stream E** — small, self-contained, and finishes work already applied to the live
    tenant.
 7. **Streams B, D, G** — each blocked on a person: a Gmail credential, an authorised

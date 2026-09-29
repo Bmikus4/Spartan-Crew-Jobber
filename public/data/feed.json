@@ -558,5 +558,47 @@
    "thera-f7 on #16317, at Ben's explicit request",
    "CLAUDE.md \u2014 the invariant, now qualified rather than deleted"
   ]
+ },
+ {
+  "id": "S-0019",
+  "ts": "2026-09-29T23:49:04+00:00",
+  "kind": "decision",
+  "headline": "Kills a planned task rather than adding one. role and Slot are 400 Unknown property on POST /orders inside SlotTeam, on POST /slotTeams and on PATCH /slotTeams, under three controls \u2014 so a Lead Worker can only come from the UI and 'emit the house shape' is not buildable. What is buildable is a deletion: the engine emits a SEPARATE Crew Chief team, successors contain a chief-only block 0 times, p36 at role 0 is paid nothing, and the block cannot be amended once a second position exists. On the two survivors the team converted our single block INTO the chief. So emit one block per shift with the crew and leave the lead to the UI, which turns a rebuild into one edit. Records #16317 and #16318 on TEST 515 as test traffic outside order_records",
+  "subject": "The engine cannot emit a Lead Worker at all, so it should stop emitting a chief block",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 121,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  },
+  "measured": {
+   "probe": "role and Slot as properties, by session thera-f7, aimed at company 999999 so nothing persisted",
+   "post_orders_inside_slotteam": "400 Unknown property",
+   "post_slotteams": "400 Unknown property",
+   "patch_slotteams": "400 Unknown property",
+   "control_1": "the same body WITHOUT them fails only on 'Company not found'",
+   "control_2": "a junk ZZZ field is flagged identically",
+   "control_3": "a size-only PATCH reaches 'Records with specified IDs not found'",
+   "conclusion": "the public API cannot create or edit a position or its role in any form; a Lead Worker can only come from the UI",
+   "successors_with_a_chief_only_block": 0,
+   "p36_at_role_0_wage_h": 0,
+   "test_traffic_not_in_order_records": "#16317 R11284 (reference shape) and #16318 R11285 (interim shape), both TEST company 515",
+   "note": "The engine emits a dedicated block for a chief paid nothing, in a shape that cannot be amended once a second position exists \u2014 so ops delete it. On the two survivors the team converted our single block INTO the role-1 chief and added crew beside it. A separate chief team is a block they must delete; one crew block is a block they can edit."
+  },
+  "deferred": [
+   {
+    "name": "actually dropping the chief team",
+    "why": "Ben's call \u2014 it changes what is written to a live tenant. #16318 is the built form of the proposal, on TEST 515."
+   },
+   {
+    "name": "the window discriminator",
+    "why": "needs a UI date change on #16317 and is Ben's call. Until then the invariant stays recorded as unproven."
+   }
+  ],
+  "sources": [
+   "thera-f7 \u2014 validation-oracle probe against company 999999, nothing persisted",
+   "docs/RESTART-PLAN-2026-09-29.md \u2014 the revised item 5 and the test-traffic record"
+  ]
  }
 ]
