@@ -436,5 +436,23 @@
    "app/lib/engine/resolve.ts:405 matchContact \u2014 written, imported, never called",
    "docs/RESTART-PLAN-2026-09-29.md Streams C and D"
   ]
+ },
+ {
+  "id": "S-0015",
+  "ts": "2026-09-29T12:27:39+00:00",
+  "kind": "decision",
+  "headline": "The gate now lists what is still uncommitted after it commits. Its confirm runs the whole tree, so tests for a file left out of the pathspec pass and get stranded \u2014 which is what happened to S-0012, where the open-offer fix landed and the cases pinning it did not. Those cases are in this commit",
+  "subject": "A pathspec commit could leave its own tests behind without saying so",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 121,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  },
+  "sources": [
+   "scripts/session.py commit_and_push \u2014 the leftovers warning",
+   "test/followupCompose.ts [6] \u2014 stranded by S-0012, landed here"
+  ]
  }
 ]

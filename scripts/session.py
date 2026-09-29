@@ -238,6 +238,18 @@ def commit_and_push(args, entry):
     finally:
         os.unlink(msg)
 
+    # A PATHSPEC COMMIT LETS YOU FORGET A FILE, and the confirm cannot tell you: it
+    # runs the WHOLE tree, so the tests for an omitted change pass and get left behind.
+    # That happened on ticket S-0012 — the fix landed, the cases pinning it did not.
+    # Legitimate often enough not to refuse, loud enough not to miss twice.
+    left = run("git status --porcelain")
+    strays = [ln for ln in (left.stdout or "").splitlines() if ln[:2] != "??"]
+    if strays:
+        print("\n  ! still uncommitted, and the suite just passed WITH them:")
+        for ln in strays:
+            print(f"      {ln}")
+        print("  ! if any of those are the tests for what you just committed, gate them now.\n")
+
     if args.no_push:
         print("push: skipped (--no-push)")
         return

@@ -99,6 +99,20 @@ console.log("\n[6] an open offer places no obligation on anyone");
     === "the start time",
     "and a thing already RECEIVED is not what we chase for",
     String(outstandingAsk("Thank you for the PO, this is now updated on our end. Please confirm the start time.")));
+
+  /**
+   * THE INVERTED ORDER, which the first version of the offer strip missed entirely —
+   * it required "let me know IF". Two drafts already in the live mailbox
+   * (1a0b51b8edf472f9 and 1a0b48de8c41c60e) chase on exactly this sentence.
+   */
+  ok(outstandingAsk("All booked in. If you need anything else in the future, please let me know.") === null,
+    "the conditional can come FIRST and it is still an offer",
+    String(outstandingAsk("All booked in. If you need anything else in the future, please let me know.")));
+  ok(outstandingAsk("Crew confirmed. If there is anything else I can help with please let me know.") === null,
+    "'if there is anything else…' likewise");
+  ok(outstandingAsk("Please let me know the start time.") === "the start time",
+    "but a courtesy WITH an object is a real request",
+    String(outstandingAsk("Please let me know the start time.")));
 }
 
 console.log("\n[7] nothing identifiable means nothing is sent");
