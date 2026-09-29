@@ -291,7 +291,6 @@ export function matchPlaceV2(
   // nothing on purpose — a city can confirm a match, never make one.
   if (!q.strong.length && !q.postcodes.length) return none;
 
-  const anyActive = places.some((p) => p.active !== false);
   const scored: VenueCandidate[] = [];
   for (const p of places) {
     const c = placeTokens(p);
@@ -380,7 +379,24 @@ export function matchPlaceV2(
     const group = scored.filter((x) => !taken.has(x.id) && (x.id === c.id || sameBuilding(c, x)));
     for (const g of group) taken.add(g.id);
     const head = [...group].sort((a, b) => {
-      const act = Number(b.evidence.active && anyActive) - Number(a.evidence.active && anyActive);
+      /**
+       * An active row speaks for its building before a retired one.
+       *
+       * This read `b.evidence.active && anyActive`, where `anyActive` was computed
+       * over the WHOLE tenant pool. It gated nothing: an active candidate IS an
+       * active alternative, so the conjunction was true exactly when its left side
+       * was. On a pool of 2,533 rows carrying 2,396 active it was also true on
+       * every call ever made. A dead conditional that reads as a safeguard is
+       * worse than no conditional, because the next reader trusts it — and the
+       * V3 matcher (venueSearch.ts) already ranks on `active` alone with no such
+       * guard and has never disagreed with this one.
+       *
+       * IT IS A TIEBREAK INSIDE ONE BUILDING'S GROUP, NOT A FILTER. A retired row
+       * that is the only candidate still wins and still gets booked. That is
+       * pinned by test/venueActivePreference.ts [3] so that changing it has to be
+       * a deliberate edit rather than a side effect of a ranking tweak.
+       */
+      const act = Number(b.evidence.active) - Number(a.evidence.active);
       if (act) return act;
       /**
        * A SHELL NEVER SPEAKS FOR ITS BUILDING while a real row is in the group.

@@ -258,16 +258,6 @@ export function matchPlace(locationText: string | undefined, places: PlaceCandid
    */
   const belowFloor = t.length < 4;
 
-  /**
-   * Retired venues are skipped. 12 of the 6,847 live places are inactive —
-   * "InterContinental London - the O2", "Battersea Evolution", "Woolwich Works" —
-   * and resolving a new job onto one puts crew at an address Spartan no longer
-   * works, silently, because nothing downstream re-checks the venue.
-   *
-   * Only when there is an active alternative, though: an inactive place is still a
-   * better answer than inventing a duplicate of a venue that already exists.
-   */
-  const anyActive = places.some((p) => p.active !== false);
 
   /**
    * Every match is collected and the richest one wins, rather than returning the
@@ -288,8 +278,24 @@ export function matchPlace(locationText: string | undefined, places: PlaceCandid
     const known = placeContext(p);
     const cand = {
       tier,
-      // An active row beats an inactive one before richness is even read.
-      ctx: (anyActive && p.active !== false ? 1000 : 0) + known,
+      /**
+       * An active row beats an inactive one before richness is even read.
+       *
+       * "Retired venues are skipped, but only when there is an active alternative"
+       * is what the comment here used to say, and neither half was ever true of
+       * this line. The guard was `anyActive`, computed over the whole pool: on the
+       * post-sweep pool of 2,533 rows with 2,396 active it is true on every call,
+       * and on an all-retired pool it still changes nothing, because a row that is
+       * not active takes no boost either way. This RANKS. It has never skipped.
+       *
+       * 137 rows are retired today and 10 of them are referenced by an engine order
+       * or ticket, so a retired row resolving is not hypothetical — it is current
+       * behaviour, and a thread whose only match is retired is still booked onto
+       * it. Whether it should hold for a human instead is a live behaviour change
+       * on every thread, with its own commit and its own measurement. It does not
+       * belong beside a simplification that provably changes no answer.
+       */
+      ctx: (p.active !== false ? 1000 : 0) + known,
       id: p.id,
       known,
     };

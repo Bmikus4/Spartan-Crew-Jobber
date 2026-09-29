@@ -60,5 +60,25 @@
    "scripts/session.py run() \u2014 encoding=utf-8, errors=replace",
    "test/all.ts:27-32 \u2014 NOT_A_TEST excludes mocks.ts and all.ts; the glob here did not"
   ]
+ },
+ {
+  "id": "S-0004",
+  "ts": "2026-09-29T03:08:29+00:00",
+  "kind": "decision",
+  "headline": "anyActive removed from both matchers: an active candidate IS an active alternative, so the conjunction was true exactly when its left side was, and on 2,533 rows with 2,396 active it was true on every call ever made. No answer changes. A retired-only match still books, now pinned by test so Q3' must be deliberate. Note: S-0003 ticketed 116 files correctly (test/venueActivePreference.ts was on disk, not in that commit); the 115 its headline names was S-0002's moment",
+  "subject": "The active-venue preference consulted the tenant pool and gated nothing",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 116,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  },
+  "sources": [
+   "app/lib/engine/venueMatch.ts:383 \u2014 was the group-head tiebreak",
+   "app/lib/engine/resolve.ts:292 \u2014 was the ctx boost",
+   "app/lib/engine/venueSearch.ts:156 \u2014 V3 already ranked on active alone, no guard, no disagreement",
+   "test/venueActivePreference.ts \u2014 [1] fails if the guard ever did anything; [3] pins retired-only booking"
+  ]
  }
 ]
