@@ -788,5 +788,23 @@
    "app/lib/engine/pipeline.ts",
    "test/createdVenueFollowUp.ts"
   ]
+ },
+ {
+  "id": "S-0028",
+  "ts": "2026-09-30T01:44:32+00:00",
+  "kind": "measurement",
+  "headline": "compile() rebuilt state from a field list and the store replaces the row, so built_flagged, manual_flagged, needs_label, updated_flagged, reconcile and pending_order were erased by every inbound email (audit #2; Order Built re-posted each message); state now starts from prior",
+  "subject": "What the pipeline records on a thread now survives the next email",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 125,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  },
+  "sources": [
+   "app/lib/engine/compiler.ts",
+   "test/stateSurvivesCompile.ts"
+  ]
  }
 ]

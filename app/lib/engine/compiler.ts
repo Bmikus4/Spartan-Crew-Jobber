@@ -1791,6 +1791,11 @@ export async function compile(
     : "drafted";
 
   const state: ConversationState = {
+    // FROM PRIOR FIRST, as the early returns above do. The store replaces the whole row,
+    // so a field the pipeline or the sweep writes and this literal does not name is
+    // erased by the next email. Six were (audit #2): "Order Built" re-posted on every
+    // message and never taken off a deleted order. test/stateSurvivesCompile.ts.
+    ...(prior ?? {}),
     thread_id: thread.thread_id,
     subject: latest.subject,
     participants: [...new Set([latest.from, ...history.map((m) => m.from)])],
