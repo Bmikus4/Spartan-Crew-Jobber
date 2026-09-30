@@ -22,7 +22,40 @@
 // only those where being wrong is structurally impossible — our own outbound, and mail
 // from a machine that cannot receive a reply.
 // ============================================================================
-import { isMachineSender, isAutoReply, isFromSpartan } from "./normalize";
+import { isMachineSender, isAutoReply, isFromSpartan, cleanEmailBody } from "./normalize";
+
+// ---------------------------------------------------------------------------
+/**
+ * Spartan's own words asking this party to price a VEHICLE: Spartan is the buyer and the
+ * other side a supplier, so nothing in the thread is a booking. Returns the words that
+ * decided, or null.
+ *
+ * First live night, 2026-09-30: Tracy asked KB Event and Mango Couriers to quote for a
+ * van for The Pembroke Club, adding "4 crew members on site"; the engine booked 8 crew
+ * for each supplier (orders 16321, 16323) beside the real order (16322). Over all 806
+ * stored threads this matches exactly the three supplier threads for that job and no
+ * client thread.
+ *
+ * Both halves are needed. The ask alone catches a crew enquiry relayed through info@
+ * ("Please can you quote for the below crew"); the vehicle alone catches every signature,
+ * which says "We now provide Van services!". "Can we quote you for a van" is Spartan
+ * SELLING and must not match, so the "we" form is only "could we get a quote".
+ */
+const SUPPLIER_ASK = /\b(?:(?:could|can|would)\s+you\s+(?:please\s+)?(?:re-?)?quote|(?:could|can)\s+we\s+(?:please\s+)?get\s+(?:a|an)\s+(?:updated\s+)?quote|please\s+(?:can\s+you\s+)?(?:re-?)?quote\s+(?:me|us)|look(?:ing)?\s+forward\s+to\s+receiving\s+(?:the|a|an)\s+(?:updated\s+)?quote)\b/i;
+const VEHICLE = /\b(?:7\.5\s*t?|3\.5\s*t|luton|sprinters?|lwb|vans?|trucks?|lorry|lorries|hgv|\d{1,2}\s*(?:t|tonne|ton))\b/i;
+const VAN_TAGLINE = /\**\s*we now provide van services[^\n]*/gi;
+
+export function supplierAsk(messages: Array<{ from?: string; body?: string; is_from_spartan?: boolean }>): string | null {
+  for (const m of messages) {
+    if (!(m.is_from_spartan || isFromSpartan(String(m.from ?? "")))) continue;
+    // Own words only: a forwarded client email inside a colleague's message is the client's.
+    const own = cleanEmailBody(String(m.body ?? "")).split(/-{5,}\s*Forwarded message/i)[0].replace(VAN_TAGLINE, " ");
+    const ask = own.match(SUPPLIER_ASK);
+    const vehicle = ask && own.match(VEHICLE);
+    if (ask && vehicle) return `${ask[0]} … ${vehicle[0]}`;
+  }
+  return null;
+}
 
 export type TriageVerdict = "admit" | "skip";
 

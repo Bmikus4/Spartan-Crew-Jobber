@@ -1076,5 +1076,24 @@
    "app/lib/engine/pipeline.ts",
    "test/dateYear.ts"
   ]
+ },
+ {
+  "id": "S-0044",
+  "ts": "2026-09-30T11:29:33+00:00",
+  "kind": "measurement",
+  "headline": "Live 09-30: Tracy asked KB Event and Mango Couriers to quote for a van for The Pembroke Club, adding '4 crew on site'; the engine booked 8 crew for each supplier (orders 16321, 16323) beside the real order 16322. Spartan's own words asking for a vehicle quote now mark the thread a supplier thread: no model call, no write, even where an order exists. Over 807 stored threads it matches exactly the 3 supplier threads for that job and no client thread; harness unchanged at 120/135",
+  "subject": "A thread in which Spartan asks a supplier to quote for a vehicle is never booked as a crew job",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 137,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  },
+  "sources": [
+   "app/lib/engine/triage.ts",
+   "app/lib/engine/compiler.ts",
+   "test/supplierThread.ts"
+  ]
  }
 ]

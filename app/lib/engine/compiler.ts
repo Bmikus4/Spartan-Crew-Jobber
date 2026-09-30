@@ -19,7 +19,7 @@ import type {
 import { normalizeThread } from "./normalize";
 import { mergeFacts, describeMerge } from "./mergeFacts";
 import { reconcileRequests } from "./parseWork";
-import { triage, decisionBinds, triageModeFromEnv, type TriageMode } from "./triage";
+import { triage, decisionBinds, triageModeFromEnv, supplierAsk, type TriageMode } from "./triage";
 import { composeOrder } from "./compose";
 import { validateOrder } from "./format";
 import { matchCompany, matchCompanyByDomain, matchContact, matchPlace, matchExistingOrder, rNumbersIn, normName, normAddr, type OrderRec } from "./resolve";
@@ -1019,6 +1019,33 @@ export async function compile(
         actions: { none: true },
       };
     }
+  }
+
+  // 0. a supplier thread — Spartan asked this party to price a vehicle, so every crew
+  // figure in it is Spartan's own crew. Checked whatever the thread carries: the false
+  // orders it already raised (16321, 16323) must not be patched by the next reply.
+  const buying = supplierAsk(thread.messages);
+  if (buying) {
+    return {
+      state: {
+        ...(prior ?? {}),
+        thread_id: thread.thread_id,
+        subject: latest.subject,
+        participants: [...new Set([latest.from, ...history.map((m) => m.from)])],
+        last_message_id: latest.message_id,
+        last_processed_epoch: now(),
+        classification: "not-a-job",
+        facts: prior?.facts ?? { requests: [] },
+        desired_order: null,
+        pending_order: undefined,
+        priority: "low",
+        needs_human: false,
+        status: "ignored",
+        notes: [`a supplier thread — Spartan asked them to quote ("${buying}"), so nothing here is a booking`],
+        order_action_log: prior?.order_action_log ?? [],
+      },
+      actions: { none: true },
+    };
   }
 
   // 0. machine mail — nothing here was written by a client, so there is nothing
