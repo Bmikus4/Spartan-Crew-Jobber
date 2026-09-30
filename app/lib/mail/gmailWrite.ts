@@ -89,6 +89,20 @@ function bareThreadId(threadId: string): string {
 }
 
 /**
+ * The same exclusivity for the n8n tag workflow, which production uses while no service
+ * account is configured. That workflow adds OR removes the one label it is given
+ * (exported 2026-09-15), so "Order Updated" went on beside "Order Built" and "Order Needs
+ * Updated" beside "Order Built" — done and outstanding at once. The other three are
+ * cleared FIRST: if a call fails half way the thread wears none, which the next email
+ * retries, rather than two that contradict each other.
+ */
+export function exclusiveTagCalls<T extends { label: string; state?: string; reason?: string }>(body: T): T[] {
+  if (body.state === "cleared" || !(THE_FOUR as readonly string[]).includes(body.label)) return [body];
+  const others = THE_FOUR.filter((n) => n !== body.label).map((n) => ({ ...body, label: n, state: "cleared", reason: `superseded by ${body.label}` }));
+  return [...others, body];
+}
+
+/**
  * Put one of the four on a thread and take the other three off, in ONE request.
  *
  * The exclusivity is the point. A thread wearing "Order Built" and "Order Needs Built"

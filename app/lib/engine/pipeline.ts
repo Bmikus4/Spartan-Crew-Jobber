@@ -756,6 +756,10 @@ export async function flagBuiltIfNeeded(next: ConversationState, deps: PipelineD
   const should = Number.isInteger(Number(next.onsinch_order_id)) && Number(next.onsinch_order_id) > 0;
   const already = next.built_flagged === true;
   if (should === already) return; // no transition, nothing to say
+  // A failure outranks a success: the four labels are exclusive, so putting Order Built
+  // on a thread that needs a person would take its Needs label off. It goes on once the
+  // problem is resolved — built_flagged stays false until then.
+  if (should && cannotBeBooked(next)) return;
 
   try {
     await deps.flagOrderBuilt({
@@ -811,6 +815,7 @@ export async function flagUpdatedIfNeeded(next: ConversationState, deps: Pipelin
     .reverse()
     .find((a) => a.ok && CHANGED_A_STANDING_ORDER.has(a.kind));
   if (!change) return;
+  if (cannotBeBooked(next)) return; // a failure outranks a success, as in flagBuiltIfNeeded
 
   try {
     await deps.flagOrderUpdated({
@@ -907,6 +912,12 @@ export async function flagManualIfNeeded(next: ConversationState, deps: Pipeline
     });
     next.manual_flagged = should;
     next.needs_label = should ? wanted : undefined;
+    // The Needs label took Order Built / Order Updated off when it went on (the four are
+    // exclusive). Once it is resolved on a thread holding an order, their markers are
+    // reset so the right one goes back on, instead of a booked thread wearing nothing.
+    // Not reset when the Needs label goes ON: a deleted order must still send its
+    // explicit Order Built clear (audit S4).
+    if (!should && Number(next.onsinch_order_id) > 0) { next.built_flagged = false; next.updated_flagged = false; }
     await deps.store.put(next);
   } catch (err) {
     // The thread is already on the board with its reason. An untagged inbox is slower

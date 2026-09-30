@@ -112,17 +112,20 @@ async function postTag<T extends { label: string }>(body: T): Promise<void> {
 
   const hook = process.env.MANUAL_TAG_WEBHOOK;
   if (!hook) return;
-  const res = await fetch(hook, {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-      "x-webhook-secret": process.env.N8N_WEBHOOK_SECRET ?? "",
-    },
-    body: JSON.stringify(body),
-  });
-  const j = (await res.json().catch(() => ({}))) as { ok?: unknown };
-  if (!res.ok || j.ok !== true) {
-    throw new Error(`${String(body.label)} tag webhook did not confirm (HTTP ${res.status}) ${JSON.stringify(j).slice(0, 160)}`);
+  const { exclusiveTagCalls } = await import("./mail/gmailWrite");
+  for (const call of exclusiveTagCalls(body as T & { state?: string })) {
+    const res = await fetch(hook, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-webhook-secret": process.env.N8N_WEBHOOK_SECRET ?? "",
+      },
+      body: JSON.stringify(call),
+    });
+    const j = (await res.json().catch(() => ({}))) as { ok?: unknown };
+    if (!res.ok || j.ok !== true) {
+      throw new Error(`${String(call.label)} tag webhook did not confirm (HTTP ${res.status}) ${JSON.stringify(j).slice(0, 160)}`);
+    }
   }
 }
 

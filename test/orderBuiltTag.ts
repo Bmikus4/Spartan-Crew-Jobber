@@ -88,14 +88,21 @@ function rig(opts: { fail?: boolean } = {}) {
     ok(s.built_flagged === false, "and the marker with it");
   }
 
-  console.log("\n[4] it is independent of the Manual tag");
+  console.log("\n[4] a note to check does not stop it; a failure does");
   {
-    // A booking on an assumed rate card is both: the order exists, and the price
-    // wants a human. Neither tag may suppress the other.
-    const { deps, sent } = rig();
-    const s = st({ onsinch_order_id: 15696, needs_human: true });
-    await flagBuiltIfNeeded(s, deps);
-    ok(sent.length === 1, "still tagged built while a human is also wanted", String(sent.length));
+    // A booking on an assumed rate card is booked and worth a look (review_only): it
+    // wears Order Built. A thread that cannot be booked wears its Needs label instead —
+    // the four are exclusive (Ben 2026-09-13, and 09-30: "are old created tags removed
+    // when a new one is added"), so Built going on would take the Needs label off.
+    const a = rig();
+    const noted = st({ onsinch_order_id: 15696, needs_human: true, review_only: true });
+    await flagBuiltIfNeeded(noted, a.deps);
+    ok(a.sent.length === 1, "tagged built while the price wants a look", String(a.sent.length));
+
+    const b = rig();
+    const failing = st({ onsinch_order_id: 15696, needs_human: true, review_only: false });
+    await flagBuiltIfNeeded(failing, b.deps);
+    ok(b.sent.length === 0 && failing.built_flagged !== true, "withheld while the thread needs a person, and retried later", String(b.sent.length));
   }
 
   console.log("\n[5] a failed post is retried, never recorded as done");

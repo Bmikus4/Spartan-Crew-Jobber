@@ -1095,5 +1095,26 @@
    "app/lib/engine/compiler.ts",
    "test/supplierThread.ts"
   ]
+ },
+ {
+  "id": "S-0045",
+  "ts": "2026-09-30T11:41:04+00:00",
+  "kind": "measurement",
+  "headline": "Ben 09-30: 'are old created tags removed when a new one is added' - not in production. The n8n tag workflow adds or removes only the label it is sent, so Order Updated went on beside Order Built, and Order Needs Updated beside Order Built (done and outstanding at once); only the unused service-account route was exclusive. Now every apply clears the other three first; Order Built/Updated are withheld while the thread needs a person, and go back on when that resolves. Harness unchanged at 120/135",
+  "subject": "A thread wears one order label at a time on the n8n route too, and a failure label is never covered by a success label",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 138,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  },
+  "sources": [
+   "app/lib/mail/gmailWrite.ts",
+   "app/lib/deps.ts",
+   "app/lib/engine/pipeline.ts",
+   "test/tagsAreExclusive.ts",
+   "test/orderBuiltTag.ts"
+  ]
  }
 ]
