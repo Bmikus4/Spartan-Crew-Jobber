@@ -894,5 +894,23 @@
    "app/lib/engine/compiler.ts",
    "test/venueListOutage.ts"
   ]
+ },
+ {
+  "id": "S-0034",
+  "ts": "2026-09-30T02:22:05+00:00",
+  "kind": "measurement",
+  "headline": "Design step 3 (shadow only): with=Job__SlotTeam__Slot sees every block and position; /attendance saw 0 of #16317's 2 unstaffed blocks. The sweep records nested vs attendance as shape_shadow metric events and decides nothing from it; parser pinned on 4 real reads",
+  "subject": "The sweep reads every block of an order in shadow, including the unstaffed ones",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 129,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  },
+  "sources": [
+   "app/lib/engine/reconcile.ts",
+   "test/nestedShape.ts"
+  ]
  }
 ]

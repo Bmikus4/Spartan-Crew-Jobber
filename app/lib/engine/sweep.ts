@@ -32,7 +32,38 @@
 // ============================================================================
 import type { ConversationState, DesiredOrder } from "./types";
 import { logAction, flagSupervisedIfNeeded, type PipelineDeps } from "./pipeline";
-import { readLiveShape, driftAgainst, driftKey, describeDrift } from "./reconcile";
+import { readLiveShape, readNestedShape, compareShapes, driftAgainst, driftKey, describeDrift, type LiveShape } from "./reconcile";
+
+/**
+ * Design §30 step 3, IN SHADOW (Ben, 2026-09-29: steps 3-5 shadow only). The nested read
+ * runs beside the attendance read and the difference goes to metric_events as
+ * `shape_shadow`; nothing here decides anything. Measured live on #16317: the nested
+ * read saw both of its blocks, the attendance read saw none, because nobody is signed on.
+ */
+async function shadowNestedRead(deps: PipelineDeps, thread_id: string, order_id: number, live: LiveShape): Promise<void> {
+  if (live.unreadable || !deps.metrics) return;
+  try {
+    const nested = await readNestedShape(deps.onsinch, order_id);
+    if (nested.unreadable) return;
+    const cmp = compareShapes(live, nested);
+    await deps.metrics.emit({
+      ts: deps.now(),
+      thread_id,
+      type: "shape_shadow",
+      meta: {
+        order_id,
+        agree: cmp.agree,
+        attendance_blocks: live.teams.size,
+        nested_blocks: nested.teams.size,
+        only_nested: cmp.onlyNested.length,
+        only_attendance: cmp.onlyAttendance,
+        differ: cmp.differ.slice(0, 10),
+      },
+    });
+  } catch (err) {
+    console.error("[shape-shadow] skipped", err);
+  }
+}
 import { matchExistingOrder, rNumbersIn, type OrderRec } from "./resolve";
 
 /** How many times one unchanged difference is re-asserted before the thread gives up. */
@@ -156,6 +187,7 @@ export async function reconcileThread(
   } catch (err: any) {
     return { thread_id, order_id, action: "error", detail: String(err?.message ?? err) };
   }
+  await shadowNestedRead(deps, thread_id, order_id, live);
 
   if (live.unreadable) {
     /**

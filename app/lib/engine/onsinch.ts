@@ -392,6 +392,19 @@ export class OnsinchClient {
    * what we wrote weeks ago, and a human may have approved, edited or already deleted
    * the order since.
    */
+  /**
+   * One order with every block and every position. `with=` nests with a DOUBLE
+   * underscore; the dot form 400s with a message listing only top-level relations, which
+   * is why blocks were long believed unreadable (measured over 390 orders, 2026-09-29).
+   * Unlike /attendance it returns blocks nobody is signed on to.
+   */
+  async orderWithBlocks(id: number) {
+    const r = await this.t("GET", "/orders" + qs({ "id[eq]": id, with: "Job__SlotTeam__Slot" }));
+    if (r.status >= 400) throw new Error(`orderWithBlocks ${r.status}: ${JSON.stringify(r.data).slice(0, 200)}`);
+    const rows = (r.data?.data ?? []) as any[];
+    return rows.find((o) => Number(o?.id) === Number(id)) ?? null;
+  }
+
   async orderById(id: number) {
     const rows = await this.getOrders({ id });
     return (rows.find((o) => Number(o?.id) === Number(id)) ?? null) as

@@ -365,6 +365,26 @@ const HELD = { size: 4, beginning: `${DAY}T09:30:00+00:00`, end: `${DAY}T14:00:0
     ok(last?.kind === "amend" && last?.ok === true, "and IS logged as an amend that worked", String(last?.kind));
   }
 
+  console.log("\n[14] the nested read runs in shadow: recorded, deciding nothing");
+  {
+    // The order read through with=Job__SlotTeam__Slot carries a second block nobody is
+    // signed on to, which the attendance read cannot see (design §30 step 3).
+    const nested = { ...LIVE_ORDER, Job: [{ ...LIVE_ORDER.Job[0], SlotTeam: [
+      { id: TEAM, name: "General", Slot: [{ id: 1, ...HELD, role: 0, cancelled: false }] },
+      { id: TEAM + 1, name: "Unstaffed", Slot: [{ id: 2, ...HELD, size: 2, role: 0, cancelled: false }] },
+    ] }] };
+    const events: any[] = [];
+    const withShadow = fakeDeps({ orders: [nested], slot: HELD });
+    (withShadow.deps as any).metrics = { emit: async (e: any) => { events.push(e); }, all: async () => events };
+    const r = await reconcileThread(stateBound(), withShadow.deps, { todayISO: TODAY });
+    const without = await reconcileThread(stateBound(), fakeDeps({ orders: [nested], slot: HELD }).deps, { todayISO: TODAY });
+    const shadow = events.find((e) => e.type === "shape_shadow");
+    ok(!!shadow, "a shape_shadow event is recorded", JSON.stringify(events.map((e) => e.type)));
+    ok(shadow?.meta?.nested_blocks === 2 && shadow?.meta?.attendance_blocks === 1 && shadow?.meta?.only_nested === 1,
+      "naming the block only the nested read sees", JSON.stringify(shadow?.meta));
+    ok(r.action === without.action, "and the sweep decides exactly as it does without it", `${r.action} vs ${without.action}`);
+  }
+
   console.log(fails ? `\n${fails} FAILED` : "\nALL PASS");
   process.exit(fails ? 1 : 0);
 })();

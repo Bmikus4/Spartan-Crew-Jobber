@@ -1,0 +1,229 @@
+[
+ {
+  "id": 16305,
+  "company_id": 457,
+  "user_id": 1802,
+  "number": "11273",
+  "intern_name": "",
+  "specification": "",
+  "Job": [
+   {
+    "id": 16363,
+    "min_beginning": "2026-10-01T08:00:00+00:00",
+    "max_end": "2026-10-01T19:30:00+00:00",
+    "SlotTeam": [
+     {
+      "id": 41716,
+      "name": "Derig",
+      "job_id": 16363,
+      "Slot": [
+       {
+        "id": 58566,
+        "slotteam_id": 41716,
+        "slotlocation_id": 17025,
+        "profession_id": 36,
+        "beginning": "2026-10-01T17:30:00+00:00",
+        "end": "2026-10-01T19:30:00+00:00",
+        "size": 1,
+        "role": 1,
+        "cancelled": false
+       },
+       {
+        "id": 58567,
+        "slotteam_id": 41716,
+        "slotlocation_id": 17025,
+        "profession_id": 1,
+        "beginning": "2026-10-01T17:30:00+00:00",
+        "end": "2026-10-01T19:30:00+00:00",
+        "size": 3,
+        "role": 0,
+        "cancelled": false
+       }
+      ]
+     },
+     {
+      "id": 41715,
+      "name": "Install ",
+      "job_id": 16363,
+      "Slot": [
+       {
+        "id": 58564,
+        "slotteam_id": 41715,
+        "slotlocation_id": 17025,
+        "profession_id": 36,
+        "beginning": "2026-10-01T08:00:00+00:00",
+        "end": "2026-10-01T10:00:00+00:00",
+        "size": 1,
+        "role": 1,
+        "cancelled": false
+       },
+       {
+        "id": 58565,
+        "slotteam_id": 41715,
+        "slotlocation_id": 17025,
+        "profession_id": 1,
+        "beginning": "2026-10-01T08:00:00+00:00",
+        "end": "2026-10-01T10:00:00+00:00",
+        "size": 3,
+        "role": 0,
+        "cancelled": false
+       }
+      ]
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "id": 16281,
+  "company_id": 734,
+  "user_id": 2313,
+  "number": "11249",
+  "intern_name": "",
+  "specification": "",
+  "Job": [
+   {
+    "id": 16338,
+    "min_beginning": "2026-09-27T07:00:00+00:00",
+    "max_end": "2026-09-28T17:00:00+00:00",
+    "SlotTeam": [
+     {
+      "id": 41666,
+      "name": "Derig 2",
+      "job_id": 16338,
+      "Slot": [
+       {
+        "id": 58483,
+        "slotteam_id": 41666,
+        "slotlocation_id": 16998,
+        "profession_id": 1,
+        "beginning": "2026-09-28T07:00:00+00:00",
+        "end": "2026-09-28T17:00:00+00:00",
+        "size": 1,
+        "role": 0,
+        "cancelled": false
+       },
+       {
+        "id": 58498,
+        "slotteam_id": 41666,
+        "slotlocation_id": 16998,
+        "profession_id": 17,
+        "beginning": "2026-09-28T12:00:00+00:00",
+        "end": "2026-09-28T17:00:00+00:00",
+        "size": 1,
+        "role": 0,
+        "cancelled": false
+       }
+      ]
+     },
+     {
+      "id": 41665,
+      "name": "Derig 1",
+      "job_id": 16338,
+      "Slot": [
+       {
+        "id": 58482,
+        "slotteam_id": 41665,
+        "slotlocation_id": 16998,
+        "profession_id": 25,
+        "beginning": "2026-09-27T07:00:00+00:00",
+        "end": "2026-09-27T17:00:00+00:00",
+        "size": 1,
+        "role": 0,
+        "cancelled": false
+       }
+      ]
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "id": 16301,
+  "company_id": 457,
+  "user_id": 2779,
+  "number": "11269",
+  "intern_name": "",
+  "specification": "",
+  "Job": [
+   {
+    "id": 16359,
+    "min_beginning": "2026-10-01T06:00:00+00:00",
+    "max_end": "2026-10-01T14:00:00+00:00",
+    "SlotTeam": [
+     {
+      "id": 41711,
+      "name": "Derig",
+      "job_id": 16359,
+      "Slot": [
+       {
+        "id": 58557,
+        "slotteam_id": 41711,
+        "slotlocation_id": 17021,
+        "profession_id": 1,
+        "beginning": "2026-10-01T12:00:00+00:00",
+        "end": "2026-10-01T14:00:00+00:00",
+        "size": 2,
+        "role": 0,
+        "cancelled": false
+       }
+      ]
+     },
+     {
+      "id": 41710,
+      "name": "Install ",
+      "job_id": 16359,
+      "Slot": [
+       {
+        "id": 58556,
+        "slotteam_id": 41710,
+        "slotlocation_id": 17021,
+        "profession_id": 1,
+        "beginning": "2026-10-01T06:00:00+00:00",
+        "end": "2026-10-01T08:00:00+00:00",
+        "size": 2,
+        "role": 0,
+        "cancelled": false
+       }
+      ]
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "id": 16306,
+  "company_id": 478,
+  "user_id": 1795,
+  "number": "11274",
+  "intern_name": "",
+  "specification": "",
+  "Job": [
+   {
+    "id": 16364,
+    "min_beginning": null,
+    "max_end": null,
+    "SlotTeam": [
+     {
+      "id": 41717,
+      "name": "Install ",
+      "job_id": 16364,
+      "Slot": [
+       {
+        "id": 58568,
+        "slotteam_id": 41717,
+        "slotlocation_id": 17026,
+        "profession_id": 1,
+        "beginning": "2026-09-30T08:00:00+00:00",
+        "end": "2026-09-30T16:00:00+00:00",
+        "size": 2,
+        "role": 0,
+        "cancelled": false
+       }
+      ]
+     }
+    ]
+   }
+  ]
+ }
+]

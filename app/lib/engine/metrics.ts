@@ -21,7 +21,9 @@ export type MetricType =
   | "order_updated"         // an OnSinch order was patched
   // quality
   | "needs_human"           // held back by the confidence gate
-  | "order_error";          // OnSinch write failed (e.g. 400)
+  | "order_error"           // OnSinch write failed (e.g. 400)
+  // shadow (records only; nothing reads these to decide)
+  | "shape_shadow";         // nested read vs attendance read of one order, from the sweep
 
 export interface MetricEvent {
   ts: number;

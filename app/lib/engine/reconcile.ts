@@ -64,6 +64,8 @@ export interface LiveTeam {
   slotlocation_id?: number;
   beginning?: string;
   end?: string;
+  /** How many live positions the block holds. Only the nested read knows; more than one is not PATCHable. */
+  positions?: number;
 }
 
 export interface LiveShape {
@@ -203,6 +205,97 @@ export async function readLiveShape(client: OnsinchClient, order_id: number): Pr
   }
 
   return shape;
+}
+
+/**
+ * The same shape from the nested read, `with=Job__SlotTeam__Slot` (design §30 step 3).
+ *
+ * Every block, staffed or not, and each one whole: size is the sum of its live positions,
+ * its times their span, its trade the staff position's. A chief is a role-1 position
+ * inside a crew block (213 of 265 multi-position blocks), so the first position is not
+ * the block's trade. Cancelled positions are left out — 134 of 1,122 read in the 390
+ * orders were cancelled. The window is the positions' span, because the job's own
+ * min_beginning/max_end was null on 51 of 388 reads.
+ *
+ * Pure, so it is pinned against real reads (test/nestedShape.ts).
+ */
+export function nestedShape(order: any): LiveShape {
+  const shape: LiveShape = {
+    order_id: Number(order?.id),
+    window: null,
+    teams: new Map(),
+    staffedBlocks: 0,
+    specification: typeof order?.specification === "string" ? order.specification : undefined,
+    intern_name: typeof order?.intern_name === "string" ? order.intern_name : undefined,
+  };
+  let lo: string | undefined;
+  let hi: string | undefined;
+  const earlier = (a?: string, b?: string) => (!a ? b : !b ? a : Date.parse(b) < Date.parse(a) ? b : a);
+  const later = (a?: string, b?: string) => (!a ? b : !b ? a : Date.parse(b) > Date.parse(a) ? b : a);
+  for (const job of order?.Job ?? []) {
+    for (const team of job?.SlotTeam ?? []) {
+      const id = Number(team?.id);
+      if (!Number.isInteger(id) || id <= 0) continue;
+      const slots = (team?.Slot ?? []).filter((s: any) => s && s.cancelled !== true);
+      const staff = slots.find((s: any) => Number(s.role) === 0) ?? slots[0];
+      let b: string | undefined;
+      let e: string | undefined;
+      for (const s of slots) { b = earlier(b, s.beginning); e = later(e, s.end); }
+      lo = earlier(lo, b);
+      hi = later(hi, e);
+      shape.teams.set(id, {
+        id,
+        name: typeof team?.name === "string" ? team.name : undefined,
+        size: slots.reduce((n: number, s: any) => n + (Number(s.size) || 0), 0),
+        profession_id: Number.isFinite(Number(staff?.profession_id)) ? Number(staff.profession_id) : undefined,
+        slotlocation_id: Number.isFinite(Number(staff?.slotlocation_id)) ? Number(staff.slotlocation_id) : undefined,
+        beginning: b,
+        end: e,
+        positions: slots.length,
+      });
+    }
+  }
+  shape.staffedBlocks = shape.teams.size;
+  shape.window = lo || hi ? { beginning: lo, end: hi } : null;
+  return shape;
+}
+
+/** The nested read of one order, or a shape marked unreadable. Never throws. */
+export async function readNestedShape(client: OnsinchClient, order_id: number): Promise<LiveShape> {
+  try {
+    const order = await client.orderWithBlocks(order_id);
+    if (!order) return { order_id, window: null, teams: new Map(), staffedBlocks: 0, unreadable: `order #${order_id} could not be read back` };
+    return nestedShape(order);
+  } catch (err: any) {
+    return { order_id, window: null, teams: new Map(), staffedBlocks: 0, unreadable: `nested read failed: ${String(err?.message ?? err)}` };
+  }
+}
+
+/**
+ * Where the attendance read and the nested read of one order disagree — the shadow for
+ * step 3, before anything reads the nested shape to decide. A block only the nested read
+ * sees is expected (nobody is signed on to it) and is counted, not called a disagreement.
+ */
+export function compareShapes(attendance: LiveShape, nested: LiveShape): {
+  agree: boolean;
+  onlyNested: number[];
+  onlyAttendance: number[];
+  differ: Array<{ id: number; field: string; attendance: unknown; nested: unknown }>;
+} {
+  const onlyNested = [...nested.teams.keys()].filter((id) => !attendance.teams.has(id));
+  const onlyAttendance = [...attendance.teams.keys()].filter((id) => !nested.teams.has(id));
+  const differ: Array<{ id: number; field: string; attendance: unknown; nested: unknown }> = [];
+  for (const [id, a] of attendance.teams) {
+    const n = nested.teams.get(id);
+    if (!n) continue;
+    for (const f of ["size", "profession_id"] as const) {
+      if (a[f] !== undefined && n[f] !== undefined && a[f] !== n[f]) differ.push({ id, field: f, attendance: a[f], nested: n[f] });
+    }
+    for (const f of ["beginning", "end"] as const) {
+      if (a[f] && n[f] && Date.parse(a[f]!) !== Date.parse(n[f]!)) differ.push({ id, field: f, attendance: a[f], nested: n[f] });
+    }
+  }
+  return { agree: !onlyAttendance.length && !differ.length, onlyNested, onlyAttendance, differ };
 }
 
 /**
