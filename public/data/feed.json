@@ -947,5 +947,23 @@
    "scripts/job-migration-dry-run.mts",
    "app/lib/engine/jobMigration.ts"
   ]
+ },
+ {
+  "id": "S-0037",
+  "ts": "2026-09-30T02:39:30+00:00",
+  "kind": "measurement",
+  "headline": "Design step 5 v0, shadow only: 413 thread openers replayed. 15/29 later threads of merged jobs continued, 14 abstained, 0 missed; 355/384 new threads new. 9 disagree with the auto-labelled gold, 7 of them by hand true merges the links missed (Fulham and Tottenham each booked twice); gate (0 false merges) awaits Ben's review",
+  "subject": "The resolver runs over history in shadow and finds bookings the order links never joined",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 131,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  },
+  "sources": [
+   "scripts/resolver-shadow.mts",
+   "app/lib/engine/resolver.ts"
+  ]
  }
 ]
