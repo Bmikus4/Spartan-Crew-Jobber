@@ -1057,5 +1057,24 @@
    "test/redeliveryIsFree.ts",
    "test/orderTitle.ts"
   ]
+ },
+ {
+  "id": "S-0043",
+  "ts": "2026-09-30T11:24:19+00:00",
+  "kind": "measurement",
+  "headline": "Live 09-30, order 16320: 'Rig 11:00-15:00, Derig 00:00-02:00' for 8 Oct was booked at midnight going into the 8th, 11 hours before the rig; a teardown listed after a build on the same date that ends before it starts now moves to the next day and says so on the ticket. Also: an amendment OnSinch refuses as 'Shift is not atomic' (16314) no longer tells ops a retry completes it",
+  "subject": "A derig written after the rig in the small hours is booked on the next day, not before the rig",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 136,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  },
+  "sources": [
+   "app/lib/engine/parseWork.ts",
+   "app/lib/engine/pipeline.ts",
+   "test/dateYear.ts"
+  ]
  }
 ]

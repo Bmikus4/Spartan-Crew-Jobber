@@ -1180,10 +1180,16 @@ async function tryAmendInPlace(
     // A real failure, so the compiler's review note does not stand: the order is
     // not merely worth a look, it is not right. See review_only in types.ts.
     next.review_only = false;
+    // "Shift is not atomic" is OnSinch refusing to PATCH a shift holding several
+    // positions — the crew chief inside the shift, as ops raise them. It is permanent,
+    // so telling ops a retry completes it sent them waiting on nothing (order 16314).
+    const permanent = /not atomic/i.test(String(err?.message ?? err));
     next.notes = [
       ...next.notes,
       `in-place amendment of order #${order_id} failed (${String(err?.message ?? err)}). Nothing was deleted; ` +
-        `the order may hold some corrected blocks and be missing a new one. A retry completes it.`,
+        (permanent
+          ? `OnSinch will not let the engine edit a shift that holds several positions, so the change must be made by hand in OnSinch.`
+          : `the order may hold some corrected blocks and be missing a new one. A retry completes it.`),
     ];
     logAction(next, now, { ts: now(), kind: "amend", order_id, ok: false, error: String(err?.message ?? err) });
     await store.put(next);

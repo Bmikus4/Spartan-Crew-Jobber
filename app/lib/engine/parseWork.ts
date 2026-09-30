@@ -354,6 +354,15 @@ export function bareMonthDays(text: string, reference: Date): Set<string> {
 
 // ---------------------------------------------------------------------------
 
+const TEARDOWN = /\b(de-?rig|get[- ]?out|load[- ]?out|break[- ]?down|take[- ]?down|pack[- ]?down|strike|de-?install)\b/i;
+const BUILD = /\b(rig|build|get[- ]?in|load[- ]?in|set[- ]?up|install)\b/i;
+
+function addDay(iso: string): string {
+  const d = new Date(`${iso}T12:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + 1);
+  return d.toISOString().slice(0, 10);
+}
+
 export interface Reconciled {
   /** Fields the parser supplied that the model had left blank. */
   filled: string[];
@@ -439,6 +448,23 @@ export function reconcileRequests(
 
     return next;
   });
+
+  // A get-out cannot come before its own rig. "Rig 11:00-15:00, Derig 00:00-02:00 (I know
+  // it's late!)" on 8 Oct was booked at midnight going INTO the 8th, eleven hours before
+  // the rig it strikes (order 16320, 2026-09-30); the client meant the small hours of the
+  // 9th. Only a teardown listed AFTER a build on the same date moves: a changeover writes
+  // the previous show's derig first, and that one stays where it is.
+  for (let i = 0; i < out.length; i++) {
+    const r = out[i];
+    if (!r.date || !r.start_time || !r.end_time || r.start_time >= "06:00" || !TEARDOWN.test(r.task ?? "")) continue;
+    const build = out.slice(0, i).find(
+      (b) => b.date === r.date && !!b.start_time && BUILD.test(b.task ?? "") && !TEARDOWN.test(b.task ?? "") && r.end_time! <= b.start_time!
+    );
+    if (!build) continue;
+    const moved = addDay(r.date);
+    report.rolled.push(`requests[${i}].date ${r.date} -> ${moved} (a ${r.start_time} ${r.task} cannot come before the ${build.start_time} ${build.task} it follows)`);
+    out[i] = { ...r, date: moved };
+  }
 
   // The model found nothing, but the text plainly states a job. This is the recovery
   // case the study measured: threads carrying a date AND a crew size that were thrown

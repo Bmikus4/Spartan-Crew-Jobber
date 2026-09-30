@@ -140,5 +140,40 @@ console.log("\n[9] the roll never moves the day or the month");
   }
 }
 
+console.log("\n[10] a derig in the small hours after the rig is the next day's");
+{
+  // Order 16320, 2026-09-30: "Rig - 4 Crew; 11:00 - 15:00 / Derig - 4 Crew: 00:00 - 02:00
+  // (I know it's late!)" for 8 October went in at midnight going INTO the 8th.
+  const text = "8th October 2026\nRig -\n4 Crew; 11:00 - 15:00\nDerig -\n4 Crew: 00:00 - 02:00\n(I know it's late!)";
+  const { requests, report } = reconcileRequests(text, [
+    { date: "2026-10-08", start_time: "11:00", end_time: "15:00", size: 4, task: "Rig" },
+    { date: "2026-10-08", start_time: "00:00", end_time: "02:00", size: 4, task: "Derig" },
+  ], AUG);
+  ok(requests[1].date === "2026-10-09", "the derig moves to the 9th", String(requests[1].date));
+  ok(requests[0].date === "2026-10-08", "the rig stays on the 8th");
+  ok(report.rolled.some((r) => /requests\[1\]\.date 2026-10-08 -> 2026-10-09/.test(r)), "and the move is said on the ticket", JSON.stringify(report.rolled));
+
+  // A changeover: the previous show's derig written FIRST, then the next rig. It stays.
+  const change = reconcileRequests("12 Oct: derig 01:00-05:00 then rig 08:00-16:00", [
+    { date: "2026-10-12", start_time: "01:00", end_time: "05:00", size: 4, task: "Derig" },
+    { date: "2026-10-12", start_time: "08:00", end_time: "16:00", size: 4, task: "Rig" },
+  ], AUG);
+  ok(change.requests[0].date === "2026-10-12", "a derig written before the rig is not moved", String(change.requests[0].date));
+
+  // A get-out that already sits on the next day is left alone.
+  const next = reconcileRequests("get-in 8 Oct 09:00-17:00, get-out 9 Oct 00:00-03:00", [
+    { date: "2026-10-08", start_time: "09:00", end_time: "17:00", size: 6, task: "Get-in" },
+    { date: "2026-10-09", start_time: "00:00", end_time: "03:00", size: 6, task: "Get-out" },
+  ], AUG);
+  ok(next.requests[1].date === "2026-10-09" && !next.report.rolled.some((r) => /requests\[1\]/.test(r)), "a get-out already on the next day is untouched");
+
+  // Two builds, no teardown: nothing moves.
+  const two = reconcileRequests("load in 02:00-06:00 and rig 08:00-12:00", [
+    { date: "2026-10-12", start_time: "08:00", end_time: "12:00", size: 4, task: "Rig" },
+    { date: "2026-10-12", start_time: "02:00", end_time: "06:00", size: 4, task: "Load in" },
+  ], AUG);
+  ok(two.requests[1].date === "2026-10-12", "an early load-in is not a teardown");
+}
+
 console.log(fails ? `\n${fails} FAILED\n` : "\nALL PASS\n");
 process.exit(fails ? 1 : 0);
