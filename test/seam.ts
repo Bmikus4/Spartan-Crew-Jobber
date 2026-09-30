@@ -64,7 +64,7 @@ const gmailThread = {
             mimeType: "text/plain",
             body: {
               data: b64(
-                "Hello,\n\nWe need 6 crew at ExCeL London on 12 August 2026, 08:00 to 18:00, for an exhibition build.\n\nBest,\nJane Doe\nBig Events Ltd\n07700 900123"
+                "Hello,\n\nWe need 6 crew at ExCeL London on 12 August 2026, 08:00 to 18:00, for an exhibition build.\n\nBest,\nJane Doe\nRedBeast Energy\n07700 900123"
               ),
             },
           },

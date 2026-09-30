@@ -283,7 +283,7 @@ console.log("\n[6] THE REMAINING BLOCKER, stated rather than hidden: a new clien
   __resetListCache();
   const { client } = tenant();
   const { state, actions } = await compile(
-    thread("t-newco", "4 crew on 12 September at The Barbican, 08:00-18:00."),
+    thread("t-newco", "4 crew on 12 September at The Barbican, 08:00-18:00. June, RedBeast Energy"),
     undefined,
     { reasoner: mockReasoner, onsinch: client, now: () => 1, repliesEnabled: false }
   );

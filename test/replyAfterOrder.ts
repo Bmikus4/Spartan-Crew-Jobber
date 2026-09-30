@@ -102,7 +102,7 @@ console.log("\n[3] the client is NEVER asked who they are, or what to charge the
       messages: [msg({
         message_id: "m1",
         from: "someone@never-heard-of.example",
-        body: "We need 6 crew on 12 August at ExCeL London, 08:00-18:00.",
+        body: "We need 6 crew on 12 August at ExCeL London, 08:00-18:00. A Company OnSinch Has Never Heard Of",
       })],
     },
     undefined,

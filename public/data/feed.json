@@ -718,5 +718,23 @@
    "app/lib/threadMessagesDb.ts",
    "test/oneConversationOneThreadId.ts"
   ]
+ },
+ {
+  "id": "S-0024",
+  "ts": "2026-09-30T01:20:52+00:00",
+  "kind": "measurement",
+  "headline": "Model answers enter compile through one schema+verbatim boundary (1 refusal in 1,353 stored identity values, 966/966 dates kept); match-binding needs a sender the company's contacts vouch for (225/242 historical pass); the combined adapter no longer drops cancellation (0/749 states ever held it)",
+  "subject": "A client's email can no longer bind the engine to another client's booking",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 123,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  },
+  "sources": [
+   "app/lib/engine/admit.ts",
+   "test/injectionBoundary.ts"
+  ]
  }
 ]

@@ -22,7 +22,7 @@ import { reconcileRequests } from "./parseWork";
 import { triage, decisionBinds, triageModeFromEnv, type TriageMode } from "./triage";
 import { composeOrder } from "./compose";
 import { validateOrder } from "./format";
-import { matchCompany, matchCompanyByDomain, matchContact, matchPlace, matchExistingOrder, rNumbersIn, normName, normAddr, type OrderRec } from "./resolve";
+import { matchCompany, matchCompanyByDomain, matchContact, matchPlace, matchExistingOrder, rNumbersIn, normName, normAddr, senderKnownTo, type OrderRec } from "./resolve";
 import { matchPlaceV2, matchedOnCityAlone, isAShell, tokenise } from "./venueMatch";
 import { buildIndex, searchVenues, applyRuledWording, type Building } from "./venueSearch";
 import { adjudicateVenue, type VenueJudge } from "./venueAdjudicate";
@@ -32,6 +32,7 @@ import { resolveRateCard } from "./rates";
 import type { Reasoner, ReplyContext } from "./reason";
 import type { OnsinchClient } from "./onsinch";
 import { counterpartyIdentity } from "./identity";
+import { admitFacts, admitClassification, admitCombined, evidenceOf, describeRefused } from "./admit";
 
 /** The third alias kind, added for professions — see aliasesDb.ts. */
 type AliasKind = "company" | "place" | "profession";
@@ -1047,13 +1048,18 @@ export async function compile(
     (Object.keys(priorFacts).length > 1 || (priorFacts.requests ?? []).length > 0) &&
     history.length > 0;
 
+  // Every model answer enters through admit (admit.ts): the email it read is untrusted,
+  // so its answer is too. test/injectionBoundary.ts [6] fails a call added without it.
+  const evidence = evidenceOf(thread.messages);
+  const refused: string[] = [];
+  const took = <T extends { refused: string[] }>(a: T): T => { refused.push(...a.refused); return a; };
   const combined = incremental
-    ? await reasoner.classifyAndExtractIncremental!(latest, priorFacts!, prior?.classification, !!prior?.onsinch_order_id, history)
+    ? took(admitCombined(await reasoner.classifyAndExtractIncremental!(latest, priorFacts!, prior?.classification, !!prior?.onsinch_order_id, history), evidence))
     : reasoner.classifyAndExtract
-      ? await reasoner.classifyAndExtract(latest, history, !!prior?.onsinch_order_id)
+      ? took(admitCombined(await reasoner.classifyAndExtract(latest, history, !!prior?.onsinch_order_id), evidence))
       : null;
   if (incremental) notes.push("read the whole conversation against the facts already stored for it");
-  const cls = combined ?? (await reasoner.classify(latest, history, !!prior?.onsinch_order_id));
+  const cls = combined ?? admitClassification(await reasoner.classify(latest, history, !!prior?.onsinch_order_id));
 
   // Keep the classifier's own explanation for a rejection. job_summary is the
   // reason ("N/A - Acknowledgment/confirmation only, no changes requested"); it
@@ -1097,7 +1103,7 @@ export async function compile(
     if (mergeNote) notes.push(mergeNote);
   }
   if (classification === "not-a-job") {
-    probed = probed ?? (await reasoner.extractFacts(latest, history));
+    probed = probed ?? took(admitFacts(await reasoner.extractFacts(latest, history), evidence)).facts;
     const usable = (probed.requests ?? []).some(
       (r) => /^\d{4}-\d{2}-\d{2}$/.test(String(r.date ?? "")) && Number(r.size) > 0
     );
@@ -1162,7 +1168,7 @@ export async function compile(
   if (isJob) {
     // The probe above already extracted this thread's facts when the classifier was
     // overruled; extracting again would be a second identical model call.
-    facts = probed ?? mergeFacts(prior?.facts, await reasoner.extractFacts(latest, history)).facts;
+    facts = probed ?? mergeFacts(prior?.facts, took(admitFacts(await reasoner.extractFacts(latest, history), evidence)).facts).facts;
 
     // Check the model's reading against the words on the page. The 18:00 finish that
     // reached 4 of 10 real orders was a prompt instruction the model quietly stopped
@@ -1398,7 +1404,21 @@ export async function compile(
           // none, so nothing here may depend on this being populated.
           r_numbers: rNumbersIn(thread.messages.map((m) => `${m.subject} ${m.body}`).join("\n")),
         });
-        if (existing && "order_id" in existing) {
+        // Binding to an order this thread did not create is the one step where a name
+        // typed into an email selects someone's live booking, so the sender must be one
+        // the company's own contacts vouch for. SPARTAN_BIND_UNKNOWN_SENDER=1 turns it off.
+        const unvouched =
+          !!existing && "order_id" in existing &&
+          process.env.SPARTAN_BIND_UNKNOWN_SENDER !== "1" &&
+          !senderKnownTo(company_id, identity, await onsinch.allCompanies());
+        if (unvouched && existing && "order_id" in existing) {
+          needs_human = true;
+          blocked = true;
+          notes.push(
+            `matches OnSinch order #${existing.order_id} of company ${company_id}, but ${identity.email ?? "the sender"} is not ` +
+              `one of that company's contacts — not amending a client's booking on an unknown sender's word; bind it by hand if it is theirs`
+          );
+        } else if (existing && "order_id" in existing) {
           linkedOrderId = existing.order_id;
           linkedOrderNumber = existing.order_number ?? linkedOrderNumber;
           linkedJobId = existing.job_id ?? linkedJobId;
@@ -1770,6 +1790,9 @@ export async function compile(
 
   // needs-info, NOT error: nothing failed here, we simply cannot finish without
   // a human. "error" is reserved for an actual failure (see pipeline.ts).
+  const refusedNote = describeRefused(refused);
+  if (refusedNote) notes.push(refusedNote);
+
   const status: ConversationState["status"] = needs_human
     ? "needs-info"
     : desired

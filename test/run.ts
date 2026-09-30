@@ -44,7 +44,7 @@ const assert = (cond: boolean, label: string) => {
 
 const TID = "thread-A";
 const thread = (msgs: Parameters<typeof msg>[0][]): HydratedThread => ({ thread_id: TID, messages: msgs.map(msg) });
-const NEW = { message_id: "m1", body: "Hi, can I book 4 crew on 9th March at Savoy Place for an exhibition stand build?" };
+const NEW = { message_id: "m1", body: "Hi, can I book 4 crew on 9th March at Savoy Place for an exhibition stand build? Pier, RedBeast Energy, PO-44821" };
 
 (async () => {
   console.log("\n[1] New job -> reply drafted, order WRITTEN to OnSinch as To Confirm");

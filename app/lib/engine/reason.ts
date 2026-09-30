@@ -368,6 +368,9 @@ ${EXTRACT_SYSTEM}`,
         priority: r.priority,
         job_summary: r.job_summary,
         ...(r.order_title ? { order_title: String(r.order_title) } : {}),
+        // Dropped here until 2026-09-29, so the pipeline's cancellation hold never fired
+        // on this path: 0 of 749 stored states carried cancellation: true.
+        ...(r.cancellation != null ? { cancellation: r.cancellation } : {}),
         facts: (r.facts ?? { requests: [] }) as ConversationFacts,
       };
     },
@@ -408,6 +411,9 @@ ${renderConversation(latest, history).text}`,
         priority: r.priority,
         job_summary: r.job_summary,
         ...(r.order_title ? { order_title: String(r.order_title) } : {}),
+        // Dropped here until 2026-09-29, so the pipeline's cancellation hold never fired
+        // on this path: 0 of 749 stored states carried cancellation: true.
+        ...(r.cancellation != null ? { cancellation: r.cancellation } : {}),
         facts: (r.facts ?? { requests: [] }) as ConversationFacts,
       };
     },
