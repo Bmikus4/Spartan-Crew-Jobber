@@ -220,7 +220,19 @@ Those 25 had no chief-shape problem and were retyped anyway.
 Measured read-only by `thera-f7`, corroborated locally here against our own
 `conversation_state`. The remaining cause is **order-level fields, not the block body**.
 
-- **Every order names the wrong client.** All 86 engine creates carry
+- **~~Every order names the wrong client.~~ STRUCK — Ben, 2026-09-29, directly: naming
+  him as the client is INTENTIONAL and is not a problem. No change is to be made.**
+  The code said so and this plan overrode it: `compiler.ts:253-259` records 2257 as
+  "deliberately a real, identifiable person rather than a fabricated placeholder —
+  whoever opens the order can see at a glance that the contact is a stand-in and who to
+  ask", quoting Ben on 2026-08-09. The error here was treating "0 of 45 successors kept
+  it" as proof the field was wrong, when ops resolving a stand-in is precisely what a
+  stand-in is for. Evidence that a field gets changed is not evidence that setting it
+  was a mistake. **Do not call `matchContact`. Do not re-propose this.**
+  The measurements below stay because they are true; only the conclusion drawn from
+  them is withdrawn.
+
+- **~~[withdrawn, see above]~~** All 86 engine creates carry
   `user_id = 2257` and `order_manager_id = 2257`. 2257 is Ben's own account —
   `PLACEHOLDER_CONTACT_ID` in `compiler.ts:261`, the stand-in used when the sender
   cannot be matched to an OnSinch user. **All 45 readable successors carry a real
@@ -355,14 +367,15 @@ product, so it goes first. The contact and the rate card affect **100% of orders
 they are the reason every engine order is retyped, and neither needs a new API
 capability — only correct values in a body we already send.
 
-1. **Contact resolution.** Make `matchContact` succeed, or fail loudly instead of
-   silently substituting Ben. 71% placeholder is not a fallback, it is the norm. Until
-   this lands, every order the engine writes will be corrected by hand no matter what
-   else is fixed — so nothing downstream of it is worth optimising.
-2. **The rate card.** 315 is stale; the house moved to 354 around 09-10. Re-measure
-   against current orders rather than trusting the comment, then change the default and
-   rewrite that comment with the new measurement and its date. The existing "money is
-   the one thing worth a click" staging rule stays.
+1. ~~**Contact resolution.**~~ **STRUCK — intentional, Ben 2026-09-29. Not a defect,
+   not to be changed.**
+2. **The rate card** — and with the contact struck and block shape parked, this is now
+   the ONLY surviving candidate from the whole order-quality investigation. 315 matches
+   the successor in 4 of 45; human orders moved onto 354 around 09-10; 354 appears
+   nowhere in our data. The `types.ts` comment argues 315 from a 498-order measurement
+   that predates the move. **Unconfirmed whether this too is intentional** — ask before
+   planning around it. If it is intentional, the honest position is that the retype
+   question is reopened, not answered: see the note below.
 3. **Stream A's pure parts** — the runner and label writer against a fake. No
    credential, no live effect, and it finishes the feature that currently only looks
    finished.
@@ -412,10 +425,25 @@ capability — only correct values in a body we already send.
 7. **Streams B, D, G** — each blocked on a person: a Gmail credential, an authorised
    probe, a conversation with the team.
 
-A note for whoever executes this: items 1 and 2 are small, and their smallness is the
-point. Months of this project's effort went into intake accuracy, venue matching and
-auth while every order it produced was unusable on arrival for two reasons that fit in
-a sentence.
+### What is left of the retype answer, honestly
+
+Three differences were found between our orders and their successors. **Two are now
+settled as intentional or parked by Ben** — the contact, and the separate chief block.
+Renaming is universal and discriminates nothing. That leaves **the rate card** as the
+only unexplained content difference, and it has not been confirmed either way.
+
+So the honest position is that **the retype question is narrowed, not answered.** 0 of
+86 engine orders survive; ops rebuild them; and if the contact is meant to be corrected
+by hand and the chief block is meant to be there, then most of what we measured is
+working as designed and something else accounts for the rebuilds. The earlier framing in
+`S-0013` — "every order is unusable on arrival" — was wrong, and wrong in a specific
+way worth remembering: **a field being changed downstream is not evidence that setting
+it was a mistake.** Half this investigation rested on that inference.
+
+What would actually settle it now is the instrument nobody has used yet: UI edits write
+`common_create` / `common_change` audit rows **carrying old and new values**. That is a
+record of what a human actually changed, rather than a diff of shapes we then guess the
+motive for. It is read-only and it is the next thing to do if this question is reopened.
 
 Stream A's Gmail write, Stream B, and anything touching the 39 `proposed` orders wait
 for Ben.

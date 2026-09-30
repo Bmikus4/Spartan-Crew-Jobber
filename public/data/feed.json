@@ -642,5 +642,45 @@
    "thera-f7 \u2014 388 saved jobs, 337 exact, 0 mismatch, 51 null",
    "docs/RESTART-PLAN-2026-09-29.md \u2014 item 5 parked, window section measured"
   ]
+ },
+ {
+  "id": "S-0021",
+  "ts": "2026-09-30T00:26:19+00:00",
+  "kind": "withdrawal",
+  "headline": "Withdraws the central claim of S-0013. Naming Ben as the client is INTENTIONAL \u2014 he said so directly, and compiler.ts:253-259 already said so, quoting him from 2026-08-09; this session read that comment and overrode it on the strength of '0 of 45 successors kept it'. That inference was the error, and half the order-quality investigation rested on it. With the contact intentional and the chief block parked by the same decision, the only unexplained difference left is the rate card, and that is unconfirmed. The retype question is narrowed, not answered \u2014 the unused instrument is common_change audit rows, which carry old and new values",
+  "subject": "A field being changed downstream is not evidence that setting it was a mistake",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 121,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  },
+  "measured": {
+   "withdrawn": "S-0013's framing that 'every order this engine sends names Ben as the client' is a defect",
+   "why": "Ben, 2026-09-29, directly: naming him as the client is INTENTIONAL and is not a problem. compiler.ts:253-259 already recorded it as deliberate, quoting him on 2026-08-09; this session read that comment and overrode it.",
+   "the_reasoning_error": "treating '0 of 45 successors kept our contact' as proof the field was wrong. A field being changed downstream is not evidence that setting it was a mistake \u2014 a stand-in resolved by a human is a stand-in working as intended.",
+   "also_confirmed_directly": "the separate Crew Chief block stays parked under the old schema; the relay via thera-f7 was accurate",
+   "differences_found_between_our_orders_and_successors": 3,
+   "now_intentional_or_parked": 2,
+   "discriminating_nothing": "renaming, universal at 0 of 47",
+   "remaining_unexplained": "the rate card, 315 against a house that moved to 354 around 09-10 \u2014 and not yet confirmed either way",
+   "note": "The retype question is narrowed, not answered. 0 of 86 engine orders survive and ops rebuild them, but if the contact is meant to be corrected by hand and the chief block is meant to be there, most of what was measured is working as designed and something else accounts for the rebuilds."
+  },
+  "deferred": [
+   {
+    "name": "whether the rate card is also intentional",
+    "why": "asked, not answered. It is the only surviving candidate and nothing should be planned around it until Ben says."
+   },
+   {
+    "name": "reading common_create / common_change audit rows",
+    "why": "UI edits carry OLD AND NEW values, so they record what a human actually changed rather than a shape diff whose motive we guess. Read-only, unused so far, and the right next instrument if this is reopened."
+   }
+  ],
+  "sources": [
+   "Ben, 2026-09-29, direct: naming him as the client is intentional; chief block stays parked",
+   "app/lib/engine/compiler.ts:253-259 \u2014 the deliberate-stand-in rationale this session overrode",
+   "docs/RESTART-PLAN-2026-09-29.md \u2014 item 1 struck, retype section rewritten"
+  ]
  }
 ]
