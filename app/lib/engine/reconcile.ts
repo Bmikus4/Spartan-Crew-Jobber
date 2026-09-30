@@ -21,7 +21,8 @@
 //                     expansion on /orders. It is the AGGREGATE span across every block,
 //                     not a per-block window — comparing a single block's times against
 //                     it produced a spurious "38 blocks have moved" reading once already.
-//   always            the order's own specification and intern_name.
+//   always            the order's own specification and intern_name (only intern_name is
+//                     compared; a specification PATCH never lands, see driftAgainst).
 //   staffed only      `/attendance?with=Slot,SlotTeam&Order__id=<id>` returns, per seat,
 //                     Slot.{slotteam_id, size, profession_id, slotlocation_id, beginning,
 //                     end} and SlotTeam.{id, name}. Per-block and exact.
@@ -291,9 +292,10 @@ export function driftAgainst(
 
   // Order-level fields. Both are set from the client's own words, so an empty desired
   // value means "this email said less", never "blank what is there".
-  if (desired.specification && !sameText(live.specification, desired.specification)) {
-    out.push({ where: "order", field: "specification", live: live.specification, want: desired.specification });
-  }
+  // specification is NOT compared. PATCH /orders answers 204 and leaves it unchanged
+  // (#15805), so a difference can never be closed. And it is the model's per-email
+  // summary, so it differs on nearly every email: counted, it re-sent a write that never
+  // lands until the ceiling, and it reset the give-up count on each email (audit S6).
   if (desired.intern_name && !sameText(live.intern_name, desired.intern_name)) {
     out.push({ where: "order", field: "intern_name", live: live.intern_name, want: desired.intern_name });
   }

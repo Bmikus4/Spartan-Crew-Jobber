@@ -841,5 +841,22 @@
    "app/lib/engine/compiler.ts",
    "test/bookedThreadStaysBooked.ts"
   ]
+ },
+ {
+  "id": "S-0031",
+  "ts": "2026-09-30T02:01:28+00:00",
+  "kind": "measurement",
+  "headline": "Drift counted specification, which PATCH /orders answers 204 and never changes (#15805) and which is the model's per-email summary, so every email looked like a new change and reset the give-up count (audit S6); drift now compares intern_name only at order level",
+  "subject": "The sweep stops re-sending a specification OnSinch never applies",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 126,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  },
+  "sources": [
+   "app/lib/engine/reconcile.ts"
+  ]
  }
 ]

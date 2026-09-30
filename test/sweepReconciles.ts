@@ -323,11 +323,13 @@ const HELD = { size: 4, beginning: `${DAY}T09:30:00+00:00`, end: `${DAY}T14:00:0
 
   console.log("\n[11] order-level drift still has a lever, so it still gets its attempts");
   {
-    const { deps, writes } = fakeDeps({ orders: [{ ...LIVE_ORDER, specification: "" }], slot: HELD });
+    // intern_name (the PO), not specification: PATCH /orders never applies a
+    // specification (#15805), so drift in it is no longer counted.
+    const { deps, writes } = fakeDeps({ orders: [{ ...LIVE_ORDER, intern_name: "" }], slot: HELD });
     const s = stateBound();
     s.last_ordered_teams = undefined;
     s.last_ordered_team_ids = undefined;
-    (s.desired_order as any).specification = "Crew for the 20th at HQ";
+    (s.desired_order as any).intern_name = "PO-2020";
     const r = await reconcileThread(s, deps, { todayISO: TODAY });
     ok(r.action === "reasserted", "re-asserted rather than abandoned", r.action);
     ok(writes.some((w) => /patchOrder/.test(w)), "patchOrder needs no block record and still runs", JSON.stringify(writes));
