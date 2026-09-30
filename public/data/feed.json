@@ -682,5 +682,23 @@
    "app/lib/engine/compiler.ts:253-259 \u2014 the deliberate-stand-in rationale this session overrode",
    "docs/RESTART-PLAN-2026-09-29.md \u2014 item 1 struck, retype section rewritten"
   ]
+ },
+ {
+  "id": "S-0022",
+  "ts": "2026-09-30T00:51:36+00:00",
+  "kind": "measurement",
+  "headline": "Thread ids: 749/749 states, 4,236 messages and 346/347 order links use bare Gmail ids; mail-poll mints gmail:-prefixed thread ids and RFC message ids, so continuity breaks at restart. Job-identity design written, nothing built.",
+  "subject": "Intake via mail-poll would give every existing conversation a second thread id",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 121,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  },
+  "sources": [
+   "app/api/mail-poll/route.ts:136",
+   "docs/JOB-IDENTITY-DESIGN-2026-09-29.md"
+  ]
  }
 ]
