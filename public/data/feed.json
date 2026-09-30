@@ -1001,5 +1001,23 @@
    "app/lib/followup/enabled.ts",
    "test/followupsHidden.ts"
   ]
+ },
+ {
+  "id": "S-0040",
+  "ts": "2026-09-30T03:10:04+00:00",
+  "kind": "measurement",
+  "headline": "An appended block's id was recorded only after POST /slotTeams returned, and the API leaves no audit row for it (probed 2026-09-30), so a lost answer made the retry append it again (audit #4: 8 crew asked, 9 held). The append now reads the order's blocks and adopts an identical unclaimed one",
+  "subject": "A crew block whose POST landed but whose answer was lost is not booked twice",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 134,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  },
+  "sources": [
+   "app/lib/engine/amendOrder.ts",
+   "test/appendIsNotRepeated.ts"
+  ]
  }
 ]

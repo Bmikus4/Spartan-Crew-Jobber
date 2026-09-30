@@ -56,7 +56,7 @@ import type { OnsinchClient } from "./onsinch";
 import type { DesiredOrder, DesiredSlotTeam } from "./types";
 import { buildSlotTeamBody, capSlotTeamName } from "./format";
 import { preflightOrder } from "./orderPreflight";
-import { readLiveShape, sameMoment, type LiveShape } from "./reconcile";
+import { readLiveShape, readNestedShape, sameMoment, type LiveShape, type LiveTeam } from "./reconcile";
 import { provisionPlaceIfNeeded } from "./provisionPlace";
 
 /** The fields of a slot team the engine sets, and can therefore correct. */
@@ -576,7 +576,29 @@ async function applyAmendment(
           `so ${stillToCreate.length} new block(s) could not be added — they must be added by hand`,
       };
     }
+    /**
+     * A POST THAT LANDED WHILE ITS ANSWER WAS LOST is on the order and in no record: its
+     * id never came back, so onCreated never ran and order_amend was never written, and
+     * POST /slotTeams leaves no audit row (probed 2026-09-30). Posting again books the
+     * block twice (audit #4: 8 crew asked, 9 held). Only a read of the order's blocks sees
+     * it, so an identical block nothing else has claimed is adopted instead, one to one.
+     */
+    const claimed = new Set<number>([...live.map((b) => b.id), ...done, ...plan.patches.map((p) => p.id)]);
+    const nested = await readNestedShape(client, order_id);
+    const spare: LiveTeam[] = nested.unreadable ? [] : [...nested.teams.values()].filter((t) => !claimed.has(t.id));
+    const same = (t: LiveTeam, want: DesiredSlotTeam) => {
+      const w = capSlotTeamName(want);
+      return t.name === w.name && t.size === Number(w.size) && t.profession_id === Number(w.profession_id) &&
+        sameMoment(t.beginning, w.beginning) && sameMoment(t.end, w.end);
+    };
     for (const team of stillToCreate) {
+      const twin = spare.findIndex((t) => same(t, team));
+      if (twin >= 0) {
+        const [landed] = spare.splice(twin, 1);
+        await hooks.onCreated(landed.id);
+        added.push(landed.id);
+        continue;
+      }
       const created = await client.createSlotTeam(buildSlotTeamBody(job_id as number, team));
       // On disk before the next POST goes out.
       await hooks.onCreated(created.id);
