@@ -82,6 +82,7 @@ export async function POST(request: Request): Promise<Response> {
     subject: mail.subject,
     body: mail.body || null,
     is_from_spartan: isFromSpartan,
+    rfc_message_id: mail.message_id || null,
   });
   await captureInboundRaw({
     thread_id: hit.thread_id,

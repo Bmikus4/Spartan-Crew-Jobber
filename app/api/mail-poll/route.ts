@@ -19,9 +19,9 @@ export const maxDuration = 60;
 // authoritative — measured, header threading splits 1 thread in 40 — so binding to it is
 // strictly better and there is nothing to gain from posting to ourselves over HTTP.
 //
-// SAFETY. Every message is stored BEFORE the engine sees it, the store dedupes on RFC
-// Message-ID, and the cursor advances only over a batch that finished. Re-running this
-// route is therefore free: the second pass finds everything already held and skips it.
+// SAFETY. Every message is stored BEFORE the engine sees it, the store dedupes on the
+// Gmail id and the RFC Message-ID, and the cursor advances only over a batch that
+// finished. Re-running this route is therefore free: the second pass finds everything already held and skips it.
 // The INTAKE_PATH interlock still governs whether the engine runs at all, so this can be
 // left polling in shadow — storing and threading, writing nothing to OnSinch — until it
 // is deliberately handed the engine.
@@ -67,7 +67,7 @@ import { gmailClient, getRawMessage } from "../../lib/mail/gmailClient";
 import { fetchSince } from "../../lib/mail/gmailCursor";
 import { readCursor, writeCursor, touchRun, unseenIds, markSeen } from "../../lib/mail/cursorDb";
 import { BOOKINGS_MAILBOX, tokenSource } from "../../lib/mail/gmailAuth";
-import { storeMessage, rebuildThread } from "../../lib/threadMessagesDb";
+import { storeMessage, rebuildThread, rowFromGmail } from "../../lib/threadMessagesDb";
 import { captureInboundRaw } from "../../lib/inboundRawDb";
 import { coerceThread } from "../../lib/engine/intake";
 import { handleThread } from "../../lib/engine/pipeline";
@@ -75,8 +75,6 @@ import { buildDeps } from "../../lib/deps";
 import { upsertTicketFromState } from "../../lib/ticketsDb";
 import { activeIntake, mayRunEngine } from "../../lib/intakePath";
 import { reportError } from "../../lib/errorReport";
-
-const SPARTAN = /@spartancrew\.co\.uk$/i;
 
 /**
  * How many messages one tick will take.
@@ -131,23 +129,13 @@ async function poll(): Promise<Response> {
       if (!msg) { handled.push(id); continue; }
 
       const mail = parseRfc822(msg.raw);
-      // Gmail's own grouping, not a guess from headers. Prefixed so a thread from this
-      // path can never collide with one minted by the webhook intake.
-      const threadId = msg.threadId ? `gmail:${msg.threadId}` : `mail:${mail.message_id || id}`;
-      const isFromSpartan = SPARTAN.test(mail.from);
+      // Gmail's own grouping, not a guess from headers, keyed as n8n keyed it so an
+      // existing conversation keeps its state. A draft of ours is refused by storeMessage.
+      const row = rowFromGmail(id, msg.threadId, mail, msg.labelIds);
+      const threadId = row.thread_id;
+      const isFromSpartan = row.is_from_spartan;
 
-      const stored = await storeMessage({
-        message_id: mail.message_id || `gmail:${id}`,
-        thread_id: threadId,
-        from_address: mail.from,
-        to_addresses: [...new Set([...mail.to, ...mail.cc])],
-        date_iso: mail.date_iso,
-        subject: mail.subject,
-        body: mail.body || null,
-        is_from_spartan: isFromSpartan,
-        // A draft of ours is not a reply the client saw. storeMessage refuses it.
-        labelIds: msg.labelIds,
-      });
+      const stored = await storeMessage(row);
       await captureInboundRaw(
         { thread_id: threadId, message_id: mail.message_id, gmail_id: id, source: "gmail-poll" },
         "gmail-poll",

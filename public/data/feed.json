@@ -700,5 +700,23 @@
    "app/api/mail-poll/route.ts:136",
    "docs/JOB-IDENTITY-DESIGN-2026-09-29.md"
   ]
+ },
+ {
+  "id": "S-0023",
+  "ts": "2026-09-30T01:03:08+00:00",
+  "kind": "measurement",
+  "headline": "Poller keyed threads gmail:<id> and messages by RFC id while 4,236/4,239 stored messages and 749/749 thread states are bare Gmail ids; it now keys the same way and keeps the RFC id as a second unique key",
+  "subject": "A reply read by the Gmail poller now lands on the conversation n8n already holds",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 122,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  },
+  "sources": [
+   "app/lib/threadMessagesDb.ts",
+   "test/oneConversationOneThreadId.ts"
+  ]
  }
 ]

@@ -47,6 +47,11 @@ async function ensure(sql: NeonQueryFunction<false, false>): Promise<void> {
     )`;
   await sql`CREATE INDEX IF NOT EXISTS thread_messages_thread ON thread_messages (thread_id, date_iso)`;
   await sql`CREATE INDEX IF NOT EXISTS thread_messages_seen ON thread_messages (first_seen_at DESC)`;
+  // A second key, not a replacement for message_id: every historical row is keyed by
+  // Gmail id and has no RFC id to backfill from. UNIQUE so the same email read by the
+  // poller (Gmail id) and by mail-inbound (RFC id) is one row, not two.
+  await sql`ALTER TABLE thread_messages ADD COLUMN IF NOT EXISTS rfc_message_id TEXT`;
+  await sql`CREATE UNIQUE INDEX IF NOT EXISTS thread_messages_rfc ON thread_messages (rfc_message_id) WHERE rfc_message_id IS NOT NULL`;
   _ready = true;
 }
 
@@ -76,6 +81,37 @@ export interface StoredMessage {
    * has none) makes no claim either way and its message is stored as before.
    */
   labelIds?: string[];
+  /** The RFC Message-ID, normalised by parseRfc822. Null when the sender set none. */
+  rfc_message_id?: string | null;
+}
+
+/**
+ * The row for a message read from Gmail by its own API.
+ *
+ * Keyed exactly as the n8n intake keyed it — Gmail id, bare Gmail threadId — because
+ * every row already stored is in that form (4,236/4,239 messages, 749/749 thread
+ * states, 2026-09-29). A prefix "so the routes cannot collide" is what split each
+ * existing conversation in two: the first reply after a restart found no state under
+ * `gmail:<id>` and was read as a fresh enquiry.
+ */
+export function rowFromGmail(
+  gmailId: string,
+  gmailThreadId: string,
+  mail: { message_id: string; from: string; to: string[]; cc: string[]; date_iso: string; subject: string; body: string },
+  labelIds: string[],
+): StoredMessage {
+  return {
+    message_id: gmailId,
+    thread_id: gmailThreadId || `mail:${mail.message_id || gmailId}`,
+    from_address: mail.from,
+    to_addresses: [...new Set([...mail.to, ...mail.cc])],
+    date_iso: mail.date_iso,
+    subject: mail.subject,
+    body: mail.body || null,
+    is_from_spartan: /@spartancrew\.co\.uk$/i.test(mail.from),
+    labelIds,
+    rfc_message_id: mail.message_id || null,
+  };
 }
 
 /** "Jane <j@x.com>" | {address} -> "j@x.com". Same rule as engine/intake.ts addrOf. */
@@ -117,7 +153,7 @@ function addrList(v: unknown): string[] {
  *
  * DROPPED, NOT FLAGGED, and the reason is the ON CONFLICT clause below. A draft keeps
  * its message id when it is sent. Stored-and-flagged, the send hits
- * `ON CONFLICT (message_id) DO NOTHING`, changes nothing, and the row stays marked a
+ * `ON CONFLICT DO NOTHING`, changes nothing, and the row stays marked a
  * draft for good — a real reply permanently invisible. Never stored, the send inserts
  * cleanly as a first sighting.
  *
@@ -192,7 +228,7 @@ export async function storeThreadMessages(payload: unknown):
         VALUES (${m.message_id}, ${m.thread_id}, ${m.from_address},
                 ${JSON.stringify(m.to_addresses)}, ${m.date_iso}, ${m.subject},
                 ${m.body}, ${m.is_from_spartan})
-        ON CONFLICT (message_id) DO NOTHING
+        ON CONFLICT DO NOTHING
         RETURNING message_id`) as { message_id: string }[];
       if (rows.length) inserted++;
     }
@@ -232,11 +268,11 @@ export async function storeMessage(m: StoredMessage): Promise<{ ok: boolean; ins
     await ensure(sql);
     const rows = (await sql`
       INSERT INTO thread_messages
-        (message_id, thread_id, from_address, to_addresses, date_iso, subject, body, is_from_spartan)
+        (message_id, thread_id, from_address, to_addresses, date_iso, subject, body, is_from_spartan, rfc_message_id)
       VALUES (${m.message_id}, ${m.thread_id}, ${m.from_address},
               ${JSON.stringify(m.to_addresses ?? [])}, ${m.date_iso}, ${m.subject},
-              ${m.body}, ${m.is_from_spartan})
-      ON CONFLICT (message_id) DO NOTHING
+              ${m.body}, ${m.is_from_spartan}, ${m.rfc_message_id || null})
+      ON CONFLICT DO NOTHING
       RETURNING message_id`) as { message_id: string }[];
     return { ok: true, inserted: rows.length > 0 };
   } catch (err) {
@@ -262,10 +298,17 @@ export async function threadIdForMessageIds(ids: string[]):
   try {
     await ensure(sql);
     const rows = (await sql`
-      SELECT message_id, thread_id FROM thread_messages
-      WHERE message_id = ANY(${ids})`) as { message_id: string; thread_id: string }[];
+      SELECT message_id, rfc_message_id, thread_id FROM thread_messages
+      WHERE message_id = ANY(${ids}) OR rfc_message_id = ANY(${ids})`) as
+      { message_id: string; rfc_message_id: string | null; thread_id: string }[];
     if (!rows.length) return null;
-    const byId = new Map(rows.map((r) => [r.message_id, r.thread_id]));
+    // A References header names RFC ids; a row the poller stored is keyed by Gmail id
+    // and answers to its RFC id only through the second column.
+    const byId = new Map<string, string>();
+    for (const r of rows) {
+      byId.set(r.message_id, r.thread_id);
+      if (r.rfc_message_id) byId.set(r.rfc_message_id, r.thread_id);
+    }
     for (const id of ids) {
       const t = byId.get(id);
       if (t) return { id, thread_id: t };
