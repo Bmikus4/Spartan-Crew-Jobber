@@ -876,5 +876,23 @@
    "app/lib/engine/pipeline.ts",
    "test/supervisedWrites.ts"
   ]
+ },
+ {
+  "id": "S-0033",
+  "ts": "2026-09-30T02:13:30+00:00",
+  "kind": "measurement",
+  "headline": "resolvePlace read allPlaces unguarded, so a timeout threw out of compile, persisted nothing, and lost the email because n8n had already stripped its label (audit #6, R7); it now holds the thread with a Gmail tag and books nothing. Harness 84% (114/135)",
+  "subject": "A venue-list outage holds the email instead of throwing it away",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 128,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  },
+  "sources": [
+   "app/lib/engine/compiler.ts",
+   "test/venueListOutage.ts"
+  ]
  }
 ]

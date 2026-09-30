@@ -672,7 +672,7 @@ export async function resolvePlace(
   onsinch: OnsinchClient,
   aliases?: CompileDeps["aliases"],
   deps?: { venueJudge?: VenueJudge | null }
-): Promise<{ id?: number; provision?: DesiredOrder["provision_place"]; note?: string }> {
+): Promise<{ id?: number; provision?: DesiredOrder["provision_place"]; note?: string; unreadable?: boolean }> {
   /**
    * A CLIENT WHO MOVES THE VENUE USED TO BE IGNORED, SILENTLY.
    *
@@ -728,7 +728,16 @@ export async function resolvePlace(
     return { id: remembered, note: `no venue named — used the "${PLACEHOLDER_PLACE_NAME}" placeholder; set the real venue in OnSinch` };
   }
 
-  const places = await onsinch.allPlaces();
+  // Guarded like every other optional read here. Unguarded, one timeout threw out of
+  // compile, nothing was persisted, and the email was lost because the intake had
+  // already stripped its label (audit #6). Held, never guessed: without the list,
+  // neither the placeholder nor a created venue is known to be the right building.
+  let places: PlaceCandidate[];
+  try {
+    places = await onsinch.allPlaces();
+  } catch (err) {
+    return { unreadable: true, note: `the venue list could not be read (${String((err as Error)?.message ?? err)}) — held and tagged, nothing booked; the client's next email re-runs it` };
+  }
 
   if (!missingVenue && process.env.SPARTAN_VENUE_V3 === "1") {
     const v3 = await resolveVenueV3(locationText, places, remembered, deps);
@@ -1216,6 +1225,7 @@ export async function compile(
     place_id = pl.id ?? place_id;
     provisionPlace = pl.provision;
     user_id = us.id ?? user_id;
+    if (pl.unreadable) { blocked = true; needs_human = true; }
     if (pl.note) notes.push(pl.note);
     if (us.note) notes.push(us.note);
 
@@ -1410,7 +1420,7 @@ export async function compile(
           location_text: facts.location_text,
           // The resolved venue is the comparable side; the raw text is the fallback.
           place_id: place_id ?? null,
-          places: place_id ? await onsinch.allPlaces() : undefined,
+          places: place_id ? await onsinch.allPlaces().catch(() => undefined) : undefined,
           // A confirmation, never the mechanism — see rNumbersIn. 83% of threads name
           // none, so nothing here may depend on this being populated.
           r_numbers: rNumbersIn(thread.messages.map((m) => `${m.subject} ${m.body}`).join("\n")),
