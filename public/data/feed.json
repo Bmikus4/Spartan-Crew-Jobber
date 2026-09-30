@@ -823,5 +823,23 @@
   "sources": [
    "docs/JOB-IDENTITY-DESIGN-2026-09-29.md"
   ]
+ },
+ {
+  "id": "S-0030",
+  "ts": "2026-09-30T01:57:08+00:00",
+  "kind": "measurement",
+  "headline": "Status came from whether this email composed an order, so an acknowledgement read 'drafted' (audit #8, S3); a thread whose order staff deleted re-created it on the next restatement (S4). Bound threads now read 'ordered'; a thread that ever had an order gets a Gmail tag instead of a second create",
+  "subject": "A booked thread stays booked when an email composes nothing, and a deleted booking is never re-created",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 126,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  },
+  "sources": [
+   "app/lib/engine/compiler.ts",
+   "test/bookedThreadStaysBooked.ts"
+  ]
  }
 ]

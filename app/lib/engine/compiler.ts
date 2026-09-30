@@ -187,6 +187,17 @@ export function stripReplyPrefix(s: string): string {
   return out.trim();
 }
 
+/** Did this thread ever put an order into OnSinch? The action log is never cleared. */
+function hadAnOrder(prior: ConversationState | undefined): boolean {
+  return lastOrderOf(prior) !== undefined;
+}
+function lastOrderOf(prior: ConversationState | undefined): number | undefined {
+  const writes = (prior?.order_action_log ?? []).filter(
+    (a) => a.ok && (a.kind === "create" || a.kind === "replace") && Number(a.order_id) > 0
+  );
+  return writes.length ? Number(writes[writes.length - 1].order_id) : undefined;
+}
+
 export function orderTitle(
   aiTitle: string | undefined,
   subject: string | undefined,
@@ -1760,6 +1771,16 @@ export async function compile(
       if (desiredHash !== prior?.last_ordered_hash) {
         actions.patchOrder = { order_id: linkedOrderId, desired };
       }
+    } else if (hadAnOrder(prior) && !prior?.order_replace) {
+      // A job that has ever had an order never falls back to create (design §9.5). Its
+      // order is gone and nothing matched as a successor; staff mostly delete ours to
+      // re-type them (47 of 86), so creating again books the job twice. A replace
+      // interrupted after its delete is the exception: that re-post IS the order.
+      needs_human = true;
+      notes.push(
+        `this thread had an order before (#${lastOrderOf(prior)}) and it is gone with no successor found — ` +
+          `not booking the job a second time; find or raise the order by hand`
+      );
     } else {
       actions.createOrder = desired;
     }
@@ -1782,9 +1803,11 @@ export async function compile(
   const refusedNote = describeRefused(refused);
   if (refusedNote) notes.push(refusedNote);
 
+  // A thread still bound to an order is booked whatever this email said: "thanks, see
+  // you then" composes nothing, and read as `drafted` a booking looked undone (audit #8).
   const status: ConversationState["status"] = needs_human
     ? "needs-info"
-    : desired
+    : desired || linkedOrderId
     ? "ordered"
     : classification === "not-a-job"
     ? "ignored"
