@@ -567,7 +567,11 @@ export function createVenueJudge(cfg: { apiKey: string; model?: string; baseUrl?
             // The answer is four small fields. The ceiling is here for the same reason
             // it is on the reasoner: without one OpenRouter reserves the model's whole
             // context and refuses the request unless the account can cover all of it.
-            max_tokens: Number(process.env.VENUE_MAX_TOKENS || 512),
+            // NOT 512: the default judge is a reasoning model and spends the budget
+            // thinking — 4 of 14 live calls on 2026-09-30 ended `finish_reason: length`
+            // with no tool call, and the fallback put order 16330 at the wrong venue on
+            // the same street. TIMEOUT_MS is what bounds the call.
+            max_tokens: Number(process.env.VENUE_MAX_TOKENS || 4096),
             messages: [
               { role: "system", content: system },
               { role: "user", content: user },

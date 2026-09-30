@@ -1135,5 +1135,23 @@
    "app/lib/engine/compiler.ts",
    "test/calledOffBooksNothing.ts"
   ]
+ },
+ {
+  "id": "S-0047",
+  "ts": "2026-09-30T11:54:25+00:00",
+  "kind": "measurement",
+  "headline": "Live 09-30: 4 of 14 venue decisions came back finish_reason=length with no tool call (gemini-3.1-pro-preview spends its 512-token cap reasoning) and fell back to the search ranking, which put order 16330 (Frameless, 55 Bryanston St) at The Marble Arch Hotel on the same street. The default cap is now 4096; the 15s timeout still bounds the call, and a judge still thinking at 15s falls back as before",
+  "subject": "The venue judge can finish thinking before it answers, so a close venue call no longer falls back to the search ranking",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 140,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  },
+  "sources": [
+   "app/lib/engine/reason.ts",
+   "test/venueJudgeHasRoom.ts"
+  ]
  }
 ]
