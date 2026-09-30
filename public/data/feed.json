@@ -929,5 +929,23 @@
   "sources": [
    "app/lib/threadMessagesDb.ts"
   ]
+ },
+ {
+  "id": "S-0036",
+  "ts": "2026-09-30T02:33:37+00:00",
+  "kind": "measurement",
+  "headline": "Design step 4 dry run: 758 threads plan to 386 jobs (325 linked, 61 unlinked), 23 merging threads, 49 with several orders, 0 spanning companies; 407 links (60 absent from order_records); every planned row fits the jobs/job_links schema in an aborted transaction, nothing left behind",
+  "subject": "The job migration is planned and proven against the live data without writing it",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 130,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  },
+  "sources": [
+   "scripts/job-migration-dry-run.mts",
+   "app/lib/engine/jobMigration.ts"
+  ]
  }
 ]
