@@ -133,5 +133,24 @@ console.log("\n[5] a machine gate the middleware never lets you reach is not a g
   }
 }
 
+console.log("\n[6] a route that READS decides who is calling too");
+{
+  // /api/jobs and /api/metrics answer with client names, addresses and order history,
+  // and carried no check of their own: production refused a stranger only because
+  // middleware enforces AUTH_REQUIRED, one environment variable. Measured 2026-09-29:
+  // both 401 from middleware ("Unauthorized"), neither from the route. The rule [2]
+  // applies to writes — a switch somebody else has to throw is not protection — holds
+  // for reads of client data too.
+  //
+  // PUBLIC is the routes a signed-out browser must reach. Adding to it needs a reason
+  // in this comment, not just a name.
+  //   auth/google  the sign-in flow itself
+  const PUBLIC = new Set(["app/api/auth/google/route.ts"]);
+  for (const path of routes) {
+    if (PUBLIC.has(path)) continue;
+    ok(AUTHORITY.test(readFileSync(path, "utf8")), `${path} authorises`);
+  }
+}
+
 console.log(fails ? `\n${fails} FAILED\n` : "\nALL PASS\n");
 process.exit(fails ? 1 : 0);

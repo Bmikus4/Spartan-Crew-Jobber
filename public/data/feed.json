@@ -736,5 +736,22 @@
    "app/lib/engine/admit.ts",
    "test/injectionBoundary.ts"
   ]
+ },
+ {
+  "id": "S-0025",
+  "ts": "2026-09-30T01:24:54+00:00",
+  "kind": "measurement",
+  "headline": "/api/jobs and /api/metrics answered 401 in production only through middleware's AUTH_REQUIRED switch; they now check the caller themselves, and a sweep requires it of every route but auth/google (/api/onboarding already did)",
+  "subject": "The jobs board and metrics routes refuse a caller without depending on middleware",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 123,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  },
+  "sources": [
+   "test/writeRoutesAuthorised.ts"
+  ]
  }
 ]

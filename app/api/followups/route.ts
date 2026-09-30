@@ -4,10 +4,9 @@ export const maxDuration = 30;
 // Read model for the dashboard's "Needs Follow-Up" row. GET only; computes nothing
 // it could not recompute, writes nothing, and holds no state of its own.
 //
-// GUARDED, unlike /api/jobs, /api/metrics and /api/onboarding. Those three predate
-// the auth work and are a known, ticketed hole; a route added today has no excuse to
-// join them. This one answers with client names, company names and the first line of
-// a client's own email — the most identifying payload any read route here returns.
+// GUARDED, as every read route now is (test/writeRoutesAuthorised.ts [6]). This one
+// answers with client names, company names and the first line of a client's own
+// email — the most identifying payload any read route here returns.
 
 import { authorizeAction } from "../../lib/apiAuth";
 import { followupBoard } from "../../lib/followup/board";
