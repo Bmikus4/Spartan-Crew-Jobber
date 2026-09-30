@@ -409,6 +409,13 @@ export async function handleThread(
     ? { kind: "patch" as const, desired: actions.patchOrder.desired, order_id: actions.patchOrder.order_id }
     : null;
 
+  if (!intended && next.cancellation && Number(next.onsinch_order_id) > 0) {
+    // Nothing composed to hold, but the booking still has to be called off by a person;
+    // this is the reason their Gmail tag carries.
+    next.notes = [...next.notes, `the client is cancelling. The engine does not cancel or shrink a booking — nothing was written, a human must do it in OnSinch.`];
+    await emit("cancellation_suspected", { order_id: next.onsinch_order_id });
+  }
+
   if (intended) {
     /**
      * An ASSUMED rate is never written hands-free.
@@ -484,6 +491,7 @@ export async function handleThread(
       }
       await emit("cross_thread_suspected", { other: twin[0].thread_id, relation: twin[0].relation });
       await store.put(next);
+      await flagManualIfNeeded(next, deps);
       return next;
     }
 
@@ -515,6 +523,7 @@ export async function handleThread(
       next.status = "proposed";
       await emit("cancellation_suspected", { order_id: next.onsinch_order_id });
       await store.put(next);
+      await flagManualIfNeeded(next, deps);
       return next;
     }
 
@@ -525,6 +534,7 @@ export async function handleThread(
       next.status = "proposed";
       await emit("order_proposed", { kind: intended.kind, size: amend.after });
       await store.put(next);
+      await flagManualIfNeeded(next, deps);
       return next;
     }
 
@@ -685,6 +695,12 @@ export async function flagSupervisedIfNeeded(next: ConversationState, deps: Pipe
 export function cannotBeBooked(s: ConversationState): boolean {
   const isJob = s.classification === "new-job" || s.classification === "update";
   if (!isJob) return false;
+  // An update the engine will not make is a Gmail tag (Ben, 2026-09-29; ops rarely open
+  // the dashboard). It never cancels a booking, so a client cancelling one needs a person;
+  // and a write it HELD (a cancellation, a shrink to nothing, a suspected twin) did not
+  // happen. Both were untagged: the holds returned before the tag step as `proposed`.
+  if (s.cancellation === true && Number(s.onsinch_order_id) > 0) return true;
+  if (s.status === "proposed" && s.pending_order) return true;
   if (s.status === "error" || s.status === "needs-info") return true;
   /**
    * `review_only` is the third shape, and it is NOT one of the three above: an order

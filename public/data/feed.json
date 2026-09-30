@@ -1019,5 +1019,23 @@
    "app/lib/engine/amendOrder.ts",
    "test/appendIsNotRepeated.ts"
   ]
+ },
+ {
+  "id": "S-0041",
+  "ts": "2026-09-30T03:31:57+00:00",
+  "kind": "measurement",
+  "headline": "Ben Q6: an update the engine cannot make gets a Gmail tag. The cancellation, shrink-to-nothing and twin holds returned before the tag step as 'proposed', and an unchanged-order cancellation read 'ordered', so none reached ops; all now post the Needs tag with the reason (found via audit A4)",
+  "subject": "A client cancelling a booking, or any update the engine holds, is tagged in Gmail",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 135,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  },
+  "sources": [
+   "app/lib/engine/pipeline.ts",
+   "test/heldUpdateIsTagged.ts"
+  ]
  }
 ]
