@@ -965,5 +965,23 @@
    "scripts/resolver-shadow.mts",
    "app/lib/engine/resolver.ts"
   ]
+ },
+ {
+  "id": "S-0038",
+  "ts": "2026-09-30T02:44:48+00:00",
+  "kind": "measurement",
+  "headline": "Design step 6, offline half (shadow, unwired): fold.ts folds set/clear/add_block/remove_block/cancel/confirm facts by (time, source) with \u00a715 authority. A1 meets (changing 1 of 3 blocks keeps all 14 crew; mergeFacts left 8), A2 meets (removal needs the client's quote); change-set extraction awaits live mail",
+  "subject": "A job's state folds from change facts, so a block the client does not mention stays booked",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 132,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  },
+  "sources": [
+   "app/lib/engine/fold.ts",
+   "test/fold.ts"
+  ]
  }
 ]
