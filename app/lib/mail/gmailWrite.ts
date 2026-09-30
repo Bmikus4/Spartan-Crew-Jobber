@@ -175,6 +175,26 @@ export async function createDraft(
  * inventing a replacement to fill the gap would be the engine asserting something it has
  * not concluded.
  */
+/**
+ * Any label outside the four ("Check Engine Write"): added, never swapped. Ben,
+ * 2026-09-30: the four allow one at a time, "all others can stack". So this removes
+ * nothing, and applyThreadLabel never removes it.
+ */
+export async function stackThreadLabel(api: GmailApi, threadId: string, label: string): Promise<void> {
+  if ((THE_FOUR as readonly string[]).includes(label)) {
+    throw new Error(`"${label}" is one of the four and must go through applyThreadLabel, which takes the other three off`);
+  }
+  const ids = await labelIds(api);
+  let id = ids.get(label);
+  if (!id) {
+    const made = await api("POST", "labels", { name: label, labelListVisibility: "labelShow", messageListVisibility: "show" });
+    if (!made?.id) throw new Error(`label "${label}" could not be created`);
+    id = String(made.id);
+    ids.set(label, id);
+  }
+  await api("POST", `threads/${bareThreadId(threadId)}/modify`, { addLabelIds: [id], removeLabelIds: [] });
+}
+
 export async function clearThreadLabel(api: GmailApi, threadId: string, label: SpartanLabel): Promise<void> {
   if (!THE_FOUR.includes(label)) {
     throw new Error(`"${label}" is not one of the four labels this system may produce (${THE_FOUR.join(", ")})`);

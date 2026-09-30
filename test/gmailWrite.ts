@@ -17,7 +17,7 @@
 //
 // Offline. Gmail is a stub.  npx tsx test/gmailWrite.ts
 // ============================================================================
-import { applyThreadLabel, clearThreadLabel, draftMime, THE_FOUR, __resetLabelCache } from "../app/lib/mail/gmailWrite";
+import { applyThreadLabel, clearThreadLabel, stackThreadLabel, draftMime, THE_FOUR, __resetLabelCache } from "../app/lib/mail/gmailWrite";
 
 let fails = 0;
 const ok = (cond: boolean, label: string, extra = "") => {
@@ -143,6 +143,33 @@ async function main() {
     ok(mod.body.addLabelIds.length === 0, "nothing added", JSON.stringify(mod.body.addLabelIds));
     ok(mod.body.removeLabelIds.length === 1, "exactly the one label removed", JSON.stringify(mod.body.removeLabelIds));
     ok(mod.path === "threads/t9/modify", "and the prefix is stripped here too", mod.path);
+  }
+
+  console.log("\n[stack] a label outside the four stacks: added, nothing removed");
+  {
+    // Ben, 2026-09-30: the four allow one at a time, "all others can stack".
+    __resetLabelCache();
+    const g = stub([...THE_FOUR, "Check Engine Write"]);
+    await stackThreadLabel(g.api, "gmail:t7", "Check Engine Write");
+    const mod = g.calls.find((c) => /modify/.test(c.path))!;
+    ok(mod.path === "threads/t7/modify" && mod.body.addLabelIds.length === 1 && mod.body.removeLabelIds.length === 0,
+      "one added, none removed", JSON.stringify(mod.body));
+
+    __resetLabelCache();
+    const fresh = stub();
+    await stackThreadLabel(fresh.api, "t8", "Check Engine Write");
+    ok(fresh.labels.some((l) => l.name === "Check Engine Write"), "created in the mailbox when missing");
+
+    __resetLabelCache();
+    const four = stub([...THE_FOUR, "Check Engine Write"]);
+    await applyThreadLabel(four.api, "t9", "Order Updated");
+    const cew = four.labels.find((l) => l.name === "Check Engine Write")!.id;
+    const m2 = four.calls.find((c) => /modify/.test(c.path))!;
+    ok(!m2.body.removeLabelIds.includes(cew), "and one of the four going on never takes it off", JSON.stringify(m2.body.removeLabelIds));
+
+    let threw = false;
+    try { await stackThreadLabel(stub().api, "t1", "Order Built"); } catch { threw = true; }
+    ok(threw, "one of the four cannot be stacked");
   }
 
   console.log(fails ? `\n${fails} FAILED` : "\nALL PASS");

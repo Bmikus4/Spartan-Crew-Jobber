@@ -1153,5 +1153,24 @@
    "app/lib/engine/reason.ts",
    "test/venueJudgeHasRoom.ts"
   ]
+ },
+ {
+  "id": "S-0048",
+  "ts": "2026-09-30T12:11:11+00:00",
+  "kind": "measurement",
+  "headline": "Ben 09-30: Order Needs Built / Needs Updated / Built / Updated allow one at a time, all other labels stack. The n8n route already did (29ce5dc); the service-account route threw on any label outside the four, so Check Engine Write would have failed the moment it was configured. It now adds such a label and removes nothing, and one of the four going on never takes it off",
+  "subject": "A label outside the four order labels stacks on the direct Gmail route instead of throwing",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 140,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  },
+  "sources": [
+   "app/lib/mail/gmailWrite.ts",
+   "app/lib/deps.ts",
+   "test/gmailWrite.ts"
+  ]
  }
 ]

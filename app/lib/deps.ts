@@ -102,10 +102,11 @@ async function postTag<T extends { label: string }>(body: T): Promise<void> {
    */
   if (serviceAccountConfigured()) {
     const { gmailWriter } = await import("./mail/gmailClient");
-    const { applyThreadLabel, clearThreadLabel } = await import("./mail/gmailWrite");
+    const { applyThreadLabel, clearThreadLabel, stackThreadLabel, THE_FOUR } = await import("./mail/gmailWrite");
     const api = gmailWriter();
     const b = body as unknown as { label: string; thread_id: string; state?: string };
-    if (b.state === "cleared") await clearThreadLabel(api, b.thread_id, b.label as never);
+    if (!(THE_FOUR as readonly string[]).includes(b.label)) await stackThreadLabel(api, b.thread_id, b.label);
+    else if (b.state === "cleared") await clearThreadLabel(api, b.thread_id, b.label as never);
     else await applyThreadLabel(api, b.thread_id, b.label as never);
     return;
   }
