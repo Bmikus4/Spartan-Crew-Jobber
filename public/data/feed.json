@@ -753,5 +753,22 @@
   "sources": [
    "test/writeRoutesAuthorised.ts"
   ]
+ },
+ {
+  "id": "S-0026",
+  "ts": "2026-09-30T01:33:35+00:00",
+  "kind": "decision",
+  "headline": "Sender check on match-binding removed (Ben 2026-09-29): it would have held 17/242 historical binds whose sender no company contact vouches for; the stranger-quotes-an-R-number risk is accepted",
+  "subject": "A thread binds to an existing order on the client's name and date, whoever sent it",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 123,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  },
+  "sources": [
+   "app/lib/engine/compiler.ts"
+  ]
  }
 ]

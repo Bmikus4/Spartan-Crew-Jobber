@@ -22,7 +22,7 @@ import { reconcileRequests } from "./parseWork";
 import { triage, decisionBinds, triageModeFromEnv, type TriageMode } from "./triage";
 import { composeOrder } from "./compose";
 import { validateOrder } from "./format";
-import { matchCompany, matchCompanyByDomain, matchContact, matchPlace, matchExistingOrder, rNumbersIn, normName, normAddr, senderKnownTo, type OrderRec } from "./resolve";
+import { matchCompany, matchCompanyByDomain, matchContact, matchPlace, matchExistingOrder, rNumbersIn, normName, normAddr, type OrderRec } from "./resolve";
 import { matchPlaceV2, matchedOnCityAlone, isAShell, tokenise } from "./venueMatch";
 import { buildIndex, searchVenues, applyRuledWording, type Building } from "./venueSearch";
 import { adjudicateVenue, type VenueJudge } from "./venueAdjudicate";
@@ -1404,21 +1404,10 @@ export async function compile(
           // none, so nothing here may depend on this being populated.
           r_numbers: rNumbersIn(thread.messages.map((m) => `${m.subject} ${m.body}`).join("\n")),
         });
-        // Binding to an order this thread did not create is the one step where a name
-        // typed into an email selects someone's live booking, so the sender must be one
-        // the company's own contacts vouch for. SPARTAN_BIND_UNKNOWN_SENDER=1 turns it off.
-        const unvouched =
-          !!existing && "order_id" in existing &&
-          process.env.SPARTAN_BIND_UNKNOWN_SENDER !== "1" &&
-          !senderKnownTo(company_id, identity, await onsinch.allCompanies());
-        if (unvouched && existing && "order_id" in existing) {
-          needs_human = true;
-          blocked = true;
-          notes.push(
-            `matches OnSinch order #${existing.order_id} of company ${company_id}, but ${identity.email ?? "the sender"} is not ` +
-              `one of that company's contacts — not amending a client's booking on an unknown sender's word; bind it by hand if it is theirs`
-          );
-        } else if (existing && "order_id" in existing) {
+        // No sender check on this bind, by decision (Ben, 2026-09-29): 17 of 242 historical
+        // binds came from a sender no contact of the company vouches for, and holding them
+        // costs more than the risk of a stranger quoting another client's R number.
+        if (existing && "order_id" in existing) {
           linkedOrderId = existing.order_id;
           linkedOrderNumber = existing.order_number ?? linkedOrderNumber;
           linkedJobId = existing.job_id ?? linkedJobId;

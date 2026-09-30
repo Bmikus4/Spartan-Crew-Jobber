@@ -22,9 +22,8 @@
 //      exempt — 2.8% of stored venues are enrichments the model is right to make
 //      ("Royal Albert Hall" for "RAH").
 //
-// What this cannot stop is a sender who TYPES another client's name. That is caught
-// where the name is used, not here: compile will not bind a thread to an existing order
-// unless the sender is known to the order's company (resolve.ts senderKnownTo).
+// What this cannot stop is a sender who TYPES another client's name: that passes rule
+// 3 by construction. Accepted, not overlooked (Ben, 2026-09-29; see the bind in compiler.ts).
 // ============================================================================
 import type { Classification, ConversationFacts } from "./types";
 import type { ClassifyResult } from "./reason";
