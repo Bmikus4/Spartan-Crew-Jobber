@@ -983,5 +983,23 @@
    "app/lib/engine/fold.ts",
    "test/fold.ts"
   ]
+ },
+ {
+  "id": "S-0039",
+  "ts": "2026-09-30T02:51:48+00:00",
+  "kind": "decision",
+  "headline": "Ben 2026-09-29: before restart only order creation, amendments and normal labels may be visible. The dashboard's follow-up row (3 placements) and /api/followups + /suppress are off unless NEXT_PUBLIC_SPARTAN_FOLLOWUPS=1; the chase composer and decide() have no caller, pinned",
+  "subject": "Ops cannot see the follow-up feature until it is switched on",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 133,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  },
+  "sources": [
+   "app/lib/followup/enabled.ts",
+   "test/followupsHidden.ts"
+  ]
  }
 ]

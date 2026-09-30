@@ -12,9 +12,11 @@ export const maxDuration = 15;
 // on the same thread is not muted by an older click. See suppressionDb.ts.
 
 import { authorizeAction } from "../../../lib/apiAuth";
+import { followupsEnabled } from "../../../lib/followup/enabled";
 import { suppress, unsuppress } from "../../../lib/followup/suppressionDb";
 
 export async function POST(request: Request): Promise<Response> {
+  if (!followupsEnabled()) return Response.json({ ok: false, error: "not enabled" }, { status: 404 });
   const caller = await authorizeAction(request);
   if (!caller.ok) return Response.json({ ok: false, error: "unauthorized" }, { status: 401 });
 
