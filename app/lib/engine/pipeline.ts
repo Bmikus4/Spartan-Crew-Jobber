@@ -295,6 +295,8 @@ export interface PipelineDeps extends CompileDeps {
    * "Order Built" at a glance in a list of threads.
    */
   flagOrderUpdated?: (a: ThreadTag) => Promise<void>;
+  /** "Check Engine Write", while SPARTAN_SUPERVISED=1. See flagSupervisedIfNeeded. */
+  flagSupervised?: (a: ThreadTag) => Promise<void>;
   flagForManual?: (a: {
     /**
      * Which label to post. There are two failure labels, not one — see `needs_label` in
@@ -617,7 +619,46 @@ export async function handleThread(
   await flagManualIfNeeded(next, deps);
   await flagBuiltIfNeeded(next, deps);
   await flagUpdatedIfNeeded(next, deps);
+  await flagSupervisedIfNeeded(next, deps, (prior?.order_action_log ?? []).length);
   return next;
+}
+
+const WROTE_TO_ONSINCH = new Set(["create", "patch", "amend", "replace"]);
+
+/**
+ * "CHECK ENGINE WRITE" — while supervised, every write to OnSinch, tagged every time.
+ *
+ * Ben, 2026-09-29: the automation restarts with a supervised first week and a Gmail tag
+ * on every write, because ops work from the mailbox and rarely open the dashboard.
+ * "Order Built" and "Order Updated" are each posted once per thread, so a second change
+ * or a sweep re-assert reached nobody. This one is applied on every pass that wrote, for
+ * ops to remove once checked, so the next write shows again.
+ *
+ * `since` is the action-log length when the pass began: only this pass's writes count,
+ * so turning supervision on does not tag a thread for its history. Read off the log for
+ * the same reason as Order Updated — a write route added later is covered without anyone
+ * remembering to tag it. Off unless SPARTAN_SUPERVISED=1; ending the week is removing it.
+ */
+export async function flagSupervisedIfNeeded(next: ConversationState, deps: PipelineDeps, since: number): Promise<void> {
+  if (!deps.flagSupervised || process.env.SPARTAN_SUPERVISED !== "1") return;
+  const wrote = (next.order_action_log ?? []).slice(since).filter((a) => a.ok && WROTE_TO_ONSINCH.has(a.kind));
+  if (!wrote.length) return;
+  const name = (id: unknown) =>
+    Number(id) === Number(next.onsinch_order_id) && next.onsinch_order_number ? `R${next.onsinch_order_number}` : `#${id}`;
+  try {
+    await deps.flagSupervised({
+      label: "Check Engine Write",
+      thread_id: next.thread_id,
+      state: "built",
+      reason: wrote.map((a) => (a.kind === "create" ? `created ${name(a.order_id)}` : `changed ${name(a.order_id)} (${a.kind})`)).join("; "),
+      status: next.status,
+      subject: next.subject,
+      ...(next.onsinch_order_id ? { order_id: Number(next.onsinch_order_id) } : {}),
+    });
+  } catch (err) {
+    // The write is made and logged; a missed supervision tag is visible in the log.
+    console.error("[supervised-tag] flag failed", err);
+  }
 }
 
 /**

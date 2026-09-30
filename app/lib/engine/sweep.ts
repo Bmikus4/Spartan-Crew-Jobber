@@ -31,7 +31,7 @@
 // that fails is treated as "nothing is known" rather than as evidence.
 // ============================================================================
 import type { ConversationState, DesiredOrder } from "./types";
-import { logAction, type PipelineDeps } from "./pipeline";
+import { logAction, flagSupervisedIfNeeded, type PipelineDeps } from "./pipeline";
 import { readLiveShape, driftAgainst, driftKey, describeDrift } from "./reconcile";
 import { matchExistingOrder, rNumbersIn, type OrderRec } from "./resolve";
 
@@ -129,6 +129,7 @@ export async function reconcileThread(
 ): Promise<SweepOutcome> {
   const { onsinch, executor, store, now } = deps;
   const thread_id = state.thread_id;
+  const since = (state.order_action_log ?? []).length;
   const order_id = Number(state.onsinch_order_id);
 
   if (!Number.isInteger(order_id) || order_id <= 0) return { thread_id, action: "skipped", detail: "no order" };
@@ -391,6 +392,7 @@ export async function reconcileThread(
     `OnSinch did not hold what this thread asks for — re-asserted (attempt ${attempts}): ${describeDrift(drift)}`,
   ];
   await store.put(state);
+  await flagSupervisedIfNeeded(state, deps, since);
   return { thread_id, order_id, action: "reasserted", detail: `${applied} field(s) sent; ${describeDrift(drift)}` };
 }
 

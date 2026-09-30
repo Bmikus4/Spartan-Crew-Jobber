@@ -734,6 +734,9 @@ export async function buildDeps(): Promise<PipelineDeps> {
     async flagOrderUpdated(a) {
       return postTag(a);
     },
+    async flagSupervised(a) {
+      return postTag(a);
+    },
     senderVerdict,
     recordSender,
     ensureOrderRecord: (rec) => ensureOrderRecord(buildOrderRecord(rec)),

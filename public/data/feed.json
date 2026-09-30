@@ -858,5 +858,23 @@
   "sources": [
    "app/lib/engine/reconcile.ts"
   ]
+ },
+ {
+  "id": "S-0032",
+  "ts": "2026-09-30T02:07:25+00:00",
+  "kind": "decision",
+  "headline": "Ben 2026-09-29 (Q12 b): restart with a supervised first week. SPARTAN_SUPERVISED=1 re-applies a 'Check Engine Write' label on every pass that wrote (pipeline and sweep), naming each write; Order Built/Updated fire once per thread so later writes reached nobody",
+  "subject": "While supervised, every OnSinch write the engine makes is tagged in Gmail",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 127,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  },
+  "sources": [
+   "app/lib/engine/pipeline.ts",
+   "test/supervisedWrites.ts"
+  ]
  }
 ]
