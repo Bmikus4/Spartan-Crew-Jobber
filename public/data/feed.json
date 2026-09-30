@@ -1116,5 +1116,24 @@
    "test/tagsAreExclusive.ts",
    "test/orderBuiltTag.ts"
   ]
+ },
+ {
+  "id": "S-0046",
+  "ts": "2026-09-30T11:48:57+00:00",
+  "kind": "measurement",
+  "headline": "Live 09-30, order 16324: Creative8 wrote 'We managed to get agency in ... it won't be needed' and 46s later the engine booked 4 crew for the day Tracy had declined; the model read no cancellation. The client's own words calling a job off now hold a first create with an Order Needs Built tag. Over 807 stored threads it marks 7 latest client emails, 6 a job called off and 1 (Solotech) that also names a live date, which gets a tag instead of an order; harness unchanged at 120/135",
+  "subject": "An enquiry the client has called off before it was booked is held and tagged, not booked",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 139,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  },
+  "sources": [
+   "app/lib/engine/triage.ts",
+   "app/lib/engine/compiler.ts",
+   "test/calledOffBooksNothing.ts"
+  ]
  }
 ]

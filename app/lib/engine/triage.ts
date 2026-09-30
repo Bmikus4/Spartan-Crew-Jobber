@@ -45,6 +45,23 @@ const SUPPLIER_ASK = /\b(?:(?:could|can|would)\s+you\s+(?:please\s+)?(?:re-?)?qu
 const VEHICLE = /\b(?:7\.5\s*t?|3\.5\s*t|luton|sprinters?|lwb|vans?|trucks?|lorry|lorries|hgv|\d{1,2}\s*(?:t|tonne|ton))\b/i;
 const VAN_TAGLINE = /\**\s*we now provide van services[^\n]*/gi;
 
+/**
+ * The client's own words calling the job off, or null. Only the top of the email: a
+ * quoted reply below it is someone else's text.
+ *
+ * A backstop for the model, which read "We managed to get agency in ... it won't be
+ * needed" as a new job (order 16324, 2026-09-30). Over 807 stored threads it marks 7
+ * latest client emails, 6 of them the job called off; the seventh (Solotech, "the
+ * previous 2 dates have gone away") also names a live date, which is why a hit HOLDS
+ * with a Gmail tag rather than dropping the thread.
+ */
+const CALLS_IT_OFF = /\b(?:(?:won'?t|wont|will\s+not)\s+be\s+(?:needed|required)|no\s+longer\s+(?:be\s+)?(?:needed|required|going\s+ahead)|(?:is|are)\s+not\s+(?:needed|required)\s+(?:any\s*more|after\s+all)|(?:has|have)\s+gone\s+away|gone\s+(?:elsewhere|with\s+another)|managed\s+to\s+(?:get|find)\s+(?:agency|crew|cover|someone|another)|found\s+(?:another|other)\s+(?:supplier|crew|company)|not\s+going\s+ahead|(?:has|have)\s+been\s+cancell?ed|(?:need|want)\s+to\s+cancel|please\s+cancel|we(?:'ll|\s+will)\s+pass\s+on\s+this)\b/i;
+
+export function callsItOff(body: string): string | null {
+  const own = String(body ?? "").split(/\nFrom: .{0,160}\nSent:|-{5,}\s*Original Message|\nOn .{0,200}wrote:/i)[0];
+  return own.match(CALLS_IT_OFF)?.[0] ?? null;
+}
+
 export function supplierAsk(messages: Array<{ from?: string; body?: string; is_from_spartan?: boolean }>): string | null {
   for (const m of messages) {
     if (!(m.is_from_spartan || isFromSpartan(String(m.from ?? "")))) continue;

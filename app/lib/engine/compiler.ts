@@ -19,7 +19,7 @@ import type {
 import { normalizeThread } from "./normalize";
 import { mergeFacts, describeMerge } from "./mergeFacts";
 import { reconcileRequests } from "./parseWork";
-import { triage, decisionBinds, triageModeFromEnv, supplierAsk, type TriageMode } from "./triage";
+import { triage, decisionBinds, triageModeFromEnv, supplierAsk, callsItOff, type TriageMode } from "./triage";
 import { composeOrder } from "./compose";
 import { validateOrder } from "./format";
 import { matchCompany, matchCompanyByDomain, matchContact, matchPlace, matchExistingOrder, rNumbersIn, normName, normAddr, type OrderRec } from "./resolve";
@@ -1804,6 +1804,18 @@ export async function compile(
     };
   }
   const desiredHash = desired ? hash(JSON.stringify(desired)) : undefined;
+  // A job called off before it was ever booked books nothing. A cancellation the model
+  // reads is already held by the pipeline; this is for the one it misses — "We managed to
+  // get agency in ... it won't be needed" was read as a new job and booked (order 16324,
+  // 2026-09-30).
+  if (desired && !blocked && !linkedOrderId && !hadAnOrder(prior) && cls.cancellation !== true) {
+    const off = callsItOff(latest.body);
+    if (off) {
+      blocked = true;
+      needs_human = true;
+      notes.push(`NOT BOOKED — the client's latest email calls the job off ("${off}"); nothing was written. Book it by hand if it is still going ahead.`);
+    }
+  }
   // `blocked`, not `needs_human`: an order built on a stand-in venue or a company being
   // created is still an order, and staging it is the whole point — a human confirms it
   // in one click instead of typing it out from an email.
