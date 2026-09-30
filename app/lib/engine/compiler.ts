@@ -218,14 +218,19 @@ export function orderTitle(
   const who = facts.company_name?.trim();
   // "Meridian Exhibitions — 6 crew at ExCeL London on 2027-09-12", not a string of
   // dashes. The em-dash separates WHO from WHAT once; the rest is a sentence.
-  const what = [
+  const what = (venue: string) => [
     crew > 0 ? `${crew} crew` : r?.task?.trim(),
-    facts.location_text?.trim() ? `at ${facts.location_text.trim()}` : "",
+    venue ? `at ${venue}` : "",
     r?.date ? `on ${r.date}` : "",
   ].filter(Boolean).join(" ");
-  const bits = [who, what].filter(Boolean);
-  if (bits.length === 2) return bits.join(" — ").slice(0, 80);
-  if (what) return what.slice(0, 80);
+  const titled = (venue: string) => (who && what(venue) ? `${who} — ${what(venue)}` : what(venue));
+  // The venue gives way, not the date — the same rule as jobNameFrom. Capping the finished
+  // string cut "on 2026-11-12" off every long London address (audit N1).
+  const place = facts.location_text?.trim() ?? "";
+  let title = titled(place);
+  const over = title.length - 80;
+  if (over > 0 && place) title = titled(place.slice(0, Math.max(0, place.length - over)).replace(/[\s,;:—-]+$/, ""));
+  if (title) return title.slice(0, 80);
 
   const fromSubject = clean(subject);
   return (fromSubject || r?.task?.trim() || "Spartan Crew job").slice(0, 80);

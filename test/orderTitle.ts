@@ -88,5 +88,16 @@ console.log("\n[7] OnSinch's 80-character order-name limit is respected on every
   ok(orderTitle(undefined, long, { requests: [] } as ConversationFacts).length <= 80, "the subject route");
 }
 
+console.log("\n[8] a long venue gives way to the date");
+{
+  const excel = "ExCeL London, Royal Victoria Dock, 1 Western Gateway, London E16 1XL";
+  const t = orderTitle(undefined, "Re: Crew", facts({ company_name: "RedBeast Energy", location_text: excel }));
+  ok(t.length <= 80 && t.endsWith("on 2027-09-12"), "the date survives the cap", t);
+  ok(t.startsWith("RedBeast Energy — 6 crew at ExCeL London"), "and the venue keeps its head", t);
+  ok(!/,\s*on /.test(t), "no dangling comma before the date", t);
+  const short = orderTitle(undefined, "Re: Crew", facts());
+  ok(short === "Meridian Exhibitions — 6 crew at ExCeL London on 2027-09-12", "a title that fits is unchanged", short);
+}
+
 console.log(fails ? `\n${fails} FAILED\n` : "\nALL PASS\n");
 process.exit(fails ? 1 : 0);

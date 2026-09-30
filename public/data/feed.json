@@ -1037,5 +1037,25 @@
    "app/lib/engine/pipeline.ts",
    "test/heldUpdateIsTagged.ts"
   ]
+ },
+ {
+  "id": "S-0042",
+  "ts": "2026-09-30T03:37:34+00:00",
+  "kind": "measurement",
+  "headline": "Audit X3 + N1, harness 114 -> 120/135. X3: the idempotency key picked the raw newest message while the compiler stored normalizeThread's pick (<id>:quoted on a colleague's forward, the previous message when the newest body is empty), so both re-ran the model on every sweep. N1: the composed order title capped the whole string at 80, so a long address cut 'on <date>' off; the venue now gives way, as in jobNameFrom",
+  "subject": "A forwarded enquiry no longer re-runs the model on every sweep, and a long venue no longer cuts the date off an order name",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 136,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  },
+  "sources": [
+   "app/lib/engine/pipeline.ts",
+   "app/lib/engine/compiler.ts",
+   "test/redeliveryIsFree.ts",
+   "test/orderTitle.ts"
+  ]
  }
 ]

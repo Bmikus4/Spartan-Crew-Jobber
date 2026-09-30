@@ -5,7 +5,7 @@
 // metrics here (not inside pure compile()) preserves compile's re-runnability.
 // ============================================================================
 import { compile, type CompileDeps } from "./compiler";
-import { selectLatest } from "./normalize";
+import { selectLatest, normalizeThread } from "./normalize";
 import type { StateStore } from "./store";
 import type { MetricSink } from "./metrics";
 import type { Actions, ConversationState, DesiredOrder, DesiredSlotTeam, HydratedThread, Settings } from "./types";
@@ -377,10 +377,17 @@ export async function handleThread(
   // message id, so it always processes.
   // Key on the newest CLIENT message: our own Spartan replies land in the thread
   // but must not count as new activity, or every drafted reply would retrigger
-  // processing. selectLatest is the SAME choice the compiler acts on — if the
-  // two ever diverged, the key would never match what was stored and the thread
-  // would re-run the model on every sweep.
-  const latestId = selectLatest(thread.messages)?.latest.message_id ?? "";
+  // processing. The key must be the SAME choice the compiler acts on — if the
+  // two ever diverge, it never matches what was stored and the thread re-runs
+  // the model on every sweep.
+  // Through normalizeThread, not selectLatest on the raw messages: the compiler stores the
+  // id of what normalizeThread chose, which differs on two real shapes — a colleague's
+  // forward (the recovered client message is `<id>:quoted`) and a newest message with an
+  // empty body (dropped, so the one before it is chosen). Keyed on the raw pick, both
+  // re-ran the model on every sweep (audit X3).
+  let latestId: string;
+  try { latestId = normalizeThread(thread).latest.message_id; }
+  catch { latestId = selectLatest(thread.messages)?.latest.message_id ?? ""; }
   if (prior && prior.last_message_id === latestId) {
     return prior;
   }
