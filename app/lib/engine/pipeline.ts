@@ -127,6 +127,8 @@ export interface Executor {
      * audit read when they are missing.
      */
     team_ids?: number[];
+    /** The order as posted, with any venue or company created on write filled in. */
+    written?: DesiredOrder;
   }>;
   /**
    * Apply what can safely be applied to an EXISTING order, and report which
@@ -195,7 +197,7 @@ export interface Executor {
     alreadyDeleted?: boolean;
     onIntent(snapshot: unknown): Promise<void>;
     onDeleted(): Promise<void>;
-  }): Promise<{ created?: { id: number; number?: string }; refused?: string; deleted: boolean }>;
+  }): Promise<{ created?: { id: number; number?: string }; refused?: string; deleted: boolean; written?: DesiredOrder }>;
   /**
    * The identifiers a human types into OnSinch, read back after a create.
    *
@@ -1232,9 +1234,7 @@ async function tryReplace(
       next.onsinch_order_id = res.created.id;
       next.onsinch_order_number = res.created.number ?? ids.order_number;
       next.onsinch_job_id = ids.job_id;
-      next.last_ordered_hash = hashOrder(intended.desired);
-      next.last_ordered_teams_hash = teamsHash;
-      next.last_ordered_teams = intended.desired.slot_teams ?? [];
+      recordSent(next, asSent(intended.desired, res.written), hashOrder);
       next.status = "ordered";
       next.pending_order = undefined;
       next.order_replace = undefined;
@@ -1303,6 +1303,35 @@ async function tryReplace(
   }
 }
 
+/**
+ * The order as OnSinch now holds it, which is what `last_ordered_*` must fingerprint.
+ *
+ * A venue or company created on write is `place_id: 0` / `company_id: 0` plus an
+ * instruction to create it in the composed order, and the real id only exists after the
+ * post. The next email composes against a tenant that now holds that venue, so a
+ * fingerprint of the pre-write shape differed on every follow-up: a PO-only reply
+ * deleted the booking and re-posted it under a new R number (audit #1, S9; ~24% of
+ * composed orders provision a venue).
+ */
+function asSent(desired: DesiredOrder, written?: DesiredOrder): DesiredOrder {
+  const { provision_place: _place, provision_company: _company, ...held } = written ?? desired;
+  return held as DesiredOrder;
+}
+
+/** Record what was sent, including the ids of anything created for it. */
+function recordSent(next: ConversationState, sent: DesiredOrder, hashOrder: PipelineDeps["hashOrder"]): void {
+  next.last_ordered_hash = hashOrder(sent);
+  next.last_ordered_teams_hash = hashOrder(sent.slot_teams);
+  // The array, not just its fingerprint: an in-place amendment on the NEXT email
+  // pairs the ids OnSinch reads back against exactly this, position by position.
+  next.last_ordered_teams = sent.slot_teams ?? [];
+  // compile reuses a thread's own venue and company before searching again, so the
+  // next email binds to what was created instead of creating it a second time.
+  const place = sent.slot_teams?.[0]?.place_id;
+  if (place) next.place_id = place;
+  if (sent.company_id) next.company_id = sent.company_id;
+}
+
 /** Execute a staged/intended order write and fold the result into state. */
 async function executeOrder(
   next: ConversationState,
@@ -1322,11 +1351,7 @@ async function executeOrder(
       next.onsinch_order_id = created.id;
       next.onsinch_order_number = created.number ?? ids.order_number;
       next.onsinch_job_id = ids.job_id;
-      next.last_ordered_hash = hashOrder(intended.desired);
-      next.last_ordered_teams_hash = hashOrder(intended.desired.slot_teams);
-      // The array, not just its fingerprint: an in-place amendment on the NEXT email
-      // pairs the ids OnSinch reads back against exactly this, position by position.
-      next.last_ordered_teams = intended.desired.slot_teams ?? [];
+      recordSent(next, asSent(intended.desired, created.written), hashOrder);
       // The ids, beside the blocks they belong to. Without these the amendment on the
       // next email has nothing to address and declines to the rebuild.
       next.last_ordered_team_ids = created.team_ids ?? [];

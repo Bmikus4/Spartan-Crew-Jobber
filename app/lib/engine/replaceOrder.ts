@@ -58,6 +58,8 @@ export interface ReplaceResult {
   refused?: string;
   /** True when the old order was deleted during THIS call. */
   deleted: boolean;
+  /** The replacement as posted, with a venue created for it filled in. */
+  written?: DesiredOrder;
   /** What the old order looked like before deletion — the recovery record. */
   snapshot?: unknown;
 }
@@ -239,7 +241,7 @@ export async function replaceProvisionalOrder(
   // If this throws, the caller sees the error with deleted:true already persisted, so
   // the retry re-posts rather than deleting a second time.
   const created = await client.createOrder(buildOrderBody(prepared.desired));
-  return { deleted: true, created, snapshot: live };
+  return { deleted: true, created, snapshot: live, written: prepared.desired };
 }
 
 /**

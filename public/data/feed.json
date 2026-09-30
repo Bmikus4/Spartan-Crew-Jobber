@@ -770,5 +770,23 @@
   "sources": [
    "app/lib/engine/compiler.ts"
   ]
+ },
+ {
+  "id": "S-0027",
+  "ts": "2026-09-30T01:38:03+00:00",
+  "kind": "measurement",
+  "headline": "Threads fingerprinted the pre-write order (place_id 0), so a PO-only reply deleted and re-posted ~24% of orders under a new R number (audit #1/S9); the fingerprint and the thread's venue are now what was actually written, S9/S1/N4 9/9",
+  "subject": "A follow-up that changes nothing no longer rebuilds an order whose venue the engine created",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 124,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  },
+  "sources": [
+   "app/lib/engine/pipeline.ts",
+   "test/createdVenueFollowUp.ts"
+  ]
  }
 ]

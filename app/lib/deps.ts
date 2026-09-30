@@ -278,6 +278,8 @@ export async function createOrderWithPlace(
     number: created.number ?? ids.order_number,
     job_id: ids.job_id,
     team_ids: [],
+    // With the venue and company it created filled in: what the thread fingerprints.
+    written: o,
     ...(ids.unread ? { unread: ids.unread } : {}),
   };
 }
