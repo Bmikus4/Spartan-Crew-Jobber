@@ -52,6 +52,10 @@ async function ensure(sql: NeonQueryFunction<false, false>): Promise<void> {
   // poller (Gmail id) and by mail-inbound (RFC id) is one row, not two.
   await sql`ALTER TABLE thread_messages ADD COLUMN IF NOT EXISTS rfc_message_id TEXT`;
   await sql`CREATE UNIQUE INDEX IF NOT EXISTS thread_messages_rfc ON thread_messages (rfc_message_id) WHERE rfc_message_id IS NOT NULL`;
+  // The reply chain, for the resolver (design §9.2: a reply-chain parent is strong
+  // evidence). `reference_ids`, not `references`, which is a reserved word in Postgres.
+  await sql`ALTER TABLE thread_messages ADD COLUMN IF NOT EXISTS in_reply_to TEXT[]`;
+  await sql`ALTER TABLE thread_messages ADD COLUMN IF NOT EXISTS reference_ids TEXT[]`;
   _ready = true;
 }
 
@@ -83,6 +87,9 @@ export interface StoredMessage {
   labelIds?: string[];
   /** The RFC Message-ID, normalised by parseRfc822. Null when the sender set none. */
   rfc_message_id?: string | null;
+  /** In-Reply-To and References as parsed, nearest ancestor first. Absent when not known. */
+  in_reply_to?: string[];
+  reference_ids?: string[];
 }
 
 /**
@@ -97,7 +104,7 @@ export interface StoredMessage {
 export function rowFromGmail(
   gmailId: string,
   gmailThreadId: string,
-  mail: { message_id: string; from: string; to: string[]; cc: string[]; date_iso: string; subject: string; body: string },
+  mail: { message_id: string; from: string; to: string[]; cc: string[]; date_iso: string; subject: string; body: string; in_reply_to?: string[]; references?: string[] },
   labelIds: string[],
 ): StoredMessage {
   return {
@@ -111,6 +118,8 @@ export function rowFromGmail(
     is_from_spartan: /@spartancrew\.co\.uk$/i.test(mail.from),
     labelIds,
     rfc_message_id: mail.message_id || null,
+    in_reply_to: mail.in_reply_to ?? [],
+    reference_ids: mail.references ?? [],
   };
 }
 
@@ -268,10 +277,11 @@ export async function storeMessage(m: StoredMessage): Promise<{ ok: boolean; ins
     await ensure(sql);
     const rows = (await sql`
       INSERT INTO thread_messages
-        (message_id, thread_id, from_address, to_addresses, date_iso, subject, body, is_from_spartan, rfc_message_id)
+        (message_id, thread_id, from_address, to_addresses, date_iso, subject, body, is_from_spartan, rfc_message_id, in_reply_to, reference_ids)
       VALUES (${m.message_id}, ${m.thread_id}, ${m.from_address},
               ${JSON.stringify(m.to_addresses ?? [])}, ${m.date_iso}, ${m.subject},
-              ${m.body}, ${m.is_from_spartan}, ${m.rfc_message_id || null})
+              ${m.body}, ${m.is_from_spartan}, ${m.rfc_message_id || null},
+              ${m.in_reply_to ?? null}, ${m.reference_ids ?? null})
       ON CONFLICT DO NOTHING
       RETURNING message_id`) as { message_id: string }[];
     return { ok: true, inserted: rows.length > 0 };

@@ -912,5 +912,22 @@
    "app/lib/engine/reconcile.ts",
    "test/nestedShape.ts"
   ]
+ },
+ {
+  "id": "S-0035",
+  "ts": "2026-09-30T02:28:22+00:00",
+  "kind": "measurement",
+  "headline": "Design step 4a: thread_messages gains in_reply_to and reference_ids (TEXT[]), filled by the Gmail poller and mail-inbound from the parsed headers, for the resolver's reply-chain evidence; validated on Neon in an aborted transaction",
+  "subject": "Every stored message keeps the reply chain it arrived with",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 129,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  },
+  "sources": [
+   "app/lib/threadMessagesDb.ts"
+  ]
  }
 ]

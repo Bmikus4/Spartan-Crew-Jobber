@@ -72,6 +72,10 @@ console.log("\n[2] the RFC Message-ID is kept beside it, for header threading");
   ok(viaPoll.rfc_message_id === RFC_ID.toLowerCase(), "rfc_message_id carries the parsed header", String(viaPoll.rfc_message_id));
   const noHeader = rowFromGmail(GMAIL_ID, GMAIL_THREAD, parseRfc822(RAW.replace(/^Message-ID:.*\r\n/m, "")), []);
   ok(noHeader.rfc_message_id === null, "no header is null, not an empty string a UNIQUE index would collide on", String(noHeader.rfc_message_id));
+  // The reply chain, which the resolver reads as strong evidence (design §9.2). Kept as
+  // parsed: normalised, angle-bracketed, nearest ancestor order untouched.
+  ok(JSON.stringify(viaPoll.in_reply_to) === JSON.stringify(["<spartan-1@spartancrew.co.uk>"]), "In-Reply-To is kept", JSON.stringify(viaPoll.in_reply_to));
+  ok(Array.isArray(viaPoll.reference_ids), "References is kept, empty when absent", JSON.stringify(viaPoll.reference_ids));
 }
 
 console.log("\n[3] the labels still reach the draft guard");
@@ -89,6 +93,7 @@ console.log("\n[4] both live routes use the rule rather than minting their own")
   ok(!/`gmail:\$\{/.test(poll), "mail-poll mints no gmail:-prefixed id");
   const inbound = src("app/api/mail-inbound/route.ts");
   ok(inbound.includes("rfc_message_id"), "mail-inbound stores the RFC id in its own column too");
+  ok(inbound.includes("in_reply_to") && inbound.includes("reference_ids"), "and the reply chain");
   const db = src("app/lib/threadMessagesDb.ts");
   ok(!/ON CONFLICT \(message_id\) DO NOTHING/.test(db),
     "inserts yield on ANY unique key, so a message held under one key is not stored again under the other");
