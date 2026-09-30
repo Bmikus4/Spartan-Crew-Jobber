@@ -806,5 +806,22 @@
    "app/lib/engine/compiler.ts",
    "test/stateSurvivesCompile.ts"
   ]
+ },
+ {
+  "id": "S-0029",
+  "ts": "2026-09-30T01:49:49+00:00",
+  "kind": "decision",
+  "headline": "Ben 2026-09-29: the three outbound asks are dropped, OPS means a Gmail tag only, steps 3-5 shadow only; plan also records the 515 probes (a standalone POST /slotTeams leaves no audit row, so a retry must re-read blocks)",
+  "subject": "The job-identity plan waits on no one outside the engine",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 125,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  },
+  "sources": [
+   "docs/JOB-IDENTITY-DESIGN-2026-09-29.md"
+  ]
  }
 ]

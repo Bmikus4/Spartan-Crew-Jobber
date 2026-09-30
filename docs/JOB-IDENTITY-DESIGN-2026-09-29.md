@@ -284,8 +284,8 @@ For a job with links, on every update:
    Otherwise **UNCERTAIN: ORDER_REMOVED_NO_SUCCESSOR / AMBIGUOUS_SUCCESSOR**.
 5. **A job that has ever had a link never falls back to create.**
 
-Case 4 is every case so far (47/47 re-typed). If ops press **Confirm and correct** our order instead
-of re-typing, case 1 covers it and the bridge is exact by id. That is a process ask for Pas.
+Case 4 is every case so far (47/47 re-typed). No process change is asked of ops (Ben, 2026-09-29), so
+the bridge must work from case 4 alone.
 
 ## 10. Temporal identity rules
 
@@ -335,8 +335,8 @@ Rules:
   evidence, reason code and an optional `probable` job.
 - **Not done:** the message is not attached to any job's authoritative history, no state changes and
   nothing is written to OnSinch.
-- **Surfaced:** the thread gets the existing Gmail marker, plus a dashboard card showing candidates and
-  evidence with one-click *this job* / *new job* (HoH's "Same enquiry?" shape).
+- **Surfaced:** the thread gets a Gmail tag, and that is all (Ben, 2026-09-29: ops rarely open the
+  dashboard unless it is urgent). Candidates and evidence go in the thread's notes for whoever opens it.
 
 **Automatic resolution.** The resolver re-runs for the thread when:
 - a new message arrives in it;
@@ -465,6 +465,14 @@ snapshot is disposable and recomputable. Nothing is ever mutated in place.
 | a block to drop on an untouched engine order | — | delete-and-repost (the only destructive path, never on an ops-shaped order) |
 
 - **Verify:** re-read after every write. A match records `base`; a mismatch means OPS `UNVERIFIED_WRITE`.
+- **OPS** above means a Gmail tag on the thread carrying the reason code, and nothing else (Ben,
+  2026-09-29).
+- **A lost `POST /slotTeams` response cannot be recovered from the audit log.** Probed 2026-09-30 on
+  company 515: an appended block leaves no audit row at all (UI edits leave `common_create`), so before a
+  retry appends, it must re-read the job's blocks through the nested read, or it books the block twice.
+  Also probed: `PATCH /slotTeams` treats an omitted field as unchanged and refuses an explicit null;
+  `POST /jobs` into an existing order and `PATCH /jobs {order_id}` both work, and the moved job keeps its
+  id; `PATCH /jobs` refuses `private_note`.
 
 ## 18. Task-specific AI context
 
@@ -473,7 +481,7 @@ One source of truth, several deterministic projections:
 | Task | Context |
 |---|---|
 | **Extract** (every new message) | current State(J) *with refs and authority*; the new message's own text (quoted tail removed); the last 6 messages of History(J), chronological with sequence numbers and thread labels; the messages that set any field the new message mentions (provenance pins) |
-| **Resolve** | none (deterministic); the ops review card shows candidates plus evidence |
+| **Resolve** | none (deterministic); candidates plus evidence go in the thread notes, the thread gets a Gmail tag |
 | **Create order** | State(J) → compose; no model |
 | **Amend** | none after extraction (diff + routing) |
 | **Reply** | State(J) summary + order_state + ask_for + the new message + the last 4 messages |
@@ -563,8 +571,8 @@ Offline, deterministic, **no model calls**: tests feed facts directly, as the cu
 | Same job, 3 threads (enquiry, PO undated, change) | one job; the undated thread is UNCERTAIN(probable) until the change message names the day, then backfills |
 | Same client, separate jobs (45-pair shape: days 3 apart) | two jobs; never merged |
 | Parallel jobs (same day, two venues) | two jobs; a message naming one venue continues that one; a venue-less message is UNCERTAIN |
-| Ambiguous | no state change, no write, card raised |
-| Amendment in a new thread to a confirmed order | continues via hard R number; the block PATCHed or sent to ops by atomicity |
+| Ambiguous | no state change, no write, Gmail tag |
+| Amendment in a new thread to a confirmed order | continues via hard R number; the block PATCHed, or a Gmail tag where the block is not atomic |
 | Reversion 4 → 6 → 4 | three facts; current 4; supersedes chain intact |
 | Duplicate ingestion (Gmail id and RFC id of the same email) | one message row |
 | Out-of-order (older message after newer) | the fold equals the in-order fold |
@@ -717,12 +725,12 @@ in the feed.
 | 10 | Venue Task 6: named a venue that matched only retired rows → hold at the placeholder | — | venue gold unchanged |
 | 11 | **Restart criteria**: supervised first week, every external write approved, no promotion on a date | 0, 1, 2 (+7 for amendments) | Ben signs off |
 
-Asks for people, raised now:
+No asks of people. The three raised here (a positions API from OnSinch, ops confirming rather than
+re-typing, the 315 → 354 rate card) were dropped by Ben on 2026-09-29; the plan does not wait on any.
 
-- **Ben to OnSinch:** a positions API.
-- **Ben to Pas:** Confirm and correct the engine's order rather than re-typing it (this makes the
-  bridge exact).
-- **Ben:** is rate card 315 → 354 intentional?
+Rulings of 2026-09-29 that bind the steps above: no sender check on a bind; steps 3-5 run in shadow
+only; an update the engine cannot make is a Gmail tag and nothing else; orders ops raised by hand may be
+updated; n8n stays the intake.
 
 ---
 
@@ -740,8 +748,8 @@ Asks for people, raised now:
    the reply-chain parent's job; the company's active jobs as of the message.
 6. **Job identity resolution.** The deterministic procedure (§9.2) gives CONTINUE / NEW / UNCERTAIN /
    NOT_A_JOB, with the evidence stored.
-7. **Confidence and abstention.** UNCERTAIN keeps the facts on the message, raises the card and the
-   thread marker, and stops. CONTINUE and NEW proceed.
+7. **Confidence and abstention.** UNCERTAIN keeps the facts on the message, tags the thread in
+   Gmail, and stops. CONTINUE and NEW proceed.
 8. **Canonical history.** The association row is written. History(J) now includes the message at its
    source-time position.
 9. **Canonical state.** Under the job lease: refold. A new `state_version` is saved with provenance for
