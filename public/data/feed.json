@@ -1217,5 +1217,24 @@
    "app/lib/deps.ts",
    "test/venueNotResent.ts"
   ]
+ },
+ {
+  "id": "S-0051",
+  "ts": "2026-10-01T01:25:00+00:00",
+  "kind": "measurement",
+  "headline": "Ben 10-01 (audit S8): a change silently discarded by OnSinch left the sweep saying 'holds', because its attendance read cannot see an unstaffed block. The sweep now compares the nested block read with the thread as total crew per time window (so a chief inside the shift and a separate chief block match) and tags Order Needs Updated when they differ and no block was last edited by a person. Measured on 44 future orders: 13 differ, 12 edited by ops by hand, so 1 tag (16326). The harness S8 stays red only because its fake tenant has no nested read",
+  "subject": "The nightly sweep tags a client's change that never reached OnSinch, unless ops have edited the order",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 143,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  },
+  "sources": [
+   "app/lib/engine/sweep.ts",
+   "app/lib/engine/reconcile.ts",
+   "test/unappliedChangeIsTagged.ts"
+  ]
  }
 ]

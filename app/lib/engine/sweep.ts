@@ -30,8 +30,8 @@
 // moves the order towards the shape the client asked for; nothing here deletes, and a read
 // that fails is treated as "nothing is known" rather than as evidence.
 // ============================================================================
-import type { ConversationState, DesiredOrder } from "./types";
-import { logAction, flagSupervisedIfNeeded, type PipelineDeps } from "./pipeline";
+import type { ConversationState, DesiredOrder, DesiredSlotTeam } from "./types";
+import { logAction, flagSupervisedIfNeeded, flagManualIfNeeded, type PipelineDeps } from "./pipeline";
 import { readLiveShape, readNestedShape, compareShapes, driftAgainst, driftKey, describeDrift, type LiveShape } from "./reconcile";
 
 /**
@@ -40,11 +40,12 @@ import { readLiveShape, readNestedShape, compareShapes, driftAgainst, driftKey, 
  * `shape_shadow`; nothing here decides anything. Measured live on #16317: the nested
  * read saw both of its blocks, the attendance read saw none, because nobody is signed on.
  */
-async function shadowNestedRead(deps: PipelineDeps, thread_id: string, order_id: number, live: LiveShape): Promise<void> {
-  if (live.unreadable || !deps.metrics) return;
+async function shadowNestedRead(deps: PipelineDeps, thread_id: string, order_id: number, live: LiveShape): Promise<LiveShape | null> {
+  if (live.unreadable) return null;
   try {
     const nested = await readNestedShape(deps.onsinch, order_id);
-    if (nested.unreadable) return;
+    if (nested.unreadable) return null;
+    if (!deps.metrics) return nested;
     const cmp = compareShapes(live, nested);
     await deps.metrics.emit({
       ts: deps.now(),
@@ -60,9 +61,68 @@ async function shadowNestedRead(deps: PipelineDeps, thread_id: string, order_id:
         differ: cmp.differ.slice(0, 10),
       },
     });
+    return nested;
   } catch (err) {
     console.error("[shape-shadow] skipped", err);
+    return null;
   }
+}
+
+/** The OnSinch user the API key acts as — the engine's own edits carry this id. Read once. */
+let apiUser: Promise<number | null> | undefined;
+function apiUserId(deps: PipelineDeps): Promise<number | null> {
+  apiUser ??= deps.onsinch.profile().then(
+    (r: any) => {
+      const d = r?.data?.data ?? r?.data;
+      const id = Number(Array.isArray(d) ? d[0]?.id : d?.id);
+      return id > 0 ? id : null;
+    },
+    () => null
+  );
+  return apiUser;
+}
+/** Test seam: the API user is process-global. */
+export function __resetApiUser(): void { apiUser = undefined; }
+
+/**
+ * WHAT THE CLIENT ASKED FOR THAT ONSINCH DOES NOT HOLD, AND NOBODY HAS TOUCHED — or null.
+ *
+ * Audit S8: a thread asking for 9 crew on an order holding 6, every write silently
+ * discarded, and the sweep said `holds`, because its attendance read cannot see a block
+ * nobody is signed on to. Ben, 2026-10-01: tag it in Gmail from the block read, "if it
+ * wasn't updated already in OnSinch".
+ *
+ * TOTAL CREW PER TIME WINDOW, not block by block: ops put the crew chief inside the
+ * shift and the engine gives the chief its own block, and both are 4 crew from 09:00 to
+ * 17:00. A block-by-block comparison flags every hand-raised order.
+ *
+ * ONLY WHERE NO PERSON HAS EDITED A BLOCK. Measured over the 44 future orders on
+ * 2026-10-01: 13 differ from their thread, and 12 of those carry a block last changed by
+ * a person (users 102, 110, 413, 494, 573, 2759) — ops changed the hours on the phone
+ * and the order is theirs. The one left, 16326, was last touched by the engine alone: the
+ * client's change simply never landed. Without the API user's id the two cannot be told
+ * apart, so nothing is reported.
+ */
+export function unappliedDifference(target: DesiredSlotTeam[], nested: LiveShape, engine: number | null): string | null {
+  if (!engine) return null;
+  const live = [...nested.teams.values()].filter((t) => Number(t.size) > 0);
+  if (!live.length) return null;
+  if (live.some((t) => t.modifier !== undefined && t.modifier !== engine)) return null;
+  const at = (b?: string, e?: string) => {
+    const x = Date.parse(String(b)), y = Date.parse(String(e));
+    return Number.isFinite(x) && Number.isFinite(y) ? `${new Date(x).toISOString().slice(0, 16)}~${new Date(y).toISOString().slice(0, 16)}` : null;
+  };
+  const want = new Map<string, number>(), held = new Map<string, number>();
+  for (const t of target) { const k = at(t.beginning, t.end); if (k) want.set(k, (want.get(k) ?? 0) + (Number(t.size) || 0)); }
+  for (const t of live) { const k = at(t.beginning, t.end); if (k) held.set(k, (held.get(k) ?? 0) + (Number(t.size) || 0)); }
+  const show = (k: string) => {
+    const [b, e] = k.split("~");
+    return `${b.replace("T", " ")}–${e.slice(0, 10) === b.slice(0, 10) ? e.slice(11) : e.replace("T", " ")}`;
+  };
+  const diffs = [...new Set([...want.keys(), ...held.keys()])].sort()
+    .filter((k) => (want.get(k) ?? 0) !== (held.get(k) ?? 0))
+    .map((k) => `${show(k)} UTC: the client asks for ${want.get(k) ?? 0}, OnSinch holds ${held.get(k) ?? 0}`);
+  return diffs.length ? diffs.slice(0, 4).join("; ") : null;
 }
 import { matchExistingOrder, rNumbersIn, type OrderRec } from "./resolve";
 
@@ -83,6 +143,8 @@ export type SweepAction =
    * record of the order, and the two want different answers from a person.
    */
   | "unactionable"
+  /** OnSinch does not hold the client's change and no person has edited the blocks: tagged for ops. */
+  | "unapplied"
   | "error";
 
 export interface SweepOutcome {
@@ -187,7 +249,7 @@ export async function reconcileThread(
   } catch (err: any) {
     return { thread_id, order_id, action: "error", detail: String(err?.message ?? err) };
   }
-  await shadowNestedRead(deps, thread_id, order_id, live);
+  const nested = await shadowNestedRead(deps, thread_id, order_id, live);
 
   if (live.unreadable) {
     /**
@@ -292,6 +354,17 @@ export async function reconcileThread(
     if (state.reconcile) {
       state.reconcile = undefined;
       await store.put(state);
+    }
+    // The attendance read sees only staffed blocks; the nested read sees the rest.
+    const unapplied = nested ? unappliedDifference(target.slot_teams ?? [], nested, await apiUserId(deps)) : null;
+    if (unapplied) {
+      const note = `OnSinch does not hold what the client asked for on order #${order_id} and nobody has changed it by hand (${unapplied}) — apply it in OnSinch`;
+      state.needs_human = true;
+      state.review_only = false;
+      if (state.notes[state.notes.length - 1] !== note) state.notes = [...state.notes, note];
+      await store.put(state);
+      await flagManualIfNeeded(state, deps);
+      return { thread_id, order_id, action: "unapplied", detail: unapplied };
     }
     return { thread_id, order_id, action: "holds" };
   }

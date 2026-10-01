@@ -68,6 +68,8 @@ export interface LiveTeam {
    * verified 2026-09-30 on orders 16308, 16313, 16330). Only the nested read fills it.
    */
   place_id?: number;
+  /** Who last changed the block (an OnSinch user id). The API key's own user is the engine. Nested read only. */
+  modifier?: number;
   beginning?: string;
   end?: string;
   /** How many live positions the block holds. Only the nested read knows; more than one is not PATCHable. */
@@ -256,6 +258,7 @@ export function nestedShape(order: any): LiveShape {
         profession_id: Number.isFinite(Number(staff?.profession_id)) ? Number(staff.profession_id) : undefined,
         slotlocation_id: Number.isFinite(Number(staff?.slotlocation_id)) ? Number(staff.slotlocation_id) : undefined,
         place_id: Number(staff?.SlotLocation?.place_id) > 0 ? Number(staff.SlotLocation.place_id) : undefined,
+        modifier: Number(team?.modifier) > 0 ? Number(team.modifier) : undefined,
         beginning: b,
         end: e,
         positions: slots.length,
