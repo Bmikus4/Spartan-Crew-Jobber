@@ -1,0 +1,68 @@
+{
+ "source": "Ben, decision page decisions/resolver-r1..r9, 2026-10-01",
+ "pairs": [
+  {
+   "pair": "r1",
+   "thread": "19ffdc29b956ef02",
+   "other_thread": "19ef1cb3d853c061",
+   "verdict": "same",
+   "label": "TMB | RE: Plasa 2026 - Olympia London - Stand A59 vs Re: Plasa London 2025 - Olympia London - Stand A59"
+  },
+  {
+   "pair": "r2",
+   "thread": "1a0492508c1b3761",
+   "other_thread": "1a03e2acc8e81c3f",
+   "verdict": "separate",
+   "label": "Solotech UK Group Ltd | Re: SOLOTECH - 24th August - 28th August - PO-UK000017591 vs Re: Crew currently"
+  },
+  {
+   "pair": "r3",
+   "thread": "1a05d8273631eaf3",
+   "other_thread": "19fd625140fb6471",
+   "verdict": "unsure",
+   "label": "Stadia Tech (Media Tech Services Limited) | Re: Fulham Football Club 6th September 2026 vs Re: Sunday 6th September & Thursday 10th September"
+  },
+  {
+   "pair": "r4",
+   "thread": "19fdc5975fcc7015",
+   "other_thread": "19fdbb55bd617841",
+   "verdict": "same",
+   "label": "Eclipse Presentations Ltd | RE: Eclipse Presentations Ltd - PO #36543 - Purchase Order f vs Re: Eclipse warehouse crew"
+  },
+  {
+   "pair": "r5",
+   "thread": "1a01eb64b2bb4aa3",
+   "other_thread": "1a01ea0806395552",
+   "verdict": "unsure",
+   "label": "Blackout Limited | PO - Tottenham Hotspur Stadium - 02/09/26 vs New booking - Tottenham stadium - 2nd & 6th Sep"
+  },
+  {
+   "pair": "r6",
+   "thread": "1a0345f1a475ca8d",
+   "other_thread": "1a0334ff5174c9a4",
+   "verdict": "unsure",
+   "label": "Solotech UK Group Ltd | SOLOTECH  Your Quote: R10673  - PO-UK000017316 vs RE: SOLOTECH - Please may I have all of the these dates put "
+  },
+  {
+   "pair": "r7",
+   "thread": "1a08fd268be97aa8",
+   "other_thread": "1a08121b33615147",
+   "verdict": "separate",
+   "label": "Broadwick Group Limited | Re: Monday - Drumsheds - 4 Humans - 17h00 - 2359 vs DRUMSHEDS Spartan Crew Booking detail"
+  },
+  {
+   "pair": "r8",
+   "thread": "1a0afcd8dc27256f",
+   "other_thread": "1a0af900bab8a3d7",
+   "verdict": "unsure",
+   "label": "proAV Ltd | RE: Additional Crew needed night of 22/09/2026 at Westfield  vs Re: Westfield - Shepherds Bush next Tuesday night"
+  },
+  {
+   "pair": "r9",
+   "thread": "1a0afd205864d26e",
+   "other_thread": "1a0af5f44ff0e792",
+   "verdict": "unsure",
+   "label": "Blackout Limited | PO - Blackout HQ - 16/10/26 vs Cancel 09/10/26 - move to 16/10/26"
+  }
+ ]
+}

@@ -18,7 +18,7 @@
 // Run: npx tsx scripts/resolver-shadow.mts
 // ============================================================================
 import { neon } from "@neondatabase/serverless";
-import { writeFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { planJobMigration, type OrderRecordRow, type StateRow } from "../app/lib/engine/jobMigration";
 import { resolveMessage, type JobView, type MessageView } from "../app/lib/engine/resolver";
 import { cleanEmailBody } from "../app/lib/engine/normalize";
@@ -62,11 +62,24 @@ const views: Array<JobView & { start: number; threads: string[] }> = plan.map((j
   start: Math.min(...j.threads.map((t) => Date.parse(opener.get(t)?.at ?? "")).filter(Number.isFinite)),
 }));
 
-const score = { cases: 0, expect_continue: 0, expect_new: 0, false_merge: 0, correct_continue: 0, abstain_on_continue: 0, missed_continue: 0, correct_new: 0, abstain_on_new: 0, other: 0 };
+/**
+ * Ben's rulings on the v0 disagreements (2026-10-01) override the auto label for those
+ * threads: "same" — the thread continues the other thread's job; "separate" — it starts
+ * its own; "unsure" — left out of the score until he looks.
+ */
+const gold = new Map<string, { verdict: string; other_thread: string }>(
+  (JSON.parse(readFileSync("scripts/resolver-gold-ben.json", "utf8")).pairs as Array<{ thread: string; other_thread: string; verdict: string }>)
+    .map((p) => [p.thread, p]),
+);
+const jobOf = (t: string) => views.find((v) => v.threads.includes(t))?.job_key;
+
+const score = { cases: 0, expect_continue: 0, expect_new: 0, false_merge: 0, correct_continue: 0, abstain_on_continue: 0, missed_continue: 0, correct_new: 0, abstain_on_new: 0, other: 0, excluded_unsure: 0 };
 const review: Array<Record<string, unknown>> = [];
 for (const j of views) {
   const order = [...j.threads].filter((t) => opener.has(t)).sort((a, b) => Date.parse(opener.get(a)!.at) - Date.parse(opener.get(b)!.at));
   order.forEach((t, i) => {
+    const ruled = gold.get(t);
+    if (ruled?.verdict === "unsure") { score.excluded_unsure++; return; }
     const op = opener.get(t)!;
     const s = state.get(t) ?? {};
     const view: MessageView = {
@@ -78,7 +91,9 @@ for (const j of views) {
     const before = views.filter((v) => v.start < Date.parse(op.at));
     const o = resolveMessage(view, before);
     score.cases++;
-    const want = i > 0 ? j.job_key : null;
+    const want = ruled?.verdict === "same" ? jobOf(ruled.other_thread) ?? null
+      : ruled?.verdict === "separate" ? null
+      : i > 0 ? j.job_key : null;
     if (want) {
       score.expect_continue++;
       if (o.kind === "CONTINUE" && o.job === want) score.correct_continue++;

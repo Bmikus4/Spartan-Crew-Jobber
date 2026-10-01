@@ -71,5 +71,24 @@ ok(is(resolveMessage(m({ own_text: "can we get crew?", asks_for_crew: true }), j
 }
 ok(is(resolveMessage(m({ company_id: undefined, asks_for_crew: true }), jobs), "NEW"), "an unknown company asking for crew is a new client");
 
+console.log("\n[9] Ben's review of the shadow disagreements (2026-10-01)");
+{
+  // r2: two Solotech threads, both on the "No Location" placeholder (6922): no venue is
+  // not the same venue.
+  const placeholder: JobView[] = [{ job_key: "job:S", company_id: 279, days: ["2026-08-30", "2026-08-31", "2026-09-01"], place_ids: [6922], order_numbers: ["13605"] }];
+  const o = resolveMessage(m({ company_id: 279, days: ["2026-08-31", "2026-09-01"], place_id: 6922, asks_for_crew: true, at: "2026-08-25T09:00:00Z" }), placeholder);
+  ok(o.kind !== "CONTINUE", "two threads on the placeholder venue are not merged", o.kind);
+
+  // r7: Drumsheds 9-14 Sep and 14-19 Sep share only the boundary day.
+  const run: JobView[] = [{ job_key: "job:D", company_id: 900, days: ["2026-09-09", "2026-09-10", "2026-09-11", "2026-09-12", "2026-09-13", "2026-09-14"], place_ids: [555], order_numbers: ["15872"] }];
+  const d = resolveMessage(m({ company_id: 900, days: ["2026-09-14", "2026-09-15", "2026-09-16", "2026-09-17", "2026-09-18", "2026-09-19"], place_id: 555, asks_for_crew: true, at: "2026-09-08T09:00:00Z" }), run);
+  ok(d.kind !== "CONTINUE", "two six-day runs touching on one day are not one job", d.kind);
+
+  // r4: Eclipse warehouse crew on the 10th, inside the PO's 10-14 Aug: the same job.
+  const po: JobView[] = [{ job_key: "job:E", company_id: 77, days: ["2026-08-10", "2026-08-11", "2026-08-12", "2026-08-13", "2026-08-14"], place_ids: [321], order_numbers: ["13675"] }];
+  ok(is(resolveMessage(m({ company_id: 77, days: ["2026-08-10"], place_id: 321, asks_for_crew: true, at: "2026-08-05T09:00:00Z" }), po), "CONTINUE", "job:E"),
+    "a one-day request inside a five-day job still continues it");
+}
+
 console.log(`\n${fails === 0 ? "ALL PASS" : `${fails} FAILED`}\n`);
 process.exitCode = fails === 0 ? 0 : 1;

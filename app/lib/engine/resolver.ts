@@ -60,6 +60,25 @@ const NEW_ENGAGEMENT = /\b(another (?:event|job|show|booking)|new (?:event|job|b
 const toMs = (d: string) => Date.parse(`${d}T12:00:00Z`);
 const lastDay = (j: JobView) => j.days.reduce<number>((m, d) => Math.max(m, toMs(d)), -Infinity);
 const shares = (a: string[], b: string[]) => a.some((d) => b.includes(d));
+
+/**
+ * The venues the engine reaches for when a thread names none — 2069 "London", 6922 "No
+ * Location", 87 "Location", 6581 "warehouse" (measured in resolve.ts). Not a venue, so
+ * two threads on one are not "the same venue": Ben ruled two Solotech threads, both on
+ * 6922, separate jobs (shadow review r2, 2026-10-01).
+ */
+export const PLACEHOLDER_PLACE_IDS = new Set([2069, 6922, 87, 6581]);
+
+/**
+ * "Same day" for the cross-thread match: the shared days cover at least half of the
+ * shorter thread's days. Two six-day Drumsheds runs touching on the boundary day were
+ * merged on that one day; Ben ruled them separate (r7). A one-day request inside a
+ * five-day job still counts (r4, ruled the same job).
+ */
+const overlapsEnough = (a: string[], b: string[]) => {
+  const shared = new Set(a.filter((d) => b.includes(d))).size;
+  return shared > 0 && shared * 2 >= Math.min(new Set(a).size, new Set(b).size);
+};
 const within = (a: string[], b: string[], days: number) => a.some((x) => b.some((y) => Math.abs(toMs(x) - toMs(y)) <= days * DAY_MS));
 const isOpen = (j: JobView, at: string) => !j.days.length || lastDay(j) + TAIL_DAYS * DAY_MS >= Date.parse(at);
 
@@ -135,9 +154,10 @@ export function resolveMessage(m: MessageView, jobs: JobView[], threadJob?: stri
 
   // 3. Cross-thread, among this client's open jobs.
   const open = ours.filter((j) => isOpen(j, m.at));
+  const venue = m.place_id && !PLACEHOLDER_PLACE_IDS.has(m.place_id) ? m.place_id : undefined;
   if (m.days.length) {
-    const sameDay = open.filter((j) => shares(m.days, j.days));
-    const atVenue = m.place_id ? sameDay.filter((j) => j.place_ids.includes(m.place_id!)) : [];
+    const sameDay = open.filter((j) => overlapsEnough(m.days, j.days));
+    const atVenue = venue ? sameDay.filter((j) => j.place_ids.includes(venue)) : [];
     const sameVenue = atVenue.filter((j) => !hoursApart(m.slots, j.slots, m.days.filter((d) => j.days.includes(d))));
     if (atVenue.length && !sameVenue.length) {
       return { kind: "UNCERTAIN", candidates: atVenue.map((j) => j.job_key), reason: "same day and venue, but none of the hours overlap", evidence: [{ kind: "contradiction", what: "disjoint hours on every shared day" }] };
@@ -149,7 +169,7 @@ export function resolveMessage(m: MessageView, jobs: JobView[], threadJob?: stri
       return { kind: "UNCERTAIN", candidates: sameVenue.map((j) => j.job_key), reason: "several jobs share the day and venue", evidence: [{ kind: "strong", what: "same company, day and venue" }] };
     }
     if (sameDay.length) {
-      return m.place_id
+      return venue
         ? { kind: "NEW", client: "existing", evidence: [{ kind: "contradiction", what: "same day, a different known venue: a parallel job" }] }
         : { kind: "UNCERTAIN", candidates: sameDay.map((j) => j.job_key), reason: "same day, venue unknown", evidence: [{ kind: "weak", what: "same company and day" }] };
     }

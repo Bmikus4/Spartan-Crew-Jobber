@@ -1297,5 +1297,25 @@
    "test/supplierThread.ts",
    "test/dateYear.ts"
   ]
+ },
+ {
+  "id": "S-0055",
+  "ts": "2026-10-01T01:47:56+00:00",
+  "kind": "measurement",
+  "headline": "Plan step 5 gate (Ben's review 10-01 of the 9 shadow disagreements): r2 Solotech (both threads on the 'No Location' placeholder) and r7 Drumsheds (two six-day runs sharing one boundary day) were false merges; placeholder venues are now no venue, and 'same day' needs the shared days to cover half the shorter thread. r1/r4 ruled the same job still continue; 5 unsure pairs left out. Shadow replay over 448 openers: false merges 0, missed continues 0, continues 17/32 correct with 15 abstaining, new jobs 387/416",
+  "subject": "The job resolver no longer merges two threads on a placeholder venue or on one boundary day, and its shadow gate passes on Ben's rulings",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 144,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  },
+  "sources": [
+   "app/lib/engine/resolver.ts",
+   "scripts/resolver-shadow.mts",
+   "scripts/resolver-gold-ben.json",
+   "test/resolver.ts"
+  ]
  }
 ]
