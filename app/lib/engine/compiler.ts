@@ -742,7 +742,7 @@ export async function resolvePlace(
   try {
     places = await onsinch.allPlaces();
   } catch (err) {
-    return { unreadable: true, note: `the venue list could not be read (${String((err as Error)?.message ?? err)}) — held and tagged, nothing booked; read again on its next delivery` };
+    return { unreadable: true, note: `the venue list could not be read (${String((err as Error)?.message ?? err)}) — held and tagged, nothing booked; read again by the hourly sweep once the list is back` };
   }
 
   if (!missingVenue && process.env.SPARTAN_VENUE_V3 === "1") {
@@ -1205,7 +1205,7 @@ export async function compile(
    * withholds it.
    */
   let blocked = false;
-  /** Why this thread must be read again on its next delivery, even with no new email. */
+  /** Why this thread must be read again with no new email: by the hourly sweep (retryHeld.ts) or a redelivery. */
   let retryPending: string | undefined;
   let company_id = prior?.company_id;
   let user_id = prior?.user_id;

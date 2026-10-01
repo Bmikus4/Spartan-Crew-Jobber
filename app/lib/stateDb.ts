@@ -93,6 +93,25 @@ export class NeonStateStore implements StateStore {
   }
 
   /**
+   * Threads held for a re-read (retry_pending), newest first, from the last 3 days.
+   *
+   * Newest first so a thread that can never be rebuilt sinks behind fresh ones instead of
+   * taking the batch every hour; 3 days because past that the enquiry has been handled by
+   * hand from its tag, and n8n's own catch-up stops at 72 hours too.
+   */
+  async heldForRetry(limit: number): Promise<ConversationState[]> {
+    const sql = db();
+    if (!sql) return [];
+    await ensure(sql);
+    const rows = (await sql`
+      SELECT state FROM conversation_state
+      WHERE state->>'retry_pending' IS NOT NULL AND updated_at > now() - interval '3 days'
+      ORDER BY updated_at DESC
+      LIMIT ${limit}`) as { state: ConversationState }[];
+    return rows.map((r) => r.state);
+  }
+
+  /**
    * Record that these threads have been swept.
    *
    * Stamped AFTER the batch and for every thread the sweep looked at, including the ones

@@ -9,9 +9,12 @@ export const maxDuration = 60;
 //   POST /api/reconcile?dry=1      sweep and report, writing nothing
 //   GET  /api/reconcile            the same as dry, for a browser
 //
-// SPENDS NO MODEL CALLS. Everything it needs is on the state row, so this is safe to run
-// on a cadence without a budget conversation. It does spend two OnSinch reads per thread,
-// which is why `limit` exists and defaults to something a 60-second function can finish.
+// THE SWEEP SPENDS NO MODEL CALLS. Everything it needs is on the state row, so this is safe
+// to run on a cadence without a budget conversation. It does spend two OnSinch reads per
+// thread, which is why `limit` exists and defaults to something a 60-second function can
+// finish. The one exception is engine/retryHeld.ts: an email held for a venue-list outage
+// is run again here, at most MAX_RETRIES_PER_RUN a run (one model call each), and only once
+// a single read shows the venue list is back. Nothing else redelivers it.
 //
 // IT SWEEPS A ROTATION, NOT THE TABLE. Measured 2026-09-17: ~0.6s per bound thread, 251
 // bound threads, so a full pass is ~117s dry and longer live, against a 60s function
@@ -33,6 +36,15 @@ import { buildDeps } from "../../lib/deps";
 import { NeonStateStore } from "../../lib/stateDb";
 import { sweepAll, type SweepOutcome } from "../../lib/engine/sweep";
 import { authorizeMachineCall } from "../../lib/apiAuth";
+import { retryHeld, MAX_RETRIES_PER_RUN, type RetryOutcome } from "../../lib/engine/retryHeld";
+import { rebuildThread } from "../../lib/threadMessagesDb";
+import { coerceThread } from "../../lib/engine/intake";
+import { handleThread } from "../../lib/engine/pipeline";
+import { upsertTicketFromState } from "../../lib/ticketsDb";
+import { reportError } from "../../lib/errorReport";
+
+// A re-run is one model call plus an OnSinch create; none starts after this many ms.
+const RETRY_START_BUDGET_MS = 35_000;
 
 // 30, not the 40 that was measured at 23.7s dry. A dry run replaces each write with an
 // immediate throw, so the live run of that same batch does 21 OnSinch patches the
@@ -40,6 +52,7 @@ import { authorizeMachineCall } from "../../lib/apiAuth";
 const DEFAULT_LIMIT = 30;
 
 async function run(request: Request, dry: boolean): Promise<Response> {
+  const started = Date.now();
   if (!authorizeMachineCall(request).ok) {
     return Response.json({ ok: false, error: "unauthorized" }, { status: 401 });
   }
@@ -84,6 +97,26 @@ async function run(request: Request, dry: boolean): Promise<Response> {
   // push every thread it looked at to the back of the queue without reconciling any of
   // them -- a read-only call silently costing the next real sweep its turn.
   if (!dry) await store.markSwept(states.map((s) => s.thread_id));
+
+  // Real runs only: a re-run books an order, which a dry run must never do.
+  let retried: RetryOutcome[] = [];
+  if (!dry) {
+    retried = await retryHeld(await store.heldForRetry(MAX_RETRIES_PER_RUN), {
+      venueListReadable: async () => { try { await deps.onsinch.allPlaces(); return true; } catch { return false; } },
+      run: async (threadId) => {
+        const thread = await rebuildThread(threadId);
+        const coerced = thread ? coerceThread(thread) : null;
+        if (!coerced) return null;
+        const state = await handleThread(coerced, deps);
+        await upsertTicketFromState(state);
+        return state;
+      },
+      hasTime: () => Date.now() - started < RETRY_START_BUDGET_MS,
+    });
+    for (const o of retried) if (o.result.startsWith("failed")) {
+      void reportError({ route: "engine-threw", where: "api/reconcile (held retry)", what: o.result, detail: `thread ${o.thread_id}` });
+    }
+  }
   const stats = await store.sweepStats();
 
   const tally: Record<string, number> = {};
@@ -100,6 +133,7 @@ async function run(request: Request, dry: boolean): Promise<Response> {
     // Only the rows that did something or could not be done. A run where 38 of 40 threads
     // hold exactly what they should is the healthy case, and printing all 38 buries the two.
     outcomes: outcomes.filter((o: SweepOutcome) => o.action !== "holds" && o.action !== "skipped"),
+    retried,
   });
 }
 

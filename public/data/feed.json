@@ -1394,5 +1394,24 @@
    "app/lib/engine/fold.ts",
    "test/fold.ts"
   ]
+ },
+ {
+  "id": "S-0060",
+  "ts": "2026-10-01T02:40:00+00:00",
+  "kind": "measurement",
+  "headline": "Read with Ben's new n8n key 10-01: n8n claims each message once (Dedupe Claim, then First seen?, which also drops its 72h catch-up) and the sweep read only threads holding an order, so S-0053's re-read on redelivery never fired; a held first enquiry waited for the client to write again (0 held at the time). Now /api/reconcile re-runs up to 2 held threads an hour from thread_messages, only after one venue-list read succeeds (an outage costs no model calls), none started past 35s of the 60s ceiling; failures email as engine-threw",
+  "subject": "An email held for a venue-list outage is booked by the hourly sweep once the list is back, not left for the client's next email",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 147,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  },
+  "sources": [
+   "app/lib/engine/retryHeld.ts",
+   "app/api/reconcile/route.ts",
+   "test/sweepRetriesHeld.ts"
+  ]
  }
 ]
