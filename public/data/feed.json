@@ -1317,5 +1317,27 @@
    "scripts/resolver-gold-ben.json",
    "test/resolver.ts"
   ]
+ },
+ {
+  "id": "S-0056",
+  "ts": "2026-10-01T01:52:33+00:00",
+  "kind": "measurement",
+  "headline": "Ben 10-01: the 'send' reply setting had no send path behind it; build it, leave it off. A drafted reply is sent (Gmail drafts/send, service-account route only) only when replies are on, reply_delivery is 'send' AND SPARTAN_SEND_REPLIES=1; a failed send leaves the draft with a note. Production has neither the service account nor the switch, so nothing sends",
+  "subject": "A reply can be sent, but only when both the send setting and the server switch ask for it; it stays off",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 145,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  },
+  "sources": [
+   "app/lib/engine/pipeline.ts",
+   "app/lib/deps.ts",
+   "app/lib/mail/gmailWrite.ts",
+   "app/lib/engine/types.ts",
+   "app/lib/engine/metrics.ts",
+   "test/replySend.ts"
+  ]
  }
 ]

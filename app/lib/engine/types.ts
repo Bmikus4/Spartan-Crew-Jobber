@@ -239,6 +239,8 @@ export interface ConversationState {
   reply_body_html?: string;
   reply_subject?: string;
   reply_draft_id?: string;
+  /** Set only when a draft was actually sent (see replySendArmed in pipeline.ts). */
+  reply_sent_id?: string;
   last_reply_hash?: string;
 
   // control

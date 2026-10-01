@@ -382,6 +382,17 @@ export function executor(client: OnsinchClient): Executor {
      * The secret is the same N8N_WEBHOOK_SECRET the inbound route uses — one shared
      * secret between this app and its own workflows, in both directions.
      */
+    /**
+     * Sending exists on the service-account route only: the n8n draft workflow has no send
+     * step, and adding one through the webhook would be a second, unreviewed way into a
+     * client's inbox. Reached only through replySendArmed (pipeline.ts).
+     */
+    async sendReplyDraft(draft_id: string) {
+      if (!serviceAccountConfigured()) throw new Error("sending needs the Gmail service account, which is not configured");
+      const { gmailWriter } = await import("./mail/gmailClient");
+      const { sendDraft } = await import("./mail/gmailWrite");
+      return sendDraft(gmailWriter(), draft_id);
+    },
     async createReplyDraft(a) {
       /**
        * DRAFTED HERE NOW, not by n8n, whenever a service account exists.

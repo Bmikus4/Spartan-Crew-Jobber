@@ -15,6 +15,7 @@ export type MetricType =
   | "filtered_out"          // classified not-a-job / spam -> no action
   | "job_detected"          // classified new-job or update
   | "reply_drafted"         // a reply draft was created
+  | "reply_sent"            // a reply draft was sent (replySendArmed only)
   | "order_proposed"        // draft-only: order staged for human confirm
   | "order_confirmed"       // a human approved a staged order
   | "order_created"         // an OnSinch order was created

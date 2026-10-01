@@ -89,6 +89,8 @@ export interface OrderContext {
 /** The side-effecting edges. Injected so the pipeline stays testable. */
 export interface Executor {
   createReplyDraft(a: NonNullable<Actions["createReplyDraft"]>): Promise<string>; // -> draft id
+  /** Send a draft this engine made; -> the sent message id. Only reached through replySendArmed. */
+  sendReplyDraft?(draft_id: string): Promise<string | null>;
   /**
    * `where` IS WHAT UNBLOCKED TWO FINISHED-BUT-DEAD FEATURES, and it is why this
    * signature has a second argument.
@@ -405,6 +407,15 @@ export async function handleThread(
   if (actions.createReplyDraft) {
     next.reply_draft_id = await executor.createReplyDraft(actions.createReplyDraft);
     await emit("reply_drafted", { priority: state.priority });
+    if (replySendArmed(deps.settings) && executor.sendReplyDraft && next.reply_draft_id && next.reply_draft_id !== "draft-failed") {
+      try {
+        next.reply_sent_id = (await executor.sendReplyDraft(next.reply_draft_id)) ?? undefined;
+        await emit("reply_sent", { priority: state.priority });
+      } catch (err) {
+        // The draft stays where it was: a failed send costs a click, never the reply.
+        next.notes = [...next.notes, `the reply was drafted but not sent (${String((err as Error)?.message ?? err)}) — it is in Drafts`];
+      }
+    }
   }
 
   if (state.needs_human) await emit("needs_human", { notes: state.notes });
@@ -699,6 +710,15 @@ export async function flagSupervisedIfNeeded(next: ConversationState, deps: Pipe
  * Also not included: a thread with no job in it. `confirmation-only` and `not-a-job` are
  * answers, not failures.
  */
+/**
+ * A reply is SENT only when it is asked for twice: the reply_delivery setting and the
+ * server switch SPARTAN_SEND_REPLIES=1. Ben, 2026-10-01: "build it, leave it off". The
+ * setting is one click on a screen ops use daily, and a sent email cannot be taken back.
+ */
+export function replySendArmed(settings: Partial<Settings> | undefined): boolean {
+  return !!settings?.replies_enabled && settings.reply_delivery === "send" && process.env.SPARTAN_SEND_REPLIES === "1";
+}
+
 export function cannotBeBooked(s: ConversationState): boolean {
   // An update the engine will not make is a Gmail tag (Ben, 2026-09-29; ops rarely open
   // the dashboard). It never cancels a booking, so a client cancelling one needs a person

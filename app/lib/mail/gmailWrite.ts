@@ -166,6 +166,12 @@ export async function createDraft(
   return res?.id ? String(res.id) : null;
 }
 
+/** Send a draft as it stands; -> the sent message id. Callers gate it (replySendArmed). */
+export async function sendDraft(api: GmailApi, draftId: string): Promise<string | null> {
+  const res = await api("POST", "drafts/send", { id: draftId });
+  return res?.id ? String(res.id) : null;
+}
+
 /**
  * Take one of the four OFF a thread, adding nothing.
  *
