@@ -1339,5 +1339,23 @@
    "app/lib/engine/metrics.ts",
    "test/replySend.ts"
   ]
+ },
+ {
+  "id": "S-0057",
+  "ts": "2026-10-01T01:56:48+00:00",
+  "kind": "measurement",
+  "headline": "Ben 10-01: commit the audit harness (audit/*.mts + REPORT.md, written by the 09-29 audit session). Offline and free: a fake OnSinch tenant, fake model, 45 scenarios x 3 runs. Currently 120/135 (89%); the 5 red are settled by rulings (S8 needs a nested read the fake tenant does not serve). Its output folder audit/out/ is ignored",
+  "subject": "The 135-scenario audit harness is in the repo, so any session can measure the engine end to end",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 145,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  },
+  "sources": [
+   "audit/run.mts",
+   "audit/REPORT.md"
+  ]
  }
 ]
