@@ -1376,5 +1376,23 @@
    "app/lib/engine/tiered.ts",
    "test/reasonerForwardsHistory.ts"
   ]
+ },
+ {
+  "id": "S-0059",
+  "ts": "2026-10-01T02:13:23+00:00",
+  "kind": "measurement",
+  "headline": "Plan step 6.1 (design \u00a715), fold still inert: a client value with no quote, or no message text, moved the job's state (it is 'inferred' and must never write); profession was ops-owned though \u00a715 makes it client-owned; a migrated seed could outrank a later client value. Now each needs the client's verbatim words, profession follows the latest client or ops value, and migrated/default values only fill blanks. A1/A2 still hold",
+  "subject": "A job's fold only moves a value on the client's own quoted words, and treats profession as the client's",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 146,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  },
+  "sources": [
+   "app/lib/engine/fold.ts",
+   "test/fold.ts"
+  ]
  }
 ]

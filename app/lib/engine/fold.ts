@@ -46,8 +46,13 @@ export interface JobState {
   rejected: Array<{ source: string; op: FactOp["op"]; ref?: string; why: string }>;
 }
 
-/** Ops-owned fields: ops_live wins; the engine sets them only at create (§15). */
-const OPS_OWNED = new Set<string>(["task", "profession"]);
+/**
+ * Ops-owned fields: ops_live wins; the engine sets them only at create (§15: names, rate
+ * card, contact, chief positions). The block's `task` is its name. Profession is NOT here:
+ * §15 makes professions client-owned, the latest of client and ops.
+ */
+const OPS_OWNED = new Set<string>(["task"]);
+const CLIENT = new Set<Authority>(["client_requested", "client_confirmed"]);
 const TIME = /^([01]\d|2[0-3]):[0-5]\d$|^24:00$/;
 const DAY = /^\d{4}-\d{2}-\d{2}$/;
 const norm = (s: string) => s.toLowerCase().replace(/\s+/g, " ").trim();
@@ -63,7 +68,7 @@ function impossible(field: string, v: unknown): string | null {
 function wins(field: string, next: Authority, cur?: Value): boolean {
   if (next === "inferred" || next === "spartan_stated") return false; // records, never values
   if (!cur) return true;
-  if (next === "engine_default") return false; // a default only fills a blank
+  if (next === "engine_default" || next === "migrated") return false; // only fills a blank, never outranks
   if (OPS_OWNED.has(field) && cur.authority === "ops_live" && next !== "ops_live") return false;
   return true; // the latest in source time among client and ops values
 }
@@ -74,7 +79,11 @@ export function fold(changeSets: ChangeSet[]): JobState {
 
   for (const cs of ordered) {
     const own = cs.own_text !== undefined ? norm(cs.own_text) : undefined;
-    const quoted = (q?: string) => own === undefined || (!!q && own.includes(norm(q)));
+    // A client value stands on the client's own words (§15: a model value without a
+    // quote is `inferred` and never writes). No own_text is no evidence, not a pass.
+    // ops_live, migrated and rule facts carry no quote and need none.
+    const client = CLIENT.has(cs.authority);
+    const quoted = (q?: string) => !client || (own !== undefined && !!q && own.includes(norm(q)));
     const reject = (op: FactOp, why: string) => state.rejected.push({ source: cs.source, op: op.op, ref: "ref" in op ? op.ref : undefined, why });
     const put = (slot: Partial<Record<string, Value>>, field: string, value: string | number) => {
       const cur = slot[field];
@@ -94,6 +103,7 @@ export function fold(changeSets: ChangeSet[]): JobState {
         const bad = Object.entries(op.block).map(([f, v]) => impossible(f, v)).find(Boolean);
         if (bad) { reject(op, bad); continue; }
         if (cs.authority === "inferred" || cs.authority === "spartan_stated") { reject(op, `${cs.authority} cannot add a block`); continue; }
+        if (!quoted(op.quote)) { reject(op, "a new block needs the client's own words"); continue; }
         const b = { fields: {} as Partial<Record<BlockField, Value>> };
         for (const [f, v] of Object.entries(op.block)) if (v !== undefined) b.fields[f as BlockField] = { value: v, authority: cs.authority, source: cs.source, at: cs.at };
         state.blocks.set(op.ref, b);
@@ -116,7 +126,7 @@ export function fold(changeSets: ChangeSet[]): JobState {
       if (op.op === "set") {
         const bad = impossible(op.field, op.value);
         if (bad) { reject(op, bad); continue; }
-        if (cs.authority.startsWith("client") && op.quote !== undefined && !quoted(op.quote)) { reject(op, "quote not in the sender's own text"); continue; }
+        if (!quoted(op.quote)) { reject(op, op.quote ? "quote not in the sender's own text" : "a client value needs the client's own words"); continue; }
       }
       const slot = (target ? target.fields : state.order) as Partial<Record<string, Value>>;
       if (op.op === "clear") { delete slot[op.field]; continue; }
