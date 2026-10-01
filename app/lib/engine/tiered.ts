@@ -110,16 +110,17 @@ export function tieredReasoner(
       : undefined,
 
     classifyAndExtractIncremental: cheap.classifyAndExtractIncremental
-      ? async (latest, priorFacts, priorCls, priorOrderExists) => {
+      ? async (latest, priorFacts, priorCls, priorOrderExists, history) => {
+          // History forwarded on every branch: see spend.ts, which dropped it the same way.
           state.cheapCalls++;
-          const first = await cheap.classifyAndExtractIncremental!(latest, priorFacts, priorCls, priorOrderExists);
+          const first = await cheap.classifyAndExtractIncremental!(latest, priorFacts, priorCls, priorOrderExists, history);
           const reason = escalationReason(latest, first);
           if (!reason) return first;
           escalate(reason);
           return strong.classifyAndExtractIncremental
-            ? strong.classifyAndExtractIncremental(latest, priorFacts, priorCls, priorOrderExists)
+            ? strong.classifyAndExtractIncremental(latest, priorFacts, priorCls, priorOrderExists, history)
             : strong.classifyAndExtract
-              ? strong.classifyAndExtract(latest, [], priorOrderExists)
+              ? strong.classifyAndExtract(latest, history ?? [], priorOrderExists)
               : first;
         }
       : undefined,

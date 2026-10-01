@@ -1357,5 +1357,24 @@
    "audit/run.mts",
    "audit/REPORT.md"
   ]
+ },
+ {
+  "id": "S-0058",
+  "ts": "2026-10-01T02:09:56+00:00",
+  "kind": "measurement",
+  "headline": "Found 10-01 while planning step 6: since 2026-08-10 the incremental classify-and-extract call takes the thread's history ('the classifier reads the whole labelled conversation'), but the spend guard (production's wrapper) and the tier wrapper kept four parameters, so on Vercel every email was judged on its own while each thread's note said 'read the whole conversation'. Both now forward it; the estimate charges for it (about 4 earlier messages per call, roughly +$0.006 an email at the Opus price)",
+  "subject": "The model is shown the conversation again in production; the cost guard and tier wrapper were dropping the history",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 146,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  },
+  "sources": [
+   "app/lib/engine/spend.ts",
+   "app/lib/engine/tiered.ts",
+   "test/reasonerForwardsHistory.ts"
+  ]
  }
 ]

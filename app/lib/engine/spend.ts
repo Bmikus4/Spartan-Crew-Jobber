@@ -110,12 +110,16 @@ export function guardReasoner(
     classifyAndExtract: inner.classifyAndExtract
       ? (latest, history, prior) => { charge(size(latest, history)); return inner.classifyAndExtract!(latest, history, prior); }
       : undefined,
-    // The incremental call is charged on the new message plus the serialised facts — the
-    // whole point is that it does NOT carry the history, and the estimate has to show that.
+    /**
+     * `history` IS FORWARDED, and it was not. The incremental call took the history from
+     * 2026-08-10 ("the classifier reads the whole labelled conversation"), but this
+     * wrapper kept four parameters, so on Vercel every email was classified on its own
+     * while each thread's note said "read the whole conversation" (found 2026-10-01).
+     */
     classifyAndExtractIncremental: inner.classifyAndExtractIncremental
-      ? (latest, priorFacts, priorCls, priorOrder) => {
-          charge(size(latest) + JSON.stringify(priorFacts ?? {}).length);
-          return inner.classifyAndExtractIncremental!(latest, priorFacts, priorCls, priorOrder);
+      ? (latest, priorFacts, priorCls, priorOrder, history) => {
+          charge(size(latest, history ?? []) + JSON.stringify(priorFacts ?? {}).length);
+          return inner.classifyAndExtractIncremental!(latest, priorFacts, priorCls, priorOrder, history);
         }
       : undefined,
     classify: (latest, history, prior) => { charge(size(latest, history)); return inner.classify(latest, history, prior); },
