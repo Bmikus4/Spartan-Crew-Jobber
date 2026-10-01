@@ -354,7 +354,7 @@ export function bareMonthDays(text: string, reference: Date): Set<string> {
 
 // ---------------------------------------------------------------------------
 
-const TEARDOWN = /\b(de-?rig|get[- ]?out|load[- ]?out|break[- ]?down|take[- ]?down|pack[- ]?down|strike|de-?install)\b/i;
+const TEARDOWN = /\b(de-?rig|get[- ]?out|load[- ]?out|break[- ]?down|take[- ]?down|tear[- ]?down|pack[- ]?(?:down|up)|strip[- ]?out|strike|de-?install)\b/i;
 const BUILD = /\b(rig|build|get[- ]?in|load[- ]?in|set[- ]?up|install)\b/i;
 
 function addDay(iso: string): string {

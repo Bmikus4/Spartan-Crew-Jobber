@@ -1277,5 +1277,25 @@
    "app/lib/engine/sweep.ts",
    "test/heldThreadIsRetried.ts"
   ]
+ },
+ {
+  "id": "S-0054",
+  "ts": "2026-10-01T01:42:57+00:00",
+  "kind": "measurement",
+  "headline": "Verification of the 09-30 release notes (10-01): when Spartan's vehicle ask survived only quoted in the supplier's reply the thread was booked as a crew job, and a real client thread ('Could you quote your PO number when you confirm? Our van will be on site from 07:30.') was ignored outright. The rule now reads Spartan's words at the first quote level of others' replies and skips the PO-number idiom; over 835 stored threads it still marks exactly the three supplier threads. Also 'Tear down', 'Pack up' and 'Strip out' after a rig now book on the next day like a derig",
+  "subject": "A supplier quoting back Spartan's van request is still a supplier, and 'quote your PO number' no longer hides a client job",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 144,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  },
+  "sources": [
+   "app/lib/engine/triage.ts",
+   "app/lib/engine/parseWork.ts",
+   "test/supplierThread.ts",
+   "test/dateYear.ts"
+  ]
  }
 ]

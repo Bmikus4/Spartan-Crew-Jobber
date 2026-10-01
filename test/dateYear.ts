@@ -173,6 +173,15 @@ console.log("\n[10] a derig in the small hours after the rig is the next day's")
     { date: "2026-10-12", start_time: "02:00", end_time: "06:00", size: 4, task: "Load in" },
   ], AUG);
   ok(two.requests[1].date === "2026-10-12", "an early load-in is not a teardown");
+
+  // Verified 2026-10-01: these teardown words were not recognised and stayed on the 8th.
+  for (const task of ["Tear down", "Pack up", "Strip out"]) {
+    const r = reconcileRequests("8 Oct", [
+      { date: "2026-10-08", start_time: "11:00", end_time: "15:00", size: 4, task: "Rig" },
+      { date: "2026-10-08", start_time: "00:00", end_time: "02:00", size: 4, task },
+    ], AUG);
+    ok(r.requests[1].date === "2026-10-09", `"${task}" after the rig books on the 9th`, String(r.requests[1].date));
+  }
 }
 
 console.log(fails ? `\n${fails} FAILED\n` : "\nALL PASS\n");

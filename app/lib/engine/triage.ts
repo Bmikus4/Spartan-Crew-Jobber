@@ -64,14 +64,55 @@ export function callsItOff(body: string): string | null {
 
 export function supplierAsk(messages: Array<{ from?: string; body?: string; is_from_spartan?: boolean }>): string | null {
   for (const m of messages) {
-    if (!(m.is_from_spartan || isFromSpartan(String(m.from ?? "")))) continue;
+    const spartan = m.is_from_spartan || isFromSpartan(String(m.from ?? ""));
     // Own words only: a forwarded client email inside a colleague's message is the client's.
-    const own = cleanEmailBody(String(m.body ?? "")).split(/-{5,}\s*Forwarded message/i)[0].replace(VAN_TAGLINE, " ");
-    const ask = own.match(SUPPLIER_ASK);
-    const vehicle = ask && own.match(VEHICLE);
-    if (ask && vehicle) return `${ask[0]} … ${vehicle[0]}`;
+    const texts = spartan
+      ? [cleanEmailBody(String(m.body ?? "")).split(/-{5,}\s*Forwarded message/i)[0]]
+      : quotedSpartan(String(m.body ?? ""));
+    for (const own of texts) {
+      const hit = askAboutAVehicle(own.replace(VAN_TAGLINE, " "));
+      if (hit) return hit;
+    }
   }
   return null;
+}
+
+/**
+ * "Could you quote your PO number" asks the client for a reference, not a supplier for a
+ * price: a real client thread reading "Could you quote your PO number when you confirm?
+ * Our van will be on site from 07:30." was ignored outright (verified 2026-10-01). Each
+ * ask is tested on its own, so one idiom in a message does not decide it.
+ */
+const NOT_A_PRICE = /^\s*(?:your|the|our|a|that)?\s*(?:po\b|p\.o\.?|purchase\s+order|reference|ref\b|order\s+(?:number|no)|booking\s+(?:number|ref)|invoice\s+(?:number|no)|job\s+(?:number|no))/i;
+function askAboutAVehicle(text: string): string | null {
+  for (const a of text.matchAll(new RegExp(SUPPLIER_ASK.source, "gi"))) {
+    if (NOT_A_PRICE.test(text.slice((a.index ?? 0) + a[0].length))) continue;
+    const vehicle = text.match(VEHICLE);
+    if (vehicle) return `${a[0]} … ${vehicle[0]}`;
+  }
+  return null;
+}
+
+/**
+ * Spartan's words quoted at the FIRST level of someone else's reply. A supplier's answer
+ * can be the only copy of Spartan's ask in the mailbox — the original sent before the poll
+ * began — and that thread was booked as a crew job (verified 2026-10-01). Only the first
+ * level: a deeper quote under Spartan's is the client's own earlier email. Over 835 stored
+ * threads this still marks exactly the three supplier threads.
+ */
+function quotedSpartan(body: string): string[] {
+  const out: string[] = [];
+  const header = /(?:^|\n)[^\n]*?(?:On\s[^\n]{0,200}?@spartancrew\.co\.uk[^\n]{0,60}?wrote:|From:\s[^\n]{0,160}?@spartancrew\.co\.uk[^\n]*)/gi;
+  for (const h of body.matchAll(header)) {
+    const lines: string[] = [];
+    for (const line of body.slice((h.index ?? 0) + h[0].length).split("\n")) {
+      if (/^\s*>\s*>/.test(line)) continue;
+      if (/^\s*(?:On\s.{0,200}wrote:|From:\s)/i.test(line.replace(/^\s*>\s?/, ""))) break;
+      lines.push(line.replace(/^\s*>\s?/, ""));
+    }
+    out.push(cleanEmailBody(lines.join("\n")));
+  }
+  return out;
 }
 
 export type TriageVerdict = "admit" | "skip";

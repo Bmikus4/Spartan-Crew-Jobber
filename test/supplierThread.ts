@@ -109,6 +109,24 @@ async function main() {
     ok(r.calls() > 0, "the model reads it", String(r.calls()));
   }
 
+  console.log("\n[5] Spartan's ask survives only inside the supplier's reply");
+  {
+    // Verified 2026-10-01: the original was sent before the poll began, so the quote in
+    // the supplier's answer is the only copy of the ask, and the thread was booked.
+    const quoted = client("q1", "2026-09-29T15:00:00Z", "seanm@kbevent.com",
+      "Hey Tracy, quote attached for the Luton.\n\nOn Mon, 29 Sep 2026 at 14:28, Bookings Spartan Crew <bookings@spartancrew.co.uk> wrote:\n> Could you please quote for a Luton van on 2 Oct 08:00?\n> There will be 4 crew members on site to assist.");
+    ok(!!supplierAsk([quoted]), "the quoted ask is Spartan's, so the thread is a supplier's");
+    const deeper = client("q2", "2026-09-29T15:00:00Z", "ops@client.co.uk",
+      "Great, thanks.\n\nOn Mon, 29 Sep 2026, Bookings Spartan Crew <bookings@spartancrew.co.uk> wrote:\n> Thanks, we'll get that booked in.\n>> On Sun, Client wrote:\n>> Could you please quote for a Luton van and 4 crew?");
+    ok(!supplierAsk([deeper]), "a client's own ask quoted beneath Spartan's reply is not Spartan's");
+  }
+
+  console.log("\n[6] \"quote your PO number\" is not asking for a price");
+  {
+    const po = spartan("p1", "2026-09-29T09:30:00Z", "Thanks Pier. Could you quote your PO number when you confirm? Our van will be on site from 07:30.");
+    ok(!supplierAsk([po]), "a real client thread with our van on site stays a job");
+  }
+
   console.log(`\n${fails === 0 ? "ALL PASS" : `${fails} FAILED`}\n`);
   process.exitCode = fails === 0 ? 0 : 1;
 }
