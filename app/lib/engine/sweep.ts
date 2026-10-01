@@ -345,6 +345,8 @@ export async function reconcileThread(
     state.review_only = false;
     state.notes = [...state.notes, `order #${order_id} has been deleted in OnSinch and nothing has replaced it`];
     await store.put(state);
+    // Ops work from the labels: a note alone left a deleted booking looking booked in Gmail.
+    await flagManualIfNeeded(state, deps);
     return { thread_id, order_id, action: "lost" };
   }
 

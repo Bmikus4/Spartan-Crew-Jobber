@@ -388,7 +388,7 @@ export async function handleThread(
   let latestId: string;
   try { latestId = normalizeThread(thread).latest.message_id; }
   catch { latestId = selectLatest(thread.messages)?.latest.message_id ?? ""; }
-  if (prior && prior.last_message_id === latestId) {
+  if (prior && prior.last_message_id === latestId && !prior.retry_pending) {
     return prior;
   }
 

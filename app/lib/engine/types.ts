@@ -201,6 +201,13 @@ export interface ConversationState {
    * holds and a human is told (pipeline.ts).
    */
   cancellation?: boolean;
+  /**
+   * Set when the thread was held for a reason that is not its own: the venue list could
+   * not be read. The idempotency fast path skips a thread already read at its latest
+   * message, so without this a held email was only re-read when the client wrote again
+   * (verified 2026-10-01). Cleared by the next compile that succeeds.
+   */
+  retry_pending?: string;
   facts: ConversationFacts;
 
   // resolved entities — cached once known so we never re-resolve/guess

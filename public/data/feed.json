@@ -1256,5 +1256,26 @@
    "app/lib/engine/triage.ts",
    "test/calledOffBooksNothing.ts"
   ]
+ },
+ {
+  "id": "S-0053",
+  "ts": "2026-10-01T01:38:04+00:00",
+  "kind": "measurement",
+  "headline": "Verification of the 09-30 release notes (10-01): 'held and tagged until the list can be read' was not true; a held email delivered again after the venue list recovered was skipped as already read, so only the client's next email could book it. A thread held for that reason is now marked retry_pending and re-read on its next delivery, then read once as before. Also an order the nightly sweep found deleted got a note but no Gmail tag; it now posts Order Needs Built",
+  "subject": "An email held because the venue list could not be read is booked when it is delivered again, and a deleted booking is tagged",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 144,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  },
+  "sources": [
+   "app/lib/engine/compiler.ts",
+   "app/lib/engine/types.ts",
+   "app/lib/engine/pipeline.ts",
+   "app/lib/engine/sweep.ts",
+   "test/heldThreadIsRetried.ts"
+  ]
  }
 ]

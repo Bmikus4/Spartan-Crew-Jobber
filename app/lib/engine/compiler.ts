@@ -742,7 +742,7 @@ export async function resolvePlace(
   try {
     places = await onsinch.allPlaces();
   } catch (err) {
-    return { unreadable: true, note: `the venue list could not be read (${String((err as Error)?.message ?? err)}) — held and tagged, nothing booked; the client's next email re-runs it` };
+    return { unreadable: true, note: `the venue list could not be read (${String((err as Error)?.message ?? err)}) — held and tagged, nothing booked; read again on its next delivery` };
   }
 
   if (!missingVenue && process.env.SPARTAN_VENUE_V3 === "1") {
@@ -1205,6 +1205,8 @@ export async function compile(
    * withholds it.
    */
   let blocked = false;
+  /** Why this thread must be read again on its next delivery, even with no new email. */
+  let retryPending: string | undefined;
   let company_id = prior?.company_id;
   let user_id = prior?.user_id;
   let place_id = prior?.place_id;
@@ -1258,7 +1260,7 @@ export async function compile(
     place_id = pl.id ?? place_id;
     provisionPlace = pl.provision;
     user_id = us.id ?? user_id;
-    if (pl.unreadable) { blocked = true; needs_human = true; }
+    if (pl.unreadable) { blocked = true; needs_human = true; retryPending = "venue-list"; }
     if (pl.note) notes.push(pl.note);
     if (us.note) notes.push(us.note);
 
@@ -1893,6 +1895,7 @@ export async function compile(
     last_processed_epoch: now(),
     classification,
     cancellation,
+    retry_pending: retryPending,
     facts,
     company_id,
     user_id,
