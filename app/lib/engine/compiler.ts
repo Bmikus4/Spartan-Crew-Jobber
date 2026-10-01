@@ -20,6 +20,7 @@ import { normalizeThread } from "./normalize";
 import { mergeFacts, describeMerge } from "./mergeFacts";
 import { reconcileRequests } from "./parseWork";
 import { triage, decisionBinds, triageModeFromEnv, supplierAsk, callsItOff, type TriageMode } from "./triage";
+import { markAttachments } from "./attachHere";
 import { composeOrder } from "./compose";
 import { validateOrder } from "./format";
 import { matchCompany, matchCompanyByDomain, matchContact, matchPlace, matchExistingOrder, rNumbersIn, normName, normAddr, type OrderRec } from "./resolve";
@@ -1783,7 +1784,7 @@ export async function compile(
         ? "updating-existing"
         : "staged"
       : "blocked";
-  const reply = repliesEnabled
+  const composed = repliesEnabled
     ? await reasoner.composeReply(latest, history, classification, {
         order_state: orderState,
         // Only worth asking about when it is the reason nothing exists. A staged
@@ -1792,6 +1793,8 @@ export async function compile(
         ask_for: orderState === "blocked" ? [...askFor] : [],
       })
     : null;
+  // Marked before hashing, so a repeat of the same draft is still recognised as one.
+  const reply = composed ? { ...composed, html: markAttachments(composed.html) } : null;
   const replyHash = reply ? hash(reply.html) : undefined;
 
   // 4. decide actions (reads already happened; writes are returned only)

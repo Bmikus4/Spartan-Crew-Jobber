@@ -20,6 +20,7 @@ import { CLASSIFY_SYSTEM, EXTRACT_SYSTEM, REPLY_SYSTEM } from "./prompts";
 import { CHASE_SYSTEM } from "../followup/compose";
 import { renderConversation } from "./renderThread";
 import { ADJUDICATION_SCHEMA } from "./venueAdjudicate";
+import { markAttachments } from "./attachHere";
 
 export interface ClassifyResult {
   classification: Classification;
@@ -451,11 +452,13 @@ ${renderConversation(latest, history).text}`,
     async composeChase(latest, history, waitingOn) {
       // Same schema as a reply: a chase is an email with a subject, a body and a
       // priority, and giving it its own shape would only mean a second renderer.
-      return call(
+      const chase = (await call(
         CHASE_SYSTEM,
         `WHAT SPARTAN IS WAITING ON: ${waitingOn}\n\n` + threadText(latest, history),
         REPLY_SCHEMA
-      );
+      )) as ReplyResult;
+      // The reply's marker is added in compile(); a chase has no such caller yet, so here.
+      return { ...chase, html: markAttachments(chase.html) };
     },
   };
 }

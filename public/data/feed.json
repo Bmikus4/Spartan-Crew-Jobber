@@ -1172,5 +1172,27 @@
    "app/lib/deps.ts",
    "test/gmailWrite.ts"
   ]
+ },
+ {
+  "id": "S-0049",
+  "ts": "2026-10-01T00:40:25+00:00",
+  "kind": "measurement",
+  "headline": "Ben 09-30: drafts that refer to an attachment, or say a colleague will follow up with it, are written for the team to add the file - every one carries [ATTACH HERE] in capitals, quotes and everything else. The reply and chase prompts now write the document as included with the marker after it (the old rule was 'never say attached, say a colleague will send it'), and markAttachments adds the marker to any draft where Spartan sends a document without one, ignoring the client's own attachments. Also: the reply prompt's emergency number is 999, not 911. Client replies are still OFF in production (replies_enabled=false)",
+  "subject": "A draft that sends a document says so and carries [ATTACH HERE] for whoever sends it",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 141,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  },
+  "sources": [
+   "app/lib/engine/attachHere.ts",
+   "app/lib/engine/prompts.ts",
+   "app/lib/followup/compose.ts",
+   "app/lib/engine/compiler.ts",
+   "app/lib/engine/reason.ts",
+   "test/attachHere.ts"
+  ]
  }
 ]
