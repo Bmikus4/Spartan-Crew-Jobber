@@ -14,12 +14,12 @@
 // Offline.  npx tsx test/calledOffBooksNothing.ts
 // ============================================================================
 import { createHash } from "node:crypto";
-import { handleThread, type Executor, type PipelineDeps } from "../app/lib/engine/pipeline";
+import { handleThread, cannotBeBooked, type Executor, type PipelineDeps } from "../app/lib/engine/pipeline";
 import { callsItOff } from "../app/lib/engine/triage";
 import { OnsinchClient } from "../app/lib/engine/onsinch";
 import { InMemoryStore } from "../app/lib/engine/store";
 import { InMemoryMetrics } from "../app/lib/engine/metrics";
-import { DEFAULT_SETTINGS, type ConversationFacts } from "../app/lib/engine/types";
+import { DEFAULT_SETTINGS, type ConversationFacts, type ConversationState } from "../app/lib/engine/types";
 import type { Reasoner, ClassifyResult, ReplyResult } from "../app/lib/engine/reason";
 import { buildOrderBody } from "../app/lib/engine/format";
 import { mockTransport, msg } from "./mocks";
@@ -94,6 +94,34 @@ async function main() {
     const r = rig();
     await handleThread({ thread_id: "t-ok", messages: [ask] }, r.deps);
     ok(r.creates() === 1, "one order", String(r.creates()));
+  }
+
+  console.log("\n[5] a BOOKED job called off, the model reading it as nothing special");
+  {
+    // Verified 2026-10-01: this stayed `ordered`, untagged, and a changed composition was
+    // patched straight in. Booked first, then called off; the fake model flags nothing.
+    const r = rig();
+    let patches = 0;
+    r.deps.executor.patchOrder = async () => { patches++; return []; };
+    await handleThread({ thread_id: "t-bk", messages: [ask] }, r.deps);
+    const before = r.tags.length;
+    const s = await handleThread({ thread_id: "t-bk", messages: [ask, reply("We have decided to go with another supplier, so we no longer need the crew.")] }, r.deps);
+    ok(s.cancellation === true && patches === 0, "read as a cancellation, nothing written", `cancellation=${s.cancellation} patches=${patches}`);
+    ok(r.tags.slice(before).some((t) => t.state === "manual" && t.label === "Order Needs Updated"), "and tagged Order Needs Updated", JSON.stringify(r.tags.slice(before)));
+  }
+
+  console.log("\n[6] a partial change is not a call-off");
+  ok(!callsItOff("No longer need the crew to stay till 10pm and go to our yard"), "shorter hours");
+  ok(!callsItOff("Will confirm as soon as possible, the previous 2 dates have gone away now"), "other dates gone, this one live");
+  ok(!!callsItOff("Sorry to say, this job has gone away"), "but the job itself gone away is");
+
+  console.log("\n[7] a booked thread with only a review note is not a failure; an unbooked one still is");
+  {
+    const base = { classification: "update", needs_human: true, review_only: true, status: "needs-info" } as unknown as ConversationState;
+    ok(!cannotBeBooked({ ...base, onsinch_order_id: 9001 }), "booked: no Needs label over Order Built");
+    ok(cannotBeBooked(base), "unbooked: it held, so it is tagged");
+    ok(cannotBeBooked({ ...base, classification: "not-a-job", cancellation: true, onsinch_order_id: 9001 } as never),
+      "a cancellation of a booking is tagged whatever it was classified as");
   }
 
   console.log(`\n${fails === 0 ? "ALL PASS" : `${fails} FAILED`}\n`);

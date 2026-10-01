@@ -700,15 +700,22 @@ export async function flagSupervisedIfNeeded(next: ConversationState, deps: Pipe
  * answers, not failures.
  */
 export function cannotBeBooked(s: ConversationState): boolean {
+  // An update the engine will not make is a Gmail tag (Ben, 2026-09-29; ops rarely open
+  // the dashboard). It never cancels a booking, so a client cancelling one needs a person
+  // — whatever the email was classified as: "we no longer need the crew" reads to the
+  // model as not-a-job, and that left a booked thread untagged (verified 2026-10-01).
+  if (s.cancellation === true && Number(s.onsinch_order_id) > 0) return true;
   const isJob = s.classification === "new-job" || s.classification === "update";
   if (!isJob) return false;
-  // An update the engine will not make is a Gmail tag (Ben, 2026-09-29; ops rarely open
-  // the dashboard). It never cancels a booking, so a client cancelling one needs a person;
-  // and a write it HELD (a cancellation, a shrink to nothing, a suspected twin) did not
+  // A write it HELD (a cancellation, a shrink to nothing, a suspected twin) did not
   // happen. Both were untagged: the holds returned before the tag step as `proposed`.
-  if (s.cancellation === true && Number(s.onsinch_order_id) > 0) return true;
   if (s.status === "proposed" && s.pending_order) return true;
-  if (s.status === "error" || s.status === "needs-info") return true;
+  if (s.status === "error") return true;
+  // `needs-info` on a BOOKED thread whose only flag is a review note is not a failure
+  // (every engine order names contact 2257, which raises the review flag): an
+  // acknowledgement on a booked thread drew "Order Needs Updated" and, the four being
+  // exclusive, lost its "Order Built" (verified 2026-10-01). Unbooked, it still held.
+  if (s.status === "needs-info" && !(s.review_only && Number(s.onsinch_order_id) > 0)) return true;
   /**
    * `review_only` is the third shape, and it is NOT one of the three above: an order
    * that wrote cleanly and carries a stand-in somebody should look at — a client or a

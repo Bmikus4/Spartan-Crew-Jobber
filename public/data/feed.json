@@ -1236,5 +1236,25 @@
    "app/lib/engine/reconcile.ts",
    "test/unappliedChangeIsTagged.ts"
   ]
+ },
+ {
+  "id": "S-0052",
+  "ts": "2026-10-01T01:32:59+00:00",
+  "kind": "measurement",
+  "headline": "Verification of the 09-30 release notes (10-01): 'We have decided to go with another supplier, so we no longer need the crew' on a booked thread stayed ordered, untagged, and a changed composition was patched in; the client's own call-off words now flag the cancellation, so the pipeline holds it with an Order Needs Updated tag, whatever it was classified as (10 of 834 threads match, all call-offs; 'no longer need the crew to stay till 10pm' and 'the previous 2 dates have gone away' do not). Separately an acknowledgement on a booked thread read needs-info because every engine order raises the review flag, drawing Order Needs Updated and losing Order Built; a booked thread whose only flag is a review note now reads ordered and is not tagged",
+  "subject": "A client calling off a booked job is held and tagged even when the model misses it, and a review note no longer un-books a thread",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 143,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  },
+  "sources": [
+   "app/lib/engine/compiler.ts",
+   "app/lib/engine/pipeline.ts",
+   "app/lib/engine/triage.ts",
+   "test/calledOffBooksNothing.ts"
+  ]
  }
 ]

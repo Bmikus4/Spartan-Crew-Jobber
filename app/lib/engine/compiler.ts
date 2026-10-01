@@ -1860,9 +1860,19 @@ export async function compile(
   const refusedNote = describeRefused(refused);
   if (refusedNote) notes.push(refusedNote);
 
+  // A client calling off a BOOKED job the model did not read as a cancellation: "We have
+  // decided to go with another supplier, so we no longer need the crew" stayed `ordered`,
+  // untagged, and a changed composition was patched straight in (verified 2026-10-01).
+  // Flagged here, the pipeline's cancellation hold applies: nothing written, a Gmail tag.
+  const calledOff = linkedOrderId && cls.cancellation !== true ? callsItOff(latest.body) : null;
+  if (calledOff) notes.push(`the client's latest email calls the booked job off ("${calledOff}")`);
+  const cancellation = cls.cancellation === true || !!calledOff;
+
   // A thread still bound to an order is booked whatever this email said: "thanks, see
   // you then" composes nothing, and read as `drafted` a booking looked undone (audit #8).
-  const status: ConversationState["status"] = needs_human
+  // A review note alone does not un-book a booked thread: an acknowledgement on one read
+  // `needs-info` because the review flag is raised on every engine order (verified 2026-10-01).
+  const status: ConversationState["status"] = needs_human && !(review_only && linkedOrderId)
     ? "needs-info"
     : desired || linkedOrderId
     ? "ordered"
@@ -1882,7 +1892,7 @@ export async function compile(
     last_message_id: latest.message_id,
     last_processed_epoch: now(),
     classification,
-    cancellation: cls.cancellation === true,
+    cancellation,
     facts,
     company_id,
     user_id,
@@ -1911,7 +1921,7 @@ export async function compile(
      * The engine never cancels in OnSinch either (pipeline.ts) — it holds and reports —
      * so this simply stops the sweep speaking for a thread that is standing still.
      */
-    desired_order: desired ?? (cls.cancellation === true ? null : (prior?.desired_order ?? null)),
+    desired_order: desired ?? (cancellation ? null : (prior?.desired_order ?? null)),
     last_ordered_hash: prior?.last_ordered_hash,
     /**
      * Both of these are written by the PIPELINE, after this function has returned, and
