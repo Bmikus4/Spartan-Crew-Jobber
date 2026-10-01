@@ -315,7 +315,7 @@ export async function amendOrderInPlace(
      * an API create logs one childless row (reference §12). Absent for UI-raised orders
      * and for everything created before, which still fall through to the audit read.
      */
-    known?: { job_id?: number; team_ids?: number[] };
+    known?: { job_id?: number; team_ids?: number[]; place_id?: number };
   },
   hooks: AmendHooks
 ): Promise<AmendResult> {
@@ -434,6 +434,10 @@ export async function amendOrderInPlace(
     const byIndex = new Map(paired.pairs.map((p) => [p.index, p.id]));
     const patches: AmendmentPlan["patches"] = [];
     const creates: DesiredSlotTeam[] = [];
+    // Each block's live venue, which only the nested read carries. Unreadable is fine:
+    // the venue rule below then sends nothing, the safe direction.
+    const livePlaces = await readNestedShape(client, order_id).then((n) => n.teams).catch(() => null);
+    const basePlace = Number(args.known?.place_id) > 0 ? Number(args.known!.place_id) : undefined;
     for (let i = 0; i < next.length; i++) {
       const id = byIndex.get(i);
       if (id === undefined) {
@@ -446,15 +450,7 @@ export async function amendOrderInPlace(
       for (const f of TEAM_FIELDS) {
         const b = want[f];
         if (b === undefined || b === "") continue;
-        /**
-         * The venue is asserted, never compared, and never on its own.
-         *
-         * A block's live venue cannot be read at all — `slotlocation_id` is a different id
-         * space with no endpoint to resolve it — so "did the venue move?" has no answer and
-         * sending it always would report a correction on every block of every pass. It
-         * rides along with a patch that is going anyway, which keeps the order's venue right
-         * without inventing a change that was never observed.
-         */
+        // The venue is decided after this loop, by its own rule.
         if (f === "place_id") continue;
         // Where the live value IS readable, only what actually moved is sent — so the
         // shrink guard below sees a size only when the size really changed.
@@ -469,9 +465,26 @@ export async function amendOrderInPlace(
         }
         patch[f] = b;
       }
-      if (Object.keys(patch).length) {
-        const place = (want as Record<string, unknown>).place_id;
-        patches.push({ id, ...patch, ...(place ? { place_id: place } : {}) });
+      /**
+       * THE VENUE GOES ONLY WHEN THE CLIENT MOVED IT, on an order the engine did not raise.
+       *
+       * It used to ride along with every patch. On a hand-raised order the thread's venue
+       * is the engine's own reading of the client's address, and ops often chose another
+       * record for the same building — so every crew or time change also moved ops' venue.
+       * Order 16308 would have gone from ops' 1027 to the engine's guess, 706, "100
+       * Bishopsgate" for "8 Bishopsgate" (2026-09-30). Ben, 2026-10-01: send one only when
+       * the client's differs.
+       *
+       * So it is sent when the thread's venue changed in this email (`known.place_id` is
+       * the venue before it) and OnSinch does not already hold it. With no baseline — the
+       * sweep's re-assert, a dashboard confirm — nothing is sent.
+       */
+      const place = Number((want as Record<string, unknown>).place_id) || undefined;
+      const livePlace = livePlaces?.get(id)?.place_id;
+      const clientMoved = !!place && basePlace !== undefined && place !== basePlace;
+      const sendPlace = clientMoved && livePlace !== place;
+      if (Object.keys(patch).length || sendPlace) {
+        patches.push({ id, ...patch, ...(sendPlace ? { place_id: place } : {}) });
       }
     }
     return applyAmendment(client, { order_id, job_id, plan: { patches, creates }, live, previous: [], shapes }, hooks, done);

@@ -169,7 +169,7 @@ export interface Executor {
      * are present the amendment addresses the blocks directly and skips the audit read,
      * which returns nothing for an order created through the API (API reference §12).
      */
-    known?: { job_id?: number; team_ids?: number[] };
+    known?: { job_id?: number; team_ids?: number[]; place_id?: number };
     onCreated(team_id: number): Promise<void>;
   }): Promise<AmendResult>;
   /**
@@ -583,7 +583,7 @@ export async function handleThread(
      *     twice for it
      *   - a cancellation — the engine never cancels or shrinks a booking
      */
-    await executeOrder(next, intended, deps, emit);
+    await executeOrder(next, intended, deps, emit, prior?.place_id);
   }
 
   // Teach the sender ledger what this thread turned out to be. It is what lets triage
@@ -962,7 +962,8 @@ async function tryAmendInPlace(
   next: ConversationState,
   intended: NonNullable<ConversationState["pending_order"]>,
   deps: PipelineDeps,
-  emit: (type: any, meta?: Record<string, unknown>) => Promise<void>
+  emit: (type: any, meta?: Record<string, unknown>) => Promise<void>,
+  basePlace?: number
 ): Promise<boolean> {
   const { executor, store, now, hashOrder } = deps;
   const order_id = intended.order_id;
@@ -1078,7 +1079,9 @@ async function tryAmendInPlace(
       previous: previous ?? [],
       desired: intended.desired,
       alreadyCreated: resuming ? next.order_amend?.created_ids : undefined,
-      known: { job_id: next.onsinch_job_id, team_ids: next.last_ordered_team_ids },
+      // The thread's venue BEFORE this email: what tells a client moving the venue apart
+      // from the engine's own guess differing from the venue ops chose.
+      known: { job_id: next.onsinch_job_id, team_ids: next.last_ordered_team_ids, place_id: basePlace },
       async onCreated(team_id) {
         next.order_amend = {
           order_id,
@@ -1418,7 +1421,8 @@ async function executeOrder(
   next: ConversationState,
   intended: NonNullable<ConversationState["pending_order"]>,
   deps: PipelineDeps,
-  emit: (type: any, meta?: Record<string, unknown>) => Promise<void>
+  emit: (type: any, meta?: Record<string, unknown>) => Promise<void>,
+  basePlace?: number
 ): Promise<void> {
   const { executor, now, hashOrder } = deps;
   try {
@@ -1440,7 +1444,7 @@ async function executeOrder(
       next.pending_order = undefined;
       next.order_action_log = [...next.order_action_log, { ts: now(), kind: "create", order_id: created.id, ok: true }];
       await emit("order_created", { order_id: created.id, size: intended.desired.slot_teams.reduce((n, s) => n + s.size, 0) });
-    } else if (await tryAmendInPlace(next, intended, deps, emit)) {
+    } else if (await tryAmendInPlace(next, intended, deps, emit, basePlace)) {
       // Handled in place: the crew blocks that moved were PATCHed and the new ones
       // appended, and the order — its R number, its attachments, anyone signed on to it
       // — was never destroyed. Returns false when the change cannot be expressed that

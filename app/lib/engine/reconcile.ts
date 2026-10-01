@@ -62,6 +62,12 @@ export interface LiveTeam {
    * to be the same thing, after the timezone offsets and the rich-text specification.
    */
   slotlocation_id?: number;
+  /**
+   * The block's venue as a Place id, which the slotlocation id above is not. Readable
+   * after all, through the nested read's `__SlotLocation` (`Slot.SlotLocation.place_id`,
+   * verified 2026-09-30 on orders 16308, 16313, 16330). Only the nested read fills it.
+   */
+  place_id?: number;
   beginning?: string;
   end?: string;
   /** How many live positions the block holds. Only the nested read knows; more than one is not PATCHable. */
@@ -249,6 +255,7 @@ export function nestedShape(order: any): LiveShape {
         size: slots.reduce((n: number, s: any) => n + (Number(s.size) || 0), 0),
         profession_id: Number.isFinite(Number(staff?.profession_id)) ? Number(staff.profession_id) : undefined,
         slotlocation_id: Number.isFinite(Number(staff?.slotlocation_id)) ? Number(staff.slotlocation_id) : undefined,
+        place_id: Number(staff?.SlotLocation?.place_id) > 0 ? Number(staff.SlotLocation.place_id) : undefined,
         beginning: b,
         end: e,
         positions: slots.length,

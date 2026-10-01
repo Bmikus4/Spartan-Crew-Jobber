@@ -543,7 +543,7 @@ export function executor(client: OnsinchClient): Executor {
       previous: DesiredSlotTeam[];
       desired: DesiredOrder;
       alreadyCreated?: number[];
-      known?: { job_id?: number; team_ids?: number[] };
+      known?: { job_id?: number; team_ids?: number[]; place_id?: number };
       onCreated(team_id: number): Promise<void>;
     }) {
       // `known` MUST be forwarded. It is the ids the create recorded, and without them

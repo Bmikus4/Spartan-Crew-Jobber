@@ -1194,5 +1194,28 @@
    "app/lib/engine/reason.ts",
    "test/attachHere.ts"
   ]
+ },
+ {
+  "id": "S-0050",
+  "ts": "2026-10-01T01:19:27+00:00",
+  "kind": "measurement",
+  "headline": "Ben 10-01 (decision page): the venue rode along with every block patch, so on a hand-raised order any crew/time change also moved ops' venue to the engine's reading of the address; order 16308 would have gone from ops' 1027 to 706, '100 Bishopsgate' for '8 Bishopsgate'. The venue is now sent only when the client changed it in this email and OnSinch does not already hold it; the sweep and dashboard confirms never send one. The live venue is read through the nested read's SlotLocation (place_id), which the code had wrongly called unresolvable",
+  "subject": "A crew or time change on an order ops raised no longer moves ops' venue to the engine's guess",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 142,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  },
+  "sources": [
+   "app/lib/engine/amendOrder.ts",
+   "app/lib/engine/reconcile.ts",
+   "app/lib/engine/onsinch.ts",
+   "app/lib/engine/pipeline.ts",
+   "app/lib/engine/sweep.ts",
+   "app/lib/deps.ts",
+   "test/venueNotResent.ts"
+  ]
  }
 ]

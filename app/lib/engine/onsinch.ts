@@ -399,7 +399,7 @@ export class OnsinchClient {
    * Unlike /attendance it returns blocks nobody is signed on to.
    */
   async orderWithBlocks(id: number) {
-    const r = await this.t("GET", "/orders" + qs({ "id[eq]": id, with: "Job__SlotTeam__Slot" }));
+    const r = await this.t("GET", "/orders" + qs({ "id[eq]": id, with: "Job__SlotTeam__Slot__SlotLocation" }));
     if (r.status >= 400) throw new Error(`orderWithBlocks ${r.status}: ${JSON.stringify(r.data).slice(0, 200)}`);
     const rows = (r.data?.data ?? []) as any[];
     return rows.find((o) => Number(o?.id) === Number(id)) ?? null;

@@ -363,7 +363,8 @@ export async function reconcileThread(
         order_id,
         previous: state.last_ordered_teams,
         desired: target,
-        known: { job_id: state.onsinch_job_id, team_ids: state.last_ordered_team_ids },
+        // The current venue as the baseline: a re-assert restores what was asked, it never moves a venue.
+        known: { job_id: state.onsinch_job_id, team_ids: state.last_ordered_team_ids, place_id: state.place_id ? Number(state.place_id) : undefined },
         async onCreated(team_id) {
           // `POST /slotTeams` is the one non-idempotent call on this path, so an appended
           // block's id is on disk before the next one is sent.
