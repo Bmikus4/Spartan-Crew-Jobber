@@ -19,7 +19,7 @@
 //
 // Run: npx tsx test/sweepReconciles.ts
 // ============================================================================
-import { reconcileThread, sweepAll } from "../app/lib/engine/sweep";
+import { reconcileThread, sweepAll, __resetApiUser } from "../app/lib/engine/sweep";
 import { OnsinchClient } from "../app/lib/engine/onsinch";
 import type { ConversationState, DesiredOrder } from "../app/lib/engine/types";
 import type { PipelineDeps } from "../app/lib/engine/pipeline";
@@ -58,7 +58,9 @@ const stateBound = (over: Partial<ConversationState> = {}): ConversationState =>
     status: "ordered",
     needs_human: false,
     notes: [],
-    order_action_log: [],
+    // The engine raised this order. Without a write on record the sweep treats the order
+    // as a person's and never re-asserts onto it (test/sweepRespectsStaffEdits.ts).
+    order_action_log: [{ ts: 0, kind: "create", order_id: ORDER, ok: true }],
     company_id: 42,
     place_id: 16689,
     onsinch_order_id: ORDER,
@@ -81,12 +83,14 @@ function fakeDeps(opts: {
   writes?: string[];
 }) {
   const writes = opts.writes ?? [];
+  __resetApiUser();
   const onsinch = new OnsinchClient(async (method, path) => {
     const page = (data: unknown[]) => ({
       status: 200 as const,
       data: { data, pagination: { count: data.length, pageCount: 1, nextPage: false } },
     });
     if (method !== "GET") return { status: 204, data: null };
+    if (path.startsWith("/users/profile")) return { status: 200 as const, data: { data: { id: 2257 } } };
     if (path.startsWith("/orders")) {
       const all = opts.orders ?? [];
       const m = /[?&]id(?:\[eq\])?=(\d+)/.exec(path);

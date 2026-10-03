@@ -1413,5 +1413,24 @@
    "app/api/reconcile/route.ts",
    "test/sweepRetriesHeld.ts"
   ]
+ },
+ {
+  "id": "S-0061",
+  "ts": "2026-10-03T22:01:54+00:00",
+  "kind": "decision",
+  "headline": "Sweep re-assert treated every OnSinch difference as its own failed write: all 42 readable re-asserted orders had staff edits, and R11312's PO (typed by user 573, 10-02 16:14) was replaced next day. It now writes only to an order nobody but the engine has stamped since the engine's last ok write; Slot.modified is ignored because crew sign-on moves it. 35 live bindings: 5 never engine-written (never re-asserted now), 30 retried only while untouched.",
+  "subject": "The hourly sweep no longer writes over an order a person has changed in OnSinch",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 148,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  },
+  "sources": [
+   "app/lib/engine/sweep.ts",
+   "app/lib/engine/reconcile.ts",
+   "test/sweepRespectsStaffEdits.ts"
+  ]
  }
 ]

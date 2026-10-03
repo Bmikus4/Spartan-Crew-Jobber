@@ -271,6 +271,37 @@ export function nestedShape(order: any): LiveShape {
 }
 
 /** The nested read of one order, or a shape marked unreadable. Never throws. */
+/**
+ * WHO, OTHER THAN THE ENGINE, HAS CHANGED THIS ORDER SINCE `sinceMs` — or null.
+ *
+ * Read off the raw nested order (`with=Job__SlotTeam__Slot`). Order, Job and SlotTeam
+ * each carry `modified` and `modifier`; a staff edit to a position's size or times in
+ * the OnSinch UI stamps its SlotTeam (measured 2026-10-03, #16345: Slot.size edited by
+ * user 1164, team 41816 modified the same second by 1164).
+ *
+ * NOT the Slot's own `modified`. It has no modifier and it moves when crew sign on
+ * (#16357: slot 58789 modified 5s after an attendance_create), so it cannot tell a
+ * person's decision from a booking filling up.
+ *
+ * Only the LAST writer is visible per record. That is enough for the one question asked
+ * here, because the engine's own write stamps its own id: a non-engine modifier with a
+ * timestamp after our last write is somebody who changed it after us.
+ */
+export function staffChangeSince(order: any, sinceMs: number, engine: number): string | null {
+  const seen: string[] = [];
+  const check = (what: string, rec: any) => {
+    const by = Number(rec?.modifier);
+    const at = Date.parse(String(rec?.modified));
+    if (by > 0 && by !== engine && Number.isFinite(at) && at > sinceMs) seen.push(`${what} by user ${by} at ${String(rec.modified).slice(0, 16)}`);
+  };
+  check("the order", order);
+  for (const job of order?.Job ?? []) {
+    check("the job", job);
+    for (const team of job?.SlotTeam ?? []) check(`block ${team?.id}`, team);
+  }
+  return seen.length ? seen.slice(0, 3).join("; ") : null;
+}
+
 export async function readNestedShape(client: OnsinchClient, order_id: number): Promise<LiveShape> {
   try {
     const order = await client.orderWithBlocks(order_id);

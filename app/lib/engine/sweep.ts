@@ -32,7 +32,7 @@
 // ============================================================================
 import type { ConversationState, DesiredOrder, DesiredSlotTeam } from "./types";
 import { logAction, flagSupervisedIfNeeded, flagManualIfNeeded, type PipelineDeps } from "./pipeline";
-import { readLiveShape, readNestedShape, compareShapes, driftAgainst, driftKey, describeDrift, type LiveShape } from "./reconcile";
+import { readLiveShape, readNestedShape, compareShapes, driftAgainst, driftKey, describeDrift, staffChangeSince, type LiveShape } from "./reconcile";
 
 /**
  * Design §30 step 3, IN SHADOW (Ben, 2026-09-29: steps 3-5 shadow only). The nested read
@@ -126,6 +126,33 @@ export function unappliedDifference(target: DesiredSlotTeam[], nested: LiveShape
 }
 import { matchExistingOrder, rNumbersIn, type OrderRec } from "./resolve";
 
+const ENGINE_WRITES = new Set(["create", "amend", "patch", "replace"]);
+
+/**
+ * Why this order is not the engine's to correct, or null when it is.
+ *
+ * Every doubt resolves to "not ours". Holding back costs a retry of a write that may have
+ * failed; writing costs a person's correction, silently, on a live booking.
+ */
+async function whyNotOurs(deps: PipelineDeps, state: ConversationState, order_id: number): Promise<string | null> {
+  const writes = (state.order_action_log ?? [])
+    .filter((a) => a.ok && ENGINE_WRITES.has(a.kind) && Number(a.order_id ?? state.onsinch_order_id) === order_id)
+    .map((a) => Number(a.ts))
+    .filter(Number.isFinite);
+  if (!writes.length) return "the engine has never written this order (a person raised or rebuilt it)";
+  const engine = await apiUserId(deps);
+  if (!engine) return "who last changed it cannot be established";
+  let order: any;
+  try {
+    order = await deps.onsinch.orderWithBlocks(order_id);
+  } catch {
+    order = null;
+  }
+  if (!order) return "it could not be read back to see who changed it";
+  const who = staffChangeSince(order, Math.max(...writes), engine);
+  return who ? `a person changed it after the engine last wrote it (${who})` : null;
+}
+
 /** How many times one unchanged difference is re-asserted before the thread gives up. */
 export const SWEEP_RECONCILE_CEILING = 3;
 
@@ -145,6 +172,8 @@ export type SweepAction =
   | "unactionable"
   /** OnSinch does not hold the client's change and no person has edited the blocks: tagged for ops. */
   | "unapplied"
+  /** OnSinch differs from the thread because a person changed it, or the engine never wrote it. Left alone. */
+  | "staff-changed"
   | "error";
 
 export interface SweepOutcome {
@@ -369,6 +398,24 @@ export async function reconcileThread(
       return { thread_id, order_id, action: "unapplied", detail: unapplied };
     }
     return { thread_id, order_id, action: "holds" };
+  }
+
+  /**
+   * A DIFFERENCE A PERSON MADE IS NOT A WRITE THAT FAILED. Re-asserting exists to retry
+   * our own write when OnSinch silently dropped it. It was reading every difference that
+   * way, and in production all 42 re-asserted orders that could still be read had been
+   * edited by staff: R11312's PO, typed in by user 573 on 2026-10-02, was replaced by the
+   * engine's the next day. So the sweep writes only to an order nobody but the engine has
+   * touched since the engine last wrote it. Anything else is the person's call, and a
+   * client's NEW instruction still reaches the order through the inbound path.
+   */
+  const owner = await whyNotOurs(deps, state, order_id);
+  if (owner) {
+    state.reconcile = undefined;
+    const note = `order #${order_id} differs from the email but ${owner}, so the sweep leaves it as it is (${describeDrift(drift)})`;
+    if (!state.notes.includes(note)) state.notes = [...state.notes, note];
+    await store.put(state);
+    return { thread_id, order_id, action: "staff-changed", detail: owner };
   }
 
   const key = driftKey(drift);
