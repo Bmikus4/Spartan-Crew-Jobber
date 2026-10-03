@@ -1478,5 +1478,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0065",
+  "ts": "2026-10-03T23:01:19+00:00",
+  "kind": "measurement",
+  "headline": "TV feed route: live 465 ms, 28 KB; reply lane behind followupsEnabled(); last email 10-01 15:00",
+  "subject": "GET /api/feed serves the office TV's cards and answers a failed read with a 500, never an empty feed",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 152,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]

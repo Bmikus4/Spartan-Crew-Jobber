@@ -3,8 +3,8 @@
 // ----------------------------------------------------------------------------
 // Ben, 2026-09-29: before the restart, nothing new may be visible except order creation,
 // amendments and the normal labels; the follow-up work in particular is not for them
-// yet. It surfaces in exactly two ways — the dashboard row and its two API routes — and
-// both are behind followupsEnabled(). Its chase composer and decide() have no caller,
+// yet. It surfaces in exactly three ways — the dashboard row, its two API routes and the
+// office TV's reply lane — all behind followupsEnabled(). Its chase composer and decide() have no caller,
 // which [3] pins so a new caller cannot switch it on by accident.
 //
 // Reads sources rather than importing routes, as test/writeRoutesAuthorised.ts does.
@@ -43,6 +43,8 @@ console.log("\n[2] every place it surfaces is behind the switch");
     const handler = s.slice(s.search(/export async function (GET|POST)/));
     ok(/^[^\n]*\n\s*if \(!followupsEnabled\(\)\) return/.test(handler), `${route} refuses first`);
   }
+  // The office TV's reply lane is the third place, and it is the same switch.
+  ok(/replies: followupsEnabled\(\) \? replies : null/.test(src("app/lib/feed/live.ts")), "the live feed's reply lane (app/lib/feed/live.ts)");
   // Nothing else in the UI reaches the feature.
   const ui: string[] = [];
   (function walk(d: string) { for (const e of readdirSync(d)) { const p = join(d, e); if (statSync(p).isDirectory()) walk(p); else if (/\.tsx$/.test(e)) ui.push(p); } })("app");
