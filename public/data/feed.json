@@ -1506,5 +1506,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0067",
+  "ts": "2026-10-03T23:13:11+00:00",
+  "kind": "measurement",
+  "headline": "TV feed screen: legend, counts, layouts A/B, tick with undo, chime, fullscreen, ?tv=1 kiosk",
+  "subject": "A Live Feed screen shows the office TV what still needs an order, fullscreen at ?tv=1, with a tick and a chime",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 154,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]

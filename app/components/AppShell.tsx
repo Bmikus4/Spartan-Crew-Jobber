@@ -9,27 +9,35 @@ import { useEffect, useState } from "react";
 import Sidebar from "./Sidebar";
 import DashboardScreen from "./DashboardScreen";
 import JobsScreen from "./JobsScreen";
+import LiveFeedScreen from "./LiveFeedScreen";
 import SettingsScreen from "./SettingsScreen";
 import LoginScreen from "./LoginScreen";
 import OnboardingFlow from "./onboarding/OnboardingFlow";
 
-type Tool = "dashboard" | "jobs" | "settings";
+type Tool = "dashboard" | "jobs" | "live" | "settings";
 
-const TITLES: Record<Tool, string> = { dashboard: "Dashboard", jobs: "Jobs Board", settings: "Settings" };
+const TITLES: Record<Tool, string> = { dashboard: "Dashboard", jobs: "Jobs Board", live: "Live Feed", settings: "Settings" };
 
 interface Auth { loading: boolean; authenticated: boolean; authRequired: boolean; name?: string; email?: string }
 
 export default function AppShell() {
   const [tool, setTool] = useState<Tool>("dashboard");
   const [auth, setAuth] = useState<Auth>({ loading: true, authenticated: false, authRequired: false });
+  // ?tv=1 is the office TV: the live feed alone, no rail and no title bar. Read in an
+  // effect, not during render, so the server's first paint and the client's agree.
+  const [tv, setTv] = useState(false);
 
   useEffect(() => {
     void (async () => {
       // Break-glass: ?admin=<ADMIN_SECRET> signs in without Google (validated server-side).
-      const admin = new URLSearchParams(window.location.search).get("admin");
+      const params = new URLSearchParams(window.location.search);
+      setTv(params.get("tv") === "1");
+      const admin = params.get("admin");
       if (admin) {
         try { await fetch("/api/auth", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ mode: "admin", secret: admin }) }); } catch {}
-        window.history.replaceState({}, "", window.location.pathname);
+        params.delete("admin");
+        const rest = params.toString();
+        window.history.replaceState({}, "", window.location.pathname + (rest ? `?${rest}` : ""));
       }
       try {
         const d = await (await fetch("/api/auth")).json();
@@ -53,6 +61,8 @@ export default function AppShell() {
   const gate = auth.authenticated && !onboarded
     ? <OnboardingFlow onDone={() => setOnboarded(true)} />
     : null;
+
+  if (tv) return <div style={{ height: "100%", width: "100%" }}>{gate}<LiveFeedScreen isActive tv /></div>;
 
   return (
     <div style={{ display: "flex", height: "100%", width: "100%", background: "var(--bg)" }}>
@@ -80,6 +90,7 @@ export default function AppShell() {
           {tool === "settings"
             ? <SettingsScreen signedInAs={auth.authenticated ? auth.email : undefined} />
             : tool === "jobs" ? <JobsScreen isActive />
+            : tool === "live" ? <LiveFeedScreen isActive />
             : <DashboardScreen isActive onOpenBoard={() => setTool("jobs")} />}
         </div>
       </main>

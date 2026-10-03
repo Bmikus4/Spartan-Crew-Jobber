@@ -67,7 +67,8 @@ void (async () => {
   {
     const files: string[] = [];
     for (const dir of ["app/lib/feed", "app/api/feed"]) (function walk(d: string) { for (const e of readdirSync(d)) { const p = join(d, e); if (statSync(p).isDirectory()) walk(p); else if (/\.tsx?$/.test(e)) files.push(p); } })(dir);
-    ok(files.length >= 7, `${files.length} files read`, files.join(" "));
+    files.push("app/components/LiveFeedScreen.tsx");
+    ok(files.length >= 9, `${files.length} files read`, files.join(" "));
     for (const f of files) {
       let src = "";
       try { src = readFileSync(f, "utf8"); } catch { ok(false, `${f} exists`); continue; }

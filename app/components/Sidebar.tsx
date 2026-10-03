@@ -35,6 +35,15 @@ interface SidebarProps {
   onSettings: () => void;
 }
 
+function IconLive() {
+  return (
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="2" y="4" width="20" height="13" rx="2" />
+      <line x1="8" y1="21" x2="16" y2="21" />
+      <line x1="12" y1="17" x2="12" y2="21" />
+    </svg>
+  );
+}
 function IconDashboard() {
   return (
     <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
@@ -68,6 +77,7 @@ function IconJobs() {
 const NAV_ITEMS: NavItemConfig[] = [
   { id: "dashboard", label: "Dashboard", icon: <IconDashboard /> },
   { id: "jobs", label: "Jobs Board", icon: <IconJobs /> },
+  { id: "live", label: "Live Feed", icon: <IconLive /> },
   { id: "settings", label: "Settings", icon: <IconSettings /> },
 ];
 const NAV_BEVEL_SHADOW = "inset 0 1px 0 rgba(255,255,255,0.08), 0 1px 2px rgba(0,0,0,0.25)";
