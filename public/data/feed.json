@@ -1450,5 +1450,19 @@
    "app/lib/engine/pipeline.ts",
    "test/poNotResent.ts"
   ]
+ },
+ {
+  "id": "S-0063",
+  "ts": "2026-10-03T22:48:03+00:00",
+  "kind": "measurement",
+  "headline": "TV feed projection: live 28 need created, 15 need updated, 10 to verify, 14 older unchecked",
+  "subject": "The office TV's feed reads the four Gmail-label statuses off the engine's own predicates",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 150,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]

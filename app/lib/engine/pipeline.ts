@@ -833,7 +833,7 @@ export const TAG_BLUE = { backgroundColor: "#4986e7", textColor: "#ffffff" } as 
  *
  * It is posted once and never taken back — see `updated_flagged` in types.ts.
  */
-const CHANGED_A_STANDING_ORDER = new Set(["amend", "patch", "replace"]);
+export const CHANGED_A_STANDING_ORDER: ReadonlySet<string> = new Set(["amend", "patch", "replace"]);
 
 export async function flagUpdatedIfNeeded(next: ConversationState, deps: PipelineDeps): Promise<void> {
   if (!deps.flagOrderUpdated) return;
@@ -881,7 +881,7 @@ export async function flagUpdatedIfNeeded(next: ConversationState, deps: Pipelin
  * work out which kind of needed. A label is a terminal marker and never a queue — nothing
  * downstream waits on it, and the sweep keeps trying either way.
  */
-function needsLabelFor(s: ConversationState): "Order Needs Built" | "Order Needs Updated" {
+export function needsLabelFor(s: ConversationState): "Order Needs Built" | "Order Needs Updated" {
   return Number(s.onsinch_order_id) > 0 ? "Order Needs Updated" : "Order Needs Built";
 }
 
