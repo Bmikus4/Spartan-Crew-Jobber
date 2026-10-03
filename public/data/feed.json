@@ -1464,5 +1464,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0064",
+  "ts": "2026-10-03T22:55:00+00:00",
+  "kind": "measurement",
+  "headline": "TV feed tick: feed_marks keyed (item, mark), undo never erases verifier evidence",
+  "subject": "A tick on the office TV records who checked an item, and writes nothing but that tick",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 151,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]
