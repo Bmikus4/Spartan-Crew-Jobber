@@ -1432,5 +1432,23 @@
    "app/lib/engine/reconcile.ts",
    "test/sweepRespectsStaffEdits.ts"
   ]
+ },
+ {
+  "id": "S-0062",
+  "ts": "2026-10-03T22:19:28+00:00",
+  "kind": "decision",
+  "headline": "Every inbound amendment sent the thread's PO with the crew change (pipeline.ts amend + patch fallback), so an old PO could overwrite one staff typed into OnSinch. The PO now goes to an existing order only when this email gave or changed it, compared against the thread's PO before the email; creates are unchanged.",
+  "subject": "A client's change email no longer re-sends a PO the thread already carried over staff's",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 149,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  },
+  "sources": [
+   "app/lib/engine/pipeline.ts",
+   "test/poNotResent.ts"
+  ]
  }
 ]

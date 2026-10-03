@@ -594,7 +594,7 @@ export async function handleThread(
      *     twice for it
      *   - a cancellation — the engine never cancels or shrinks a booking
      */
-    await executeOrder(next, intended, deps, emit, prior?.place_id);
+    await executeOrder(next, intended, deps, emit, prior?.place_id, prior?.desired_order?.intern_name);
   }
 
   // Teach the sender ledger what this thread turned out to be. It is what lets triage
@@ -990,7 +990,8 @@ async function tryAmendInPlace(
   intended: NonNullable<ConversationState["pending_order"]>,
   deps: PipelineDeps,
   emit: (type: any, meta?: Record<string, unknown>) => Promise<void>,
-  basePlace?: number
+  basePlace?: number,
+  poBefore?: string
 ): Promise<boolean> {
   const { executor, store, now, hashOrder } = deps;
   const order_id = intended.order_id;
@@ -1144,7 +1145,7 @@ async function tryAmendInPlace(
        */
       let applied: string[] = [];
       try {
-        applied = (await executor.patchOrder({ order_id, desired: intended.desired })) || [];
+        applied = (await executor.patchOrder({ order_id, desired: poOnlyIfChanged(intended.desired, poBefore) })) || [];
       } catch (err: any) {
         next.notes = [...next.notes, `order fields not updated on #${order_id} (${String(err?.message ?? err)})`];
       }
@@ -1443,13 +1444,30 @@ function recordSent(next: ConversationState, sent: DesiredOrder, hashOrder: Pipe
   if (sent.company_id) next.company_id = sent.company_id;
 }
 
+/**
+ * THE PO GOES TO AN EXISTING ORDER ONLY WHEN THIS EMAIL CHANGED IT.
+ *
+ * Every amendment used to send the thread's PO along with the crew change, so a client's
+ * "can we add two crew" re-sent a PO the client had stated weeks earlier, over whatever
+ * staff had since typed into OnSinch. The sweep's version of this replaced R11312's PO
+ * (typed by user 573) on 2026-10-03. A PO the client has just given or changed is their
+ * new instruction and still goes; one this thread already carried is not re-sent.
+ * `before` is the thread's PO as it stood before this email; absent, the PO is new.
+ */
+export function poOnlyIfChanged(desired: DesiredOrder, before: string | undefined): DesiredOrder {
+  const norm = (v: unknown) => String(v ?? "").trim().replace(/\s+/g, " ").toLowerCase();
+  if (!norm(desired.intern_name) || norm(desired.intern_name) !== norm(before)) return desired;
+  return { ...desired, intern_name: undefined };
+}
+
 /** Execute a staged/intended order write and fold the result into state. */
 async function executeOrder(
   next: ConversationState,
   intended: NonNullable<ConversationState["pending_order"]>,
   deps: PipelineDeps,
   emit: (type: any, meta?: Record<string, unknown>) => Promise<void>,
-  basePlace?: number
+  basePlace?: number,
+  poBefore?: string
 ): Promise<void> {
   const { executor, now, hashOrder } = deps;
   try {
@@ -1471,7 +1489,7 @@ async function executeOrder(
       next.pending_order = undefined;
       next.order_action_log = [...next.order_action_log, { ts: now(), kind: "create", order_id: created.id, ok: true }];
       await emit("order_created", { order_id: created.id, size: intended.desired.slot_teams.reduce((n, s) => n + s.size, 0) });
-    } else if (await tryAmendInPlace(next, intended, deps, emit, basePlace)) {
+    } else if (await tryAmendInPlace(next, intended, deps, emit, basePlace, poBefore)) {
       // Handled in place: the crew blocks that moved were PATCHed and the new ones
       // appended, and the order — its R number, its attachments, anyone signed on to it
       // — was never destroyed. Returns false when the change cannot be expressed that
@@ -1486,7 +1504,7 @@ async function executeOrder(
       // the original POST have no exposed ids, and there is no GET /slotTeams to
       // diff against. So report exactly what went, and hand the rest to a human
       // instead of marking the job done.
-      const applied = (await executor.patchOrder({ order_id: intended.order_id!, desired: intended.desired })) || [];
+      const applied = (await executor.patchOrder({ order_id: intended.order_id!, desired: poOnlyIfChanged(intended.desired, poBefore) })) || [];
       const teams = intended.desired.slot_teams ?? [];
       const crew = teams.reduce((n, s) => n + (s.size || 0), 0);
 
