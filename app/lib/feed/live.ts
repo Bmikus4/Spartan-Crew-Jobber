@@ -1,6 +1,8 @@
 // The feed's production reads. SELECTs only; the feed's writes live in marksDb.ts.
 import { neon, type NeonQueryFunction } from "@neondatabase/serverless";
-import { allMarks, verifyStatus } from "./marksDb";
+import { allMarks, verifyStatus, addMark, claimVerify, saveVerify } from "./marksDb";
+import { verify } from "./verify";
+import { httpTransport } from "../engine/onsinch";
 import { followupsEnabled } from "../followup/enabled";
 import type { FeedDeps } from "./serve";
 import type { ReplyNeed } from "./project";
@@ -51,6 +53,14 @@ export function liveFeedDeps(): FeedDeps {
   return {
     states, inbound, marks: allMarks,
     replies: followupsEnabled() ? replies : null,
+    // verify() wraps this transport in readOnly() before its first call.
+    verify: (cards, now) => verify(cards, now, {
+      transport: httpTransport({
+        baseUrl: process.env.ONSINCH_BASE_URL || "https://spartancrew.onsinch.com/api/v1",
+        apiKey: process.env.ONSINCH_API_KEY || "",
+      }),
+      claim: claimVerify, save: saveVerify, addMark,
+    }),
     verifyStatus,
   };
 }

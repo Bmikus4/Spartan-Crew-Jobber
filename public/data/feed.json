@@ -1492,5 +1492,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0066",
+  "ts": "2026-10-03T23:07:25+00:00",
+  "kind": "measurement",
+  "headline": "TV feed verifier: first live round 8.0 s, timeline cursor set, matcher found R11081 for 1 of 13 needs-created with a company",
+  "subject": "The office TV turns an item green on a staff edit in OnSinch after the engine's write, read with GETs only",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 154,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]
