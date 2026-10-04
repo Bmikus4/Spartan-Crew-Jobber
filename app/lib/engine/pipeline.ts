@@ -241,6 +241,8 @@ export interface PipelineDeps extends CompileDeps {
   executor: Executor;
   settings: Settings;
   hashOrder: (o: unknown) => string;
+  /** Injected by tests; production uses errorReport's reportError. */
+  report?: typeof reportError;
   /** Feeds the sender ledger that triage reads. Injected; absent in tests. */
   recordSender?: (a: { addr: string; thread_id: string; wasJob: boolean; subject?: string }) => Promise<void>;
   /**
@@ -666,6 +668,21 @@ export async function handleThread(
 const WROTE_TO_ONSINCH = new Set(["create", "patch", "amend", "replace"]);
 
 /**
+ * A label that did not land is reported, not only logged (SP-03): from 10-02 every label
+ * post failed on the expired Gmail credential and nobody was told. `where` names the label
+ * kind, so each kind is one fingerprint: one email per kind per 6-hour window however many
+ * threads fail. The marker stays unset, so the next pass tries the label again.
+ */
+function reportLabelFailure(deps: PipelineDeps, label: string, next: ConversationState, err: unknown): void {
+  void (deps.report ?? reportError)({
+    route: "label-failed",
+    where: `pipeline/label ${label}`,
+    what: `the "${label}" Gmail label could not be set`,
+    detail: `thread ${next.thread_id} (${String(next.subject ?? "")}): ${String((err as Error)?.message ?? err)}`,
+  });
+}
+
+/**
  * "CHECK ENGINE WRITE" — while supervised, every write to OnSinch, tagged every time.
  *
  * Ben, 2026-09-29: the automation restarts with a supervised first week and a Gmail tag
@@ -698,6 +715,7 @@ export async function flagSupervisedIfNeeded(next: ConversationState, deps: Pipe
   } catch (err) {
     // The write is made and logged; a missed supervision tag is visible in the log.
     console.error("[supervised-tag] flag failed", err);
+    reportLabelFailure(deps, "Check Engine Write", next, err);
   }
 }
 
@@ -823,6 +841,7 @@ export async function flagBuiltIfNeeded(next: ConversationState, deps: PipelineD
     // untagged thread is slower for ops; a lost booking would be dangerous, and a
     // marker set for a tag that never landed would stop it ever being retried.
     console.error("[order-built-tag] flag failed", err);
+    reportLabelFailure(deps, "Order Built", next, err);
   }
 }
 
@@ -877,6 +896,7 @@ export async function flagUpdatedIfNeeded(next: ConversationState, deps: Pipelin
     // The change is made and recorded. An untagged thread is slower for ops; a marker
     // set for a tag that never landed would stop it ever being retried.
     console.error("[order-updated-tag] flag failed", err);
+    reportLabelFailure(deps, "Order Updated", next, err);
   }
 }
 
@@ -966,6 +986,7 @@ export async function flagManualIfNeeded(next: ConversationState, deps: Pipeline
     // The thread is already on the board with its reason. An untagged inbox is slower
     // for ops; a lost booking would be dangerous, and this is not that.
     console.error("[manual-tag] flag failed", err);
+    reportLabelFailure(deps, "Order Needs", next, err);
   }
 }
 

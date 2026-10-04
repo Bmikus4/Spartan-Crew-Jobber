@@ -1940,5 +1940,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0098",
+  "ts": "2026-10-04T19:26:45+00:00",
+  "kind": "measurement",
+  "headline": "SP-03 residual: label-failed route; the four flag catches report with one fingerprint per label kind",
+  "subject": "A Gmail label that fails to land is reported, one email per label kind",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 164,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]

@@ -37,7 +37,7 @@ export type Severity = "alert" | "log";
  * not running cannot report that it is not running. It is asked from outside on a schedule —
  * see app/api/health/intake. The other three are the engine reporting on itself.
  */
-export type Route = "booking-lost" | "write-unconfirmed" | "engine-threw" | "intake-quiet" | "mail-undeliverable" | "mail-pull-failed";
+export type Route = "booking-lost" | "write-unconfirmed" | "engine-threw" | "intake-quiet" | "mail-undeliverable" | "mail-pull-failed" | "label-failed";
 
 const ROUTE_TITLE: Record<Route, string> = {
   "booking-lost": "A BOOKING WAS LOST",
@@ -53,6 +53,9 @@ const ROUTE_TITLE: Record<Route, string> = {
   // while this says we could not go and look, which is never benign and has a different
   // remedy. Separating them is what stops a broken credential reading as a slow Tuesday.
   "mail-pull-failed": "THE MAILBOX COULD NOT BE READ",
+  // Ops work from the four Gmail labels and rarely open the dashboard, so a label that did
+  // not land leaves a thread looking done, or looking untouched, when it is neither.
+  "label-failed": "A GMAIL LABEL COULD NOT BE SET",
 };
 
 /** Default gap between emails about the same thing. Long enough to stop a flood, short enough
