@@ -2220,5 +2220,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0118",
+  "ts": "2026-10-04T22:12:14+00:00",
+  "kind": "measurement",
+  "headline": "Rail tools reorderable; Live Feed first",
+  "subject": "Dashboard tools can be dragged into any order by a grip, and the Live Feed is first by default",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 178,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]

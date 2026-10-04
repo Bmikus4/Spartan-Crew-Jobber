@@ -22,6 +22,7 @@
 import { useEffect, useState } from "react";
 import { BrandMark, BrandWordmark } from "./BrandLogo";
 import RailProfile from "./RailProfile";
+import { applyOrder, reorder, readOrder, writeOrder } from "../lib/navOrder";
 
 interface NavItemConfig {
   id: string;
@@ -72,12 +73,13 @@ function IconJobs() {
   );
 }
 
-// Settings is an ordinary row at the END of the list, not a pinned footer bay with
-// its own divider — the same call the quote tool made (Ben, 2026-08-09).
+// The DEFAULT order; each reader can drag their own (app/lib/navOrder.ts). The TV feed
+// leads (Ben, 2026-10-04). Settings is an ordinary row at the end of the list, not a
+// pinned footer bay with its own divider — the same call the quote tool made (Ben, 2026-08-09).
 const NAV_ITEMS: NavItemConfig[] = [
+  { id: "live", label: "Live Feed", icon: <IconLive /> },
   { id: "dashboard", label: "Dashboard", icon: <IconDashboard /> },
   { id: "jobs", label: "Jobs Board", icon: <IconJobs /> },
-  { id: "live", label: "Live Feed", icon: <IconLive /> },
   { id: "settings", label: "Settings", icon: <IconSettings /> },
 ];
 const NAV_BEVEL_SHADOW = "inset 0 1px 0 rgba(255,255,255,0.08), 0 1px 2px rgba(0,0,0,0.25)";
@@ -89,10 +91,39 @@ const NAV_BEVEL_SHADOW = "inset 0 1px 0 rgba(255,255,255,0.08), 0 1px 2px rgba(0
 const WORDMARK_H = 19;
 const WORDMARK_W = Math.round(WORDMARK_H * (640 / 195));
 
-function MobileBottomBar({ activeTool, onSelectTool, onSettings }: SidebarProps) {
+/**
+ * THE GRIP: six dots in two columns, the only part of a row you may drag it by. Every row
+ * is a button that goes somewhere; a draggable button turns a slow click into a reorder.
+ * So the grip ARMS its row on pointer-down and disarms it after, and the row is draggable
+ * only while the pointer is on these dots.
+ */
+function NavGrip({ onArm }: { onArm: (armed: boolean) => void }) {
+  const [hovered, setHovered] = useState(false);
+  return (
+    <span
+      onPointerDown={() => onArm(true)}
+      onPointerUp={() => onArm(false)}
+      onPointerLeave={() => onArm(false)}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      // The row underneath is a button; without this a press on the grip also navigates.
+      onClick={(e) => { e.preventDefault(); e.stopPropagation(); }}
+      role="button" tabIndex={-1} aria-label="Drag to reorder" title="Drag to reorder"
+      style={{
+        marginLeft: "auto", display: "grid", gridTemplateColumns: "repeat(2, 3px)", gridAutoRows: "3px", gap: 3, padding: "3px 1px 3px 4px",
+        cursor: "grab", color: hovered ? "var(--text-secondary)" : "var(--text-muted)", opacity: hovered ? 1 : 0.55,
+        transition: "opacity 150ms ease, color 150ms ease", touchAction: "none",
+      }}
+    >
+      {Array.from({ length: 6 }, (_, i) => <span key={i} style={{ width: 3, height: 3, borderRadius: "50%", background: "currentColor" }} />)}
+    </span>
+  );
+}
+
+function MobileBottomBar({ activeTool, onSelectTool, onSettings, items }: SidebarProps & { items: NavItemConfig[] }) {
   return (
     <nav aria-label="Main navigation" style={{ position: "fixed", bottom: 0, left: 0, right: 0, zIndex: 200, display: "flex", justifyContent: "space-around", alignItems: "stretch", height: "calc(var(--mobile-nav-h) + var(--mobile-nav-safe) + 20px)", paddingTop: 6, paddingBottom: "calc(var(--mobile-nav-safe) + 6px)", background: "var(--surface)", borderTop: "1px solid var(--border)" }}>
-      {NAV_ITEMS.map((item) => {
+      {items.map((item) => {
         const active = activeTool === item.id;
         return (
           <button key={item.id} onClick={() => (item.id === "settings" ? onSettings() : onSelectTool(item.id))}
@@ -112,6 +143,23 @@ export default function Sidebar({ activeTool, onSelectTool, onSettings }: Sideba
   const [expanded, setExpanded] = useState(false);
   const [hoveredItem, setHoveredItem] = useState<string | null>(null);
   const [isMobile, setIsMobile] = useState(false);
+  // The reader's own order, read once on the client: the server has no localStorage, and
+  // seeding the initial state from it is a hydration mismatch.
+  const [order, setOrder] = useState<string[]>([]);
+  useEffect(() => { setOrder(readOrder()); }, []);
+  // `armed`: the row the grip has authorised to drag. `over`: the row it will take the place of.
+  const [armed, setArmed] = useState<string | null>(null);
+  const [dragId, setDragId] = useState<string | null>(null);
+  const [over, setOver] = useState<string | null>(null);
+  const navItems = applyOrder(NAV_ITEMS, order);
+
+  function dropOn(targetId: string) {
+    if (!dragId) return;
+    const next = reorder(navItems.map((i) => i.id), dragId, targetId);
+    setOrder(next);
+    writeOrder(next);
+    setDragId(null); setOver(null); setArmed(null);
+  }
 
   useEffect(() => {
     function check() { setIsMobile(window.innerWidth < 768); }
@@ -120,7 +168,7 @@ export default function Sidebar({ activeTool, onSelectTool, onSettings }: Sideba
     return () => window.removeEventListener("resize", check);
   }, []);
 
-  if (isMobile) return <MobileBottomBar activeTool={activeTool} onSelectTool={onSelectTool} onSettings={onSettings} />;
+  if (isMobile) return <MobileBottomBar activeTool={activeTool} onSelectTool={onSelectTool} onSettings={onSettings} items={navItems} />;
 
   const isCondensed = !expanded;
   const width = expanded ? "var(--nav-w-expanded)" : "var(--nav-w-condensed)";
@@ -169,6 +217,8 @@ export default function Sidebar({ activeTool, onSelectTool, onSettings }: Sideba
         <span aria-hidden={isCondensed} style={{ ...fade, fontSize: 14, fontWeight: 500, color: labelColor, whiteSpace: "pre", transition: `${fade.transition}, color 250ms` }}>
           {item.label}
         </span>
+        {/* Only on the open rail: an icon strip has nothing to grab and no room to grab it. */}
+        {!isCondensed && <NavGrip onArm={(on) => setArmed(on ? item.id : null)} />}
       </button>
     );
   }
@@ -232,8 +282,33 @@ export default function Sidebar({ activeTool, onSelectTool, onSettings }: Sideba
           change here must move the logo band's left padding by the same amount. */}
       {/* flex:1 is what pins the profile to the foot of the rail — see RailProfile. */}
       <div style={{ display: "flex", flexDirection: "column", gap: 2, padding: "0 4px", flex: 1 }}>
-        {NAV_ITEMS.map((item) => (
-          <div key={item.id} style={{ position: "relative" }}>
+        {navItems.map((item) => (
+          <div
+            key={item.id}
+            draggable={armed === item.id}
+            onDragStart={(e) => {
+              setDragId(item.id);
+              e.dataTransfer.effectAllowed = "move";
+              // Firefox starts no drag at all unless something is written here.
+              e.dataTransfer.setData("text/plain", item.id);
+            }}
+            onDragOver={(e) => {
+              if (!dragId) return;
+              // Without preventDefault the browser refuses the drop and the row springs back.
+              e.preventDefault();
+              e.dataTransfer.dropEffect = "move";
+              if (over !== item.id) setOver(item.id);
+            }}
+            onDrop={(e) => { e.preventDefault(); dropOn(item.id); }}
+            onDragEnd={() => { setDragId(null); setOver(null); setArmed(null); }}
+            style={{
+              position: "relative", borderRadius: 8, opacity: dragId === item.id ? 0.4 : 1,
+              // Where it will land: a line on the displaced row, below it when travelling down.
+              boxShadow: over === item.id && dragId && dragId !== item.id
+                ? (navItems.findIndex((i) => i.id === dragId) < navItems.findIndex((i) => i.id === item.id) ? "inset 0 -2px 0 0 var(--accent)" : "inset 0 2px 0 0 var(--accent)")
+                : undefined,
+            }}
+          >
             {renderButton(item, {
               active: activeTool === item.id,
               onClick: () => (item.id === "settings" ? onSettings() : onSelectTool(item.id)),
