@@ -146,7 +146,7 @@ async function run(request: Request, dry: boolean): Promise<Response> {
     tally,
     // Only the rows that did something or could not be done. A run where 38 of 40 threads
     // hold exactly what they should is the healthy case, and printing all 38 buries the two.
-    outcomes: outcomes.filter((o: SweepOutcome) => o.action !== "holds" && o.action !== "skipped"),
+    outcomes: outcomes.filter((o: SweepOutcome) => o.action !== "holds" && o.action !== "skipped" && o.action !== "exists"),
     retried,
   });
 }

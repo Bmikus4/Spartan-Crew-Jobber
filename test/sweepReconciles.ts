@@ -162,7 +162,8 @@ const HELD = { size: 4, beginning: `${DAY}T09:30:00+00:00`, end: `${DAY}T14:00:0
     }
     ok(seen.slice(0, 3).every((a) => a === "reasserted"), "three attempts are made", seen.join(","));
     ok(seen[3] === "unreconciled", "the fourth gives up", seen[3]);
-    ok(seen[4] === "skipped", "and the fifth does not even read it", seen[4]);
+    // SP-07: past the ceiling it is no longer re-asserted, but its existence is still read.
+    ok(seen[4] === "exists", "and the fifth only checks the order still exists", seen[4]);
     ok(s.needs_human === true, "the thread is marked — which is what puts the label on it");
     ok((s.notes ?? []).some((n) => n.includes("has not taken this change")), "and says so once", JSON.stringify(s.notes.slice(-1)));
   }
@@ -231,7 +232,8 @@ const HELD = { size: 4, beginning: `${DAY}T09:30:00+00:00`, end: `${DAY}T14:00:0
     const noShape = stateBound({ desired_order: undefined, last_ordered_teams: undefined });
     const { deps: d2 } = fakeDeps({ orders: [LIVE_ORDER], slot: HELD });
     const r2 = await reconcileThread(noShape, d2, { todayISO: TODAY });
-    ok(r2.action === "skipped", "a thread with no recorded shape has nothing to reconcile towards", String(r2.detail));
+    // SP-07: nothing to reconcile towards, but whether the order still exists is read.
+    ok(r2.action === "exists", "a thread with no recorded shape is only checked for existence", `${r2.action}: ${r2.detail}`);
 
     /**
      * But `desired_order` alone being absent is NOT that case, and 171 of 267 live
@@ -280,13 +282,14 @@ const HELD = { size: 4, beginning: `${DAY}T09:30:00+00:00`, end: `${DAY}T14:00:0
      * counted against the limit, a scheduled run of 40 spent its entire budget on rows it
      * never read, stopped, and came back to the same 40 next time. The bookings it could
      * never reach were the quiet ones, which are the only ones this sweep is watching.
+     * Since SP-07 a thread with no desired shape has its existence read, so only a past
+     * job is free.
      */
     const { deps } = fakeDeps({ orders: [LIVE_ORDER], slot: HELD });
-    // Twelve rows with nothing to reconcile, then two real ones behind them.
+    // Twelve rows whose jobs are over, then two real ones behind them.
     const free = Array.from({ length: 12 }, (_, i) => {
       const s = stateBound({ thread_id: `T-free-${i}` });
-      s.desired_order = null;
-      s.last_ordered_teams = undefined;
+      s.desired_order = { ...desired(), slot_teams: [{ ...desired().slot_teams[0], beginning: "2026-08-01T09:30:00+00:00", end: "2026-08-01T14:00:00+00:00" }] } as DesiredOrder;
       return s;
     });
     const real = [stateBound({ thread_id: "T-real-1" }), stateBound({ thread_id: "T-real-2" })];

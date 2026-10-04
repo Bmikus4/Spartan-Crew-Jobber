@@ -1786,5 +1786,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0087",
+  "ts": "2026-10-04T18:02:09+00:00",
+  "kind": "measurement",
+  "headline": "SP-07: no-shape and past-ceiling threads get the existence read and positive control (new outcome 'exists'), stop before any correction; past jobs stay free",
+  "subject": "Every future-dated bound thread has its order's existence read, shape or no shape",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 158,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]

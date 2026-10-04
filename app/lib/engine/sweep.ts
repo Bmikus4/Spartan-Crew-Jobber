@@ -188,6 +188,8 @@ export type SweepAction =
   | "unapplied"
   /** OnSinch differs from the thread because a person changed it, or the engine never wrote it. Left alone. */
   | "staff-changed"
+  /** Existence was all this thread could be checked for (no desired shape, or past the ceiling), and the order is there. */
+  | "exists"
   | "error";
 
 export interface SweepOutcome {
@@ -270,20 +272,27 @@ export async function reconcileThread(
 
   if (!Number.isInteger(order_id) || order_id <= 0) return { thread_id, action: "skipped", detail: "no order" };
   const target = reconcileTarget(state);
-  if (!target) {
-    // Nothing to compare against. A thread whose shape was never recorded cannot be
-    // reconciled towards anything, and inventing one from the order would make OnSinch
-    // the source of truth for what the client asked for.
-    return { thread_id, order_id, action: "skipped", detail: "no desired shape on the thread" };
-  }
-  if (alreadyHappened(target, opts.todayISO)) {
+  // The one free skip. With no shape recorded, the requested days stand in for it.
+  const requested = (state.facts?.requests ?? []).map((r) => r.date).filter((d): d is string => !!d);
+  const past = target
+    ? alreadyHappened(target, opts.todayISO)
+    : requested.length > 0 && requested.every((d) => day(d) < day(opts.todayISO));
+  if (past) {
     return { thread_id, order_id, action: "skipped", detail: "the job is in the past" };
   }
-  if ((state.reconcile?.attempts ?? 0) > SWEEP_RECONCILE_CEILING) {
-    // Already a dead end and already labelled. Re-asserting costs two reads and a write
-    // every sweep for the life of the thread and changes nothing.
-    return { thread_id, order_id, action: "skipped", detail: "already unreconciled" };
-  }
+  /**
+   * EXISTENCE IS CHECKED EVEN WHEN NOTHING ELSE CAN BE (SP-07). With no desired shape there
+   * is nothing to reconcile towards (inventing one from the order would make OnSinch the
+   * source of truth for what the client asked), and past the ceiling re-asserting is a dead
+   * end. Both used to return before the order was read at all, so a deleted order on such a
+   * thread stayed claimed and labelled booked: 8 were found that way on 10-03. They now get
+   * the existence read and its positive control, and stop before any correction.
+   */
+  const existenceOnly = !target
+    ? "no desired shape on the thread"
+    : (state.reconcile?.attempts ?? 0) > SWEEP_RECONCILE_CEILING
+      ? "already unreconciled"
+      : null;
 
   // ---- 1. is it still there? --------------------------------------------------------
   let live;
@@ -292,7 +301,7 @@ export async function reconcileThread(
   } catch (err: any) {
     return { thread_id, order_id, action: "error", detail: String(err?.message ?? err) };
   }
-  const nested = await shadowNestedRead(deps, thread_id, order_id, live);
+  const nested = existenceOnly ? null : await shadowNestedRead(deps, thread_id, order_id, live);
 
   if (live.unreadable) {
     /**
@@ -436,6 +445,10 @@ export async function reconcileThread(
     await flagBuiltIfNeeded(state, deps);
     await flagManualIfNeeded(state, deps);
     return { thread_id, order_id, action: "lost" };
+  }
+
+  if (existenceOnly || !target) {
+    return { thread_id, order_id, action: "exists", detail: existenceOnly ?? "no desired shape on the thread" };
   }
 
   // ---- 3. does it hold what the thread asks for? ------------------------------------
