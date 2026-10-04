@@ -187,6 +187,7 @@ function asDeployment() {
     const broken: ErrorStore = {
       async record() { throw new Error("no database"); },
       async claimEmail() { throw new Error("no database"); },
+      async releaseEmail() { throw new Error("no database"); },
     };
     threw = false;
     try { await reportError({ route: "engine-threw", where: "t/db", what: "boom", store: broken }); } catch { threw = true; }
@@ -243,6 +244,65 @@ function asDeployment() {
     });
     ok(/seen 12 times/i.test(many), "a repeat carries the count");
     ok(/order #14866/.test(many), "and the detail");
+  }
+
+  // 2026-10-01..03: intake was down 53 hours and no report reached anyone. Every caller writes
+  // `void reportError()`, so on Vercel the send died when the lambda froze after the response.
+  console.log("\n[8] the pending send is handed to keepAlive, so it outlives the response");
+  {
+    const undo = asDeployment();
+    const spy = spyFetch(() => new Response(JSON.stringify({ ok: true }), { status: 200 }));
+    const kept: Promise<unknown>[] = [];
+    try {
+      const p = reportError({
+        route: "intake-quiet", where: "t/keepalive", what: "quiet", store: new InMemoryErrorStore(),
+        keepAlive: (q) => { kept.push(q); },
+      });
+      ok(kept.length === 1, "keepAlive receives one promise", String(kept.length));
+      ok(kept[0] === p, "and it is the send itself, not a copy that settles early");
+      ok((await p) === true, "which still resolves to whether the email went");
+    } finally { spy.restore(); undo(); }
+  }
+
+  // SP-16. The 10-02 16:45Z intake-quiet report claimed its window, failed to send, and kept
+  // the claim, so the next real alarm was blocked for six hours.
+  console.log("\n[9] a failed post gives the window back; the next call emails");
+  {
+    const undo = asDeployment();
+    const store = new InMemoryErrorStore();
+    const fp = fingerprint("t/release", "receiver off");
+    const call = () => reportError({ route: "intake-quiet", where: "t/release", what: "receiver off", store });
+    let spy = spyFetch(() => new Response("not found", { status: 404 }));
+    try {
+      ok((await call()) === false, "a 404 from the receiver is not sent");
+      ok(store.rows.get(fp)?.lastEmailedAt === null, "and the claim is released", String(store.rows.get(fp)?.lastEmailedAt));
+      spy.restore();
+      spy = spyFetch(() => new Response(JSON.stringify({ ok: true }), { status: 200 }));
+      ok((await call()) === true, "so the next occurrence emails at once, not six hours later");
+      ok(spy.calls.length === 1, "one post on the second call", String(spy.calls.length));
+    } finally { spy.restore(); undo(); }
+  }
+
+  console.log("\n[10] a receiver that hangs is abandoned at the timeout");
+  {
+    const undo = asDeployment();
+    const store = new InMemoryErrorStore();
+    const real = globalThis.fetch;
+    globalThis.fetch = ((_url: unknown, init?: RequestInit) => new Promise((_, reject) => {
+      init?.signal?.addEventListener("abort", () => reject(init.signal!.reason));
+    })) as typeof fetch;
+    // AbortSignal.timeout's timer is unref'd: with a fetch stub holding nothing open, Node would
+    // exit 0 mid-await and this section would pass by never running. The ref'd timer holds the
+    // loop, and fails the file if the send never settles.
+    const hold = setTimeout(() => { console.log("  FAIL  the send never settled"); process.exit(1); }, 10_000);
+    try {
+      const t0 = Date.now();
+      const sent = await reportError({ route: "engine-threw", where: "t/hang", what: "boom", store, timeoutMs: 50 });
+      const ms = Date.now() - t0;
+      ok(sent === false, "a hung receiver is not sent");
+      ok(ms < 2000, "and it gives up instead of holding the lambda", `${ms} ms`);
+      ok(store.rows.get(fingerprint("t/hang", "boom"))?.lastEmailedAt === null, "and the claim is released");
+    } finally { clearTimeout(hold); globalThis.fetch = real; undo(); }
   }
 
   console.log(`\n${fails ? `${fails} FAILED` : "errorReport: ALL PASS"}\n`);

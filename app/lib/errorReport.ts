@@ -178,6 +178,13 @@ export interface ErrorStore {
   record(o: Occurrence): Promise<{ count: number; firstSeenAt: string }>;
   /** Claim the right to email about this fingerprint. True for exactly one caller per window. */
   claimEmail(fingerprint: string, windowMs: number, now: number): Promise<boolean>;
+  /**
+   * Give a claim back after the post failed. Without it a dead receiver holds the window for six
+   * hours on an email nobody got: on 2026-10-02 the intake-quiet report claimed, failed, and kept
+   * the claim. A permanently dead receiver then costs one HTTP attempt per occurrence, not a flood,
+   * because nothing is ever delivered.
+   */
+  releaseEmail(fingerprint: string): Promise<void>;
 }
 
 export class InMemoryErrorStore implements ErrorStore {
@@ -201,9 +208,15 @@ export class InMemoryErrorStore implements ErrorStore {
     row.lastEmailedAt = now;
     return true;
   }
+
+  async releaseEmail(fp: string) {
+    const row = this.rows.get(fp);
+    if (row) row.lastEmailedAt = null;
+  }
 }
 
 import { neon, type NeonQueryFunction } from "@neondatabase/serverless";
+import { after } from "next/server";
 
 let _sql: NeonQueryFunction<false, false> | null = null;
 let _ready = false;
@@ -274,6 +287,11 @@ export function neonErrorStore(): ErrorStore | null {
       `) as { fingerprint: string }[];
       return claim.length > 0;
     },
+
+    async releaseEmail(fp: string) {
+      await ensure(sql);
+      await sql`UPDATE error_reports SET last_emailed_at = NULL WHERE fingerprint = ${fp}`;
+    },
   };
 }
 
@@ -285,29 +303,53 @@ const _seenInProcess = new Set<string>();
 // --- sending ------------------------------------------------------------------------------
 
 /**
- * The live n8n "Send Support Tickets" workflow, which emails ben@ and
- * samuraisolutionsofficial@. Chosen because it is already live, already proven and needs no new
- * workflow — the same reason HoH's reporter uses it.
+ * The n8n workflow "Spartan Alarms" (4QTUkIbqSDrkTC6h): webhook, Gmail on the "Test Email"
+ * credential to ben@ and samuraisolutionsofficial@, then a JSON reply. Spartan's own, so House of
+ * Hud's "Send Support Tickets" (switched off 09-28..09-30, reason unknown) can be on or off without
+ * silencing Spartan, and never on "Gmail account 14", the credential whose expiry this channel
+ * exists to report. A code default, because an unset env var is how this channel went dead.
+ * The intake watchdog posts its own alarms to the same webhook.
  */
-const DEFAULT_WEBHOOK = "https://samuraisolutions.app.n8n.cloud/webhook/support-ticket";
+const DEFAULT_WEBHOOK = "https://samuraisolutions.app.n8n.cloud/webhook/spartan-alarm";
+
+/** A hung receiver is abandoned after this; the claim is released and the next occurrence retries. */
+const POST_TIMEOUT_MS = 8000;
 
 /**
- * A 200 WITH AN EMPTY BODY IS A FAILURE, not a delivery. n8n answers 200 when the workflow
- * throws, which is exactly what a rejected secret produces — the same trap postTag() documents
- * in deps.ts. Reporting that as sent would mark the window claimed for six hours on an email
- * nobody received.
+ * Sends: the report as JSON. Back: {"ok":true} once n8n's Gmail node has sent (the webhook
+ * replies from a response node, after the email). Failure looks like: a non-2xx (workflow inactive
+ * = 404, Gmail failed = 500), a 200 with an empty body (n8n's answer when a workflow throws), a
+ * timeout, or a transport error. Every one is `false` and logged, never a throw: reporting it as
+ * sent would mark the window claimed for six hours on an email nobody received.
  */
-async function post(body: Record<string, unknown>): Promise<boolean> {
+async function post(body: Record<string, unknown>, timeoutMs: number): Promise<boolean> {
   const url = (process.env.ERROR_REPORT_WEBHOOK ?? DEFAULT_WEBHOOK).trim();
   if (!url) return false;
-  const res = await fetch(url, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify(body),
-  });
-  if (!res.ok) return false;
-  const j = (await res.json().catch(() => null)) as unknown;
-  return j !== null && typeof j === "object";
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+    const j = res.ok ? ((await res.json().catch(() => null)) as unknown) : null;
+    if (j !== null && typeof j === "object") return true;
+    console.error(`[error-report] receiver answered ${res.status}${res.ok ? " with no JSON body" : ""} for ${body.record_id}`);
+    return false;
+  } catch (err) {
+    console.error(`[error-report] receiver unreachable for ${body.record_id}: ${String(err)}`);
+    return false;
+  }
+}
+
+/**
+ * Keeps the lambda alive until the report has been sent. Every caller writes `void reportError()`
+ * and returns its response; on Vercel the function is then frozen and an unawaited fetch dies with
+ * it. That is where the 29 "fetch failed" lines came from while the intake was down. Outside a
+ * request (a script, a test) after() throws, and the promise simply runs to completion.
+ */
+function keepAlive(p: Promise<unknown>): void {
+  try { after(p); } catch { /* not in a request scope */ }
 }
 
 /**
@@ -315,24 +357,36 @@ async function post(body: Record<string, unknown>): Promise<boolean> {
  *
  * NEVER THROWS and never blocks the caller's own error handling — a reporting failure must not
  * turn a handled error into an unhandled one, and must never be the reason a booking fails.
- * Always call it with `void`. Returns whether an email was sent, which callers may ignore.
+ * Call it with `void`; the send outlives the response through keepAlive(). Returns whether an
+ * email was sent, which callers may ignore.
  *
  * `severity: "log"` records the occurrence and never emails: worth counting, not worth
  * interrupting anyone over.
  */
-export async function reportError(
-  { route, where, what, detail, severity = "alert", windowMs = DEFAULT_WINDOW_MS, store, now }:
-  {
-    route: Route;
-    where: string;
-    what: string;
-    detail?: string;
-    severity?: Severity;
-    windowMs?: number;
-    /** Injected by tests. Production uses the Neon-backed store. */
-    store?: ErrorStore;
-    now?: () => number;
-  },
+export function reportError(args: ReportArgs): Promise<boolean> {
+  const p = reportNow(args);
+  (args.keepAlive ?? keepAlive)(p);
+  return p;
+}
+
+type ReportArgs = {
+  route: Route;
+  where: string;
+  what: string;
+  detail?: string;
+  severity?: Severity;
+  windowMs?: number;
+  /** Injected by tests. Production uses the Neon-backed store. */
+  store?: ErrorStore;
+  now?: () => number;
+  /** Injected by tests. Production hands the pending send to Next's after(). */
+  keepAlive?: (p: Promise<unknown>) => void;
+  /** Injected by tests. */
+  timeoutMs?: number;
+};
+
+async function reportNow(
+  { route, where, what, detail, severity = "alert", windowMs = DEFAULT_WINDOW_MS, store, now, timeoutMs = POST_TIMEOUT_MS }: ReportArgs,
 ): Promise<boolean> {
   try {
     const fp = fingerprint(where, what);
@@ -370,7 +424,7 @@ export async function reportError(
 
     if (!emailNow) return false;
 
-    return await post({
+    const sent = await post({
       record_id: fp,
       user_name: `Spartan error report (automated) - ${route}`,
       user_email: "error-report@spartancrew",
@@ -379,7 +433,12 @@ export async function reportError(
       deploy_sha: deploySha,
       ticket_text: errorEmailText({ route, where, what, detail, count, firstSeenAt }),
       transcript: `Automated error report. Fingerprint ${fp}. Repeats within ${Math.round(windowMs / 3600_000)} hours are counted, not re-sent.`,
-    });
+    }, timeoutMs);
+    if (!sent) {
+      if (sink) await sink.releaseEmail(fp);
+      else _seenInProcess.delete(fp);
+    }
+    return sent;
   } catch (err) {
     // The last line of defence: reporting must never be the thing that breaks a booking.
     console.error("[error-report] reporter itself failed", err);

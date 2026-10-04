@@ -1744,5 +1744,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0084",
+  "ts": "2026-10-04T17:42:08+00:00",
+  "kind": "measurement",
+  "headline": "Stage 1 (SP-02, SP-16): reporter kept alive by after(), 8 s send timeout, claim released on a failed post, default receiver is n8n Spartan Alarms on Test Email",
+  "subject": "An error report survives the response and frees its 6-hour window when the send fails",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 155,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]
