@@ -2010,5 +2010,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0103",
+  "ts": "2026-10-04T20:03:03+00:00",
+  "kind": "measurement",
+  "headline": "SP-14: confirmOrder refuses cancellation and empty holds, shares makeEmit (booking-lost report) and labels like handleThread",
+  "subject": "Confirming a staged order refuses a cancellation hold and reports a failed write",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 168,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]

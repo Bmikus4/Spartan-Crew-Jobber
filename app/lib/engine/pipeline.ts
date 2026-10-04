@@ -357,25 +357,9 @@ export async function handleThread(
   thread: HydratedThread,
   deps: PipelineDeps
 ): Promise<ConversationState> {
-  const { store, metrics, executor, settings, now, hashOrder } = deps;
+  const { store, executor, settings, now, hashOrder } = deps;
   const tid = thread.thread_id;
-  const emit = (type: any, meta?: Record<string, unknown>) => {
-    // ROUTE 1, "a booking was lost", hooked HERE rather than at each failure branch.
-    // Every path in this file that gives up on writing an order ends in emit("order_error")
-    // — there are five of them and more will be added — so reporting at the one shared exit
-    // means a new branch reports itself without anyone remembering to add a line. The same
-    // reasoning made test/all.ts discover its files instead of listing them: a list that has
-    // to be edited by hand to stay complete will not stay complete.
-    if (type === "order_error") {
-      void reportError({
-        route: "booking-lost",
-        where: "pipeline/order_error",
-        what: String(meta?.error ?? "the order could not be written"),
-        detail: `thread ${tid}${meta?.order_id ? `, order #${meta.order_id}` : ""}`,
-      });
-    }
-    return metrics.emit({ ts: now(), thread_id: tid, type, meta });
-  };
+  const emit = makeEmit(deps, tid);
 
   const prior = await store.get(tid);
 
@@ -1622,14 +1606,56 @@ export async function confirmOrder(
   thread_id: string,
   deps: PipelineDeps
 ): Promise<ConversationState | undefined> {
-  const { store, metrics, now } = deps;
+  const { store } = deps;
   const state = await store.get(thread_id);
   if (!state?.pending_order) return state;
-  const emit = (type: any, meta?: Record<string, unknown>) =>
-    metrics.emit({ ts: now(), thread_id, type, meta });
+  const emit = makeEmit(deps, thread_id);
   const next = { ...state };
+
+  /**
+   * A CONFIRM IS A CLICK ON A STAGED ORDER, NOT A REVIEW OF WHY IT WAS STAGED (SP-14). It ran
+   * the executor on anything pending, so a cancellation hold, which the engine must never
+   * write, was written by one click, and a failed write reported nothing. A cancellation or
+   * an empty order is refused here with the reason on the thread. A suspected twin stays
+   * confirmable: the person clicking is the override that hold was waiting for.
+   */
+  const crew = (state.pending_order.desired?.slot_teams ?? []).reduce((n, t) => n + (t.size || 0), 0);
+  if (state.cancellation === true || crew === 0) {
+    const why = state.cancellation
+      ? "the client is cancelling, and the engine does not cancel or shrink a booking; do it in OnSinch"
+      : "the staged order has no crew in it";
+    next.notes = [...next.notes, `confirm refused: ${why}. Nothing was written.`];
+    await store.put(next);
+    return next;
+  }
+
   await emit("order_confirmed", { kind: state.pending_order.kind });
   await executeOrder(next, state.pending_order, deps, emit);
   await store.put(next);
+  // The labels follow the write exactly as they do after an email (handleThread).
+  await flagManualIfNeeded(next, deps);
+  await flagBuiltIfNeeded(next, deps);
+  await flagUpdatedIfNeeded(next, deps);
+  await flagSupervisedIfNeeded(next, deps, (state.order_action_log ?? []).length);
   return next;
+}
+
+/**
+ * The pipeline's metric emitter. ROUTE 1, "a booking was lost", is hooked here rather than at
+ * each failure branch: every path that gives up on writing an order ends in
+ * emit("order_error"), so reporting at the one shared exit means a new branch reports itself
+ * without anyone remembering to add a line. Shared by handleThread and confirmOrder.
+ */
+function makeEmit(deps: PipelineDeps, tid: string) {
+  return (type: any, meta?: Record<string, unknown>) => {
+    if (type === "order_error") {
+      void (deps.report ?? reportError)({
+        route: "booking-lost",
+        where: "pipeline/order_error",
+        what: String(meta?.error ?? "the order could not be written"),
+        detail: `thread ${tid}${meta?.order_id ? `, order #${meta.order_id}` : ""}`,
+      });
+    }
+    return deps.metrics.emit({ ts: deps.now(), thread_id: tid, type, meta });
+  };
 }
