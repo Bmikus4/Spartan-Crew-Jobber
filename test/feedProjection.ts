@@ -7,7 +7,7 @@
 // made is done (green) the moment it is written (Ben, 2026-10-04).
 // Run: npx tsx test/feedProjection.ts
 // ============================================================================
-import { project, STATUS_TEXT, DONE_DWELL_MS, STALE_UNDATED_MS, dismissKey, type FeedMark } from "../app/lib/feed/project";
+import { project, STATUS_TEXT, DONE_DWELL_MS, STALE_UNDATED_MS, dismissKey, londonInstant, type FeedMark } from "../app/lib/feed/project";
 import type { ConversationState } from "../app/lib/engine/types";
 
 let fails = 0;
@@ -149,6 +149,17 @@ console.log("\n[10] crew is the busiest day, not the sum");
   const teams = (d: string, n: number) => ({ name: "", profession_id: 1, beginning: `${d}T08:00:00+01:00`, end: `${d}T18:00:00+01:00`, size: n, place_id: 1 });
   const p = project([created("c", NOW - H, { desired_order: { slot_teams: [teams("2026-10-16", 6), teams("2026-10-16", 2), teams("2026-10-17", 5)] } as never })], new Map(), [], null, NOW);
   ok(p.cards[0]?.crew === 8, "two blocks on the 16th (6+2) beat five on the 17th", String(p.cards[0]?.crew));
+}
+
+console.log("\n[11] when the job starts, for the countdown");
+{
+  ok(londonInstant("2026-10-16", "08:00") === Date.parse("2026-10-16T07:00:00Z"), "08:00 in October is 07:00 UTC (BST)");
+  ok(londonInstant("2026-12-07", "08:00") === Date.parse("2026-12-07T08:00:00Z"), "08:00 in December is 08:00 UTC (GMT)");
+  const team = (iso: string) => ({ name: "", profession_id: 1, beginning: iso, end: iso, size: 2, place_id: 1 });
+  const p = project([created("c", NOW - H, { desired_order: { slot_teams: [team("2026-10-03T09:00:00+01:00"), team("2026-10-04T07:30:00+01:00")] } as never })], new Map(), [], null, NOW);
+  ok(p.cards[0]?.starts_at === Date.parse("2026-10-04T06:30:00Z"), "the first block not yet started, not one already under way", String(p.cards[0]?.starts_at));
+  const q = project([needsCreated("n", { facts: { requests: [{ date: "2026-10-05", start_time: "06:00" }] } })], new Map(), [], null, NOW);
+  ok(q.cards[0]?.starts_at === Date.parse("2026-10-05T05:00:00Z"), "a request's date and time are London's");
 }
 
 console.log(fails ? `\n${fails} FAILED` : "\nALL PASS");

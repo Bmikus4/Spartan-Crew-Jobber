@@ -1688,5 +1688,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0080",
+  "ts": "2026-10-04T17:00:04+00:00",
+  "kind": "measurement",
+  "headline": "TV feed: 48-hour countdown clock (Leni DueClock style) from the job's real start time",
+  "subject": "A job starting within 48 hours shows a live countdown clock, green at 48 hours to red at none",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 154,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]

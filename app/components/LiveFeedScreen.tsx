@@ -112,11 +112,58 @@ function nextDay(c: FeedCard, now: number): string | null {
   const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/London", year: "numeric", month: "2-digit", day: "2-digit" }).format(now);
   return c.dates.find((d) => d >= today) ?? null;
 }
+/** When the countdown runs to: the job's first block not yet started, else the start of its next day. */
+function deadline(c: FeedCard, now: number): number | null {
+  if (c.starts_at != null) return c.starts_at;
+  const d = nextDay(c, now);
+  return d ? Date.parse(`${d}T00:00:00Z`) : null;
+}
 /** Starts within 48 hours and is still open. */
 function urgent(c: FeedCard, now: number): boolean {
   if (!isOpen(c)) return false;
-  const d = nextDay(c, now);
-  return !!d && Date.parse(`${d}T00:00:00Z`) - now <= URGENT_MS;
+  const at = deadline(c, now);
+  return at != null && at - now <= URGENT_MS;
+}
+
+const two = (n: number) => String(n).padStart(2, "0");
+/** Green at 48 hours to red at none, through yellow and orange: the hue walks the spectrum, not a blend. */
+const urgencyColour = (left: number) => `hsl(${Math.round(Math.min(1, Math.max(0, left / URGENT_MS)) * 130)} 78% 50%)`;
+function countdownText(left: number): string {
+  const h = Math.floor(left / 3_600_000), m = Math.floor((left % 3_600_000) / 60_000), sec = Math.floor((left % 60_000) / 1000);
+  return `${h}:${two(m)}:${two(sec)}`;
+}
+
+/**
+ * The 48-hour countdown, after the follow-up timer on Leni's list (DueClock): a tinted
+ * clock face in the urgency colour. Here the ring is the time left of the 48 hours, a dot
+ * walks it with the seconds, and the live time to the job's start sits inside.
+ */
+function CountdownClock({ until, now, size }: { until: number; now: number; size: number }) {
+  const left = Math.max(0, until - now);
+  const f = Math.min(1, left / URGENT_MS);
+  const color = urgencyColour(left);
+  const C = 2 * Math.PI * 44;
+  const sec = Math.floor((left % 60_000) / 1000);
+  const dot = ((sec * 6 - 90) * Math.PI) / 180;
+  const h = Math.floor(left / 3_600_000), m = Math.floor((left % 3_600_000) / 60_000);
+  return (
+    <svg width={size} height={size} viewBox="0 0 100 100" role="img" aria-label={`Starts in ${countdownText(left)}`} style={{ flexShrink: 0, overflow: "visible" }}>
+      <circle cx="50" cy="50" r="47" fill={`color-mix(in oklab, ${color} 14%, transparent)`} />
+      <circle cx="50" cy="50" r="44" fill="none" stroke="var(--border-strong)" strokeWidth="5" />
+      <circle cx="50" cy="50" r="44" fill="none" stroke={color} strokeWidth="5" strokeLinecap="round" strokeDasharray={`${C * f} ${C}`} transform="rotate(-90 50 50)" style={{ transition: "stroke-dasharray 900ms linear, stroke 900ms linear" }} />
+      {Array.from({ length: 12 }, (_, i) => {
+        const a = ((i * 30 - 90) * Math.PI) / 180;
+        return <line key={i} x1={50 + Math.cos(a) * 36} y1={50 + Math.sin(a) * 36} x2={50 + Math.cos(a) * 39.5} y2={50 + Math.sin(a) * 39.5} stroke={color} strokeOpacity={i % 3 ? 0.35 : 0.8} strokeWidth={i % 3 ? 1.4 : 2.2} strokeLinecap="round" />;
+      })}
+      <circle cx={50 + Math.cos(dot) * 44} cy={50 + Math.sin(dot) * 44} r="4.6" fill={color} stroke="var(--bg)" strokeWidth="1.6" />
+      <text x="50" y="50" textAnchor="middle" className="mono tnum" style={{ fontSize: 23, fontWeight: 700, fill: `color-mix(in oklab, ${color} 78%, var(--text-primary))` }}>
+        {left === 0 ? "NOW" : `${h}:${two(m)}`}
+      </text>
+      <text x="50" y="68" textAnchor="middle" className="mono tnum" style={{ fontSize: 13, fontWeight: 600, fill: "var(--text-muted)" }}>
+        {left === 0 ? "started" : `${two(sec)}s`}
+      </text>
+    </svg>
+  );
 }
 function numbersOf(c: FeedCard, one = false): string | null {
   if (c.colour === "neutral") return null;
@@ -168,7 +215,7 @@ function Row({ card, now, s, phase, onTick }: { card: FeedCard; now: number; s: 
 
   return (
     <div style={{
-      display: "grid", gridTemplateColumns: `${4 * s}px minmax(0, 1fr) ${240 * s}px ${72 * s}px`, alignItems: "center", columnGap: 20 * s,
+      display: "grid", gridTemplateColumns: `${4 * s}px minmax(0, 1fr) ${104 * s}px ${240 * s}px ${72 * s}px`, alignItems: "center", columnGap: 20 * s,
       minHeight: 108 * s, padding: `${14 * s}px ${20 * s}px ${14 * s}px 0`, borderBottom: "1px solid var(--border)",
       background: done ? tint(GREEN, 15) : "transparent",
       opacity: phase === "fade" ? 0 : 1,
@@ -185,7 +232,6 @@ function Row({ card, now, s, phase, onTick }: { card: FeedCard; now: number; s: 
           </span>
           <Tag s={s} color={done ? GREEN : signal(card)}>{lead.status}</Tag>
           {hasReply(card) && it && <Tag s={s} color={GREY}>Needs reply</Tag>}
-          {urgent(card, now) && <Tag s={s} color={AMBER}>48H</Tag>}
         </div>
         <div style={{ fontSize: 20 * s, fontWeight: 500, color: "var(--text-secondary)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
           {/* The numbers lead so a long venue can never cut them: they find the job in OnSinch. */}
@@ -195,6 +241,10 @@ function Row({ card, now, s, phase, onTick }: { card: FeedCard; now: number; s: 
             ? <span style={{ color: GREEN, fontWeight: 600 }}>{evidence}</span>
             : <>{detail}{detail ? <span style={{ color: "var(--text-faint)" }}> · </span> : null}<span style={{ color: "var(--text-muted)" }}>{ago(lead.at, now)}</span></>}
         </div>
+      </div>
+
+      <div style={{ display: "grid", placeItems: "center" }}>
+        {urgent(card, now) && <CountdownClock until={deadline(card, now)!} now={now} size={96 * s} />}
       </div>
 
       <div style={{ minWidth: 0 }}>
@@ -227,7 +277,7 @@ function Tile({ card, now, s, onTick }: { card: FeedCard; now: number; s: number
         <div style={{ fontSize: 22 * s, fontWeight: 800, color: "var(--text-primary)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{card.company || card.subject}</div>
         <div style={{ fontSize: 14 * s, fontWeight: 500, color: "var(--text-secondary)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
           {numbers && <span className={card.r_number || card.j_number ? "mono" : undefined} style={{ color: "var(--text-primary)" }}>{numbers} · </span>}
-          {urgent(card, now) && <span style={{ color: AMBER, fontWeight: 700 }}>48H · </span>}
+          {urgent(card, now) && <span className="mono tnum" style={{ color: urgencyColour(deadline(card, now)! - now), fontWeight: 700 }}>{countdownText(Math.max(0, deadline(card, now)! - now))} · </span>}
           {t ? fmt(t, { weekday: "short", day: "numeric", month: "short" }) : it ? "Date TBC" : `Waiting since ${fmt(lead.at, { day: "numeric", month: "short" })}`}
         </div>
       </div>

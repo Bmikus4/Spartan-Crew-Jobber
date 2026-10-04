@@ -83,6 +83,8 @@ export interface FeedCard {
   company: string | null;
   contact: string | null;
   dates: string[];
+  /** The first block that has not started yet (ms), for the 48-hour countdown; null when no time is known. */
+  starts_at: number | null;
   crew: number | null;
   venue: string | null;
   r_number: string | null;
@@ -124,6 +126,28 @@ function jobDays(s: ConversationState): string[] {
   for (const r of s.facts?.requests ?? []) if (r?.date && /^\d{4}-\d{2}-\d{2}/.test(r.date)) days.add(r.date.slice(0, 10));
   for (const t of s.desired_order?.slot_teams ?? []) if (t?.beginning && /^\d{4}-\d{2}-\d{2}/.test(t.beginning)) days.add(t.beginning.slice(0, 10));
   return [...days].sort();
+}
+
+/** A London wall-clock time as an instant: the offset is London's on that day, so BST is right. */
+export function londonInstant(day: string, hhmm: string): number {
+  const guess = Date.parse(`${day}T${hhmm.length === 5 ? hhmm : "00:00"}:00Z`);
+  if (!Number.isFinite(guess)) return NaN;
+  const p = Object.fromEntries(new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/London", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).formatToParts(guess).map((x) => [x.type, x.value]));
+  const wall = Date.parse(`${p.year}-${p.month}-${p.day}T${p.hour}:${p.minute}:00Z`);
+  return guess - (wall - guess);
+}
+
+/**
+ * When the job next starts. The ordered blocks carry real instants; a request's date and
+ * start time are London wall-clock. A day with no time counts from its first minute, so
+ * the countdown never promises more time than there is.
+ */
+function nextStart(s: ConversationState, now: number): number | null {
+  const at: number[] = [];
+  for (const t of s.desired_order?.slot_teams ?? []) { const v = Date.parse(String(t?.beginning ?? "")); if (Number.isFinite(v)) at.push(v); }
+  for (const r of s.facts?.requests ?? []) if (r?.date && /^\d{4}-\d{2}-\d{2}/.test(r.date)) { const v = londonInstant(r.date.slice(0, 10), r.start_time ?? "00:00"); if (Number.isFinite(v)) at.push(v); }
+  const future = at.filter((v) => v >= now).sort((a, b) => a - b);
+  return future[0] ?? null;
 }
 
 /**
@@ -249,6 +273,7 @@ export function project(
       company: str(s.facts?.company_name),
       contact: firstName(s.facts?.contact_name),
       dates: days,
+      starts_at: nextStart(s, now),
       crew: crewOf(s),
       venue: str(s.facts?.location_text),
       r_number: str(s.onsinch_order_number) ? `R${String(s.onsinch_order_number).replace(/^R/i, "")}` : null,
@@ -275,7 +300,7 @@ export function project(
     cards.set(r.thread_id, {
       thread_id: r.thread_id, colour: "neutral", lane: "reply", items: [item], green: false, at: item.at,
       order_id: null, company_id: null, company: r.company, contact: firstName(r.contact),
-      dates: [], crew: null, venue: null, r_number: null, j_number: null, subject: r.subject,
+      dates: [], starts_at: null, crew: null, venue: null, r_number: null, j_number: null, subject: r.subject,
     });
   }
 
