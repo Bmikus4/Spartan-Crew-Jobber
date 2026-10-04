@@ -239,10 +239,13 @@ function Tile({ card, now, s, onTick }: { card: FeedCard; now: number; s: number
     <div style={{ height: "100%", boxSizing: "border-box", borderRadius: 14 * s, overflow: "hidden", background: bgOf(card), borderLeft: `${12 * s}px solid ${edge}`, boxShadow: "0 2px 10px rgba(17,19,24,0.06)", padding: `${12 * s}px ${14 * s}px`, display: "flex", gap: 10 * s }}>
       <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 4 * s }}>
         <div style={{ fontSize: 20 * s, fontWeight: 800, color: card.green ? C.green : edge, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-          {urgent(card, now) ? "URGENT · " : ""}{lead.status}
+          {lead.status}
         </div>
         <div style={{ fontSize: 32 * s, fontWeight: 800, color: C.ink, lineHeight: 1.1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{card.company || card.subject}</div>
         <div style={{ fontSize: 20 * s, fontWeight: 700, color: C.sub, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+          {/* URGENT rides on the date line: as a prefix to the status it cut the requester's
+              wording to "Order needs c..." at five tiles across 1080p. */}
+          {urgent(card, now) && <span style={{ color: C.ink, fontWeight: 800 }}>URGENT · </span>}
           {t ? fmt(t, { weekday: "short", day: "2-digit", month: "short" }) : it ? "Date TBC" : `Waiting since ${fmt(lead.at, { day: "2-digit", month: "short" })}`}
           {numbers ? <span style={{ color: C.ink }}> · {numbers}</span> : null}
         </div>

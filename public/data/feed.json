@@ -1604,5 +1604,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0074",
+  "ts": "2026-10-04T03:11:20+00:00",
+  "kind": "measurement",
+  "headline": "TV feed: URGENT moved from the tile status to its date line",
+  "subject": "Layout B's tiles keep the status wording whole when a job is urgent",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 154,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]
