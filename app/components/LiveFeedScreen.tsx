@@ -27,7 +27,8 @@ const STALE_DATA_MS = 2 * 60_000;
 const CHIME_GAP_MS = 10_000;
 const UNDO_MS = 10_000;
 const IDLE_CURSOR_MS = 3_000;
-const STRIP = 6;
+/** Five, not six: at 1080p six compact cards cut "Order needs created" to "Order need...". */
+const STRIP = 5;
 
 const C = {
   bg: "#0b0d10", text: "#ffffff", dim: "#b9c0cb", faint: "#7d8592",
@@ -135,18 +136,18 @@ function Card({ card, now, s, compact, onTick }: { card: FeedCard; now: number; 
       borderLeft: `${14 * s}px solid ${card.lane === "check" && !card.green ? edge : bg}`,
       // the thin red or blue edge a green card keeps, so the legend still reads
       boxShadow: card.green ? `inset 0 0 0 ${4 * s}px ${edge}` : undefined,
-      padding: `${(compact ? 12 : 18) * s}px ${(compact ? 14 : 20) * s}px`, paddingRight: (it ? 84 : 20) * s,
+      padding: `${(compact ? 12 : 18) * s}px ${(compact ? 14 : 20) * s}px`, paddingRight: (it ? (compact ? 62 : 84) : 20) * s,
       display: "flex", flexDirection: "column", gap: 6 * s,
     }}>
-      <div style={{ fontSize: (compact ? 28 : 42) * s, fontWeight: 800, lineHeight: 1.1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+      <div style={{ fontSize: (compact ? 25 : 42) * s, fontWeight: 800, lineHeight: 1.1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
         {lead.status}
       </div>
       <div style={{ display: "flex", gap: 10 * s, alignItems: "center", flexWrap: "nowrap", fontSize: (compact ? 16 : 22) * s, fontWeight: 800, letterSpacing: "0.04em" }}>
-        {card.colour !== "neutral" && <span style={{ background: chipBg, color: chipFg, borderRadius: 6 * s, padding: `${2 * s}px ${10 * s}px` }}>{card.colour === "red" ? "NEW JOB" : "UPDATE"}</span>}
-        {reply && it && <span style={{ background: "#e5e7eb", color: "#1f2937", borderRadius: 6 * s, padding: `${2 * s}px ${10 * s}px` }}>NEEDS REPLY</span>}
-        <span style={{ fontWeight: 600, letterSpacing: 0, color: solid || card.green ? "rgba(255,255,255,0.85)" : C.dim, whiteSpace: "nowrap" }}>{ago(lead.at, now)}</span>
+        {card.colour !== "neutral" && <span style={{ background: chipBg, color: chipFg, borderRadius: 6 * s, padding: `${2 * s}px ${10 * s}px`, whiteSpace: "nowrap", flexShrink: 0 }}>{card.colour === "red" ? "NEW JOB" : "UPDATE"}</span>}
+        {reply && it && <span style={{ background: "#e5e7eb", color: "#1f2937", borderRadius: 6 * s, padding: `${2 * s}px ${10 * s}px`, whiteSpace: "nowrap", flexShrink: 0 }}>NEEDS REPLY</span>}
+        <span style={{ fontWeight: 600, letterSpacing: 0, color: solid || card.green ? "rgba(255,255,255,0.85)" : C.dim, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{ago(lead.at, now)}</span>
       </div>
-      <div style={{ fontSize: (compact ? 20 : 29) * s, fontWeight: 600, lineHeight: 1.2, display: "-webkit-box", WebkitLineClamp: compact ? 2 : 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
+      <div style={{ fontSize: (compact ? 18 : 29) * s, fontWeight: 600, lineHeight: 1.2, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
         {ident || card.subject}
         {numbers && <span style={{ fontWeight: 800 }}>{ident ? " · " : ""}{numbers}</span>}
       </div>
@@ -158,8 +159,8 @@ function Card({ card, now, s, compact, onTick }: { card: FeedCard; now: number; 
           aria-label={ticked ? "Undo check" : it.green ? "Verified" : "Mark checked"}
           onClick={() => { if (!autoGreen) onTick(card, it, !ticked); }}
           style={{
-            position: "absolute", right: 18 * s, top: "50%", transform: "translateY(-50%)",
-            width: 48 * s, height: 48 * s, borderRadius: 8 * s, cursor: autoGreen ? "default" : "pointer",
+            position: "absolute", right: (compact ? 14 : 18) * s, top: "50%", transform: "translateY(-50%)",
+            width: (compact ? 36 : 48) * s, height: (compact ? 36 : 48) * s, borderRadius: 8 * s, cursor: autoGreen ? "default" : "pointer",
             border: `${3 * s}px solid rgba(255,255,255,0.9)`, background: it.green ? "#ffffff" : "transparent",
             color: C.green, fontSize: 34 * s, fontWeight: 900, lineHeight: 1, display: "grid", placeItems: "center", padding: 0,
           }}>

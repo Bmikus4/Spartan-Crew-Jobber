@@ -1520,5 +1520,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0068",
+  "ts": "2026-10-04T01:00:14+00:00",
+  "kind": "measurement",
+  "headline": "TV feed: layout B strip 6 -> 5 cards, chips never wrap (seen on production at 1920x1080)",
+  "subject": "Layout B's strip of five needs fits 'Order needs created' on one line at 1080p; six cut it to 'Order need...'",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 154,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]
