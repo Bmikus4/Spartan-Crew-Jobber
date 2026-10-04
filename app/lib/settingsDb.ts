@@ -4,6 +4,7 @@
 
 import { neon, type NeonQueryFunction } from "@neondatabase/serverless";
 import { DEFAULT_SETTINGS, type Settings } from "./engine/types";
+import { reportError } from "./errorReport";
 
 let _sql: NeonQueryFunction<false, false> | null = null;
 let _ready = false;
@@ -54,29 +55,36 @@ export function replyDeliveryForWire(s: Settings): { enabled: boolean; delivery:
   return { enabled: s.replies_enabled, delivery: s.replies_enabled ? s.reply_delivery : "draft" };
 }
 
-export async function getSettings(): Promise<Settings> {
-  const sql = db();
+/**
+ * With a database configured, a failed read THROWS (SP-17). It returned the defaults, so a
+ * Neon blip priced the next order at the default rate card (315, types.ts) and reset the
+ * reply switches with nobody told. On intake the throw lands in the route's catch, which
+ * holds the email for the sweep (SP-15). No database at all is still the defaults: that is
+ * a local run, not a failure. `sql` is injected by tests.
+ */
+export async function getSettings(sql: NeonQueryFunction<false, false> | null = db()): Promise<Settings> {
   if (!sql) return { ...DEFAULT_SETTINGS };
   try {
     await ensure(sql);
     const rows = (await sql`SELECT value FROM app_settings WHERE id = 'singleton'`) as { value: Settings }[];
     return { ...DEFAULT_SETTINGS, ...(rows[0]?.value ?? {}) };
-  } catch {
-    return { ...DEFAULT_SETTINGS };
+  } catch (err) {
+    void reportError({
+      route: "engine-threw", where: "settings/read", severity: "alert",
+      what: "the settings could not be read, so nothing that depends on them ran",
+      detail: String((err as Error)?.message ?? err),
+    });
+    throw err;
   }
 }
 
-export async function saveSettings(next: Partial<Settings>): Promise<Settings> {
-  const merged = { ...(await getSettings()), ...next };
-  const sql = db();
+/** Throws when the write fails, so the Settings screen is never told "saved" for nothing. */
+export async function saveSettings(next: Partial<Settings>, sql: NeonQueryFunction<false, false> | null = db()): Promise<Settings> {
+  const merged = { ...(await getSettings(sql)), ...next };
   if (!sql) return merged;
-  try {
-    await ensure(sql);
-    await sql`
-      INSERT INTO app_settings (id, value, updated_at) VALUES ('singleton', ${JSON.stringify(merged)}, now())
-      ON CONFLICT (id) DO UPDATE SET value = EXCLUDED.value, updated_at = now()`;
-  } catch (err) {
-    console.error("[settings] save failed", err);
-  }
+  await ensure(sql);
+  await sql`
+    INSERT INTO app_settings (id, value, updated_at) VALUES ('singleton', ${JSON.stringify(merged)}, now())
+    ON CONFLICT (id) DO UPDATE SET value = EXCLUDED.value, updated_at = now()`;
   return merged;
 }

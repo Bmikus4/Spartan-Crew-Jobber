@@ -11,7 +11,11 @@ import { getSettings, saveSettings, coerceSettings } from "../../lib/settingsDb"
 import { authorizeAction } from "../../lib/apiAuth";
 
 export async function GET(): Promise<Response> {
-  return Response.json(await getSettings());
+  try {
+    return Response.json(await getSettings());
+  } catch {
+    return Response.json({ ok: false, error: "settings could not be read" }, { status: 500 });
+  }
 }
 
 /**
@@ -32,6 +36,11 @@ export async function POST(request: Request): Promise<Response> {
 
   let body: unknown;
   try { body = await request.json(); } catch { return Response.json({ ok: false, error: "bad json" }, { status: 400 }); }
-  const saved = await saveSettings(coerceSettings(body));
-  return Response.json({ ok: true, settings: saved });
+  try {
+    const saved = await saveSettings(coerceSettings(body));
+    return Response.json({ ok: true, settings: saved });
+  } catch {
+    // It answered 200 "ok" when the write failed, so a switch looked flipped and was not.
+    return Response.json({ ok: false, error: "settings not saved" }, { status: 500 });
+  }
 }

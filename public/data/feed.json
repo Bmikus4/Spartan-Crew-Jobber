@@ -1996,5 +1996,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0102",
+  "ts": "2026-10-04T19:56:13+00:00",
+  "kind": "measurement",
+  "headline": "SP-17: getSettings/saveSettings throw when a DB is configured and fails; the settings route answers 500",
+  "subject": "A failed settings read or write is an error, not the defaults or a false save",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 167,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]
