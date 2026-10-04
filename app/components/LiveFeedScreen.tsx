@@ -34,6 +34,7 @@ const URGENT_MS = 48 * 3_600_000;
 const STRIP = 5;
 /** A row that has just gone green holds its place this long, then fades and drops to the done group (Ben, 2026-10-04). */
 const HOLD_MS = 3_000;
+const RETURN_TO_TOP_MS = 20_000;
 const FADE_MS = 600;
 
 // Signal colours only, from the theme. Everything else is the tool's neutral tokens.
@@ -85,20 +86,35 @@ function evidenceLine(it: FeedItem): string | null {
 }
 
 /** The soft two-note chime. WebAudio, so there is no file to fail to load. */
+/**
+ * AS LOUD AS THE BROWSER WILL PLAY (Ben, 2026-10-04): it has to carry across the office.
+ * Each note is a sine with a triangle an octave up for presence, at full gain, through a
+ * compressor so the summed notes are pushed to the ceiling without clipping into a
+ * crackle. The figure plays twice. Past this, only the TV's own volume can go higher.
+ */
 function chime(ctx: AudioContext) {
   const t0 = ctx.currentTime;
-  for (const [i, f] of [660, 880].entries()) {
-    const o = ctx.createOscillator();
-    const g = ctx.createGain();
-    o.type = "sine";
-    o.frequency.value = f;
-    const s = t0 + i * 0.22;
-    g.gain.setValueAtTime(0, s);
-    g.gain.linearRampToValueAtTime(0.07, s + 0.03);
-    g.gain.exponentialRampToValueAtTime(0.0001, s + 0.6);
-    o.connect(g).connect(ctx.destination);
-    o.start(s);
-    o.stop(s + 0.65);
+  const comp = ctx.createDynamicsCompressor();
+  comp.threshold.value = -12; comp.knee.value = 6; comp.ratio.value = 8; comp.attack.value = 0.002; comp.release.value = 0.2;
+  const master = ctx.createGain();
+  master.gain.value = 1;
+  comp.connect(master).connect(ctx.destination);
+  for (const round of [0, 0.75]) {
+    for (const [i, f] of [660, 880].entries()) {
+      const at = t0 + round + i * 0.22;
+      for (const [type, mult, peak] of [["sine", 1, 1], ["triangle", 2, 0.45]] as const) {
+        const o = ctx.createOscillator();
+        const g = ctx.createGain();
+        o.type = type;
+        o.frequency.value = f * mult;
+        g.gain.setValueAtTime(0, at);
+        g.gain.linearRampToValueAtTime(peak, at + 0.015);
+        g.gain.exponentialRampToValueAtTime(0.0001, at + 0.65);
+        o.connect(g).connect(comp);
+        o.start(at);
+        o.stop(at + 0.7);
+      }
+    }
   }
 }
 
@@ -313,6 +329,8 @@ function Section({ s, label, n, color }: { s: number; label: string; n: number; 
 
 export default function LiveFeedScreen({ isActive, tv = false }: { isActive: boolean; tv?: boolean }) {
   const rootRef = useRef<HTMLDivElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
+  const lastScrollAt = useRef(0);
   const [data, setData] = useState<FeedResponse | null>(null);
   const [okAt, setOkAt] = useState<number | null>(null);
   const [failed, setFailed] = useState(false);
@@ -342,10 +360,13 @@ export default function LiveFeedScreen({ isActive, tv = false }: { isActive: boo
       // A chime for an item this screen has not seen before. Never on first load, at
       // most one per ten seconds, and only once a click has unlocked audio.
       const prev = seen.current;
-      if (prev && [...keys].some((k) => !prev.has(k)) && audio.current && Date.now() - lastChime.current > CHIME_GAP_MS) {
+      const arrived = !!prev && [...keys].some((k) => !prev.has(k));
+      if (arrived && audio.current && Date.now() - lastChime.current > CHIME_GAP_MS) {
         lastChime.current = Date.now();
         try { chime(audio.current); } catch { /* audio is a nicety */ }
       }
+      // Something new goes to the top, so the top is where the screen has to be looking.
+      if (arrived) window.setTimeout(() => listRef.current?.scrollTo({ top: 0, behavior: "smooth" }), 50);
       seen.current = keys;
       setData(body);
       setOkAt(Date.now());
@@ -400,6 +421,16 @@ export default function LiveFeedScreen({ isActive, tv = false }: { isActive: boo
       return next;
     });
   }, [data]);
+
+  /**
+   * THE TV ALWAYS COMES BACK TO THE TOP (Ben, 2026-10-04). The most urgent work is up
+   * there, and a list somebody scrolled down and walked away from would hide it all day.
+   * Twenty seconds after the last scroll it glides back.
+   */
+  useEffect(() => {
+    const el = listRef.current;
+    if (el && el.scrollTop > 0 && Date.now() - lastScrollAt.current > RETURN_TO_TOP_MS) el.scrollTo({ top: 0, behavior: "smooth" });
+  }, [now]);
 
   // Released on the screen's own clock, not a timer per row: a tick refetches within a
   // second, and a timer cleared by that refetch left the row held in place for good.
@@ -546,7 +577,7 @@ export default function LiveFeedScreen({ isActive, tv = false }: { isActive: boo
         </div>
       )}
 
-      <div className="frosted-glass" style={{ flex: 1, minHeight: 0, overflowY: "auto", overflowX: "hidden" }}>
+      <div ref={listRef} onScroll={() => { lastScrollAt.current = Date.now(); }} className="frosted-glass" style={{ flex: 1, minHeight: 0, overflowY: "auto", overflowX: "hidden" }}>
         {data == null ? (
           <div style={{ padding: 40 * s, fontSize: 22 * s, fontWeight: 600, color: failed ? AMBER : "var(--text-muted)" }}>{failed ? "The feed could not be read. Retrying." : "Loading…"}</div>
         ) : (

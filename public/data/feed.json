@@ -1828,5 +1828,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0090",
+  "ts": "2026-10-04T18:44:23+00:00",
+  "kind": "measurement",
+  "headline": "TV feed: return-to-top after 20s or on a new item, chime at full gain through a compressor, played twice",
+  "subject": "The TV scrolls back to the top 20 s after anyone scrolls it, and its chime plays at full gain",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 159,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]
