@@ -1,6 +1,7 @@
 export const runtime = "nodejs";
 // 300, not 60: a lost order now asks the link judge (up to two 45s calls) for its
-// replacement. The batch limit below is still sized for the old 60s; see DEFAULT_LIMIT.
+// replacement. The batch limit is still sized for the old 60s; see DEFAULT_LIMIT in
+// app/lib/routes/reconcile.ts.
 export const maxDuration = 300;
 
 // The reconciliation sweep. Re-reads every bound thread against OnSinch and corrects what
@@ -34,129 +35,23 @@ export const maxDuration = 300;
 // Same N8N_WEBHOOK_SECRET as the other machine routes, and the same rule: a deployment
 // with the database but no secret is NOT open.
 
-import { buildDeps } from "../../lib/deps";
-import { NeonStateStore } from "../../lib/stateDb";
-import { sweepAll, type SweepOutcome } from "../../lib/engine/sweep";
+// The handler is app/lib/routes/reconcile.ts, where its IO can be injected for tests; the
+// gate stays here, where test/machineRouteAuth.ts and the middleware SKIP list look for it.
 import { authorizeMachineCall } from "../../lib/apiAuth";
-import { retryHeld, markThrew, MAX_RETRIES_PER_RUN, type RetryOutcome } from "../../lib/engine/retryHeld";
-import { rebuildThread } from "../../lib/threadMessagesDb";
-import { coerceThread } from "../../lib/engine/intake";
-import { handleThread, flagManualIfNeeded } from "../../lib/engine/pipeline";
-import { upsertTicketFromState } from "../../lib/ticketsDb";
-import { drySandbox } from "../../lib/engine/sweepSandbox";
-import { expirePast } from "../../lib/engine/expirePast";
+import { runReconcile } from "../../lib/routes/reconcile";
 
-const NEEDS_A_PERSON = new Set(["lost", "unapplied", "unactionable", "unreconciled"]);
-import { reportError } from "../../lib/errorReport";
-
-// A re-run is one model call plus an OnSinch create; none starts after this many ms.
-const RETRY_START_BUDGET_MS = 35_000;
-
-// 30, not the 40 that was measured at 23.7s dry. A dry run replaces each write with an
-// immediate throw, so the live run of that same batch does 21 OnSinch patches the
-// measurement never paid for. The headroom is for those.
-const DEFAULT_LIMIT = 30;
-
-async function run(request: Request, dry: boolean): Promise<Response> {
-  const started = Date.now();
-  if (!authorizeMachineCall(request).ok) {
-    return Response.json({ ok: false, error: "unauthorized" }, { status: 401 });
-  }
-
-  const url = new URL(request.url);
-  const limit = Math.max(1, Math.min(500, Number(url.searchParams.get("limit")) || DEFAULT_LIMIT));
-
-  const store = new NeonStateStore();
-  const states = await store.forSweep(limit);
-  const deps = await buildDeps();
-
-  // A dry run must not be able to write, and "we promise not to call it" is not a
-  // mechanism: drySandbox builds its deps from an allowlist of reads (SP-13).
-  const sandboxed = dry ? drySandbox(deps) : deps;
-
-  // No `limit` here: the batch was already bounded by the query that chose it, and
-  // sweepAll's limit counts only threads that PAID for an OnSinch read. Applying both
-  // means a batch of mostly-skipped rows stops short, leaves the rest unstamped, and
-  // hands the next run the same rows again -- the rotation stalls while reporting
-  // success. One bound, in one place.
-  const { swept, outcomes } = await sweepAll(states, sandboxed as typeof deps, {
-    todayISO: new Date().toISOString(),
-  });
-
-  // One ticket upsert per outcome that needs a person (SP-09): before this only held
-  // re-runs reached the tickets table, so the dashboard never saw a lost order.
-  if (!dry) {
-    const byId = new Map(states.map((s) => [s.thread_id, s]));
-    for (const o of outcomes) {
-      const s = NEEDS_A_PERSON.has(o.action) ? byId.get(o.thread_id) : undefined;
-      if (s) await upsertTicketFromState(s);
-    }
-  }
-
-  // Stamped only on a real run. A dry run must leave no trace, and stamping one would
-  // push every thread it looked at to the back of the queue without reconciling any of
-  // them -- a read-only call silently costing the next real sweep its turn.
-  if (!dry) await store.markSwept(states.map((s) => s.thread_id));
-
-  // Real runs only: a re-run books an order, which a dry run must never do.
-  let retried: RetryOutcome[] = [];
-  if (!dry) {
-    retried = await retryHeld(await store.heldForRetry(MAX_RETRIES_PER_RUN), {
-      listsReadable: async () => { try { await deps.onsinch.allPlaces(); await deps.onsinch.allCompanies(); return true; } catch { return false; } },
-      run: async (threadId) => {
-        const thread = await rebuildThread(threadId);
-        const coerced = thread ? coerceThread(thread) : null;
-        if (!coerced) return null;
-        const state = await handleThread(coerced, deps);
-        await upsertTicketFromState(state);
-        return state;
-      },
-      hasTime: () => Date.now() - started < RETRY_START_BUDGET_MS,
-    });
-    for (const o of retried) if (o.result.startsWith("failed")) {
-      void reportError({ route: "engine-threw", where: "api/reconcile (held retry)", what: o.result, detail: `thread ${o.thread_id}` });
-      // A re-run that threw is a held pass too, or a thread that always throws would be
-      // re-run, with its model calls, every hour for three days (SP-15).
-      await markThrew(store, { thread_id: o.thread_id }, o.result).catch(() => {});
-    }
-  }
-  // Real runs only: a needs-a-person flag on a job that is over comes off, 20 a run (SP-40).
-  let expired = 0;
-  if (!dry) {
-    for (const s of expirePast(await store.flaggedOldestFirst(200), new Date().toISOString())) {
-      await store.put(s);
-      await flagManualIfNeeded(s, deps);
-      await upsertTicketFromState(s);
-      expired++;
-    }
-  }
-  const stats = await store.sweepStats();
-
-  const tally: Record<string, number> = {};
-  for (const o of outcomes) tally[o.action] = (tally[o.action] ?? 0) + 1;
-
-  return Response.json({
-    ok: true,
-    dry,
-    batch: states.length,
-    bound_threads: stats.bound,
-    never_swept: stats.never_swept,
-    swept,
-    tally,
-    expired,
-    // Only the rows that did something or could not be done. A run where 38 of 40 threads
-    // hold exactly what they should is the healthy case, and printing all 38 buries the two.
-    outcomes: outcomes.filter((o: SweepOutcome) => o.action !== "holds" && o.action !== "skipped" && o.action !== "exists"),
-    retried,
-  });
+function unauthorized(): Response {
+  return Response.json({ ok: false, error: "unauthorized" }, { status: 401 });
 }
 
 export async function POST(request: Request): Promise<Response> {
+  if (!authorizeMachineCall(request).ok) return unauthorized();
   const dry = new URL(request.url).searchParams.get("dry") === "1";
-  return run(request, dry);
+  return runReconcile(request, dry);
 }
 
 /** GET is always dry. A sweep that writes should be something a caller asked for on purpose. */
 export async function GET(request: Request): Promise<Response> {
-  return run(request, true);
+  if (!authorizeMachineCall(request).ok) return unauthorized();
+  return runReconcile(request, true);
 }

@@ -2178,5 +2178,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0115",
+  "ts": "2026-10-04T21:47:18+00:00",
+  "kind": "measurement",
+  "headline": "SP-50: health/intake, settings, confirm-order, dedupe and reconcile handlers moved to app/lib/routes; handler tests added",
+  "subject": "Every live route's handler is tested with its IO injected",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 176,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]

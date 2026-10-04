@@ -18,7 +18,8 @@ export const runtime = "nodejs";
 // GET is a health probe: reports whether the DB and the secret are configured,
 // without revealing either.
 
-import { claimMessage, peekMessage } from "../../lib/messageLedgerDb";
+import { peekMessage } from "../../lib/messageLedgerDb";
+import { handleDedupe } from "../../lib/routes/dedupe";
 import { authorizeMachineCall } from "../../lib/apiAuth";
 
 // An unconfigured secret used to mean "allowed". On a preview deployment the secret is
@@ -28,33 +29,7 @@ const authorized = (request: Request): boolean => authorizeMachineCall(request).
 
 export async function POST(request: Request): Promise<Response> {
   if (!authorized(request)) return Response.json({ ok: false, error: "unauthorized" }, { status: 401 });
-
-  let body: Record<string, unknown>;
-  try { body = (await request.json()) as Record<string, unknown>; }
-  catch { return Response.json({ ok: false, error: "bad json" }, { status: 400 }); }
-
-  // Accept the several id spellings the workflow has floating around (Gmail
-  // `id`/`threadId`, the normalized `email_id`/`thread_id`, Outlook leftovers).
-  const oe = (body.original_email ?? {}) as Record<string, unknown>;
-  const message_id = String(body.message_id ?? body.messageId ?? body.id ?? oe.email_id ?? oe.message_id ?? "").trim();
-  const thread_id = String(body.thread_id ?? body.threadId ?? body.conversationId ?? oe.thread_id ?? "").trim() || null;
-
-  if (!message_id) {
-    // Fail OPEN: never let a missing id silently drop an enquiry.
-    return Response.json({
-      ok: false, found: false, first_seen: true, thread_first_seen: true,
-      error: "missing message_id", degraded: "missing message_id",
-    });
-  }
-
-  const result = await claimMessage({
-    message_id,
-    thread_id,
-    subject: body.subject ? String(body.subject) : null,
-    from_address: String(body.from_address ?? body.fromAddress ?? body.from ?? oe.from ?? "") || null,
-    note: body.note ? String(body.note) : null,
-  });
-  return Response.json(result);
+  return handleDedupe(request);
 }
 
 export async function GET(request: Request): Promise<Response> {

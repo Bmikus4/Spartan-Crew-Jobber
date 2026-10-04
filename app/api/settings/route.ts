@@ -7,18 +7,14 @@ export const runtime = "nodejs";
 // share one rule — it used to be inline here and accepted only order_mode, which
 // silently discarded the replies toggle.
 
-import { getSettings, saveSettings, coerceSettings } from "../../lib/settingsDb";
 import { authorizeAction } from "../../lib/apiAuth";
+import { handleSettingsGet, handleSettingsPost } from "../../lib/routes/settings";
 
 export async function GET(request: Request): Promise<Response> {
   // Guarded like the write (SP-20): it returns the reply switches and the default rate card.
   // The Settings screen's same-origin fetch sends the session cookie, so it still works.
   if (!(await authorizeAction(request)).ok) return Response.json({ ok: false, error: "Unauthorized" }, { status: 401 });
-  try {
-    return Response.json(await getSettings());
-  } catch {
-    return Response.json({ ok: false, error: "settings could not be read" }, { status: 500 });
-  }
+  return handleSettingsGet();
 }
 
 /**
@@ -36,14 +32,5 @@ export async function GET(request: Request): Promise<Response> {
 export async function POST(request: Request): Promise<Response> {
   const caller = await authorizeAction(request);
   if (!caller.ok) return Response.json({ ok: false, error: "Unauthorized" }, { status: 401 });
-
-  let body: unknown;
-  try { body = await request.json(); } catch { return Response.json({ ok: false, error: "bad json" }, { status: 400 }); }
-  try {
-    const saved = await saveSettings(coerceSettings(body));
-    return Response.json({ ok: true, settings: saved });
-  } catch {
-    // It answered 200 "ok" when the write failed, so a switch looked flipped and was not.
-    return Response.json({ ok: false, error: "settings not saved" }, { status: 500 });
-  }
+  return handleSettingsPost(request);
 }

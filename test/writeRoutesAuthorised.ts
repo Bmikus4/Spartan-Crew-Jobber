@@ -85,7 +85,8 @@ console.log("\n[3] the settings write in particular");
   ok(/authorizeAction/.test(post), "POST calls authorizeAction");
   // Order matters: authorise BEFORE the body is trusted, and refuse with 401
   // rather than saving and reporting failure afterwards.
-  ok(post.includes("authorizeAction") && post.indexOf("authorizeAction") < post.indexOf("saveSettings"),
+  // The save is in app/lib/routes/settings.ts (SP-50); the route calls it only after the gate.
+  ok(post.includes("authorizeAction") && post.indexOf("authorizeAction") < post.indexOf("handleSettingsPost"),
     "and does so before anything is saved");
   ok(/401/.test(post), "and refuses with 401");
   // SP-20: the GET is guarded too. It returns the reply switches and the default rate card,
