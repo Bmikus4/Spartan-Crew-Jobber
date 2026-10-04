@@ -1,29 +1,12 @@
 export const runtime = "nodejs";
-// 300, not 60: one email can now wait on the classifier (25s), the venue judge (15s) and
+// 300, not 60: one email can now wait on the classifier (25s), the venue judge (30s) and
 // two link-judge calls (45s each, linkJudge.ts). The Pro plan allows 300.
 export const maxDuration = 300;
 
-// Inbound trigger from n8n. The n8n workflow watches the Spartan mailbox and,
-// for each new/updated thread, POSTs the FULL hydrated thread here:
-//   { thread_id, messages: [{ message_id, from, to[], date_iso, subject, body }] }
-// We run the compile+execute pipeline (draft-only by default) and return the
-// resulting state. If no Gmail draft webhook is configured, the composed reply
-// is included so n8n can create the draft. n8n builds the trigger; the
-// automation itself runs here on Vercel.
-
+// Inbound trigger from n8n. The handler is app/lib/n8nInbound.ts, where its IO can be
+// injected for tests: a route file may export only HTTP methods and route config.
 import { authorizeMachineCall } from "../../lib/apiAuth";
-import { handleThread } from "../../lib/engine/pipeline";
-import { activeIntake, mayRunEngine } from "../../lib/intakePath";
-import { coerceThread } from "../../lib/engine/intake";
-import { buildDeps } from "../../lib/deps";
-import { captureInboundRaw } from "../../lib/inboundRawDb";
-import { replyDeliveryForWire } from "../../lib/settingsDb";
-import { upsertTicketFromState } from "../../lib/ticketsDb";
-import { reportError } from "../../lib/errorReport";
-
-function unauthorized(): Response {
-  return Response.json({ ok: false, error: "unauthorized" }, { status: 401 });
-}
+import { handleInbound } from "../../lib/n8nInbound";
 
 export async function POST(request: Request): Promise<Response> {
   // `if (secret && header !== secret)` meant an absent secret was an absent gate, and
@@ -31,92 +14,8 @@ export async function POST(request: Request): Promise<Response> {
   // preview deployment has no secret and the production database, which made every
   // preview URL an unauthenticated way to inject an enquiry. The shared rule refuses an
   // unconfigured caller in a production build and keeps the local-dev allowance the
-  // offline harnesses rely on.
-  if (!authorizeMachineCall(request).ok) return unauthorized();
-
-  let payload: unknown;
-  try { payload = await request.json(); } catch { return Response.json({ ok: false, error: "bad json" }, { status: 400 }); }
-
-  // Durable capture FIRST — no inbound is ever lost, and re-posts dedupe.
-  const cap = await captureInboundRaw(payload, "n8n");
-
-  /**
-   * AFTER THE CUTOVER THIS ROUTE IS INERT, and does not depend on n8n being switched off.
-   *
-   * The Workspace routing rule and the n8n trigger live in different systems, so there is
-   * no single click that moves both. If this route kept working, the window between the
-   * two clicks would put the same enquiry down both paths — two thread ids, two
-   * conversations, two orders for one job, at 16 orders a day. Closing it here rather
-   * than in a runbook means the order of the clicks stops mattering.
-   *
-   * The payload is captured above before this returns, so nothing is lost and the intake
-   * watchdog still sees mail arriving. 200 rather than an error code: n8n retries a 4xx
-   * for hours and alarms on it, and there is nothing wrong — this route is simply no
-   * longer the one that acts.
-   */
-  if (!mayRunEngine("n8n")) {
-    return Response.json({
-      ok: true,
-      captured: cap.captured,
-      stored: true,
-      engine: "skipped",
-      note: `INTAKE_PATH is ${activeIntake()} — /api/mail-inbound owns the engine now. Kept for the record; turn this workflow off in n8n when convenient.`,
-      dedup_key: cap.dedup_key,
-    });
-  }
-
-  const thread = coerceThread(payload);
-  if (!thread) {
-    // Accept + keep any non-contract payload (e.g. the live workflow's current
-    // shape) so we can align without dropping it. Return 200, not 400.
-    return Response.json({
-      ok: true,
-      captured: cap.captured,
-      stored: true,
-      note: "payload kept verbatim in inbound_raw for contract alignment (not the { thread_id, messages[] } shape)",
-      dedup_key: cap.dedup_key,
-    });
-  }
-
-  try {
-    const deps = await buildDeps();
-    const state = await handleThread(thread, deps);
-    await upsertTicketFromState(state); // project onto the Jobs Board tickets table
-    return Response.json({
-      ok: true,
-      thread_id: state.thread_id,
-      classification: state.classification,
-      priority: state.priority,
-      status: state.status,
-      needs_human: state.needs_human,
-      onsinch_order_id: state.onsinch_order_id ?? null,
-      // Returned so n8n can create the Gmail draft when no draft webhook is set.
-      // `delivery` tells its reply subflow which Gmail call to make:
-      //   "draft" -> POST /users/me/drafts   (the default, human sends it)
-      //   "send"  -> POST /users/me/messages/send
-      // The decision lives here, not in n8n, so the Settings screen is the single
-      // place it is controlled.
-      reply: {
-        subject: state.reply_subject ?? null,
-        html: state.reply_body_html ?? null,
-        draft_id: state.reply_draft_id ?? null,
-        ...replyDeliveryForWire(deps.settings),
-      },
-      pending_order: state.pending_order ?? null,
-      notes: state.notes,
-    });
-  } catch (err) {
-    // ROUTE 3, "the engine threw". Anything escaping handleThread lands here, and until now
-    // it went to Vercel's logs and nowhere else. This is the outermost catch on the only path
-    // the engine runs on, so it is the last chance to tell anyone.
-    void reportError({
-      route: "engine-threw",
-      where: "api/n8n-inbound",
-      what: String((err as Error)?.message ?? err),
-      detail: `thread ${thread.thread_id}
-${String((err as Error)?.stack ?? "").slice(0, 1200)}`,
-    });
-    console.error("[n8n-inbound] pipeline failed", err);
-    return Response.json({ ok: false, error: String((err as Error)?.message ?? err) }, { status: 500 });
-  }
+  // offline harnesses rely on. It stays in this file: test/machineRouteAuth.ts reads each
+  // skipped route for it.
+  if (!authorizeMachineCall(request).ok) return Response.json({ ok: false, error: "unauthorized" }, { status: 401 });
+  return handleInbound(request);
 }
