@@ -2052,5 +2052,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0106",
+  "ts": "2026-10-04T20:22:13+00:00",
+  "kind": "measurement",
+  "headline": "SP-20: settings GET calls authorizeAction; writeRoutesAuthorised [6] checks each exported method, following same-file helpers",
+  "subject": "The settings read is authorised, and every route handler is checked on its own",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 169,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]

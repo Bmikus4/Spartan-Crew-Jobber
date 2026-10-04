@@ -10,7 +10,10 @@ export const runtime = "nodejs";
 import { getSettings, saveSettings, coerceSettings } from "../../lib/settingsDb";
 import { authorizeAction } from "../../lib/apiAuth";
 
-export async function GET(): Promise<Response> {
+export async function GET(request: Request): Promise<Response> {
+  // Guarded like the write (SP-20): it returns the reply switches and the default rate card.
+  // The Settings screen's same-origin fetch sends the session cookie, so it still works.
+  if (!(await authorizeAction(request)).ok) return Response.json({ ok: false, error: "Unauthorized" }, { status: 401 });
   try {
     return Response.json(await getSettings());
   } catch {

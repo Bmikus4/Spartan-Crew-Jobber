@@ -88,9 +88,10 @@ console.log("\n[3] the settings write in particular");
   ok(post.includes("authorizeAction") && post.indexOf("authorizeAction") < post.indexOf("saveSettings"),
     "and does so before anything is saved");
   ok(/401/.test(post), "and refuses with 401");
-  // A human on the Settings screen sends a session cookie, not the webhook
-  // secret; authorizeAction accepts either, which is why the screen still works.
-  ok(/GET/.test(src), "GET is left open — reading settings is not the hole, writing is");
+  // SP-20: the GET is guarded too. It returns the reply switches and the default rate card,
+  // and the Settings screen's same-origin fetch carries the session cookie, so it still works.
+  const get = src.slice(src.indexOf("export async function GET"), src.indexOf("export async function POST"));
+  ok(/authorizeAction/.test(get), "GET calls authorizeAction too");
 }
 
 console.log("\n[4] the onboarding write demands a person, not a secret");
@@ -146,10 +147,44 @@ console.log("\n[6] a route that READS decides who is calling too");
   // in this comment, not just a name.
   //   auth/google  the sign-in flow itself
   const PUBLIC = new Set(["app/api/auth/google/route.ts"]);
+  /**
+   * PER HANDLER, NOT PER FILE (SP-20). A file passed when any of its functions consulted an
+   * authority, so a guarded POST vouched for an unguarded GET beside it. Each exported
+   * method is checked on its own source plus the same-file helpers it calls (reconcile's
+   * run(), dedupe's authorized(), onboarding's emailFromSession()).
+   *
+   * OPEN_BY_DESIGN names a handler that is deliberately unguarded, with its reason:
+   *   (none today)
+   */
+  const OPEN_BY_DESIGN = new Set<string>([]);
+  const handlers = (src: string) => {
+    const at = [...src.matchAll(/export\s+(?:async\s+)?function\s+(GET|POST|PUT|PATCH|DELETE)\b/g)];
+    return at.map((m, i) => ({ method: m[1], body: src.slice(m.index!, at[i + 1]?.index ?? src.length) }));
+  };
+  // A same-file function or arrow const, from its declaration to the next top-level one.
+  const helper = (src: string, name: string) => {
+    const m = new RegExp(`^(?:async\\s+)?(?:function\\s+${name}\\s*\\(|const\\s+${name}\\s*=)`, "m").exec(src);
+    if (!m) return "";
+    const rest = src.slice(m.index);
+    const end = rest.slice(1).search(/\n(?:export\s|async\s+function\s|function\s|const\s)/);
+    return end < 0 ? rest : rest.slice(0, end + 1);
+  };
   for (const path of routes) {
     if (PUBLIC.has(path)) continue;
-    ok(AUTHORITY.test(readFileSync(path, "utf8")), `${path} authorises`);
+    const src = readFileSync(path, "utf8");
+    for (const h of handlers(src)) {
+      if (OPEN_BY_DESIGN.has(`${path} ${h.method}`)) continue;
+      const called = [...new Set([...h.body.matchAll(/\b([a-zA-Z_]\w*)\(/g)].map((m) => m[1]))];
+      const guarded = AUTHORITY.test(h.body) || called.some((n) => AUTHORITY.test(helper(src, n)));
+      ok(guarded, `${path} ${h.method} authorises`);
+    }
   }
+
+  // The check itself must be able to fail: a GET with no gate beside a guarded POST.
+  const fixture = "export async function GET() { return Response.json({}); }\n" +
+    "export async function POST(r: Request) { const c = await authorizeAction(r); return Response.json(c); }\n";
+  const failing = handlers(fixture).filter((h) => !AUTHORITY.test(h.body)).map((h) => h.method);
+  ok(failing.join() === "GET", "an unguarded GET beside a guarded POST is caught", failing.join());
 }
 
 console.log(fails ? `\n${fails} FAILED\n` : "\nALL PASS\n");
