@@ -21,7 +21,7 @@ import { BrandMark, BrandWordmark } from "./BrandLogo";
 interface FeedResponse {
   ok: boolean;
   generated_at: string;
-  health: { last_email_at: string | null; minutes_since_email: number | null; intake_stale: boolean; replies_enabled: boolean };
+  health: { last_email_at: string | null; minutes_since_email: number | null; intake_stale: boolean; replies_enabled: boolean; verify?: { last_at: string | null; note: string | null } };
   counts: FeedCounts;
   items: FeedCard[];
 }
@@ -63,13 +63,6 @@ function ago(ms: number, now: number): string {
   const h = Math.floor(m / 60);
   if (h < 48) return `${h}h ago`;
   return `${Math.floor(h / 24)}d ago`;
-}
-function ageShort(ms: number | null, now: number): string {
-  if (ms == null) return "never";
-  const s = Math.max(0, Math.floor((now - ms) / 1000));
-  if (s < 60) return `${s}s ago`;
-  if (s < 3600) return `${Math.floor(s / 60)}m ago`;
-  return `${Math.floor(s / 3600)}h ${Math.floor((s % 3600) / 60)}m ago`;
 }
 function personName(by: string | null): string {
   const local = String(by ?? "someone").split("@")[0].split(/[._-]/)[0];
@@ -243,6 +236,26 @@ function Tick({ card, it, s, size, onTick }: { card: FeedCard; it: FeedItem; s: 
   );
 }
 
+/** The sync state as a cloud: green connected, grey offline, red an error. No timers. */
+function SyncCloud({ s, state, why }: { s: number; state: "ok" | "offline" | "error"; why: string }) {
+  const color = state === "ok" ? GREEN : state === "error" ? RED : GREY;
+  const line1 = state === "ok" ? "Synced with" : state === "error" ? "Sync error" : "Offline";
+  const line2 = state === "ok" ? "Gmail and OnSinch" : state === "error" ? why || "Gmail or OnSinch" : "Not syncing";
+  return (
+    <div role="status" aria-label={`${line1} ${line2}`} style={{ display: "flex", alignItems: "center", gap: 12 * s, padding: `0 ${14 * s}px 0 ${18 * s}px`, borderLeft: `${2 * s}px solid var(--border)` }}>
+      <svg width={52 * s} height={52 * s} viewBox="0 0 24 24" aria-hidden style={{ flexShrink: 0 }}>
+        <path d="M17.5 19a4.5 4.5 0 1 0-1.2-8.84A6 6 0 0 0 4.5 12.5 3.5 3.5 0 0 0 7 19h10.5Z" fill={tint(color, 22)} stroke={color} strokeWidth="1.7" strokeLinejoin="round" />
+        {state === "ok" && <polyline points="9 14.6 11.2 16.6 15.2 12.4" fill="none" stroke={color} strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" />}
+        {state === "error" && <><line x1="12" y1="11.6" x2="12" y2="14.8" stroke={color} strokeWidth="1.9" strokeLinecap="round" /><circle cx="12" cy="17" r="0.95" fill={color} /></>}
+        {state === "offline" && <line x1="9.6" y1="12.4" x2="14.4" y2="17.2" stroke={color} strokeWidth="1.9" strokeLinecap="round" />}
+      </svg>
+      <div style={{ fontSize: 18 * s, fontWeight: 700, lineHeight: 1.25, whiteSpace: "nowrap", color: state === "ok" ? "var(--text-secondary)" : color }}>
+        {line1}<br /><span style={{ color: state === "ok" ? "var(--text-primary)" : color }}>{line2}</span>
+      </div>
+    </div>
+  );
+}
+
 type Phase = "steady" | "hold" | "fade";
 
 /** One row: signal rule, name and status, ids and detail, date, tick. */
@@ -349,7 +362,9 @@ export default function LiveFeedScreen({ isActive, tv = false }: { isActive: boo
   const lastScrollAt = useRef(0);
   const [data, setData] = useState<FeedResponse | null>(null);
   const [okAt, setOkAt] = useState<number | null>(null);
-  const [failed, setFailed] = useState(false);
+  /** Why the last refresh failed: the screen could not reach the system, or the system answered with an error. */
+  const [failKind, setFailKind] = useState<null | "offline" | "error">(null);
+  const failed = failKind !== null;
   const [now, setNow] = useState(() => Date.now());
   const [layout, setLayout] = useState<"a" | "b">("a");
   const [full, setFull] = useState(false);
@@ -368,8 +383,14 @@ export default function LiveFeedScreen({ isActive, tv = false }: { isActive: boo
   useEffect(() => { setLayout(readLayout()); }, []);
 
   const load = useCallback(async () => {
+    let res: Response;
     try {
-      const res = await fetch("/api/feed", { cache: "no-store" });
+      res = await fetch("/api/feed", { cache: "no-store" });
+    } catch {
+      setFailKind("offline"); // keep the last good rows; the cloud goes grey
+      return;
+    }
+    try {
       const body = (await res.json()) as FeedResponse;
       if (!res.ok || !body.ok) throw new Error("feed");
       const keys = new Set(body.items.flatMap((c) => c.items.map((i) => i.item_key)));
@@ -386,9 +407,9 @@ export default function LiveFeedScreen({ isActive, tv = false }: { isActive: boo
       seen.current = keys;
       setData(body);
       setOkAt(Date.now());
-      setFailed(false);
+      setFailKind(null);
     } catch {
-      setFailed(true); // keep the last good rows; the header's age says how old they are
+      setFailKind("error"); // the system answered, and the answer was a failure: the cloud goes red
     }
   }, []);
 
@@ -535,10 +556,22 @@ export default function LiveFeedScreen({ isActive, tv = false }: { isActive: boo
 
   const c = data?.counts;
   const dataAge = okAt == null ? null : now - okAt;
-  const dataStale = failed || (dataAge != null && dataAge > STALE_DATA_MS);
-  const emailAt = data?.health.last_email_at ? Date.parse(data.health.last_email_at) : null;
   const emailStale = !!data?.health.intake_stale;
-  const warn = dataStale || emailStale;
+  const onsinchUnread = /unreadable|failed/i.test(data?.health.verify?.note ?? "");
+  /**
+   * THE SYNC CLOUD (Ben, 2026-10-04: no timers, a green, grey or red cloud).
+   *   grey   offline: the screen cannot reach the system, or has had nothing for 2 minutes
+   *   red    an error: the system answered with a failure, Gmail has gone quiet in working
+   *          hours (intake was silently down for 53 hours on 2026-10-01..03), or OnSinch
+   *          could not be read
+   *   green  connected, and both are coming through
+   * The ages are still measured; they just decide the colour instead of being printed.
+   */
+  const sync: "ok" | "offline" | "error" =
+    failKind === "offline" || data == null || (dataAge != null && dataAge > STALE_DATA_MS && failKind == null) ? "offline"
+    : failKind === "error" || emailStale || onsinchUnread ? "error"
+    : "ok";
+  const warn = sync !== "ok";
   const urgentCount = cards.filter((x) => urgent(x, now)).length;
   const openCount = cards.filter(isOpen).length;
   const pad = 24 * s;
@@ -565,25 +598,26 @@ export default function LiveFeedScreen({ isActive, tv = false }: { isActive: boo
         </div>
         <div style={{ width: 2 * s, alignSelf: "stretch", background: "var(--border)", flexShrink: 0 }} />
         <div aria-label="Legend" style={{ display: "flex", flexDirection: "column", gap: 8 * s, minWidth: 0, overflow: "hidden" }}>
-          <div style={{ display: "flex", gap: 36 * s, alignItems: "center", fontSize: 34 * s, fontWeight: 800, letterSpacing: "-0.01em", color: "var(--text-primary)", whiteSpace: "nowrap" }}>
+          <div style={{ display: "flex", gap: 32 * s, alignItems: "center", fontSize: 31 * s, fontWeight: 800, letterSpacing: "-0.01em", color: "var(--text-primary)", whiteSpace: "nowrap" }}>
             <span style={{ display: "flex", alignItems: "center", gap: 14 * s }}><span style={{ width: 32 * s, height: 32 * s, borderRadius: 8 * s, background: RED, flexShrink: 0 }} />Red = New job</span>
             <span style={{ display: "flex", alignItems: "center", gap: 14 * s }}><span style={{ width: 32 * s, height: 32 * s, borderRadius: 8 * s, background: BLUE, flexShrink: 0 }} />Blue = Update</span>
           </div>
           {/* The clock's key. */}
           <div style={{ display: "flex", alignItems: "center", gap: 10 * s, fontSize: 20 * s, fontWeight: 600, color: "var(--text-secondary)", whiteSpace: "nowrap" }}>
             <ReplyClock ms={5 * 3_600_000} size={38 * s} label={false} />
-            <span>= time since the client's email with no reply from us</span>
+            <span>= time since the client's email, unanswered</span>
             <span style={{ color: "var(--text-muted)" }}>· red at 24h</span>
           </div>
         </div>
         </div>
         <div style={{ display: "flex", alignItems: "center", flexShrink: 0 }}>
           {kpis.map((k) => (
-            <div key={k.label.join(" ")} style={{ display: "flex", alignItems: "center", gap: 12 * s, padding: `0 ${22 * s}px`, borderLeft: `${2 * s}px solid var(--border)` }}>
-              <span className="tnum" style={{ fontSize: 60 * s, fontWeight: 800, lineHeight: 1, letterSpacing: "-0.02em", color: k.n ? k.color : "var(--text-faint)" }}>{k.n}</span>
-              <span style={{ fontSize: 20 * s, fontWeight: 600, lineHeight: 1.2, color: "var(--text-muted)", whiteSpace: "nowrap" }}>{k.label[0]}<br />{k.label[1]}</span>
+            <div key={k.label.join(" ")} style={{ display: "flex", alignItems: "center", gap: 10 * s, padding: `0 ${16 * s}px`, borderLeft: `${2 * s}px solid var(--border)` }}>
+              <span className="tnum" style={{ fontSize: 56 * s, fontWeight: 800, lineHeight: 1, letterSpacing: "-0.02em", color: k.n ? k.color : "var(--text-faint)" }}>{k.n}</span>
+              <span style={{ fontSize: 19 * s, fontWeight: 600, lineHeight: 1.2, color: "var(--text-muted)", whiteSpace: "nowrap" }}>{k.label[0]}<br />{k.label[1]}</span>
             </div>
           ))}
+          <SyncCloud s={s} state={sync} why={failKind === "error" ? "The feed returned an error" : emailStale ? "No new email for 90+ min" : onsinchUnread ? "OnSinch could not be read" : ""} />
           <button onClick={() => void goFull()} aria-label={full ? "Exit fullscreen" : "Fullscreen"} title={full ? "Exit fullscreen" : "Fullscreen"}
             style={{ marginLeft: 16 * s, width: 64 * s, height: 64 * s, borderRadius: 14 * s, border: "1px solid var(--border-strong)", background: "var(--surface)", color: "var(--text-primary)", cursor: "pointer", display: "grid", placeItems: "center", padding: 0, flexShrink: 0 }}>
             <svg width={34 * s} height={34 * s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
@@ -613,7 +647,7 @@ export default function LiveFeedScreen({ isActive, tv = false }: { isActive: boo
             <Section s={s} label="Needs action" n={openRows.filter(isOpen).length} />
             {openRows.length === 0 && (
               <div style={{ padding: `${22 * s}px ${20 * s}px`, borderBottom: "1px solid var(--border)", fontSize: 20 * s, fontWeight: 700, color: warn ? AMBER : GREEN, background: warn ? tint(AMBER, 10) : tint(GREEN, 12) }}>
-                {warn ? "Nothing listed, but the data may be out of date: see the status above." : openCount === 0 && strip.length === 0 ? "Everything is checked." : "Nothing else waiting."}
+                {warn ? "Nothing listed, but the sync is not healthy: see the cloud at the top right." : openCount === 0 && strip.length === 0 ? "Everything is checked." : "Nothing else waiting."}
               </div>
             )}
             {openRows.map((card) => <Row key={card.thread_id} card={card} now={now} s={s} phase={phaseOf(card)} onTick={tick} />)}
@@ -628,13 +662,7 @@ export default function LiveFeedScreen({ isActive, tv = false }: { isActive: boo
         )}
       </div>
 
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16 * s, flexShrink: 0 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10 * s, padding: `${8 * s}px ${14 * s}px`, borderRadius: 999, border: `1px solid ${warn ? tint(AMBER, 45) : "var(--border)"}`, background: warn ? tint(AMBER, 12) : "var(--surface)", fontSize: 17 * s, fontWeight: 600, color: "var(--text-secondary)", whiteSpace: "nowrap" }}>
-          <span style={{ width: 10 * s, height: 10 * s, borderRadius: 999, background: warn ? AMBER : GREEN }} />
-          <span style={{ color: dataStale ? AMBER : undefined }}>{failed ? "Refresh failed" : "Live"} · updated {ageShort(okAt, now)}</span>
-          <span style={{ color: "var(--text-faint)" }}>·</span>
-          <span style={{ color: emailStale ? AMBER : undefined }}>last email {ageShort(emailAt, now)}</span>
-        </div>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 16 * s, flexShrink: 0 }}>
         {/* Hidden with the cursor on the TV, so nothing but the feed is on screen. */}
         <div className="seg" role="tablist" aria-label="Layout" style={{ opacity: idle ? 0 : 1, transition: "opacity 200ms", pointerEvents: idle ? "none" : "auto", transform: `scale(${s * 1.15})`, transformOrigin: "right center" }}>
           <button className="seg__btn" aria-selected={layout === "a"} onClick={() => pickLayout("a")}>List</button>

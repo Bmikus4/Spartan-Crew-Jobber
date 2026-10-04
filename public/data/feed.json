@@ -1926,5 +1926,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0097",
+  "ts": "2026-10-04T19:22:24+00:00",
+  "kind": "measurement",
+  "headline": "TV feed: sync cloud top right (green synced / grey offline / red error), timer line removed",
+  "subject": "The TV shows its sync as a green, grey or red cloud instead of a ticking 'updated' line",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 163,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]
