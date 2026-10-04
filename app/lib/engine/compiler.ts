@@ -23,10 +23,11 @@ import { triage, decisionBinds, triageModeFromEnv, supplierAsk, callsItOff, type
 import { markAttachments } from "./attachHere";
 import { composeOrder } from "./compose";
 import { validateOrder } from "./format";
-import { matchCompany, matchCompanyByDomain, matchContact, matchPlace, matchExistingOrder, rNumbersIn, normName, normAddr, type OrderRec } from "./resolve";
+import { matchCompany, matchCompanyByDomain, matchContact, matchPlace, matchExistingOrder, rateOrdersForLink, rNumbersIn, normName, normAddr, type OrderRec } from "./resolve";
 import { matchPlaceV2, matchedOnCityAlone, isAShell, tokenise } from "./venueMatch";
 import { buildIndex, searchVenues, applyRuledWording, type Building } from "./venueSearch";
 import { adjudicateVenue, type VenueJudge } from "./venueAdjudicate";
+import { assembleLinkQuestion, decideLink, type LinkJudge, type BlockView } from "./linkJudge";
 import { resolveProfession, normProf, type ProfessionRec } from "./professions";
 import { PROFESSION_LIST } from "./professionList";
 import { resolveRateCard } from "./rates";
@@ -91,6 +92,12 @@ export interface CompileDeps {
    * deterministic search result and says so on the ticket.
    */
   venueJudge?: VenueJudge | null;
+  /**
+   * The model half of the link judge (linkJudge.ts): is an unlinked thread about an
+   * order the client already has on the day? Used only with SPARTAN_LINK_JUDGE=on until
+   * its accuracy is measured; absent or off, matchExistingOrder decides as before.
+   */
+  linkJudge?: LinkJudge | null;
   aliases?: {
     lookup: (kind: AliasKind, aliasNorm: string) => Promise<number | null>;
     record: (a: { kind: AliasKind; alias_norm: string; entity_id: number; source: "exact" | "fuzzy"; raw_example?: string }) => Promise<void>;
@@ -1386,6 +1393,7 @@ export async function compile(
     // an empty company list is treated as no evidence at all, and a bound order is
     // released only when a working list omits it AND a direct read of it comes back
     // empty too.
+    let lostOrder: { id: number; number?: string } | undefined;
     if (company_id) {
       const companyOrders = await onsinch.companyOrdersWithJob(company_id);
 
@@ -1440,6 +1448,7 @@ export async function compile(
           const direct = await onsinch.orderById(linkedOrderId);
           if (!direct) {
             notes.push(`OnSinch order #${linkedOrderId} no longer exists — looking for the job it became`);
+            lostOrder = { id: linkedOrderId, number: linkedOrderNumber };
             linkedOrderId = undefined;
             linkedOrderNumber = undefined;
             linkedJobId = undefined;
@@ -1447,7 +1456,59 @@ export async function compile(
         }
       }
 
-      if (!linkedOrderId) {
+      /**
+       * THE LINK JUDGE (linkJudge.ts; Ben, 2026-10-03): the same client on the same day is
+       * never on its own a reason to link. The model reads the thread against each order
+       * the client has on the day, the code checks its answer, and anything they do not
+       * agree on is held with a Gmail tag. Behind SPARTAN_LINK_JUDGE=on until measured;
+       * the legacy rule below decides otherwise.
+       */
+      let judged = false;
+      if (!linkedOrderId && deps.linkJudge && process.env.SPARTAN_LINK_JUDGE === "on") {
+        judged = true;
+        const days = facts.requests.map((r) => r.date).filter((d): d is string => !!d);
+        const daySet = new Set(days.map((d) => d.slice(0, 10)));
+        const sameDay = companyOrders.filter((o: OrderRec) => daySet.has(String(o.happening ?? "").slice(0, 10)));
+        if (sameDay.length) {
+          const places = await onsinch.allPlaces().catch(() => undefined);
+          const rated = rateOrdersForLink(sameDay, {
+            days,
+            location_text: facts.location_text,
+            place_id: place_id ?? null,
+            places,
+            r_numbers: rNumbersIn(thread.messages.map((m) => `${m.subject} ${m.body}`).join("\n")),
+          });
+          const lostBlocks: BlockView[] = (prior?.last_ordered_teams ?? []).map((t) => ({
+            day: t.beginning.slice(0, 10), start: t.beginning.slice(11, 16), end: t.end.slice(11, 16), size: t.size, name: t.name,
+          }));
+          const question = await assembleLinkQuestion({
+            mode: lostOrder ? "successor" : "enquiry",
+            client: facts.company_name,
+            thread,
+            facts,
+            rated,
+            readBlocks: (id) => onsinch.orderWithBlocks(id),
+            places,
+            lost: lostOrder ? { number: lostOrder.number, name: prior?.desired_order?.name, blocks: lostBlocks } : undefined,
+          });
+          const verdict = await decideLink(question, deps.linkJudge);
+          if (verdict.action === "link") {
+            const o = sameDay.find((x: OrderRec) => Number(x.id) === verdict.order_id)!;
+            linkedOrderId = verdict.order_id;
+            linkedOrderNumber = o.number ?? linkedOrderNumber;
+            linkedJobId = o.Job?.[0]?.id ?? linkedJobId;
+            notes.push(`matched existing OnSinch order #${verdict.order_id}${o.number ? ` (R${o.number})` : ""} — ${verdict.reason} [${verdict.how}] — will update, not create`);
+          } else if (verdict.action === "new") {
+            notes.push(`not the same job as the client's ${sameDay.length} order(s) on the day — ${verdict.reason} [${verdict.how}] — a new order`);
+          } else {
+            needs_human = true;
+            blocked = true;
+            notes.push(`not linked and not created: ${verdict.reason} [${verdict.how}] — check the client's orders on the day by hand`);
+          }
+        }
+      }
+
+      if (!linkedOrderId && !judged) {
         const existing = matchExistingOrder(firstDate(facts), companyOrders, {
           // Every date the thread asks for, so a stated date change finds the order it
           // is changing instead of creating a second booking beside it.

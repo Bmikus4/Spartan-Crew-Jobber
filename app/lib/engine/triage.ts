@@ -58,8 +58,12 @@ const VAN_TAGLINE = /\**\s*we now provide van services[^\n]*/gi;
 const CALLS_IT_OFF = /\b(?:(?:won'?t|wont|will\s+not)\s+be\s+(?:needed|required)|(?:won'?t|wont|will\s+not|no\s+longer)\s+(?:be\s+)?need(?:ed)?\s+(?:the\s+|any\s+)?(?:crew|staff|labour|team|you|them|this|it)\b(?!\s+(?:to|for|until|till|after|before|from|on|at)\b)|no\s+longer\s+(?:be\s+)?(?:needed|required|going\s+ahead)|(?:go|going|gone|went)\s+with\s+(?:another|a\s+different)\s+(?:supplier|company|agency|crew)|decided\s+to\s+go\s+elsewhere|(?:is|are)\s+not\s+(?:needed|required)\s+(?:any\s*more|after\s+all)|(?:job|booking|event|show|it|this)\s+(?:has|have)\s+gone\s+away|gone\s+(?:elsewhere|with\s+another)|managed\s+to\s+(?:get|find)\s+(?:agency|crew|cover|someone|another)|found\s+(?:another|other)\s+(?:supplier|crew|company)|not\s+going\s+ahead|(?:has|have)\s+been\s+cancell?ed|(?:need|want)\s+to\s+cancel|please\s+cancel|we(?:'ll|\s+will)\s+pass\s+on\s+this)\b/i;
 
 export function callsItOff(body: string): string | null {
-  const own = String(body ?? "").split(/\bFrom:\s[^\n]{0,160}?\s+Sent:|-{5,}\s*Original Message|\bOn\s[^\n]{0,200}?\s*wrote:/i)[0];
-  return own.match(CALLS_IT_OFF)?.[0] ?? null;
+  return ownPart(body).match(CALLS_IT_OFF)?.[0] ?? null;
+}
+
+/** The top of an email: what its sender wrote, above any quoted reply. */
+export function ownPart(body: string): string {
+  return String(body ?? "").split(/\bFrom:\s[^\n]{0,160}?\s+Sent:|-{5,}\s*Original Message|\bOn\s[^\n]{0,200}?\s*wrote:/i)[0];
 }
 
 export function supplierAsk(messages: Array<{ from?: string; body?: string; is_from_spartan?: boolean }>): string | null {

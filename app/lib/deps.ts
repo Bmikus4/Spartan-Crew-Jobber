@@ -10,7 +10,7 @@
 import { createHash } from "node:crypto";
 import { OnsinchClient, httpTransport } from "./engine/onsinch";
 import { normName, normAddr } from "./engine/resolve";
-import { createOpenRouterReasoner, createVenueJudge, type Reasoner } from "./engine/reason";
+import { createOpenRouterReasoner, createVenueJudge, createLinkJudge, type Reasoner } from "./engine/reason";
 import { guardReasoner } from "./engine/spend";
 import { serviceAccountConfigured } from "./mail/gmailAuth";
 import { tieredReasoner } from "./engine/tiered";
@@ -294,6 +294,8 @@ import { NeonStateStore } from "./stateDb";
 import { NeonMetrics } from "./metricsDb";
 import { getSettings } from "./settingsDb";
 import { getRateCard } from "./rateCardsDb";
+import { rebuildThread } from "./threadMessagesDb";
+import { coerceThread } from "./engine/intake";
 import { lookupAlias, recordAlias } from "./aliasesDb";
 import { senderVerdict, recordSender } from "./senderLedgerDb";
 
@@ -706,6 +708,17 @@ export async function buildDeps(): Promise<PipelineDeps> {
     venueJudge: process.env.OPENROUTER_API_KEY
       ? createVenueJudge({ apiKey: process.env.OPENROUTER_API_KEY })
       : null,
+    /**
+     * The link judge (linkJudge.ts). Built whenever there is a key; the compiler and the
+     * sweep consult it only with SPARTAN_LINK_JUDGE=on.
+     */
+    linkJudge: process.env.OPENROUTER_API_KEY
+      ? createLinkJudge({ apiKey: process.env.OPENROUTER_API_KEY })
+      : null,
+    readThread: async (threadId: string) => {
+      const t = await rebuildThread(threadId);
+      return t ? coerceThread(t) : null;
+    },
     // Read once per invocation from the Neon cache; the committed list is the floor.
     professions: await loadProfessions(PROFESSION_LIST),
     /**

@@ -596,6 +596,38 @@ function venueVerdict(o: OrderRec, opts: MatchOpts): VenueVerdict {
 }
 
 /**
+ * The deterministic half of the link judge (linkJudge.ts): what the code alone can say
+ * about each same-day order, before any model is asked.
+ *
+ * Ben, 2026-10-03: the same client on the same day must never be the only reason to
+ * link. So nothing here can say "this is the job": a named R number is the one rating
+ * strong enough to overrule the model, an agreeing venue only supports, and a venue
+ * that resolved to a DIFFERENT place argues against. Two shows at one venue on one day
+ * are two jobs (thread #13841, PROMS 53 and 54 at the RAH), which is why "supports" is
+ * not proof.
+ */
+export type LinkRating = "named" | "supports" | "possible" | "contrary";
+
+export function rateOrdersForLink(
+  orders: OrderRec[],
+  opts: MatchOpts & { r_numbers?: string[] } = {}
+): Array<{ order: OrderRec; rating: LinkRating; why: string }> {
+  const rn = (opts.r_numbers ?? []).length === 1 ? opts.r_numbers![0] : null;
+  const namedHere = rn ? orders.find((o) => String(o.number ?? "") === rn) : undefined;
+  return orders.map((o) => {
+    if (namedHere) {
+      return Number(o.id) === Number(namedHere.id)
+        ? { order: o, rating: "named" as const, why: `the thread names R${rn}` }
+        : { order: o, rating: "contrary" as const, why: `the thread names R${rn}, which is another order` };
+    }
+    const v = venueVerdict(o, opts);
+    if (v === "agree") return { order: o, rating: "supports" as const, why: "same venue" };
+    if (v === "differ-id") return { order: o, rating: "contrary" as const, why: `a different venue (${venueOfOrder(o.name) || "unnamed"})` };
+    return { order: o, rating: "possible" as const, why: "same client and day only" };
+  });
+}
+
+/**
  * Which existing OnSinch order a thread belongs to - or nothing.
  *
  * Ben, 2026-08-09: "If a thread update/potential update comes in, we should search for

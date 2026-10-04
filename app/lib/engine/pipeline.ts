@@ -244,6 +244,11 @@ export interface PipelineDeps extends CompileDeps {
   /** Feeds the sender ledger that triage reads. Injected; absent in tests. */
   recordSender?: (a: { addr: string; thread_id: string; wasJob: boolean; subject?: string }) => Promise<void>;
   /**
+   * A thread's stored messages, for the sweep's link judge (linkJudge.ts), which has no
+   * message text on the state row. Absent, the judge reads the orders without the thread.
+   */
+  readThread?: (thread_id: string) => Promise<HydratedThread | null>;
+  /**
    * Adopt a thread->order link this engine did not mint, once, permanently.
    *
    * Most links are not ours: 90 of 148 recorded ids were read out of OnSinch by

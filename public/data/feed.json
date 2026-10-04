@@ -1730,5 +1730,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0083",
+  "ts": "2026-10-04T17:36:21+00:00",
+  "kind": "measurement",
+  "headline": "B1: link check committed behind SPARTAN_LINK_JUDGE (unset in production); venue judge reads its body inside the timeout; intake and sweep routes get 300 s",
+  "subject": "The order-link check is in the engine, switched off until its accuracy is measured",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 155,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]

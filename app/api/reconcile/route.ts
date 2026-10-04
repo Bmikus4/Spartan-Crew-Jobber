@@ -1,5 +1,7 @@
 export const runtime = "nodejs";
-export const maxDuration = 60;
+// 300, not 60: a lost order now asks the link judge (up to two 45s calls) for its
+// replacement. The batch limit below is still sized for the old 60s; see DEFAULT_LIMIT.
+export const maxDuration = 300;
 
 // The reconciliation sweep. Re-reads every bound thread against OnSinch and corrects what
 // has drifted — see engine/sweep.ts for what it does and engine/reconcile.ts for why a

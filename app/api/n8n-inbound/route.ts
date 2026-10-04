@@ -1,5 +1,7 @@
 export const runtime = "nodejs";
-export const maxDuration = 60;
+// 300, not 60: one email can now wait on the classifier (25s), the venue judge (15s) and
+// two link-judge calls (45s each, linkJudge.ts). The Pro plan allows 300.
+export const maxDuration = 300;
 
 // Inbound trigger from n8n. The n8n workflow watches the Spartan mailbox and,
 // for each new/updated thread, POSTs the FULL hydrated thread here:

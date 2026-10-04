@@ -20,6 +20,7 @@ import { CLASSIFY_SYSTEM, EXTRACT_SYSTEM, REPLY_SYSTEM } from "./prompts";
 import { CHASE_SYSTEM } from "../followup/compose";
 import { renderConversation } from "./renderThread";
 import { ADJUDICATION_SCHEMA } from "./venueAdjudicate";
+import { LINK_SCHEMA } from "./linkJudge";
 import { markAttachments } from "./attachHere";
 
 export interface ClassifyResult {
@@ -544,58 +545,94 @@ const REPLY_SCHEMA = {
  * venue resolution is accuracy above cost and time. SPARTAN_VENUE_MODEL overrides it.
  */
 export function createVenueJudge(cfg: { apiKey: string; model?: string; baseUrl?: string }) {
-  const model = cfg.model ?? process.env.SPARTAN_VENUE_MODEL ?? "google/gemini-3.1-pro-preview";
-  const baseUrl = cfg.baseUrl ?? "https://openrouter.ai/api/v1";
-  // Shorter than the reasoner's 25s: this call sits inside the same n8n invocation as
-  // everything else and it is the LAST thing on the critical path. A venue the
-  // matcher already has a good answer for is not worth a timeout for.
-  const TIMEOUT_MS = Number(process.env.VENUE_TIMEOUT_MS || 15_000);
+  const ask = createToolJudge({
+    ...cfg,
+    label: "venue judge",
+    model: cfg.model ?? process.env.SPARTAN_VENUE_MODEL ?? "google/gemini-3.1-pro-preview",
+    schema: ADJUDICATION_SCHEMA,
+    // Shorter than the reasoner's 25s: this call sits inside the same n8n invocation as
+    // everything else and it is the LAST thing on the critical path. A venue the
+    // matcher already has a good answer for is not worth a timeout for.
+    timeoutMs: Number(process.env.VENUE_TIMEOUT_MS || 15_000),
+    // NOT 512: the default judge is a reasoning model and spends the budget thinking —
+    // 4 of 14 live calls on 2026-09-30 ended `finish_reason: length` with no tool call,
+    // and the fallback put order 16330 at the wrong venue on the same street.
+    maxTokens: Number(process.env.VENUE_MAX_TOKENS || 4096),
+  });
+  return { adjudicate: ask };
+}
 
-  return {
-    async adjudicate(system: string, user: string): Promise<unknown> {
-      let res: Response;
-      try {
-        res = await fetch(`${baseUrl}/chat/completions`, {
-          method: "POST",
-          signal: AbortSignal.timeout(TIMEOUT_MS),
-          headers: {
-            Authorization: `Bearer ${cfg.apiKey}`,
-            "Content-Type": "application/json",
-            "HTTP-Referer": "https://spartan-crew-jobber.vercel.app",
-            "X-Title": "Spartan Crew Jobber",
-          },
-          body: JSON.stringify({
-            model,
-            temperature: 0,
-            // The answer is four small fields. The ceiling is here for the same reason
-            // it is on the reasoner: without one OpenRouter reserves the model's whole
-            // context and refuses the request unless the account can cover all of it.
-            // NOT 512: the default judge is a reasoning model and spends the budget
-            // thinking — 4 of 14 live calls on 2026-09-30 ended `finish_reason: length`
-            // with no tool call, and the fallback put order 16330 at the wrong venue on
-            // the same street. TIMEOUT_MS is what bounds the call.
-            max_tokens: Number(process.env.VENUE_MAX_TOKENS || 4096),
-            messages: [
-              { role: "system", content: system },
-              { role: "user", content: user },
-            ],
-            tools: [{ type: "function", function: { name: "emit", description: "Return the chosen venue", parameters: ADJUDICATION_SCHEMA } }],
-            tool_choice: { type: "function", function: { name: "emit" } },
-          }),
-        });
-      } catch (err) {
-        const timedOut = (err as Error)?.name === "TimeoutError" || (err as Error)?.name === "AbortError";
-        throw new Error(timedOut ? `venue judge (${model}) timed out after ${TIMEOUT_MS}ms` : `venue judge (${model}) failed: ${(err as Error)?.message}`);
-      }
+/**
+ * The link judge (linkJudge.ts): is this thread about one of the client's existing
+ * orders? The main model by default, because it reads a whole conversation, which is
+ * the reasoner's job and not the venue model's. 45s, not 15: this call decides whether
+ * a booking is written at all, and a timeout here HOLDS the email rather than guessing.
+ */
+export function createLinkJudge(cfg: { apiKey: string; model?: string; baseUrl?: string }) {
+  const ask = createToolJudge({
+    ...cfg,
+    label: "link judge",
+    model: cfg.model ?? process.env.SPARTAN_LINK_MODEL ?? process.env.SPARTAN_MODEL ?? "anthropic/claude-opus-4.6",
+    schema: LINK_SCHEMA,
+    timeoutMs: Number(process.env.LINK_TIMEOUT_MS || 45_000),
+    maxTokens: Number(process.env.LINK_MAX_TOKENS || 1500),
+  });
+  return { ask };
+}
+
+/**
+ * One forced tool call, its arguments returned parsed. Shared by the judges so a fix to
+ * the transport lands in all of them.
+ *
+ * The body is read INSIDE the timeout handling. It was not, and on 2026-10-01 12:51Z the
+ * 15s abort fired while `res.json()` was still reading: a raw TimeoutError escaped, the
+ * venue fell back to the search hit, and "Hotel Cafe Royal" was booked at Park Royal.
+ */
+function createToolJudge(cfg: {
+  apiKey: string; model: string; baseUrl?: string; label: string;
+  schema: unknown; timeoutMs: number; maxTokens: number;
+}) {
+  const baseUrl = cfg.baseUrl ?? "https://openrouter.ai/api/v1";
+  return async (system: string, user: string): Promise<unknown> => {
+    let res: Response;
+    let j: any;
+    try {
+      res = await fetch(`${baseUrl}/chat/completions`, {
+        method: "POST",
+        signal: AbortSignal.timeout(cfg.timeoutMs),
+        headers: {
+          Authorization: `Bearer ${cfg.apiKey}`,
+          "Content-Type": "application/json",
+          "HTTP-Referer": "https://spartan-crew-jobber.vercel.app",
+          "X-Title": "Spartan Crew Jobber",
+        },
+        body: JSON.stringify({
+          model: cfg.model,
+          temperature: 0,
+          // Without a ceiling OpenRouter reserves the model's whole context and refuses
+          // the request unless the account can cover all of it.
+          max_tokens: cfg.maxTokens,
+          messages: [
+            { role: "system", content: system },
+            { role: "user", content: user },
+          ],
+          tools: [{ type: "function", function: { name: "emit", description: "Return the answer", parameters: cfg.schema } }],
+          tool_choice: { type: "function", function: { name: "emit" } },
+        }),
+      });
       if (!res.ok) {
         const detail = (await res.text()).slice(0, 300);
         if (res.status === 401 || res.status === 402 || res.status === 403) throw new ReasonerAuthError(res.status, detail);
-        throw new Error(`venue judge ${res.status}: ${detail}`);
+        throw new Error(`${cfg.label} ${res.status}: ${detail}`);
       }
-      const j = await res.json();
-      const args = j.choices?.[0]?.message?.tool_calls?.[0]?.function?.arguments;
-      if (!args) throw new Error("venue judge returned no tool_call: " + JSON.stringify(j).slice(0, 300));
-      return typeof args === "string" ? JSON.parse(args) : args;
-    },
+      j = await res.json();
+    } catch (err) {
+      if (err instanceof ReasonerAuthError) throw err;
+      const timedOut = (err as Error)?.name === "TimeoutError" || (err as Error)?.name === "AbortError";
+      throw new Error(timedOut ? `${cfg.label} (${cfg.model}) timed out after ${cfg.timeoutMs}ms` : `${cfg.label} (${cfg.model}) failed: ${(err as Error)?.message}`);
+    }
+    const args = j.choices?.[0]?.message?.tool_calls?.[0]?.function?.arguments;
+    if (!args) throw new Error(`${cfg.label} returned no tool_call: ` + JSON.stringify(j).slice(0, 300));
+    return typeof args === "string" ? JSON.parse(args) : args;
   };
 }

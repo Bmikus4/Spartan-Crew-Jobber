@@ -124,7 +124,8 @@ export function unappliedDifference(target: DesiredSlotTeam[], nested: LiveShape
     .map((k) => `${show(k)} UTC: the client asks for ${want.get(k) ?? 0}, OnSinch holds ${held.get(k) ?? 0}`);
   return diffs.length ? diffs.slice(0, 4).join("; ") : null;
 }
-import { matchExistingOrder, rNumbersIn, type OrderRec } from "./resolve";
+import { matchExistingOrder, rateOrdersForLink, rNumbersIn, type OrderRec } from "./resolve";
+import { assembleLinkQuestion, decideLink } from "./linkJudge";
 
 const ENGINE_WRITES = new Set(["create", "amend", "patch", "replace"]);
 
@@ -327,14 +328,54 @@ export async function reconcileThread(
      */
     let places;
     try { places = await onsinch.allPlaces(); } catch { places = undefined; }
-    const found = matchExistingOrder(days.sort()[0], orders, {
+    const matchOpts = {
       days,
       location_text: state.facts?.location_text,
       place_id: state.place_id ? Number(state.place_id) : null,
       places,
       r_numbers: rNumbersIn(String(state.subject ?? "")),
-    });
-    if (found && "order_id" in found) {
+    };
+    let found: { order_id: number; order_number?: string; job_id?: number; by: string } | null = null;
+    if (deps.linkJudge && process.env.SPARTAN_LINK_JUDGE === "on") {
+      /**
+       * The link judge in successor mode (linkJudge.ts; Ben, 2026-10-03): a same-day
+       * order is not the replacement because it is the only one on the day. The model
+       * compares our deleted order and the thread with each candidate; the code checks
+       * its answer; anything short of agreement leaves the thread lost and tagged below.
+       */
+      const daySet = new Set(days.map((d) => d.slice(0, 10)));
+      const sameDay = orders.filter((o) => daySet.has(String(o.happening ?? "").slice(0, 10)) && Number(o.id) !== order_id);
+      if (sameDay.length) {
+        const thread = (deps.readThread ? await deps.readThread(thread_id).catch(() => null) : null) ?? { thread_id, messages: [] };
+        const question = await assembleLinkQuestion({
+          mode: "successor",
+          client: state.facts?.company_name,
+          thread,
+          facts: state.facts ?? { requests: [] },
+          rated: rateOrdersForLink(sameDay, matchOpts),
+          readBlocks: (id) => onsinch.orderWithBlocks(id),
+          places,
+          lost: {
+            number: state.onsinch_order_number,
+            name: state.desired_order?.name,
+            blocks: (state.last_ordered_teams ?? []).map((t) => ({
+              day: t.beginning.slice(0, 10), start: t.beginning.slice(11, 16), end: t.end.slice(11, 16), size: t.size, name: t.name,
+            })),
+          },
+        });
+        const verdict = await decideLink(question, deps.linkJudge);
+        if (verdict.action === "link") {
+          const o = sameDay.find((x) => Number(x.id) === verdict.order_id)!;
+          found = { order_id: verdict.order_id, order_number: o.number, job_id: o.Job?.[0]?.id, by: `${verdict.how}: ${verdict.reason}` };
+        } else {
+          state.notes = [...state.notes, `no replacement for order #${order_id} linked: ${verdict.reason} [${verdict.how}]`];
+        }
+      }
+    } else {
+      const m = matchExistingOrder(days.sort()[0], orders, matchOpts);
+      if (m && "order_id" in m) found = m;
+    }
+    if (found) {
       state.onsinch_order_id = found.order_id;
       state.onsinch_order_number = found.order_number ?? state.onsinch_order_number;
       state.onsinch_job_id = found.job_id ?? state.onsinch_job_id;
