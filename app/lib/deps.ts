@@ -639,8 +639,8 @@ export function executor(client: OnsinchClient): Executor {
     async patchOrder(p) {
       const body: Record<string, unknown> = { id: p.order_id };
       const applied: string[] = [];
-      const spec = p.desired.specification?.trim();
-      if (spec) { body.specification = spec; applied.push("specification"); }
+      // Not `specification`: PATCH /orders answers 204 and ignores it (S-0017, #15805), so
+      // sending it reported a field as applied that never changed (SP-11).
       const po = p.desired.intern_name?.trim();
       if (po) { body.intern_name = po; applied.push("intern_name"); }
       if (!applied.length) return []; // nothing safe to send — do not call at all

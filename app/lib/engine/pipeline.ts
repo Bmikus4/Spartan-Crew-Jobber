@@ -4,7 +4,7 @@
 // emits one metric event per pipeline transition (funnel + quality). Keeping
 // metrics here (not inside pure compile()) preserves compile's re-runnability.
 // ============================================================================
-import { compile, type CompileDeps } from "./compiler";
+import { compile, writeShape, type CompileDeps } from "./compiler";
 import { selectLatest, normalizeThread } from "./normalize";
 import type { StateStore } from "./store";
 import type { MetricSink } from "./metrics";
@@ -1167,7 +1167,7 @@ async function tryAmendInPlace(
       }
 
       const crew = (intended.desired.slot_teams ?? []).reduce((n, t) => n + (t.size || 0), 0);
-      next.last_ordered_hash = hashOrder(intended.desired);
+      next.last_ordered_hash = hashOrder(writeShape(intended.desired));
       next.last_ordered_teams_hash = teamsHash;
       next.last_ordered_teams = intended.desired.slot_teams ?? [];
       /**
@@ -1448,7 +1448,7 @@ function asSent(desired: DesiredOrder, written?: DesiredOrder): DesiredOrder {
 
 /** Record what was sent, including the ids of anything created for it. */
 function recordSent(next: ConversationState, sent: DesiredOrder, hashOrder: PipelineDeps["hashOrder"]): void {
-  next.last_ordered_hash = hashOrder(sent);
+  next.last_ordered_hash = hashOrder(writeShape(sent));
   next.last_ordered_teams_hash = hashOrder(sent.slot_teams);
   // The array, not just its fingerprint: an in-place amendment on the NEXT email
   // pairs the ids OnSinch reads back against exactly this, position by position.
@@ -1551,7 +1551,7 @@ async function executeOrder(
         : `crew and times must be applied by hand on OnSinch order #${intended.order_id}` +
           (teams.length ? ` — this thread asks for ${crew} crew across ${teams.length} block(s)` : "");
 
-      next.last_ordered_hash = hashOrder(intended.desired);
+      next.last_ordered_hash = hashOrder(writeShape(intended.desired));
       next.pending_order = undefined;
       // Only when a crew change could NOT be verified as landed. An unchanged team set
       // has nothing to verify and nothing to hand over.

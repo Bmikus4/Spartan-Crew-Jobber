@@ -134,6 +134,18 @@ function hash(s: string): string {
 }
 
 /**
+ * The part of a desired order an update can actually write, which is what "has it changed"
+ * is judged on. `specification` is out: PATCH /orders answers 204 and ignores it (S-0017,
+ * order #15805), so counting it made every reworded summary a "change" that was patched,
+ * logged as applied and tagged Order Updated while OnSinch kept the old text (SP-11). It is
+ * still sent on create, where it does land.
+ */
+export function writeShape(o: DesiredOrder): DesiredOrder {
+  const { specification: _ignoredByPatch, ...rest } = o;
+  return rest as DesiredOrder;
+}
+
+/**
  * OnSinch caps the Job name at EIGHTY, not a hundred, and rejects the whole order
  * with it — the same limit and the same whole-request 400 as the SlotTeam name.
  *
@@ -1918,7 +1930,7 @@ export async function compile(
       in_reply_to: latest.message_id,
     };
   }
-  const desiredHash = desired ? hash(JSON.stringify(desired)) : undefined;
+  const desiredHash = desired ? hash(JSON.stringify(writeShape(desired))) : undefined;
   // A job called off before it was ever booked books nothing. A cancellation the model
   // reads is already held by the pipeline; this is for the one it misses — "We managed to
   // get agency in ... it won't be needed" was read as a new job and booked (order 16324,

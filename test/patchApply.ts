@@ -137,10 +137,12 @@ async function main() {
       return { status: 204, data: null };
     });
     const real = realExecutor(recording);
-    const applied = await real.patchOrder({ order_id: 13632, desired });
+    const applied = await real.patchOrder({ order_id: 13632, desired: { ...desired, intern_name: "PO-44821" } });
     const sentBody = (calls[0]?.body as any[])?.[0] ?? {};
     console.log(`      PATCH ${calls[0]?.path} ${JSON.stringify(sentBody)}`);
-    ok(Array.isArray(applied) && applied.includes("specification"), "specification applied", JSON.stringify(applied));
+    // SP-11: PATCH /orders answers 204 and ignores specification (#15805), so it is not sent.
+    ok(Array.isArray(applied) && !applied.includes("specification") && !("specification" in sentBody), "specification is not sent or claimed", JSON.stringify(applied));
+    ok((applied ?? []).includes("intern_name") && sentBody.intern_name === "PO-44821", "the PO is", JSON.stringify(sentBody));
     ok(!("name" in sentBody), "does NOT overwrite the order name with the email subject");
     ok(!("pricelist_category_id" in sentBody), "does NOT overwrite the real, invoiced rate card");
     ok(!("slot_teams" in sentBody), "does NOT pretend to set slot teams");

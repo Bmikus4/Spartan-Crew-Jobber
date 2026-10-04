@@ -1912,5 +1912,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0096",
+  "ts": "2026-10-04T19:17:49+00:00",
+  "kind": "measurement",
+  "headline": "SP-11: specification left out of the order hash and the PATCH body (PATCH /orders ignores it, #15805)",
+  "subject": "A job-summary-only change is no longer patched, logged or tagged as an update",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 163,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]
