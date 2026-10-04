@@ -19,8 +19,15 @@ import type { ConversationState, DesiredSlotTeam } from "../engine/types";
 
 export type FeedKind = "needs-created" | "needs-updated" | "created-check" | "updated-check" | "needs-reply";
 export type FeedColour = "red" | "blue" | "neutral";
-export type FeedLane = "reply" | "need" | "check";
-export type MarkKind = "checked" | "staff-edit" | "order-found";
+export type FeedLane = "reply" | "need" | "done";
+/**
+ * `made` is never stored: it is what the projection calls an order or update the engine
+ * itself wrote, which is done the moment it is written (Ben, 2026-10-04). `history` and
+ * `dismissed` are stored and are NOT green: `history` records that the verifier has
+ * read an item's past once; `dismissed` takes a whole thread off the TV.
+ */
+export type MarkKind = "checked" | "staff-edit" | "order-found" | "made" | "history" | "dismissed";
+const GREEN_MARKS = new Set<MarkKind>(["checked", "staff-edit", "order-found"]);
 
 /** The requester's wording, byte for byte (test/feedProjection.ts pins it). */
 export const STATUS_TEXT: Record<FeedKind, string> = {
@@ -31,9 +38,18 @@ export const STATUS_TEXT: Record<FeedKind, string> = {
   "needs-reply": "Needs reply",
 };
 
-/** How long a green card stays on screen, and how long an unverified check waits. */
-export const GREEN_DWELL_MS = 2 * 3_600_000;
-export const UNCHECKED_EXPIRY_MS = 7 * 24 * 3_600_000;
+/**
+ * How long a done card stays at the bottom of the list. A day, so a board the crew has
+ * worked through reads all green rather than empty (Ben, 2026-10-04).
+ */
+export const DONE_DWELL_MS = 24 * 3_600_000;
+/**
+ * A need with no job date and no word from the client in this long leaves the list for
+ * the "older" count. Undated, it never passes its own date, and the July and August
+ * enquiries on the board on 2026-10-04 were all of this kind.
+ */
+export const STALE_UNDATED_MS = 14 * 24 * 3_600_000;
+export const dismissKey = (thread_id: string) => `dismiss:${thread_id}`;
 
 export interface FeedMark {
   item_key: string;
@@ -87,9 +103,10 @@ export interface FeedCounts {
   needs_created: number;
   needs_updated: number;
   needs_reply: number;
-  to_verify: number;
-  verified: number;
-  older_unchecked: number;
+  /** Made by the engine, ticked, or verified in OnSinch, within the last day. */
+  done: number;
+  /** Undated needs nobody has written about for a fortnight. */
+  older: number;
 }
 
 export interface Projection {
@@ -176,22 +193,29 @@ export function project(
   now: number,
 ): Projection {
   const today = londonDay(now);
+  const dismissed = new Set(marks.filter((m) => m.mark === "dismissed").map((m) => m.thread_id));
   const byKey = new Map<string, FeedMark>();
-  for (const m of [...marks].sort((a, b) => a.at - b.at)) if (!byKey.has(m.item_key)) byKey.set(m.item_key, m);
+  for (const m of [...marks].sort((a, b) => a.at - b.at)) if (GREEN_MARKS.has(m.mark) && !byKey.has(m.item_key)) byKey.set(m.item_key, m);
   // A tick outranks automatic evidence for what the card SAYS, not for when it went green.
   const ticked = new Map(marks.filter((m) => m.mark === "checked").map((m) => [m.item_key, m]));
-  const green = (key: string): FeedItem["green"] => {
-    const first = byKey.get(key);
+  const green = (it: Omit<FeedItem, "green">): FeedItem["green"] => {
+    const first = byKey.get(it.item_key);
+    if (it.kind === "created-check" || it.kind === "updated-check") {
+      const shown = ticked.get(it.item_key) ?? first;
+      return shown
+        ? { mark: shown.mark, by: shown.by, evidence: shown.evidence, at: it.at }
+        : { mark: "made", by: null, evidence: { text: it.kind === "created-check" ? "Order created by the system" : "Order updated by the system" }, at: it.at };
+    }
     if (!first) return null;
-    const shown = ticked.get(key) ?? first;
+    const shown = ticked.get(it.item_key) ?? first;
     return { mark: shown.mark, by: shown.by, evidence: shown.evidence, at: first.at };
   };
 
-  const counts: FeedCounts = { needs_created: 0, needs_updated: 0, needs_reply: 0, to_verify: 0, verified: 0, older_unchecked: 0 };
+  const counts: FeedCounts = { needs_created: 0, needs_updated: 0, needs_reply: 0, done: 0, older: 0 };
   const cards = new Map<string, FeedCard>();
 
   for (const s of states) {
-    if (!s?.thread_id) continue;
+    if (!s?.thread_id || dismissed.has(s.thread_id)) continue;
     /**
      * `not-a-job` is excluded EXCEPT where the engine's own predicate still holds: a client
      * calling a booked job off reads to the model as not-a-job, and cannotBeBooked keeps
@@ -204,21 +228,19 @@ export function project(
 
     const it = orderItem(s, lastInbound.get(s.thread_id));
     if (!it) continue;
-    const g = green(it.item_key);
-    if (g && now - g.at > GREEN_DWELL_MS) continue;
-    const isCheck = it.kind === "created-check" || it.kind === "updated-check";
-    if (isCheck && !g && now - it.at > UNCHECKED_EXPIRY_MS) { counts.older_unchecked++; continue; }
+    const g = green(it);
+    if (g && now - g.at > DONE_DWELL_MS) continue;
+    if (!g && !days.length && now - it.at > STALE_UNDATED_MS) { counts.older++; continue; }
 
-    if (g) counts.verified++;
+    if (g) counts.done++;
     else if (it.kind === "needs-created") counts.needs_created++;
-    else if (it.kind === "needs-updated") counts.needs_updated++;
-    else counts.to_verify++;
+    else counts.needs_updated++;
 
     const { order_id, ...item } = it;
     cards.set(s.thread_id, {
       thread_id: s.thread_id,
       colour: order_id ? "blue" : "red",
-      lane: isCheck || g ? "check" : "need",
+      lane: g ? "done" : "need",
       items: [{ ...item, green: g }],
       green: !!g,
       at: it.at,
@@ -240,6 +262,7 @@ export function project(
    * a verified order never answers the client. So it carries no mark and no tick.
    */
   for (const r of replies ?? []) {
+    if (dismissed.has(r.thread_id)) continue;
     counts.needs_reply++;
     const item: FeedItem = { item_key: `reply:${r.thread_id}:${r.since_iso}`, kind: "needs-reply", status: STATUS_TEXT["needs-reply"], at: Date.parse(r.since_iso) || now, green: null };
     const card = cards.get(r.thread_id);
@@ -256,11 +279,13 @@ export function project(
     });
   }
 
-  const LANE: Record<FeedLane, number> = { reply: 0, need: 1, check: 2 };
+  const LANE: Record<FeedLane, number> = { reply: 0, need: 1, done: 2 };
+  const doneAt = (c: FeedCard) => c.items[0].green?.at ?? c.at;
   const ordered = [...cards.values()].sort((a, b) =>
     LANE[a.lane] - LANE[b.lane] ||
-    // replies and needs oldest first: the longest wait is the one to act on now
-    (a.lane === "check" ? b.at - a.at : a.at - b.at));
+    // open work oldest first, the longest wait being the one to act on now; done work
+    // newest first, so what just went green sits at the top of the done group
+    (a.lane === "done" ? doneAt(b) - doneAt(a) : a.at - b.at));
   return { cards: ordered, counts };
 }
 

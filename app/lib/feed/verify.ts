@@ -85,9 +85,19 @@ export function changeOf(row: TimelineRow, engine: number | null): Change | null
 }
 
 /** The order item on a card that is still open and could be verified, or null. */
+/** The open need on a card that evidence could close, or null. An engine write is done already. */
 function openOrderItem(c: FeedCard): FeedItem | null {
-  const it = c.items.find((i) => i.kind !== "needs-reply");
+  const it = c.items.find((i) => i.kind === "needs-created" || i.kind === "needs-updated");
   return it && !it.green ? it : null;
+}
+
+/** staffChangeSince's sentence as evidence: what was touched, and the latest stamp. */
+function stampChange(who: string): Change {
+  const parts = who.split("; ").map((p) => /^(.*) by user (\d+) at (\S+)$/.exec(p)).filter((m): m is RegExpExecArray => !!m);
+  const at = Math.max(...parts.map((m) => Date.parse(m[3] + ":00Z")).filter(Number.isFinite), 0);
+  const what = [...new Set(parts.map((m) => m[1].replace(/^the /, "").replace(/^block \d+$/, "a block")))].join(", ");
+  const last = parts.find((m) => Date.parse(m[3] + ":00Z") === at);
+  return { at, creator: Number(last?.[2]) || 0, text: `${what || "the order"} edited after the client's email`, model: "Order", ref: "" };
 }
 
 type Nested = { teams: Set<string>; slots: Set<string>; raw: any };
@@ -116,7 +126,7 @@ function engineUser(t: Transport): Promise<number | null> {
   return engineId;
 }
 
-export async function verify(cards: FeedCard[], now: number, deps: VerifyDeps, budgetMs = VERIFY_BUDGET_MS): Promise<{ ran: boolean; wrote: number; note: string }> {
+export async function verify(cards: FeedCard[], now: number, deps: VerifyDeps, marks: FeedMark[] = [], budgetMs = VERIFY_BUDGET_MS): Promise<{ ran: boolean; wrote: number; note: string }> {
   const claim = await deps.claim(VERIFY_EVERY_MS);
   if (!claim) return { ran: false, wrote: 0, note: "not due" };
   const deadline = Date.now() + budgetMs;
@@ -170,14 +180,24 @@ export async function verify(cards: FeedCard[], now: number, deps: VerifyDeps, b
     notes.push(`timeline unreadable (${String((err as Error)?.message ?? err).slice(0, 80)}), used order stamps`);
   }
 
-  // (c) the stamps on the order itself, when the timeline could not be read
-  if (!timelineOk && engine) {
+  /**
+   * (c) The stamps on the order itself. Every open item gets this ONCE, for its history:
+   * the timeline cursor only sees edits from the day it was first set (2026-10-03), and
+   * 13 of 17 open updates on 2026-10-04 had been edited by staff before that. When the
+   * timeline cannot be read, every item gets it every round instead.
+   */
+  const historyDone = new Set(marks.filter((m) => m.mark === "history").map((m) => m.item_key));
+  const historyRead: FeedCard[] = [];
+  if (engine) {
     for (const card of blue) {
-      if (Date.now() >= deadline) break;
       const item = openOrderItem(card)!;
+      if (found.has(card) || (timelineOk && historyDone.has(item.item_key))) continue;
+      if (Date.now() >= deadline) { notes.push("history check stopped at the time budget"); break; }
       const n = await nested(client, card.order_id!, now).catch(() => null);
-      const who = n ? staffChangeSince(n.raw, item.at, engine) : null;
-      if (who) found.set(card, [{ at: now, creator: 0, text: who, model: "Order", ref: "" }]);
+      if (!n) continue;
+      const who = staffChangeSince(n.raw, item.at, engine);
+      if (who) found.set(card, [stampChange(who)]);
+      if (timelineOk) historyRead.push(card);
     }
   }
 
@@ -189,6 +209,11 @@ export async function verify(cards: FeedCard[], now: number, deps: VerifyDeps, b
       evidence: { text: [...new Set(ch.map((c) => c.text))].slice(0, 3).join(", "), at: new Date(latest.at).toISOString(), creator: latest.creator || null },
     });
     wrote++;
+  }
+
+  for (const card of historyRead) {
+    const item = openOrderItem(card)!;
+    await deps.addMark({ item_key: item.item_key, thread_id: card.thread_id, mark: "history", by: null, evidence: null });
   }
 
   // (b) a needed order somebody raised by hand

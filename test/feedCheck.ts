@@ -17,11 +17,12 @@ const ok = (cond: boolean, label: string, extra = "") => {
 };
 
 const NOW = Date.parse("2026-10-03T12:00:00Z");
-const KEY = `created-check:901:${NOW - 3_600_000}`;
+// A need: what the engine made is green already, so only a need shows what a tick does.
+const KEY = "needs-updated:c:901:0";
 const state = {
   thread_id: "c", subject: "s", participants: [], last_message_id: "m", last_processed_epoch: NOW,
-  classification: "new-job", facts: { requests: [] }, desired_order: null, priority: "medium", status: "ordered", notes: [],
-  onsinch_order_id: 901, order_action_log: [{ ts: NOW - 3_600_000, kind: "create", order_id: 901, ok: true }],
+  classification: "update", facts: { requests: [] }, desired_order: null, priority: "medium", status: "error", notes: [],
+  onsinch_order_id: 901, order_action_log: [],
 } as unknown as ConversationState;
 
 /** An in-memory feed_marks with the same (item_key, mark) key and the same insert-once rule. */

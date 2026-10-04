@@ -125,7 +125,7 @@ function fit(cards: FeedCard[], cap: number): { shown: FeedCard[]; hidden: numbe
 }
 
 function edgeOf(c: FeedCard) { return c.colour === "red" ? C.red : c.colour === "blue" ? C.blue : C.grey; }
-function bgOf(c: FeedCard) { return c.green ? C.greenBg : c.colour === "neutral" ? C.greyBg : c.lane === "check" ? C.white : C.cream; }
+function bgOf(c: FeedCard) { return c.green ? C.greenBg : c.colour === "neutral" ? C.greyBg : c.lane === "done" ? C.white : C.cream; }
 function numbersOf(c: FeedCard, one = false) {
   if (c.colour === "neutral") return null;
   if (!c.r_number && !c.j_number) return "No order yet";
@@ -184,7 +184,7 @@ function Row({ card, now, s, onTick }: { card: FeedCard; now: number; s: number;
     <div style={{
       height: "100%", boxSizing: "border-box", borderRadius: 18 * s, overflow: "hidden",
       background: bgOf(card), borderLeft: `${16 * s}px solid ${edge}`,
-      boxShadow: card.green ? `inset 0 0 0 ${3 * s}px ${C.greenEdge}` : card.lane === "check" ? `inset 0 0 0 ${2 * s}px ${C.rule}` : "0 2px 10px rgba(17,19,24,0.06)",
+      boxShadow: card.green ? `inset 0 0 0 ${3 * s}px ${C.greenEdge}` : card.lane === "done" ? `inset 0 0 0 ${2 * s}px ${C.rule}` : "0 2px 10px rgba(17,19,24,0.06)",
       display: "flex", alignItems: "center", gap: 28 * s, padding: `${18 * s}px ${26 * s}px ${18 * s}px ${30 * s}px`,
     }}>
       <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 8 * s }}>
@@ -404,7 +404,7 @@ export default function LiveFeedScreen({ isActive, tv = false }: { isActive: boo
   const dataStale = failed || (dataAge != null && dataAge > STALE_DATA_MS);
   const emailAt = data?.health.last_email_at ? Date.parse(data.health.last_email_at) : null;
   const emailStale = !!data?.health.intake_stale;
-  const urgentCount = cards.filter((x) => x.lane !== "check" && urgent(x, now)).length;
+  const urgentCount = cards.filter((x) => x.lane !== "done" && urgent(x, now)).length;
   const warn = dataStale || emailStale;
   const showControls = !idle;
 
@@ -435,7 +435,7 @@ export default function LiveFeedScreen({ isActive, tv = false }: { isActive: boo
             <Count s={s} n={c.needs_updated} label={["need", "updated"]} color={C.blue} />
             {data?.health.replies_enabled && <Count s={s} n={c.needs_reply} label={["need", "reply"]} color={C.grey} />}
             <Count s={s} n={urgentCount} label={["within", "48 hours"]} color={C.ink} />
-            <Count s={s} n={c.to_verify} label={["to", "verify"]} color={C.grey} />
+            <Count s={s} n={c.done} label={["done", "today"]} color={C.grey} />
           </>}
           <div style={{ display: "flex", alignItems: "center", gap: 12 * s, padding: `${6 * s}px ${14 * s}px`, marginLeft: 4 * s, borderLeft: `${2 * s}px solid ${C.rule}`, background: warn ? C.amberBg : undefined, borderRadius: warn ? 10 * s : 0 }}>
             <svg width={38 * s} height={38 * s} viewBox="0 0 24 24" fill="none" stroke={warn ? C.amber : C.sub} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M17.5 19a4.5 4.5 0 1 0-1.2-8.84A6 6 0 0 0 4.5 12.5 3.5 3.5 0 0 0 7 19h10.5Z" /></svg>
@@ -478,7 +478,7 @@ export default function LiveFeedScreen({ isActive, tv = false }: { isActive: boo
             )}
             <div style={more(s, moreH)}>
               {hidden > 0 ? `+${hidden} more` : ""}
-              {c && c.older_unchecked > 0 ? `${hidden > 0 ? " · " : ""}older, unchecked: ${c.older_unchecked}` : ""}
+              {c && c.older > 0 ? `${hidden > 0 ? " · " : ""}older: ${c.older}` : ""}
             </div>
           </>
         )}

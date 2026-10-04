@@ -1,5 +1,5 @@
 // ============================================================================
-// The feed's verifier turns a card green only on a person's edit after the engine's.
+// The feed's verifier closes a need only on a person's edit after the client's email.
 // ----------------------------------------------------------------------------
 // Fixtures are shaped like the live rows read on 2026-10-03: /timelineAudits sorted
 // oldest-first (newest on the LAST page), `common_change` carrying
@@ -24,7 +24,8 @@ const ENGINE = 2257;
 const iso = (ms: number) => new Date(ms).toISOString().replace(".000Z", "+00:00");
 
 const base = { subject: "s", participants: [], last_message_id: "m", last_processed_epoch: NOW, facts: { requests: [{ date: "2026-10-16" }] }, desired_order: null, priority: "medium", notes: [] };
-const checkState = (id: string, oid: number, num: string, job: number, ts: number) => ({ ...base, thread_id: id, classification: "new-job", status: "ordered", onsinch_order_id: oid, onsinch_order_number: num, onsinch_job_id: job, order_action_log: [{ ts, kind: "create", order_id: oid, ok: true }] }) as unknown as ConversationState;
+/** An update the engine could not make: a need on an order, dated by the client's email. */
+const needUpdate = (id: string, oid: number, num: string, job: number) => ({ ...base, thread_id: id, classification: "update", status: "error", onsinch_order_id: oid, onsinch_order_number: num, onsinch_job_id: job, order_action_log: [] }) as unknown as ConversationState;
 const needCreated = (id: string, company: number) => ({ ...base, thread_id: id, classification: "new-job", status: "needs-info", company_id: company, order_action_log: [] }) as unknown as ConversationState;
 
 const change = (id: number, model: string, ref: string, diff: Record<string, { old: unknown; new: unknown }>, at: number, creator = 1164) =>
@@ -67,8 +68,11 @@ function deps(t: Transport, cursor: number | null = null) {
 
 void (async () => {
   const wrote = NOW - 5 * H;
-  const states = [checkState("a", 16345, "11312", 13925, wrote), checkState("b", 16400, "11400", 14001, wrote), checkState("c", 16500, "11500", 14100, wrote)];
-  const cards = project(states, new Map(), [], null, NOW).cards;
+  const states = [needUpdate("a", 16345, "11312", 13925), needUpdate("b", 16400, "11400", 14001), needUpdate("c", 16500, "11500", 14100)];
+  const inbound = new Map(states.map((s) => [s.thread_id, wrote]));
+  const cards = project(states, inbound, [], null, NOW).cards;
+  // Every item's history already read, so a case can isolate the timeline.
+  const historyRead: FeedMark[] = cards.map((c) => ({ item_key: c.items[0].item_key, thread_id: c.thread_id, mark: "history", by: null, evidence: null, at: NOW }));
 
   console.log("\n[1] reading a row");
   {
@@ -82,7 +86,7 @@ void (async () => {
     ok(crew?.text === "crew 2 → 1", "crew 2 → 1", crew?.text);
   }
 
-  console.log("\n[2] a staff edit after the engine's write turns the card green");
+  console.log("\n[2] a staff edit after the client's email turns the card green");
   {
     __resetVerifyCache();
     const pages = [
@@ -99,9 +103,9 @@ void (async () => {
     const keys = new Map(marks.map((m) => [m.thread_id, m]));
     ok(keys.get("a")?.mark === "staff-edit" && (keys.get("a")?.evidence as { text: string }).text === "PO A → B", "order a: green on its PO change", JSON.stringify(keys.get("a")?.evidence));
     ok((keys.get("b")?.evidence as { text: string } | undefined)?.text === "crew 2 → 1", "order b: green on a Slot change found through its blocks");
-    ok(!keys.has("c"), "order c: an edit before the engine's write and the engine's own edit are not evidence");
+    ok(!keys.has("c"), "order c: an edit before the client's email and the engine's own edit are not evidence");
     ok(r.wrote === 2 && saved[0]?.id === 23, "the cursor moves to the newest row read", JSON.stringify(saved));
-    const after = project(states, new Map(), marks, null, NOW).cards;
+    const after = project(states, inbound, marks, null, NOW).cards;
     ok(after.filter((c) => c.green).length === 2, "and the projection shows two green cards");
   }
 
@@ -111,7 +115,7 @@ void (async () => {
     const pages = [[change(5, "Order", "11312", { intern_name: { old: "A", new: "B" } }, wrote + H)], [change(30, "Order", "11400", { name: { old: "A", new: "B" } }, wrote + H)]];
     const on = fakeOnsinch(pages);
     const { d, marks } = deps(on.t, 20);
-    await verify(cards, NOW, d);
+    await verify(cards, NOW, d, historyRead);
     ok(marks.length === 1 && marks[0].thread_id === "b", "row 5 is behind the cursor and is not re-read as new");
     ok(on.calls.filter((c) => c.startsWith("GET /timelineAudits")).length === 2, "page 1 for the count, then back from the last page until the cursor (page 1 is not fetched twice)", on.calls.join(" | "));
     ok(!on.calls.some((c) => c.includes("Job__SlotTeam")), "no nested read when no Slot or SlotTeam row needs one");
@@ -122,7 +126,7 @@ void (async () => {
     __resetVerifyCache();
     const on = fakeOnsinch([[create(40, "SlotTeam", "999", "Order:16500/Job:14100/SlotTeam:999", wrote + H)]]);
     const { d, marks } = deps(on.t);
-    await verify(cards, NOW, d);
+    await verify(cards, NOW, d, historyRead);
     ok(marks.length === 1 && marks[0].thread_id === "c" && (marks[0].evidence as { text: string }).text === "block added", "order c: block added");
   }
 
@@ -133,7 +137,8 @@ void (async () => {
     const on = fakeOnsinch([], { timelineDown: true, nested: { 16345: stamped(16345, 1164, wrote + H), 16400: stamped(16400, ENGINE, wrote + H), 16500: stamped(16500, 1164, wrote - H) } });
     const { d, marks, saved } = deps(on.t, 50);
     await verify(cards, NOW, d);
-    ok(marks.length === 1 && marks[0].thread_id === "a", "only the order a person stamped after our write", marks.map((m) => m.thread_id).join(","));
+    ok(marks.length === 1 && marks[0].thread_id === "a", "only the order a person stamped after the client's email", marks.map((m) => m.thread_id).join(","));
+    ok(!marks.some((m) => m.mark === "history"), "and no history is recorded as read while the timeline is down");
     ok(saved[0]?.id === null && /timeline unreadable/.test(saved[0].note), "the cursor is left where it was, and the note says why");
   }
 
@@ -149,14 +154,32 @@ void (async () => {
     ok(!on.calls.some((c) => c.includes("company_id=78")), "an undated need is not matched");
   }
 
-  console.log("\n[7] not due: nothing is read");
+  console.log("\n[7] history: edits from before the cursor existed are read once per item");
+  {
+    __resetVerifyCache();
+    const stamped = (id: number, by: number, at: number) => ({ id, modifier: by, modified: iso(at), Job: [{ id: 1, modifier: ENGINE, modified: iso(wrote - H), SlotTeam: [{ id: 41608, modifier: by, modified: iso(at) }] }] });
+    const on = fakeOnsinch([[]], { nested: { 16345: stamped(16345, 413, wrote + H), 16400: stamped(16400, ENGINE, wrote + H), 16500: stamped(16500, 413, wrote - H) } });
+    const { d, marks } = deps(on.t, 99);
+    await verify(cards, NOW, d);
+    const edit = marks.filter((m) => m.mark === "staff-edit");
+    ok(edit.length === 1 && edit[0].thread_id === "a", "order a: a person edited it after the client's email", edit.map((m) => m.thread_id).join(","));
+    ok((edit[0]?.evidence as { text: string } | undefined)?.text === "order, a block edited after the client's email", "and the evidence says what", JSON.stringify(edit[0]?.evidence));
+    ok(marks.filter((m) => m.mark === "history").length === 3, "all three are recorded as read");
+    __resetVerifyCache();
+    const again = fakeOnsinch([[]], { nested: {} });
+    const second = deps(again.t, 99);
+    await verify(cards, NOW, second.d, [...historyRead]);
+    ok(!again.calls.some((c) => c.includes("Job__SlotTeam")), "an item whose history was read is not read again");
+  }
+
+  console.log("\n[8] not due: nothing is read");
   {
     const on = fakeOnsinch([[]]);
     const r = await verify(cards, NOW, { transport: on.t, claim: async () => null, save: async () => {}, addMark: async () => {} });
     ok(!r.ran && on.calls.length === 0, "another screen verified within the window");
   }
 
-  console.log("\n[8] readOnly refuses anything but GET before it reaches the network");
+  console.log("\n[9] readOnly refuses anything but GET before it reaches the network");
   {
     const seen: string[] = [];
     const t = readOnly(async (m, p) => { seen.push(`${m} ${p}`); return { status: 200, data: {} }; });

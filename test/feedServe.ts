@@ -75,9 +75,11 @@ void (async () => {
     ok(r.status === 200 && (r.body.items as unknown[]).length === 1, "verifier throws -> feed still served");
     ok(/verify failed: connection refused/.test(String(((r.body.health as Record<string, unknown>).verify as Record<string, unknown>).note)), "and the failure is reported");
     const marks: FeedMark[] = [];
+    const need = { ...created, classification: "update", status: "error", order_action_log: [] } as unknown as ConversationState;
     const g = await serveFeed(deps({
+      states: async () => [need],
       marks: async () => marks,
-      verify: async () => { marks.push({ item_key: `created-check:901:${NOW - H}`, thread_id: "c", mark: "staff-edit", by: null, evidence: null, at: NOW }); return { ran: true, wrote: 1, note: "ok" }; },
+      verify: async () => { marks.push({ item_key: "needs-updated:c:901:0", thread_id: "c", mark: "staff-edit", by: null, evidence: null, at: NOW }); return { ran: true, wrote: 1, note: "ok" }; },
     }), NOW);
     ok((g.body.items as { green: boolean }[])[0]?.green === true, "marks it writes show on the same refresh");
   }
