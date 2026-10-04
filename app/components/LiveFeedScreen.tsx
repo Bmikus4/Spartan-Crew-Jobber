@@ -7,7 +7,7 @@
 // shell and fullscreen on the TV; `s` (scale) is the only difference.
 //
 // IT WEARS THE TOOL'S OWN DESIGN LANGUAGE (globals.css): the theme tokens, one bordered
-// panel with hairline rows, the KPI strip, eyebrow labels, mono ids, colour only as a
+// card per job (Ben, 10-04: separate cards, not hairline rows), the KPI strip, eyebrow labels, mono ids, colour only as a
 // signal. Heavy type is spent on one thing per row, the client's name.
 //
 // AN EMPTY SCREEN MUST NEVER LOOK LIKE "ALL CLEAR". Intake was silently down for 53
@@ -164,7 +164,7 @@ function waitText(ms: number): string {
  * green to red over 24 hours, and stays red after. It is the TV's only clock: the job's own
  * timing is its date beside a calendar (Ben, 2026-10-04).
  */
-function ReplyClock({ ms, size, label = true }: { ms: number; size: number; label?: boolean }) {
+function ReplyClock({ ms, size }: { ms: number; size: number }) {
   const t = Math.max(0, ms);
   const spent = Math.min(1, t / REPLY_RED_MS);
   const color = replyColour(t);
@@ -180,14 +180,12 @@ function ReplyClock({ ms, size, label = true }: { ms: number; size: number; labe
         const a = ((i * 30 - 90) * Math.PI) / 180;
         return <line key={i} x1={50 + Math.cos(a) * 36} y1={50 + Math.sin(a) * 36} x2={50 + Math.cos(a) * 39.5} y2={50 + Math.sin(a) * 39.5} stroke={color} strokeOpacity={i % 3 ? 0.35 : 0.8} strokeWidth={i % 3 ? 1.4 : 2.2} strokeLinecap="round" />;
       })}
-      <text x="50" y={label ? 46 : 51} textAnchor="middle" dominantBaseline="central" className="tnum" style={{ fontSize: label ? 29 : 32, fontWeight: 800, letterSpacing: "-0.02em", fill: `color-mix(in oklab, ${color} 78%, var(--text-primary))` }}>
+      <text x="50" y="46" textAnchor="middle" dominantBaseline="central" className="tnum" style={{ fontSize: 29, fontWeight: 800, letterSpacing: "-0.02em", fill: `color-mix(in oklab, ${color} 78%, var(--text-primary))` }}>
         {text}
       </text>
-      {label && (
-        <text x="50" y="69" textAnchor="middle" dominantBaseline="central" style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: "0.08em", fill: "var(--text-muted)" }}>
-          NO REPLY
-        </text>
-      )}
+      <text x="50" y="69" textAnchor="middle" dominantBaseline="central" style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: "0.08em", fill: "var(--text-muted)" }}>
+        NO REPLY
+      </text>
     </svg>
   );
 }
@@ -273,15 +271,17 @@ function Row({ card, now, s, phase, onTick }: { card: FeedCard; now: number; s: 
 
   return (
     <div style={{
-      display: "grid", gridTemplateColumns: `${4 * s}px minmax(0, 1fr) ${108 * s}px ${300 * s}px ${72 * s}px`, alignItems: "center", columnGap: 20 * s,
-      minHeight: 116 * s, padding: `${14 * s}px ${20 * s}px ${14 * s}px 0`, borderBottom: "1px solid var(--border)",
-      background: done ? tint(GREEN, 15) : "transparent",
+      display: "grid", gridTemplateColumns: `${12 * s}px minmax(0, 1fr) ${108 * s}px ${300 * s}px ${72 * s}px`, alignItems: "center", columnGap: 20 * s,
+      minHeight: 116 * s, padding: `${14 * s}px ${20 * s}px ${14 * s}px 0`,
+      border: "1px solid var(--border)", borderRadius: "var(--radius-lg)", overflow: "hidden",
+      // Mixed into the surface, not over transparent: the card sits on the page, not a panel.
+      background: done ? `color-mix(in srgb, ${GREEN} 15%, var(--surface))` : "var(--surface)",
       opacity: phase === "fade" ? 0 : 1,
       transition: `background-color 200ms ease, opacity ${FADE_MS}ms ease`,
       animation: phase === "steady" ? "feedRowIn 400ms ease" : undefined,
     }}>
       {/* The legend's colour, kept when the row goes green so it still reads. */}
-      <div style={{ alignSelf: "stretch", background: signal(card), borderRadius: `0 ${3 * s}px ${3 * s}px 0` }} />
+      <div style={{ alignSelf: "stretch", margin: `${-14 * s}px 0`, background: signal(card) }} />
 
       <div style={{ minWidth: 0, display: "flex", flexDirection: "column", gap: 6 * s }}>
         <div style={{ display: "flex", alignItems: "center", gap: 12 * s, minWidth: 0 }}>
@@ -350,7 +350,7 @@ function Tile({ card, now, s, onTick }: { card: FeedCard; now: number; s: number
 
 function Section({ s, label, n, color }: { s: number; label: string; n: number; color?: string }) {
   return (
-    <div className="eyebrow" style={{ position: "sticky", top: 0, zIndex: 1, background: "var(--surface)", borderBottom: "1px solid var(--border)", padding: `${12 * s}px ${20 * s}px`, fontSize: 13 * s, color: color ?? "var(--text-muted)" }}>
+    <div className="eyebrow" style={{ position: "sticky", top: 0, zIndex: 1, background: "var(--bg)", padding: `${12 * s}px ${20 * s}px`, fontSize: 13 * s, color: color ?? "var(--text-muted)" }}>
       <span className="slash" style={{ color: "inherit" }}>/</span>{label} <span className="tnum" style={{ color: "var(--text-faint)" }}>· {n}</span>
     </div>
   );
@@ -602,12 +602,6 @@ export default function LiveFeedScreen({ isActive, tv = false }: { isActive: boo
             <span style={{ display: "flex", alignItems: "center", gap: 14 * s }}><span style={{ width: 32 * s, height: 32 * s, borderRadius: 8 * s, background: RED, flexShrink: 0 }} />Red = New job</span>
             <span style={{ display: "flex", alignItems: "center", gap: 14 * s }}><span style={{ width: 32 * s, height: 32 * s, borderRadius: 8 * s, background: BLUE, flexShrink: 0 }} />Blue = Update</span>
           </div>
-          {/* The clock's key. */}
-          <div style={{ display: "flex", alignItems: "center", gap: 10 * s, fontSize: 20 * s, fontWeight: 600, color: "var(--text-secondary)", whiteSpace: "nowrap" }}>
-            <ReplyClock ms={5 * 3_600_000} size={38 * s} label={false} />
-            <span>= time since the client's email, unanswered</span>
-            <span style={{ color: "var(--text-muted)" }}>· red at 24h</span>
-          </div>
         </div>
         </div>
         <div style={{ display: "flex", alignItems: "center", flexShrink: 0 }}>
@@ -639,13 +633,13 @@ export default function LiveFeedScreen({ isActive, tv = false }: { isActive: boo
         </div>
       )}
 
-      <div ref={listRef} onScroll={() => { lastScrollAt.current = Date.now(); }} className="frosted-glass" style={{ flex: 1, minHeight: 0, overflowY: "auto", overflowX: "hidden" }}>
+      <div ref={listRef} onScroll={() => { lastScrollAt.current = Date.now(); }} style={{ flex: 1, minHeight: 0, overflowY: "auto", overflowX: "hidden", display: "grid", alignContent: "start", gap: 10 * s }}>
         {data == null ? (
           <div style={{ padding: 40 * s, fontSize: 22 * s, fontWeight: 600, color: failed ? AMBER : "var(--text-muted)" }}>{failed ? "The feed could not be read. Retrying." : "Loading…"}</div>
         ) : (
           <>
             {openRows.length === 0 && (
-              <div style={{ padding: `${22 * s}px ${20 * s}px`, borderBottom: "1px solid var(--border)", fontSize: 20 * s, fontWeight: 700, color: warn ? AMBER : GREEN, background: warn ? tint(AMBER, 10) : tint(GREEN, 12) }}>
+              <div style={{ padding: `${22 * s}px ${20 * s}px`, border: "1px solid var(--border)", borderRadius: "var(--radius-lg)", fontSize: 20 * s, fontWeight: 700, color: warn ? AMBER : GREEN, background: warn ? tint(AMBER, 10) : tint(GREEN, 12) }}>
                 {warn ? "Nothing listed, but the sync is not healthy: see the cloud at the top right." : openCount === 0 && strip.length === 0 ? "Everything is checked." : "Nothing else waiting."}
               </div>
             )}

@@ -2038,5 +2038,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0105",
+  "ts": "2026-10-04T20:15:30+00:00",
+  "kind": "measurement",
+  "headline": "TV rows become separate cards; reply-clock key removed",
+  "subject": "Each TV job is its own card with a 12px red/blue stripe, and the key no longer explains the reply clock",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 169,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]
