@@ -1534,5 +1534,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0069",
+  "ts": "2026-10-04T01:06:29+00:00",
+  "kind": "measurement",
+  "headline": "TV feed: order numbers moved to the chip row (seen cut to 'R10616...' on production at 1080p)",
+  "subject": "A card's R and J numbers are never truncated on the TV; a long venue used to cut them off",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 154,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]
