@@ -1618,5 +1618,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0075",
+  "ts": "2026-10-04T03:17:19+00:00",
+  "kind": "measurement",
+  "headline": "TV feed: tile line leads with the order number",
+  "subject": "A layout B tile's R number is never the part a long date line cuts off",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 154,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]

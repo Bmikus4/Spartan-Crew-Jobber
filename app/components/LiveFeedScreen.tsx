@@ -243,11 +243,11 @@ function Tile({ card, now, s, onTick }: { card: FeedCard; now: number; s: number
         </div>
         <div style={{ fontSize: 32 * s, fontWeight: 800, color: C.ink, lineHeight: 1.1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{card.company || card.subject}</div>
         <div style={{ fontSize: 20 * s, fontWeight: 700, color: C.sub, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-          {/* URGENT rides on the date line: as a prefix to the status it cut the requester's
-              wording to "Order needs c..." at five tiles across 1080p. */}
+          {/* Number first, as on the rows, so the date is what truncates. URGENT rides here too:
+              as a prefix to the status it cut the wording to "Order needs c..." at 1080p. */}
+          {numbers ? <span style={{ color: C.ink }}>{numbers} · </span> : null}
           {urgent(card, now) && <span style={{ color: C.ink, fontWeight: 800 }}>URGENT · </span>}
           {t ? fmt(t, { weekday: "short", day: "2-digit", month: "short" }) : it ? "Date TBC" : `Waiting since ${fmt(lead.at, { day: "2-digit", month: "short" })}`}
-          {numbers ? <span style={{ color: C.ink }}> · {numbers}</span> : null}
         </div>
       </div>
       {it && <div style={{ display: "grid", placeItems: "center" }}><Tick card={card} it={it} s={s} size={56} onTick={onTick} /></div>}
