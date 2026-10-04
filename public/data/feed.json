@@ -1576,5 +1576,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0072",
+  "ts": "2026-10-04T02:56:58+00:00",
+  "kind": "measurement",
+  "headline": "TV feed restyle to the mockup: 4 rows at 1080p, URGENT - NEXT 48H badge and count, legend kept top-left",
+  "subject": "The office TV looks like the requester's mockup: light rows, huge company, dated calendar, big tick, 48-hour urgency",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 154,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]
