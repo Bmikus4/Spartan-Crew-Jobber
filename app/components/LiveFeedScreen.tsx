@@ -90,15 +90,16 @@ function evidenceLine(it: FeedItem): string | null {
 /**
  * A BELL, NOT A BEEP (Ben, 2026-10-04: "softer and less 8 bit"). Two notes a fourth apart,
  * each a sine with two quiet upper partials that die away faster than it does, a gentle
- * attack and a long fade, through one short darkened echo for some room. Still loud: the
- * compressor lifts the level without the edge a triangle or square wave gives.
+ * attack and a long fade, through one short darkened echo for some room. The compressor
+ * keeps it even without the edge a triangle or square wave gives.
  */
 function chime(ctx: AudioContext) {
   const t0 = ctx.currentTime;
   const comp = ctx.createDynamicsCompressor();
   comp.threshold.value = -18; comp.knee.value = 12; comp.ratio.value = 4; comp.attack.value = 0.01; comp.release.value = 0.3;
   const out = ctx.createGain();
-  out.gain.value = 0.9;
+  // 0.9 was "a little too loud" in the office (Ben, 2026-10-04); 0.55 is about 4 dB down.
+  out.gain.value = 0.55;
   const bus = ctx.createGain();
   const echo = ctx.createDelay();
   echo.delayTime.value = 0.16;

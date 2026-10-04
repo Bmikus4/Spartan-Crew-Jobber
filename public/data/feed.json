@@ -1898,5 +1898,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0095",
+  "ts": "2026-10-04T19:11:55+00:00",
+  "kind": "measurement",
+  "headline": "TV feed: chime master gain 0.9 -> 0.55",
+  "subject": "The TV's chime plays about 4 dB quieter",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 162,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]
