@@ -644,7 +644,6 @@ export default function LiveFeedScreen({ isActive, tv = false }: { isActive: boo
           <div style={{ padding: 40 * s, fontSize: 22 * s, fontWeight: 600, color: failed ? AMBER : "var(--text-muted)" }}>{failed ? "The feed could not be read. Retrying." : "Loading…"}</div>
         ) : (
           <>
-            <Section s={s} label="Needs action" n={openRows.filter(isOpen).length} />
             {openRows.length === 0 && (
               <div style={{ padding: `${22 * s}px ${20 * s}px`, borderBottom: "1px solid var(--border)", fontSize: 20 * s, fontWeight: 700, color: warn ? AMBER : GREEN, background: warn ? tint(AMBER, 10) : tint(GREEN, 12) }}>
                 {warn ? "Nothing listed, but the sync is not healthy: see the cloud at the top right." : openCount === 0 && strip.length === 0 ? "Everything is checked." : "Nothing else waiting."}

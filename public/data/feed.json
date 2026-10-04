@@ -1968,5 +1968,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0100",
+  "ts": "2026-10-04T19:40:37+00:00",
+  "kind": "measurement",
+  "headline": "TV feed: '/ NEEDS ACTION' section label removed",
+  "subject": "The TV's open list starts straight under the header, with no 'Needs action' label",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 165,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]
