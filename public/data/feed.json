@@ -1856,5 +1856,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0092",
+  "ts": "2026-10-04T18:54:43+00:00",
+  "kind": "measurement",
+  "headline": "TV feed: reply clock only (red at 24h), calendar date, ordering red-wait then nearest job, Spartan logo top left, softer bell chime",
+  "subject": "The TV's only clock is the client's wait for our reply, red at 24 h; the job shows its date by a calendar; red waits sort first, then nearest job",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 160,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]

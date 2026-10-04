@@ -16,6 +16,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { FeedCard, FeedCounts, FeedItem } from "../lib/feed/project";
+import { BrandMark, BrandWordmark } from "./BrandLogo";
 
 interface FeedResponse {
   ok: boolean;
@@ -87,33 +88,45 @@ function evidenceLine(it: FeedItem): string | null {
 
 /** The soft two-note chime. WebAudio, so there is no file to fail to load. */
 /**
- * AS LOUD AS THE BROWSER WILL PLAY (Ben, 2026-10-04): it has to carry across the office.
- * Each note is a sine with a triangle an octave up for presence, at full gain, through a
- * compressor so the summed notes are pushed to the ceiling without clipping into a
- * crackle. The figure plays twice. Past this, only the TV's own volume can go higher.
+ * A BELL, NOT A BEEP (Ben, 2026-10-04: "softer and less 8 bit"). Two notes a fourth apart,
+ * each a sine with two quiet upper partials that die away faster than it does, a gentle
+ * attack and a long fade, through one short darkened echo for some room. Still loud: the
+ * compressor lifts the level without the edge a triangle or square wave gives.
  */
 function chime(ctx: AudioContext) {
   const t0 = ctx.currentTime;
   const comp = ctx.createDynamicsCompressor();
-  comp.threshold.value = -12; comp.knee.value = 6; comp.ratio.value = 8; comp.attack.value = 0.002; comp.release.value = 0.2;
-  const master = ctx.createGain();
-  master.gain.value = 1;
-  comp.connect(master).connect(ctx.destination);
-  for (const round of [0, 0.75]) {
-    for (const [i, f] of [660, 880].entries()) {
-      const at = t0 + round + i * 0.22;
-      for (const [type, mult, peak] of [["sine", 1, 1], ["triangle", 2, 0.45]] as const) {
-        const o = ctx.createOscillator();
-        const g = ctx.createGain();
-        o.type = type;
-        o.frequency.value = f * mult;
-        g.gain.setValueAtTime(0, at);
-        g.gain.linearRampToValueAtTime(peak, at + 0.015);
-        g.gain.exponentialRampToValueAtTime(0.0001, at + 0.65);
-        o.connect(g).connect(comp);
-        o.start(at);
-        o.stop(at + 0.7);
-      }
+  comp.threshold.value = -18; comp.knee.value = 12; comp.ratio.value = 4; comp.attack.value = 0.01; comp.release.value = 0.3;
+  const out = ctx.createGain();
+  out.gain.value = 0.9;
+  const bus = ctx.createGain();
+  const echo = ctx.createDelay();
+  echo.delayTime.value = 0.16;
+  const feedback = ctx.createGain();
+  feedback.gain.value = 0.28;
+  const dark = ctx.createBiquadFilter();
+  dark.type = "lowpass";
+  dark.frequency.value = 2400;
+  bus.connect(comp);
+  bus.connect(echo);
+  echo.connect(dark);
+  dark.connect(feedback);
+  feedback.connect(echo);
+  dark.connect(comp);
+  comp.connect(out).connect(ctx.destination);
+  for (const [i, f] of [784, 1047].entries()) {
+    const at = t0 + i * 0.28;
+    for (const [mult, peak, decay] of [[1, 0.8, 1.6], [2, 0.12, 0.7], [3.01, 0.05, 0.35]] as const) {
+      const o = ctx.createOscillator();
+      const g = ctx.createGain();
+      o.type = "sine";
+      o.frequency.value = f * mult;
+      g.gain.setValueAtTime(0, at);
+      g.gain.linearRampToValueAtTime(peak, at + 0.012);
+      g.gain.exponentialRampToValueAtTime(0.0001, at + decay);
+      o.connect(g).connect(bus);
+      o.start(at);
+      o.stop(at + decay + 0.05);
     }
   }
 }
@@ -141,44 +154,33 @@ function urgent(c: FeedCard, now: number): boolean {
   return at != null && at - now <= URGENT_MS;
 }
 
-/** Green at 48 hours to red at none, through yellow and orange: the hue walks the spectrum, not a blend. */
-const urgencyColour = (left: number) => `hsl(${Math.round(Math.min(1, Math.max(0, left / URGENT_MS)) * 130)} 78% 50%)`;
-/**
- * Whole hours only, read from across the room (Ben, 2026-10-04): "36h". The last hour reads
- * "<1h" rather than "0h", which would look like the job had started.
- */
-function countdownText(left: number): string {
-  if (left <= 0) return "NOW";
-  return left < 3_600_000 ? "<1h" : `${Math.floor(left / 3_600_000)}h`;
-}
+/** A client waiting this long for our reply is red, and goes to the top (Ben, 2026-10-04). */
+const REPLY_RED_MS = 24 * 3_600_000;
+const replyColour = (ms: number) => `hsl(${Math.round((1 - Math.min(1, Math.max(0, ms) / REPLY_RED_MS)) * 130)} 78% 50%)`;
 
-/** How long a client has waited, read the same way: whole hours, then days past two. */
+/** How long a client has waited, read from across the room: whole hours, then days past two. */
 function waitText(ms: number): string {
   if (ms < 3_600_000) return "<1h";
   return ms < URGENT_MS ? `${Math.floor(ms / 3_600_000)}h` : `${Math.floor(ms / 86_400_000)}d`;
 }
 
-type ClockKind = "start" | "reply";
 /**
- * The two clocks (Ben, 2026-10-04), after the follow-up timer on Leni's list (DueClock): a
- * tinted face in a colour that walks green to red over 48 hours.
- *   start  hours until the job's first block; the ring drains as it nears.
- *   reply  how long the client has waited with nothing from us; the ring fills, and stays
- *          red once it passes 48 hours.
- * A word inside says which, because two rings side by side otherwise read alike.
+ * THE REPLY CLOCK, after the follow-up timer on Leni's list (DueClock): how long the client
+ * has waited with nothing from us. A tinted face whose ring fills and whose colour walks
+ * green to red over 24 hours, and stays red after. It is the TV's only clock: the job's own
+ * timing is its date beside a calendar (Ben, 2026-10-04).
  */
-function Clock({ kind, ms, size, label = true }: { kind: ClockKind; ms: number; size: number; label?: boolean }) {
+function ReplyClock({ ms, size, label = true }: { ms: number; size: number; label?: boolean }) {
   const t = Math.max(0, ms);
-  const spent = kind === "start" ? 1 - Math.min(1, t / URGENT_MS) : Math.min(1, t / URGENT_MS);
-  const color = `hsl(${Math.round((1 - spent) * 130)} 78% 50%)`;
-  const ring = kind === "start" ? 1 - spent : spent;
-  const text = kind === "start" ? countdownText(t) : waitText(t);
+  const spent = Math.min(1, t / REPLY_RED_MS);
+  const color = replyColour(t);
+  const text = waitText(t);
   const C = 2 * Math.PI * 44;
   return (
-    <svg width={size} height={size} viewBox="0 0 100 100" role="img" aria-label={kind === "start" ? `Starts in ${text}` : `Waiting ${text} for a reply`} style={{ flexShrink: 0, overflow: "visible" }}>
+    <svg width={size} height={size} viewBox="0 0 100 100" role="img" aria-label={`Waiting ${text} for a reply`} style={{ flexShrink: 0, overflow: "visible" }}>
       <circle cx="50" cy="50" r="47" fill={`color-mix(in oklab, ${color} 14%, transparent)`} />
       <circle cx="50" cy="50" r="44" fill="none" stroke="var(--border-strong)" strokeWidth="5" />
-      <circle cx="50" cy="50" r="44" fill="none" stroke={color} strokeWidth="5" strokeLinecap="round" strokeDasharray={`${C * ring} ${C}`} transform="rotate(-90 50 50)" style={{ transition: "stroke-dasharray 900ms linear, stroke 900ms linear" }} />
+      <circle cx="50" cy="50" r="44" fill="none" stroke={color} strokeWidth="5" strokeLinecap="round" strokeDasharray={`${C * spent} ${C}`} transform="rotate(-90 50 50)" style={{ transition: "stroke-dasharray 900ms linear, stroke 900ms linear" }} />
       {/* No marks at 3 and 9 o'clock: that is where the figure sits. */}
       {Array.from({ length: 12 }, (_, i) => i).filter((i) => i !== 3 && i !== 9).map((i) => {
         const a = ((i * 30 - 90) * Math.PI) / 180;
@@ -189,12 +191,24 @@ function Clock({ kind, ms, size, label = true }: { kind: ClockKind; ms: number; 
       </text>
       {label && (
         <text x="50" y="69" textAnchor="middle" dominantBaseline="central" style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: "0.08em", fill: "var(--text-muted)" }}>
-          {kind === "start" ? "TO START" : "NO REPLY"}
+          NO REPLY
         </text>
       )}
     </svg>
   );
 }
+
+function CalendarIcon({ size, color }: { size: number; color: string }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }} aria-hidden>
+      <rect x="3" y="5" width="18" height="16" rx="2.5" />
+      <line x1="3" y1="10" x2="21" y2="10" /><line x1="8" y1="3" x2="8" y2="7" /><line x1="16" y1="3" x2="16" y2="7" />
+      <circle cx="8" cy="14" r="0.7" fill={color} /><circle cx="12" cy="14" r="0.7" fill={color} /><circle cx="16" cy="14" r="0.7" fill={color} />
+      <circle cx="8" cy="17.5" r="0.7" fill={color} /><circle cx="12" cy="17.5" r="0.7" fill={color} />
+    </svg>
+  );
+}
+
 function numbersOf(c: FeedCard, one = false): string | null {
   if (c.colour === "neutral") return null;
   if (!c.r_number && !c.j_number) return "No order yet";
@@ -245,7 +259,7 @@ function Row({ card, now, s, phase, onTick }: { card: FeedCard; now: number; s: 
 
   return (
     <div style={{
-      display: "grid", gridTemplateColumns: `${4 * s}px minmax(0, 1fr) ${108 * s}px ${108 * s}px ${240 * s}px ${72 * s}px`, alignItems: "center", columnGap: 20 * s,
+      display: "grid", gridTemplateColumns: `${4 * s}px minmax(0, 1fr) ${108 * s}px ${300 * s}px ${72 * s}px`, alignItems: "center", columnGap: 20 * s,
       minHeight: 116 * s, padding: `${14 * s}px ${20 * s}px ${14 * s}px 0`, borderBottom: "1px solid var(--border)",
       background: done ? tint(GREEN, 15) : "transparent",
       opacity: phase === "fade" ? 0 : 1,
@@ -274,18 +288,19 @@ function Row({ card, now, s, phase, onTick }: { card: FeedCard; now: number; s: 
       </div>
 
       <div style={{ display: "grid", placeItems: "center" }}>
-        {isOpen(card) && card.awaiting_reply_since != null && <Clock kind="reply" ms={now - card.awaiting_reply_since} size={100 * s} />}
-      </div>
-      <div style={{ display: "grid", placeItems: "center" }}>
-        {urgent(card, now) && <Clock kind="start" ms={deadline(card, now)! - now} size={100 * s} />}
+        {isOpen(card) && card.awaiting_reply_since != null && <ReplyClock ms={now - card.awaiting_reply_since} size={100 * s} />}
       </div>
 
-      <div style={{ minWidth: 0 }}>
-        <div className="eyebrow" style={{ fontSize: 14 * s, color: "var(--text-muted)" }}>
-          {!it ? "Waiting since" : t ? fmt(t, { weekday: "long" }) + (more ? ` +${more}d` : "") : "Date"}
-        </div>
-        <div className="tnum" style={{ fontSize: 28 * s, fontWeight: 700, color: "var(--text-primary)", whiteSpace: "nowrap", marginTop: 2 * s }}>
-          {!it ? fmt(lead.at, { day: "numeric", month: "short" }) : t ? fmt(t, sameYear ? { day: "numeric", month: "short" } : { day: "numeric", month: "short", year: "numeric" }) : "TBC"}
+      {/* The job's own timing: its date beside a calendar, amber within 48 hours. */}
+      <div style={{ display: "flex", alignItems: "center", gap: 16 * s, minWidth: 0 }}>
+        <CalendarIcon size={44 * s} color={urgent(card, now) ? AMBER : "var(--text-muted)"} />
+        <div style={{ minWidth: 0 }}>
+          <div className="eyebrow" style={{ fontSize: 14 * s, color: urgent(card, now) ? AMBER : "var(--text-muted)" }}>
+            {!it ? "Waiting since" : t ? fmt(t, { weekday: "long" }) + (more ? ` +${more}d` : "") : "Date"}
+          </div>
+          <div className="tnum" style={{ fontSize: 28 * s, fontWeight: 700, color: "var(--text-primary)", whiteSpace: "nowrap", marginTop: 2 * s }}>
+            {!it ? fmt(lead.at, { day: "numeric", month: "short" }) : t ? fmt(t, sameYear ? { day: "numeric", month: "short" } : { day: "numeric", month: "short", year: "numeric" }) : "TBC"}
+          </div>
         </div>
       </div>
 
@@ -310,7 +325,7 @@ function Tile({ card, now, s, onTick }: { card: FeedCard; now: number; s: number
         <div style={{ fontSize: 22 * s, fontWeight: 800, color: "var(--text-primary)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{card.company || card.subject}</div>
         <div style={{ fontSize: 14 * s, fontWeight: 500, color: "var(--text-secondary)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
           {numbers && <span className={card.r_number || card.j_number ? "mono" : undefined} style={{ color: "var(--text-primary)" }}>{numbers} · </span>}
-          {urgent(card, now) && <span className="mono tnum" style={{ color: urgencyColour(deadline(card, now)! - now), fontWeight: 700 }}>{countdownText(Math.max(0, deadline(card, now)! - now))} · </span>}
+          {isOpen(card) && card.awaiting_reply_since != null && <span className="tnum" style={{ color: replyColour(now - card.awaiting_reply_since), fontWeight: 700 }}>{waitText(now - card.awaiting_reply_since)} no reply · </span>}
           {t ? fmt(t, { weekday: "short", day: "numeric", month: "short" }) : it ? "Date TBC" : `Waiting since ${fmt(lead.at, { day: "numeric", month: "short" })}`}
         </div>
       </div>
@@ -477,12 +492,19 @@ export default function LiveFeedScreen({ isActive, tv = false }: { isActive: boo
     }
   }, [load]);
 
-  // Anything with a timer goes to the very top, soonest start first (Ben, 2026-10-04);
-  // everything else keeps the server's order.
+  /**
+   * THE ORDER (Ben, 2026-10-04). Open orders above done ones. Within the open ones, every
+   * client who has waited a day or more for our reply comes first; then everything by how
+   * near the job is, nearest first, the longer wait breaking a tie. Undated jobs go last in
+   * their group. Done keeps the server's order: what went green most recently on top.
+   */
   const cards = useMemo(() => {
     const list = data?.items ?? [];
-    const timed = list.filter((c) => urgent(c, now)).sort((a, b) => deadline(a, now)! - deadline(b, now)!);
-    return [...timed, ...list.filter((c) => !urgent(c, now))];
+    const waited = (c: FeedCard) => (c.awaiting_reply_since != null ? now - c.awaiting_reply_since : -1);
+    const red = (c: FeedCard) => (waited(c) >= REPLY_RED_MS ? 0 : 1);
+    const when = (c: FeedCard) => deadline(c, now) ?? Number.MAX_SAFE_INTEGER;
+    const open = list.filter(isOpen).sort((a, b) => red(a) - red(b) || when(a) - when(b) || waited(b) - waited(a));
+    return [...open, ...list.filter((c) => !isOpen(c))];
   }, [data, now]);
 
   let strip: FeedCard[] = [];
@@ -535,19 +557,24 @@ export default function LiveFeedScreen({ isActive, tv = false }: { isActive: boo
       <header style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 24 * s, flexShrink: 0 }}>
         {/* The legend: permanent, not interactive, exactly two entries. Large, because it is
             the key to every row's colour and is read from across the office. */}
+        <div style={{ display: "flex", alignItems: "center", gap: 26 * s, minWidth: 0 }}>
+        <div aria-label="Spartan Crew" style={{ display: "flex", alignItems: "center", gap: 8 * s, flexShrink: 0 }}>
+          <BrandWordmark height={40 * s} />
+          <BrandMark height={52 * s} />
+        </div>
+        <div style={{ width: 2 * s, alignSelf: "stretch", background: "var(--border)", flexShrink: 0 }} />
         <div aria-label="Legend" style={{ display: "flex", flexDirection: "column", gap: 8 * s, minWidth: 0, overflow: "hidden" }}>
           <div style={{ display: "flex", gap: 36 * s, alignItems: "center", fontSize: 34 * s, fontWeight: 800, letterSpacing: "-0.01em", color: "var(--text-primary)", whiteSpace: "nowrap" }}>
             <span style={{ display: "flex", alignItems: "center", gap: 14 * s }}><span style={{ width: 32 * s, height: 32 * s, borderRadius: 8 * s, background: RED, flexShrink: 0 }} />Red = New job</span>
             <span style={{ display: "flex", alignItems: "center", gap: 14 * s }}><span style={{ width: 32 * s, height: 32 * s, borderRadius: 8 * s, background: BLUE, flexShrink: 0 }} />Blue = Update</span>
           </div>
-          {/* The clocks' key: one counts down to the job, the other up from the client's email. */}
+          {/* The clock's key. */}
           <div style={{ display: "flex", alignItems: "center", gap: 10 * s, fontSize: 20 * s, fontWeight: 600, color: "var(--text-secondary)", whiteSpace: "nowrap" }}>
-            <Clock kind="reply" ms={5 * 3_600_000} size={38 * s} label={false} />
-            <span>= waiting for our reply</span>
-            <Clock kind="start" ms={36 * 3_600_000} size={38 * s} label={false} />
-            <span>= until the job starts</span>
-            <span style={{ color: "var(--text-muted)" }}>· green → red over 48h</span>
+            <ReplyClock ms={5 * 3_600_000} size={38 * s} label={false} />
+            <span>= time since the client's email with no reply from us</span>
+            <span style={{ color: "var(--text-muted)" }}>· red at 24h</span>
           </div>
+        </div>
         </div>
         <div style={{ display: "flex", alignItems: "center", flexShrink: 0 }}>
           {kpis.map((k) => (
