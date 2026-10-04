@@ -3,6 +3,7 @@
 // ----------------------------------------------------------------------------
 //   npx tsx study/venues.ts             deterministic only — FREE
 //   npx tsx study/venues.ts --judge     with the adjudicator — COSTS MONEY (~$0.40)
+//   add --gate to hand the score to the next session gate (.tmp-data/gate-measurements.json)
 //
 // Venue is where every failure in this study lives, and the corpus can only say
 // how OFTEN it fails. This says WHICH WORDING fails and WHY, one row per
@@ -120,6 +121,15 @@ const withJudge = process.argv.includes("--judge");
       console.log(`      would:  ${m.got}`);
       if (m.why) console.log(`      why:    ${m.why}`);
     }
+  }
+  if (process.argv.includes("--gate")) {
+    const { recordMeasurement } = await import("../scripts/_gateMeasure.mjs");
+    console.log("\nhanded to the next gate:", recordMeasurement(withJudge ? "venue_table_with_judge" : "venue_table_deterministic", {
+      dataset: `study/gold.ts GOLD_VENUES, ${total} phrasings, against .tmp-data/places.json (${places.length} places, file dated ${(await import("node:fs")).statSync(".tmp-data/places.json").mtime.toISOString().slice(0, 10)})`,
+      instrument: withJudge ? "study/venues.ts --judge (model adjudicator, costs money)" : "study/venues.ts (deterministic only, no model)",
+      right, total, pct: Math.round((right / total) * 1000) / 10,
+      misses: misses.map((m) => m.said),
+    }));
   }
   console.log("");
 })();

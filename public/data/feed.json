@@ -2248,5 +2248,227 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0120",
+  "ts": "2026-10-04T22:23:34+00:00",
+  "kind": "measurement",
+  "headline": "Venue table 27/33 (81.8%, no model); venue sink 8/112 engine orders (7.1%); link judge 314/374 right, 14 wrong links (3.7%) vs the old rule's 28",
+  "subject": "The venue table and the venue sink rate hand their scores to the session gate",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 178,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  },
+  "measured": {
+   "venue_table_deterministic": {
+    "dataset": "study/gold.ts GOLD_VENUES, 33 phrasings, against .tmp-data/places.json (5567 places, file dated 2026-08-25)",
+    "instrument": "study/venues.ts (deterministic only, no model)",
+    "right": 27,
+    "total": 33,
+    "pct": 81.8,
+    "misses": [
+     "the BDC",
+     "London Stadium",
+     "the London Stadium",
+     "Ally Pally",
+     "Battersea Evolution",
+     "the Albert Hall"
+    ]
+   },
+   "venue_sink": {
+    "dataset": "order_records id_source=api_response, 2026-09-03 to 2026-10-04, read 2026-10-04",
+    "instrument": "scripts/venue-sink.ts: one SELECT, no OnSinch, no model",
+    "placeholder_place_ids": [
+     2069,
+     6922,
+     87,
+     6581
+    ],
+    "engine_orders": 112,
+    "on_placeholder": 8,
+    "sink_rate_pct": 7.1,
+    "wilson95_pct": [
+     3.7,
+     13.5
+    ],
+    "matched_orders_not_the_rate": {
+     "orders": 289,
+     "on_placeholder": 41
+    }
+   },
+   "link_judge_b3": {
+    "dataset": "392 hindsight-labelled link points (gold.jsonl: 356 by hand, 36 by stated R number; 18 unsure excluded), cases built 2026-10-03",
+    "instrument": ".tmp-data/linkjudge/link-eval.mts --all (paid, 413 model calls, anthropic/claude-opus-4.6) rescored by rescore.mjs after the gold correction",
+    "gold_correction": "46 of 53 rule labels 'own-order' were wrong (the rule read the bound order's existence, and the bound order was usually the candidate); relabelled by hand before scoring",
+    "judge": {
+     "n": 374,
+     "right": 314,
+     "wrong_links": 14,
+     "held": 29,
+     "missed_links": 17,
+     "right_pct": 84,
+     "right_wilson95_pct": [
+      79.9,
+      87.3
+     ],
+     "wrong_link_pct": 3.7,
+     "wrong_link_wilson95_pct": [
+      2.2,
+      6.2
+     ],
+     "right_when_acting_pct": 91
+    },
+    "old_date_venue_rule": {
+     "n": 374,
+     "right": 269,
+     "wrong_links": 28,
+     "held": 77,
+     "missed_links": 0,
+     "right_pct": 71.9,
+     "right_wilson95_pct": [
+      67.2,
+      76.2
+     ],
+     "wrong_link_pct": 7.5,
+     "wrong_link_wilson95_pct": [
+      5.2,
+      10.6
+     ],
+     "right_when_acting_pct": 90.6
+    },
+    "by": {
+     "1 candidate": {
+      "n": 293,
+      "right": 246,
+      "wrong_links": 10,
+      "held": 25,
+      "missed_links": 12,
+      "right_pct": 84,
+      "right_wilson95_pct": [
+       79.3,
+       87.7
+      ],
+      "wrong_link_pct": 3.4,
+      "wrong_link_wilson95_pct": [
+       1.9,
+       6.2
+      ],
+      "right_when_acting_pct": 91.8
+     },
+     "2 candidates": {
+      "n": 55,
+      "right": 45,
+      "wrong_links": 2,
+      "held": 3,
+      "missed_links": 5,
+      "right_pct": 81.8,
+      "right_wilson95_pct": [
+       69.7,
+       89.8
+      ],
+      "wrong_link_pct": 3.6,
+      "wrong_link_wilson95_pct": [
+       1,
+       12.3
+      ],
+      "right_when_acting_pct": 86.5
+     },
+     "3+ candidates": {
+      "n": 26,
+      "right": 23,
+      "wrong_links": 2,
+      "held": 1,
+      "missed_links": 0,
+      "right_pct": 88.5,
+      "right_wilson95_pct": [
+       71,
+       96
+      ],
+      "wrong_link_pct": 7.7,
+      "wrong_link_wilson95_pct": [
+       2.1,
+       24.1
+      ],
+      "right_when_acting_pct": 92
+     },
+     "enquiry": {
+      "n": 239,
+      "right": 197,
+      "wrong_links": 13,
+      "held": 21,
+      "missed_links": 8,
+      "right_pct": 82.4,
+      "right_wilson95_pct": [
+       77.1,
+       86.7
+      ],
+      "wrong_link_pct": 5.4,
+      "wrong_link_wilson95_pct": [
+       3.2,
+       9.1
+      ],
+      "right_when_acting_pct": 90.4
+     },
+     "successor": {
+      "n": 135,
+      "right": 117,
+      "wrong_links": 1,
+      "held": 8,
+      "missed_links": 9,
+      "right_pct": 86.7,
+      "right_wilson95_pct": [
+       79.9,
+       91.4
+      ],
+      "wrong_link_pct": 0.7,
+      "wrong_link_wilson95_pct": [
+       0.1,
+       4.1
+      ],
+      "right_when_acting_pct": 92.1
+     },
+     "gold high": {
+      "n": 350,
+      "right": 298,
+      "wrong_links": 10,
+      "held": 26,
+      "missed_links": 16,
+      "right_pct": 85.1,
+      "right_wilson95_pct": [
+       81,
+       88.5
+      ],
+      "wrong_link_pct": 2.9,
+      "wrong_link_wilson95_pct": [
+       1.6,
+       5.2
+      ],
+      "right_when_acting_pct": 92
+     },
+     "gold medium": {
+      "n": 24,
+      "right": 16,
+      "wrong_links": 4,
+      "held": 3,
+      "missed_links": 1,
+      "right_pct": 66.7,
+      "right_wilson95_pct": [
+       46.7,
+       82
+      ],
+      "wrong_link_pct": 16.7,
+      "wrong_link_wilson95_pct": [
+       6.7,
+       35.9
+      ],
+      "right_when_acting_pct": 76.2
+     }
+    },
+    "decision": "Ben accepted B4 on 2026-10-04; SPARTAN_LINK_JUDGE=on and SPARTAN_LINK_MODEL pinned to the measured model in Vercel production"
+   }
+  }
  }
 ]
