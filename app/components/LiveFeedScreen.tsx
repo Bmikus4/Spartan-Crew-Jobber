@@ -308,13 +308,8 @@ function Row({ card, now, s, phase, onTick }: { card: FeedCard; now: number; s: 
         {numbers}
       </div>
 
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 20 * s, minWidth: 0 }}>
-      {/* Fixed width with or without a clock, so the dates line up down the list. */}
-      <div style={{ width: 84 * s, height: 84 * s, display: "grid", placeItems: "center", flexShrink: 0 }}>
-        {isOpen(card) && card.awaiting_reply_since != null && <ReplyClock ms={now - card.awaiting_reply_since} size={84 * s} />}
-      </div>
-
-      {/* The job's own timing: its date beside a calendar, amber within 48 hours. */}
+      <div style={{ display: "flex", alignItems: "center", gap: 20 * s, minWidth: 0 }}>
+      {/* The job's own timing, straight after the numbers (Ben): its date beside a calendar, amber within 48 hours. */}
       <div style={{ display: "flex", alignItems: "center", gap: 16 * s, width: 250 * s, flexShrink: 0 }}>
         <CalendarIcon size={44 * s} color={urgent(card, now) ? AMBER : "var(--text-muted)"} />
         <div style={{ minWidth: 0 }}>
@@ -325,6 +320,11 @@ function Row({ card, now, s, phase, onTick }: { card: FeedCard; now: number; s: 
             {!it ? fmt(lead.at, { day: "numeric", month: "short" }) : t ? fmt(t, sameYear ? { day: "numeric", month: "short" } : { day: "numeric", month: "short", year: "numeric" }) : "TBC"}
           </div>
         </div>
+      </div>
+
+      {/* Pushed to the far side; fixed width so the ticks line up whether or not a clock shows. */}
+      <div style={{ marginLeft: "auto", width: 84 * s, height: 84 * s, display: "grid", placeItems: "center", flexShrink: 0 }}>
+        {isOpen(card) && card.awaiting_reply_since != null && <ReplyClock ms={now - card.awaiting_reply_since} size={84 * s} />}
       </div>
 
       <div style={{ width: 56 * s, display: "grid", placeItems: "center", flexShrink: 0 }}>

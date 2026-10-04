@@ -2206,5 +2206,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0117",
+  "ts": "2026-10-04T22:07:05+00:00",
+  "kind": "measurement",
+  "headline": "TV cards: date moved beside the R/J numbers",
+  "subject": "A TV card's job date sits straight after its R/J numbers, with the reply clock at the far side",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 178,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]
