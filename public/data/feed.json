@@ -2066,5 +2066,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0107",
+  "ts": "2026-10-04T20:30:45+00:00",
+  "kind": "measurement",
+  "headline": "SP-19: venueResolution runs every case under SPARTAN_VENUE_V3=0 and =1 (fake judge); no divergence found",
+  "subject": "The venue resolution tests run with V3 on as well as off",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 169,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]

@@ -22,6 +22,7 @@
 // Run: npx tsx test/venueResolution.ts
 // ============================================================================
 import { resolvePlace } from "../app/lib/engine/compiler";
+import type { VenueJudge } from "../app/lib/engine/venueAdjudicate";
 import type { ConversationFacts, PlaceCandidate } from "../app/lib/engine/types";
 
 let fails = 0;
@@ -43,15 +44,44 @@ const PLACES: PlaceCandidate[] = [
 ];
 
 const onsinch = { allPlaces: async () => PLACES } as never;
+
+/**
+ * SP-19: every case runs twice. Production runs SPARTAN_VENUE_V3=1 and the suite does not
+ * load .env.local, so `npm run test:all` used to exercise only the resolver that books no
+ * jobs. The V3 pass injects a judge that agrees with the search's top candidate: no network,
+ * and it pins the deterministic half of V3 (search, city guard, placeholder) under the flag.
+ */
+const agreeWithSearch: VenueJudge = {
+  async adjudicate(_system: string, user: string) {
+    const id = Number(/id (\d+)/.exec(user)?.[1]);
+    return { decision: "match", place_id: id, confidence: 0.9, reason: "agrees with the search" };
+  },
+};
+let mode: "0" | "1" = "0";
 const go = (location_text?: string) =>
-  resolvePlace({ requests: [], ...(location_text ? { location_text } : {}) } as ConversationFacts, undefined, onsinch);
+  resolvePlace({ requests: [], ...(location_text ? { location_text } : {}) } as ConversationFacts, undefined, onsinch,
+    undefined, mode === "1" ? { venueJudge: agreeWithSearch } : undefined);
 
 async function main() {
+  const prior = process.env.SPARTAN_VENUE_V3;
+  for (const m of ["0", "1"] as const) {
+    mode = m;
+    process.env.SPARTAN_VENUE_V3 = m;
+    console.log(`\n######## SPARTAN_VENUE_V3=${m}`);
+    await cases();
+  }
+  if (prior === undefined) delete process.env.SPARTAN_VENUE_V3; else process.env.SPARTAN_VENUE_V3 = prior;
+  console.log(fails ? `\n${fails} FAILED\n` : "\nALL PASS\n");
+  process.exit(fails ? 1 : 0);
+}
+
+async function cases() {
   console.log("\n[1] matchPlace answers — book it, say nothing");
   {
     const r = await go("ExCeL London");
     ok(r.id === 49, "ExCeL London -> 49", String(r.id));
     ok(!r.provision, "nothing provisioned");
+    if (mode === "1") ok(/searched \d+ venues/.test(r.note ?? ""), "and under the flag it is V3 that answered", r.note ?? "(none)");
   }
 
   console.log("\n[2] a SHELL is held back so the second pass can find the real row");
@@ -122,8 +152,6 @@ async function main() {
     ok(!!r.note && /Thornbury/.test(r.note), "and the ticket names the venue to check", r.note ?? "(none)");
   }
 
-console.log(fails ? `\n${fails} FAILED\n` : "\nALL PASS\n");
-process.exit(fails ? 1 : 0);
 }
 
 main();
