@@ -407,7 +407,8 @@ export function executor(client: OnsinchClient): Executor {
        * produced is deliberate: the reply goes to whoever actually wrote, and an address
        * can never be invented by a composition step.
        *
-       * Still a DRAFT and never a send. A human sends.
+       * This only drafts. Sending is a separate step (sendReplyDraft above), reached only
+       * through replySendArmed (pipeline.ts), which the reply settings decide.
        */
       if (serviceAccountConfigured()) {
         try {

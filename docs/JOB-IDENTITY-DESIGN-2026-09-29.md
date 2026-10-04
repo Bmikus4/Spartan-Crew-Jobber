@@ -1,7 +1,7 @@
 # Job identity, conversation consolidation and canonical job state — design
 
-2026-09-29. Discovery, architecture, tests and plan. **Nothing here is built.** Implementation waits
-for Ben's go-ahead.
+2026-09-29. Discovery, architecture, tests and plan. Steps 1-5 and 6.1 are built (S-0059 and
+earlier); 6.2 onward is Stage 6 of the 10-03 remediation plan.
 
 Evidence tags: **[measured]** = counted this session against Neon or the live OnSinch tenant
 (read-only unless stated). **[repo]** = read in code. **[carried]** = older note, not re-checked.

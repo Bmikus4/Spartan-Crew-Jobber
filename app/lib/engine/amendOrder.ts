@@ -196,9 +196,11 @@ export interface Pairing {
  * and is not one: thread place 621 is "Westfield Stratford City" and 236 is "Syon Park",
  * while the slotlocation ids on those same blocks are 16610 and 16578, and
  * `GET /places?id[eq]=` finds neither. There is no `/slotLocations` endpoint in any
- * spelling. So a block's venue simply cannot be read through this API, and a key that
- * included it matched NOTHING — measured 2026-09-14, it declined every multi-block
- * staff-raised order in the tenant.
+ * spelling, and a key that compared it with the place id matched NOTHING — measured
+ * 2026-09-14, it declined every multi-block staff-raised order in the tenant. The
+ * SlotLocation has since been found readable through the nested order read
+ * (`orderWithBlocks`, `with=Job__SlotTeam__Slot__SlotLocation`); this key has not been
+ * changed to use it, so the trade-off below still stands.
  *
  * The profession carries the discrimination the venue was expected to. Within one order a
  * block is the work it is for — the crew-chief rule carves a block of 4 into 3 crew plus 1

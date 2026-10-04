@@ -428,17 +428,8 @@ export async function handleThread(
 
   if (intended) {
     /**
-     * An ASSUMED rate is never written hands-free.
-     *
-     * default_rate_card lets a brand-new client get an order at all, instead of
-     * holding on a number they have no history for. Three in four are priced
-     * right by it. The fourth is why this exists: auto mode would put a guessed
-     * price on a real booking and bill it, which is the exact failure — OnSinch's
-     * silent card 245 — that I1 was written to stop. Staging costs one click.
-     *
-     * Deliberately checked on the order being written rather than on settings, so
-     * it holds for a patch as well as a create, and cannot be switched off from
-     * the dashboard.
+     * An assumed rate card used to hold the order here. Since 2026-08-27 it books with a
+     * flag instead: see "AN ASSUMED RATE CARD FLAGS THE ORDER" below.
      */
     /**
      * Ben, Q1 (2026-08-18): an order goes to OnSinch as To Confirm the moment it
@@ -453,20 +444,8 @@ export async function handleThread(
      * The queue itself stays, as the record: every inbound request is still visible
      * in the tool with the order it produced. What it no longer does is hold.
      *
-     * The ONE case that still holds is money, and it is not a mode — it is checked
-     * on the order being written, so it holds for a patch as well as a create and
-     * cannot be switched off from the dashboard. An assumed rate card is a guess
-     * that reaches an invoice; card 245, the silent OnSinch default, is Tracy's
-     * original wrong-rate failure.
-     *
-     * The obvious objection to keeping it is Ben's own Q1 argument: a gate nobody
-     * opens is a drawer, not safety. What answers that is the volume. A card is only
-     * assumed for a company with NO order history, and over the tenant's 6,686 orders
-     * there are 557 such companies — 8.3% of all orders ever, and 5.6% of the last
-     * thousand. It is one click per NEW CLIENT, not one per order: the moment that
-     * first order exists, every later one derives its card from history and writes
-     * straight through. A first booking for a company nobody has priced before is the
-     * one moment in the life of an account where a human should see the number.
+     * Money was kept as the one hold for nine days; it went on 2026-08-27 (see below),
+     * and what still holds is listed there under WHAT STILL HOLDS.
      */
     /**
      * Before anything is written: is this the same job as a thread we already hold?

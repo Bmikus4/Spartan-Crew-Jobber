@@ -51,12 +51,12 @@ export const maxDuration = 60;
 //   4. set GMAIL_SA_CLIENT_EMAIL, GMAIL_SA_PRIVATE_KEY, GMAIL_SUBJECT in Vercel
 //   5. restore vercel.json, which was REMOVED so these would not fire against the n8n
 //      workflows they duplicate — /api/health/intake is already driven by the Intake
-//      Watchdog and /api/reconcile by the Reconciliation Sweep, and two of each is worse
-//      than one:
+//      Watchdog, and two of each is worse than one:
 //        { "$schema": "https://openapi.vercel.sh/vercel.json",
 //          "crons": [ { "path": "/api/mail-poll",      "schedule": "*/2 * * * *"  },
-//                     { "path": "/api/health/intake",  "schedule": "*/15 * * * *" },
-//                     { "path": "/api/reconcile",      "schedule": "0 3 * * *"    } ] }
+//                     { "path": "/api/health/intake",  "schedule": "*/15 * * * *" } ] }
+//      /api/reconcile stays on n8n's Reconciliation Sweep: a Vercel cron sends GET, and a
+//      GET of /api/reconcile is the DRY run, so a cron there would sweep daily and change nothing.
 //      and set CRON_SECRET, without which every cron 401s — fail-closed, deliberately.
 //   6. watch it in shadow, then INTAKE_PATH=routing to hand it the engine.
 // ============================================================================

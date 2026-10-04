@@ -153,8 +153,8 @@ export function draftMime(a: { to: string; from: string; subject: string; html: 
 /**
  * Create the draft, on the thread it answers.
  *
- * A DRAFT, never a send. Ben's standing position is that the engine composes and a human
- * sends; the settings layer decides whether anything is delivered at all, and this
+ * This only drafts. Sending is sendDraft below, reached only through replySendArmed
+ * (pipeline.ts): the reply settings decide whether anything is delivered at all, and this
  * function is not the place that decision gets quietly widened.
  */
 export async function createDraft(

@@ -18,7 +18,7 @@ has watched fail is a gate nobody has reason to believe; re-run it whenever the 
 or the confirm step changes.
 
 **The suite is `npm run test:all`, not `npm test`.** `npm test` is `tsx test/run.ts` and
-runs exactly one file. The 117-file discovery runner is `test/all.ts`. Three handoffs
+runs exactly one file. The discovery runner is `test/all.ts`, which finds every test file itself. Three handoffs
 have claimed "117 test files, `npm test` ALL PASS" — that sentence names a command which
 does not run them.
 

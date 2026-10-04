@@ -1984,8 +1984,8 @@ export async function compile(
     }
   }
   // `blocked`, not `needs_human`: an order built on a stand-in venue or a company being
-  // created is still an order, and staging it is the whole point — a human confirms it
-  // in one click instead of typing it out from an email.
+  // created is still an order. It is written, as To Confirm in OnSinch (Q1, 2026-08-18),
+  // with the reason on the thread; only `blocked` stops the write.
   if (desired && !blocked) {
     if (linkedOrderId) {
       // an existing order (ours or matched in OnSinch) — patch only if it changed

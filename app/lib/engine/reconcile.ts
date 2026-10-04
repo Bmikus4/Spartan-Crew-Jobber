@@ -17,8 +17,7 @@
 //
 // WHAT IS READABLE, probed live 2026-09-14 (scripts/probe-live-shape.mjs):
 //
-//   always            Job.min_beginning / max_end via `?with=Job`, the ONLY working
-//                     expansion on /orders. It is the AGGREGATE span across every block,
+//   always            Job.min_beginning / max_end via `?with=Job`. It is the AGGREGATE span across every block,
 //                     not a per-block window — comparing a single block's times against
 //                     it produced a spurious "38 blocks have moved" reading once already.
 //   always            the order's own specification and intern_name (only intern_name is
@@ -26,9 +25,10 @@
 //   staffed only      `/attendance?with=Slot,SlotTeam&Order__id=<id>` returns, per seat,
 //                     Slot.{slotteam_id, size, profession_id, slotlocation_id, beginning,
 //                     end} and SlotTeam.{id, name}. Per-block and exact.
-//   never             an unstaffed block. Order #16005 with attendance count 0 returns
-//                     ZERO rows, so an order nobody has been assigned to is invisible
-//                     here and the Job window is its only witness.
+//   every block       `/orders?id[eq]=<id>&with=Job__SlotTeam__Slot__SlotLocation`, staffed or
+//                     not (readNestedShape; found after the rest of this list). Attendance
+//                     alone never shows an unstaffed block: order #16005, attendance count 0,
+//                     returns ZERO rows there.
 //
 // AN UNREADABLE ORDER IS NOT AN EMPTY ONE. This API answers an unsupported filter with an
 // empty list rather than an error, and the same shape — no rows — is returned by "nobody

@@ -2150,5 +2150,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0113",
+  "ts": "2026-10-04T21:34:08+00:00",
+  "kind": "measurement",
+  "headline": "SP-51: README rewritten; CLAUDE.md, design doc and 8 comments corrected; test/staleDocs.ts keeps them corrected",
+  "subject": "Docs and comments the code had outgrown say what the code now does",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 174,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]

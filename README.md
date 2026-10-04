@@ -1,118 +1,56 @@
-# Spartan Crew Jobber
+# Spartan Crew Enquiry Engine
 
-Enquiry → booking automation for Spartan Crew, rebuilt from the ground up.
+Spartan Crew's booking mailbox, read and acted on by code: each new email becomes or
+amends an OnSinch order, and Gmail labels tell ops what still needs a person.
 
-Replaces the 3 live n8n workflows (155 nodes total) with **one idempotent
-compile loop over a Save State Table**. One Gmail thread = one state row. See
-the printed planning doc in `docs/` for the full rationale.
+## How it runs
 
-## Shape (v0.02)
+- **Intake.** n8n polls the bookings mailbox and POSTs each new message once to
+  `/api/n8n-inbound` (`app/lib/n8nInbound.ts`). n8n never sends a message twice, so
+  anything held is re-read by the hourly sweep, never by a redelivery.
+- **Engine** (`app/lib/engine/`). A model classifies the thread and extracts the crew
+  request; code resolves client, venue, profession and rate card, then creates or amends
+  the order (`compiler.ts`, `pipeline.ts`). A model never invents an id: the venue, link
+  and company judges choose from candidates code lists, code checks the answer, and on a
+  model failure the thread holds and is tagged.
+- **Labels.** Four, mutually exclusive: Order Built, Order Updated, Order Needs Built,
+  Order Needs Updated (`app/lib/mail/gmailWrite.ts`).
+- **Sweep.** `/api/reconcile`, hourly from n8n: checks every future-dated bound order
+  still exists, re-asserts changes OnSinch dropped, re-runs held emails, and expires
+  needs-a-person flags on jobs that are over.
+- **Alarms.** `app/lib/errorReport.ts` emails through the n8n workflow "Spartan Alarms";
+  the n8n "Spartan Intake Watchdog" checks `/api/health/intake` every 15 minutes.
+- **TV feed.** `/api/feed` and `app/components/LiveFeedScreen.tsx`, read-only against OnSinch.
 
-A **Next.js app on Vercel** — same architecture as the House of Hud quote tool
-(collapsible nav rail, Settings button, dark/amber design system), but the only
-client-facing surface is a **Dashboard** + a **Settings** menu. The automation
-runs server-side in `app/api`; **n8n only triggers it**.
+## Routes (`app/api`)
 
-```
-app/
-  components/   AppShell · Sidebar (Dashboard-only) · DashboardScreen · SettingsScreen
-  lib/
-    engine/     the pure engine (compiler, pipeline, onsinch, reason, …) — unit-tested
-    metricsDb   Neon metric_events sink + dashboard summary (HoH pattern)
-    stateDb     Neon Save State Table (StateStore)
-    settingsDb  order_mode (draft-only | auto)
-    deps        wires PipelineDeps from env (OpenRouter reasoner, http OnSinch)
-  api/
-    n8n-inbound   POST { thread_id, messages[] }  ← n8n trigger; runs the pipeline
-    confirm-order POST { thread_id }              ← dashboard confirm queue
-    metrics       GET  → dashboard read-model
-    settings      GET/POST
-```
+| Route | Called by | Does |
+|---|---|---|
+| `n8n-inbound` | n8n intake | runs the engine on one email |
+| `dedupe` | n8n intake | claims a message id once (`message_ledger`) |
+| `reconcile` | n8n, hourly | the sweep; `?dry=1` writes nothing |
+| `health/intake` | n8n watchdog | is mail arriving; delete-and-repost state |
+| `confirm-order` | dashboard | approves a staged order |
+| `settings` | Settings screen | replies switch, delivery, scope, default rate card |
+| `jobs`, `metrics`, `feed`, `followups` | dashboard, TV | read models |
+| `mail-inbound`, `mail-poll`, `sweep-ingest` | routing-rule intake | inert while `INTAKE_PATH` is not `routing` |
+| `auth`, `onboarding` | browser | sign-in and terms |
 
-**Trigger split:** n8n watches the mailbox and POSTs each hydrated thread to
-`/api/n8n-inbound`. Vercel compiles + executes (OnSinch write here). If
-`GMAIL_DRAFT_WEBHOOK` is unset, the composed reply is returned so n8n drafts it.
-
-### Env
-`DATABASE_URL` (Neon) · `OPENROUTER_API_KEY` · `ONSINCH_API_KEY` ·
-`ONSINCH_BASE_URL` · `N8N_WEBHOOK_SECRET` · `GMAIL_DRAFT_WEBHOOK` (optional) ·
-`SPARTAN_MODEL` (default `anthropic/claude-opus-4.8`, via OpenRouter).
-
-### Dev
-```
-npm install
-npm run dev      # the dashboard + settings + API
-npm test         # engine proof, 20/20, offline
-```
-
-## The loop
-
-```
-on any Gmail event (poll OR push):
-  thread   = gmail.hydrateThread(threadId)     // always the FULL conversation
-  prior    = store.get(threadId)               // the Save State row (or none)
-  {state, actions} = compile(thread, prior)    // reads only; derives desired state
-  execute(actions)                             // reply draft + OnSinch create/patch
-  store.put(state)                             // persist (idempotent)
-```
-
-Because `compile` only reads and is keyed on `thread_id`, re-running it on any
-thread is safe. That is the "never miss a lead" guarantee: a nightly sweep can
-re-compile every thread and produce zero duplicate work.
-
-## What's deterministic vs. LLM
-
-- **LLM (3 tasks only):** classify the latest email, extract typed facts,
-  write the reply. One model — `claude-opus-4-8`, temperature 0.
-- **Deterministic code (everything else):** thread normalization, company/
-  place/user id resolution, place scoring (no fuzzy search in OnSinch), order
-  composition + business rules, order-body building, dedup, diffing.
-
-The model never resolves an integer id or builds the order body.
-
-## Files
-
-| File | Role |
-|------|------|
-| `src/types.ts` | `ConversationState` (the state row), `DesiredOrder`, facts |
-| `src/normalize.ts` | port of n8n `Normalize Data` (clean bodies, dedupe) |
-| `src/score.ts` | port of n8n `Score Findings` (place matching) |
-| `src/format.ts` | build + validate the OnSinch `POST /orders` array body |
-| `src/compose.ts` | facts + ids → `DesiredOrder` (business rules in code) |
-| `src/onsinch.ts` | typed OnSinch client (injectable transport) |
-| `app/lib/engine/reason.ts` | the 3-task LLM boundary + OpenRouter adapter |
-| `src/store.ts` | Save State Table interface (in-memory now, Postgres/KV later) |
-| `src/metrics.ts` | append-only `metric_events` + dashboard aggregate (HoH pattern) |
-| `src/compiler.ts` | **the foundational `compile()` function** |
-| `src/pipeline.ts` | per-event handler: compile → execute → emit metrics |
-| `test/run.ts` | offline end-to-end proof (17 assertions) |
-
-## Run
+## Working in this repo
 
 ```
 npm install
-npm test        # runs test/run.ts via tsx — no network needed
-npx tsc --noEmit # typecheck
+npm run test:all      # the suite: every test/*.ts, then the payload check
+npx tsc --noEmit
 ```
 
-The test proves (20 assertions): draft-only new-job → reply drafted + order
-*proposed* (not written); one-click `confirmOrder` → order created; re-handle →
-no-op (idempotent); follow-up crew-count change → proposed PATCH → confirm;
-bare "thanks" → confirmation-only; dashboard aggregate reflects the funnel; and
-flipping `order_mode:"auto"` writes hands-free.
+`npm test` runs ONE file (`test/run.ts`); the suite is `npm run test:all`.
 
-## Launch mode: draft-only (default)
+Commits and pushes go only through `python scripts/session.py` (see `CLAUDE.md`). A push
+to `main` is a production release on Vercel.
 
-`Settings.order_mode` defaults to `"draft-only"` — replies are drafted and the
-OnSinch order is **staged** (`status:"proposed"`, `pending_order` set) for a
-one-click approve in the dashboard, never auto-written. Flip to `"auto"` for
-hands-free once the needs-human/error rate is proven low. `confirmOrder(thread_id)`
-executes a staged order.
+Environment variables: `.env.example` lists every name the app reads (names only),
+regenerated by `node scripts/env-names.mjs` and checked by `test/envExample.ts`. The default
+model is `anthropic/claude-opus-4.6` via OpenRouter (`SPARTAN_MODEL`, `app/lib/deps.ts`).
 
-## Not built yet (next phases)
-
-- Vercel app shell (dashboard + settings + helper chatbot) — client-facing only.
-- Real Gmail hydrate/draft client + Gmail push (Pub/Sub) trigger.
-- Postgres/KV-backed `StateStore`.
-- The two data studies (2000+ sent emails → style guide; OnSinch edge-case map).
-- Wire `createOpenRouterReasoner` prompts to the full ported n8n prompts.
+Design and plans are in `docs/`; `docs/JOB-IDENTITY-DESIGN-2026-09-29.md` is the target design.
