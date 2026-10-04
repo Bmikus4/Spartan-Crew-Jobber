@@ -254,9 +254,9 @@ function Tile({ card, now, s, onTick }: { card: FeedCard; now: number; s: number
 
 function Count({ s, n, label, color }: { s: number; n: number; label: [string, string]; color: string }) {
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: 12 * s, padding: `0 ${22 * s}px`, borderLeft: `${2 * s}px solid ${C.rule}` }}>
-      <span style={{ fontSize: 60 * s, fontWeight: 800, color, lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>{n}</span>
-      <span style={{ fontSize: 21 * s, fontWeight: 600, color: C.sub, lineHeight: 1.2 }}>{label[0]}<br />{label[1]}</span>
+    <div style={{ display: "flex", alignItems: "center", gap: 10 * s, padding: `0 ${16 * s}px`, borderLeft: `${2 * s}px solid ${C.rule}` }}>
+      <span style={{ fontSize: 52 * s, fontWeight: 800, color, lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>{n}</span>
+      <span style={{ fontSize: 19 * s, fontWeight: 600, color: C.sub, lineHeight: 1.2, whiteSpace: "nowrap" }}>{label[0]}<br />{label[1]}</span>
     </div>
   );
 }
@@ -408,14 +408,16 @@ export default function LiveFeedScreen({ isActive, tv = false }: { isActive: boo
   return (
     <div ref={rootRef} style={{ position: "relative", height: "100%", width: "100%", background: C.page, color: C.ink, display: "flex", flexDirection: "column", cursor: idle ? "none" : undefined, overflow: "hidden" }}>
       <header style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 24 * s, padding: `${18 * s}px ${pad + 8 * s}px`, background: C.header, borderBottom: `${2 * s}px solid ${C.rule}`, flexShrink: 0, ["--text-primary" as string]: C.ink }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 28 * s, minWidth: 0 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 24 * s, minWidth: 0, flex: 1, overflow: "hidden" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8 * s, flexShrink: 0 }}>
             <BrandWordmark height={44 * s} />
             <BrandMark height={58 * s} />
           </div>
           <div style={{ width: 2 * s, alignSelf: "stretch", background: C.rule }} />
           <div style={{ minWidth: 0 }}>
-            <div style={{ fontSize: 44 * s, fontWeight: 800, letterSpacing: "-0.01em", whiteSpace: "nowrap", lineHeight: 1.1 }}>Jobs Requiring Attention</div>
+            {/* Shrinks with an ellipsis rather than running under the counts, which it did at
+                1920 wide with four counts showing. The counts are the part that must stay whole. */}
+            <div style={{ fontSize: 38 * s, fontWeight: 800, letterSpacing: "-0.01em", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", lineHeight: 1.15 }}>Jobs Requiring Attention</div>
             {/* The legend: permanent, not interactive, exactly two entries. */}
             <div aria-label="Legend" style={{ display: "flex", gap: 22 * s, alignItems: "center", fontSize: 23 * s, fontWeight: 700, color: C.sub, marginTop: 6 * s, whiteSpace: "nowrap" }}>
               <span style={{ display: "flex", alignItems: "center", gap: 9 * s }}><span style={{ width: 24 * s, height: 24 * s, borderRadius: 5 * s, background: C.red }} />Red = New job</span>
@@ -432,9 +434,9 @@ export default function LiveFeedScreen({ isActive, tv = false }: { isActive: boo
             <Count s={s} n={urgentCount} label={["within", "48 hours"]} color={C.ink} />
             <Count s={s} n={c.to_verify} label={["to", "verify"]} color={C.grey} />
           </>}
-          <div style={{ display: "flex", alignItems: "center", gap: 14 * s, padding: `${6 * s}px ${18 * s}px`, marginLeft: 8 * s, borderLeft: `${2 * s}px solid ${C.rule}`, background: warn ? C.amberBg : undefined, borderRadius: warn ? 10 * s : 0 }}>
-            <svg width={44 * s} height={44 * s} viewBox="0 0 24 24" fill="none" stroke={warn ? C.amber : C.sub} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M17.5 19a4.5 4.5 0 1 0-1.2-8.84A6 6 0 0 0 4.5 12.5 3.5 3.5 0 0 0 7 19h10.5Z" /></svg>
-            <div style={{ fontSize: 21 * s, fontWeight: 600, color: C.sub, lineHeight: 1.3, whiteSpace: "nowrap" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 12 * s, padding: `${6 * s}px ${14 * s}px`, marginLeft: 4 * s, borderLeft: `${2 * s}px solid ${C.rule}`, background: warn ? C.amberBg : undefined, borderRadius: warn ? 10 * s : 0 }}>
+            <svg width={38 * s} height={38 * s} viewBox="0 0 24 24" fill="none" stroke={warn ? C.amber : C.sub} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M17.5 19a4.5 4.5 0 1 0-1.2-8.84A6 6 0 0 0 4.5 12.5 3.5 3.5 0 0 0 7 19h10.5Z" /></svg>
+            <div style={{ fontSize: 19 * s, fontWeight: 600, color: C.sub, lineHeight: 1.3, whiteSpace: "nowrap" }}>
               <div style={{ color: dataStale ? C.amber : undefined, fontWeight: dataStale ? 800 : 600 }}>{failed ? "Refresh failed · " : "Updated "}{ageShort(okAt, now)}</div>
               <div style={{ color: emailStale ? C.amber : undefined, fontWeight: emailStale ? 800 : 600 }}>Last email {ageShort(emailAt, now)}</div>
             </div>

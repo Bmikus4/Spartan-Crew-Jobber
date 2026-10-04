@@ -1590,5 +1590,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0073",
+  "ts": "2026-10-04T03:04:36+00:00",
+  "kind": "measurement",
+  "headline": "TV feed header: counts 60 -> 52px, title shrinks with an ellipsis (seen overlapping on production)",
+  "subject": "The TV header's title no longer runs under the counts at 1920 wide",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 154,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]
