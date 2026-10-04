@@ -273,8 +273,9 @@ function Row({ card, now, s, phase, onTick }: { card: FeedCard; now: number; s: 
 
   return (
     <div style={{
-      // Equal side columns put the numbers in the true centre of the card, whatever the name's length.
-      display: "grid", gridTemplateColumns: "minmax(0, 1fr) auto minmax(0, 1fr)", alignItems: "center", columnGap: 24 * s,
+      // Equal side columns put the numbers in the true centre of the card; the fixed middle keeps
+      // every date at the same x down the list, with or without numbers.
+      display: "grid", gridTemplateColumns: `minmax(0, 1fr) ${330 * s}px minmax(0, 1fr)`, alignItems: "center", columnGap: 24 * s,
       minHeight: 116 * s, padding: `${14 * s}px ${20 * s}px ${14 * s}px ${(20 + STRIPE) * s}px`,
       border: "1px solid var(--border)", borderRadius: "var(--radius-lg)",
       // The legend's colour as an inset edge, kept when the row goes green so it still reads.

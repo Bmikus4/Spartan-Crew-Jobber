@@ -2470,5 +2470,19 @@
     "decision": "Ben accepted B4 on 2026-10-04; SPARTAN_LINK_JUDGE=on and SPARTAN_LINK_MODEL pinned to the measured model in Vercel production"
    }
   }
+ },
+ {
+  "id": "S-0121",
+  "ts": "2026-10-04T22:29:36+00:00",
+  "kind": "measurement",
+  "headline": "TV cards: fixed centre column aligns dates",
+  "subject": "TV dates line up down the list whether or not a card has R/J numbers",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 178,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]
