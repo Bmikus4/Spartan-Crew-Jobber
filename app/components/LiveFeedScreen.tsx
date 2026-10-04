@@ -126,7 +126,7 @@ function numbersOf(c: FeedCard, one = false): string | null {
 
 function Tag({ s, color, children }: { s: number; color: string; children: React.ReactNode }) {
   return (
-    <span style={{ color, background: tint(color, 14), border: `1px solid ${tint(color, 30)}`, borderRadius: 6 * s, padding: `${2 * s}px ${8 * s}px`, fontSize: 15 * s, fontWeight: 700, whiteSpace: "nowrap", flexShrink: 0, lineHeight: 1.35 }}>
+    <span style={{ color, background: tint(color, 14), border: `1px solid ${tint(color, 30)}`, borderRadius: 6 * s, padding: `${3 * s}px ${10 * s}px`, fontSize: 17 * s, fontWeight: 700, whiteSpace: "nowrap", flexShrink: 0, lineHeight: 1.35 }}>
       {children}
     </span>
   );
@@ -168,8 +168,8 @@ function Row({ card, now, s, phase, onTick }: { card: FeedCard; now: number; s: 
 
   return (
     <div style={{
-      display: "grid", gridTemplateColumns: `${4 * s}px minmax(0, 1fr) ${210 * s}px ${64 * s}px`, alignItems: "center", columnGap: 20 * s,
-      minHeight: 92 * s, padding: `${12 * s}px ${20 * s}px ${12 * s}px 0`, borderBottom: "1px solid var(--border)",
+      display: "grid", gridTemplateColumns: `${4 * s}px minmax(0, 1fr) ${240 * s}px ${72 * s}px`, alignItems: "center", columnGap: 20 * s,
+      minHeight: 108 * s, padding: `${14 * s}px ${20 * s}px ${14 * s}px 0`, borderBottom: "1px solid var(--border)",
       background: done ? tint(GREEN, 15) : "transparent",
       opacity: phase === "fade" ? 0 : 1,
       transition: `background-color 200ms ease, opacity ${FADE_MS}ms ease`,
@@ -180,14 +180,14 @@ function Row({ card, now, s, phase, onTick }: { card: FeedCard; now: number; s: 
 
       <div style={{ minWidth: 0, display: "flex", flexDirection: "column", gap: 6 * s }}>
         <div style={{ display: "flex", alignItems: "center", gap: 12 * s, minWidth: 0 }}>
-          <span style={{ fontSize: 29 * s, fontWeight: 800, letterSpacing: "-0.01em", color: "var(--text-primary)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", minWidth: 0 }}>
+          <span style={{ fontSize: 34 * s, fontWeight: 800, letterSpacing: "-0.01em", color: "var(--text-primary)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", minWidth: 0 }}>
             {card.company || card.subject || "Unknown client"}
           </span>
           <Tag s={s} color={done ? GREEN : signal(card)}>{lead.status}</Tag>
           {hasReply(card) && it && <Tag s={s} color={GREY}>Needs reply</Tag>}
           {urgent(card, now) && <Tag s={s} color={AMBER}>48H</Tag>}
         </div>
-        <div style={{ fontSize: 17 * s, fontWeight: 500, color: "var(--text-secondary)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+        <div style={{ fontSize: 20 * s, fontWeight: 500, color: "var(--text-secondary)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
           {/* The numbers lead so a long venue can never cut them: they find the job in OnSinch. */}
           {numbers && <span className={card.r_number || card.j_number ? "mono" : undefined} style={{ color: "var(--text-primary)", fontWeight: 600 }}>{numbers}</span>}
           {numbers && <span style={{ color: "var(--text-faint)" }}> · </span>}
@@ -198,16 +198,16 @@ function Row({ card, now, s, phase, onTick }: { card: FeedCard; now: number; s: 
       </div>
 
       <div style={{ minWidth: 0 }}>
-        <div className="eyebrow" style={{ fontSize: 12 * s, color: "var(--text-muted)" }}>
+        <div className="eyebrow" style={{ fontSize: 14 * s, color: "var(--text-muted)" }}>
           {!it ? "Waiting since" : t ? fmt(t, { weekday: "long" }) + (more ? ` +${more}d` : "") : "Date"}
         </div>
-        <div className="tnum" style={{ fontSize: 24 * s, fontWeight: 700, color: "var(--text-primary)", whiteSpace: "nowrap", marginTop: 2 * s }}>
+        <div className="tnum" style={{ fontSize: 28 * s, fontWeight: 700, color: "var(--text-primary)", whiteSpace: "nowrap", marginTop: 2 * s }}>
           {!it ? fmt(lead.at, { day: "numeric", month: "short" }) : t ? fmt(t, sameYear ? { day: "numeric", month: "short" } : { day: "numeric", month: "short", year: "numeric" }) : "TBC"}
         </div>
       </div>
 
       <div style={{ display: "grid", placeItems: "center" }}>
-        {it && <Tick card={card} it={it} s={s} size={44} onTick={onTick} />}
+        {it && <Tick card={card} it={it} s={s} size={52} onTick={onTick} />}
       </div>
     </div>
   );
@@ -422,57 +422,42 @@ export default function LiveFeedScreen({ isActive, tv = false }: { isActive: boo
   const openCount = cards.filter(isOpen).length;
   const pad = 24 * s;
 
-  const kpis: Array<{ label: string; n: number; color: string }> = c ? [
-    { label: "Need created", n: c.needs_created, color: RED },
-    { label: "Need updated", n: c.needs_updated, color: BLUE },
-    ...(data?.health.replies_enabled ? [{ label: "Need reply", n: c.needs_reply, color: GREY }] : []),
-    { label: "Within 48 hours", n: urgentCount, color: AMBER },
-    { label: "Done today", n: c.done, color: GREEN },
+  const kpis: Array<{ label: [string, string]; n: number; color: string }> = c ? [
+    { label: ["need", "created"], n: c.needs_created, color: RED },
+    { label: ["need", "updated"], n: c.needs_updated, color: BLUE },
+    ...(data?.health.replies_enabled ? [{ label: ["need", "reply"] as [string, string], n: c.needs_reply, color: GREY }] : []),
+    { label: ["within", "48 hours"], n: urgentCount, color: AMBER },
+    { label: ["done", "today"], n: c.done, color: GREEN },
   ] : [];
 
   return (
     <div ref={rootRef} style={{ position: "relative", height: "100%", width: "100%", background: "var(--bg)", color: "var(--text-primary)", display: "flex", flexDirection: "column", gap: 16 * s, padding: pad, cursor: idle ? "none" : undefined, overflow: "hidden" }}>
       <style>{`@keyframes feedRowIn { from { opacity: 0; transform: translateY(${6 * s}px); } to { opacity: 1; transform: none; } }`}</style>
 
-      <header style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 20 * s, flexShrink: 0 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 24 * s, minWidth: 0 }}>
-          <span className="eyebrow" style={{ fontSize: 15 * s, color: "var(--text-primary)" }}><span className="slash">/</span>Live feed</span>
-          {/* The legend: permanent, not interactive, exactly two entries. */}
-          <div aria-label="Legend" style={{ display: "flex", gap: 18 * s, alignItems: "center", fontSize: 17 * s, fontWeight: 600, color: "var(--text-secondary)", whiteSpace: "nowrap" }}>
-            <span style={{ display: "flex", alignItems: "center", gap: 8 * s }}><span style={{ width: 12 * s, height: 12 * s, borderRadius: 3 * s, background: RED }} />Red = New job</span>
-            <span style={{ display: "flex", alignItems: "center", gap: 8 * s }}><span style={{ width: 12 * s, height: 12 * s, borderRadius: 3 * s, background: BLUE }} />Blue = Update</span>
-          </div>
+      <header style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 24 * s, flexShrink: 0 }}>
+        {/* The legend: permanent, not interactive, exactly two entries. Large, because it is
+            the key to every row's colour and is read from across the office. */}
+        <div aria-label="Legend" style={{ display: "flex", gap: 36 * s, alignItems: "center", fontSize: 34 * s, fontWeight: 800, letterSpacing: "-0.01em", color: "var(--text-primary)", whiteSpace: "nowrap", minWidth: 0, overflow: "hidden" }}>
+          <span style={{ display: "flex", alignItems: "center", gap: 14 * s }}><span style={{ width: 32 * s, height: 32 * s, borderRadius: 8 * s, background: RED, flexShrink: 0 }} />Red = New job</span>
+          <span style={{ display: "flex", alignItems: "center", gap: 14 * s }}><span style={{ width: 32 * s, height: 32 * s, borderRadius: 8 * s, background: BLUE, flexShrink: 0 }} />Blue = Update</span>
         </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 12 * s, flexShrink: 0 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 10 * s, padding: `${7 * s}px ${12 * s}px`, borderRadius: 999, border: `1px solid ${warn ? tint(AMBER, 45) : "var(--border)"}`, background: warn ? tint(AMBER, 12) : "var(--surface)", fontSize: 15 * s, fontWeight: 600, color: "var(--text-secondary)", whiteSpace: "nowrap" }}>
-            <span style={{ width: 9 * s, height: 9 * s, borderRadius: 999, background: warn ? AMBER : GREEN }} />
-            <span style={{ color: dataStale ? AMBER : undefined }}>{failed ? "Refresh failed" : "Live"} · updated {ageShort(okAt, now)}</span>
-            <span style={{ color: "var(--text-faint)" }}>·</span>
-            <span style={{ color: emailStale ? AMBER : undefined }}>last email {ageShort(emailAt, now)}</span>
-          </div>
-          {/* Hidden with the cursor on the TV, so nothing but the feed is on screen. */}
-          <div style={{ display: "flex", alignItems: "center", gap: 8 * s, opacity: idle ? 0 : 1, transition: "opacity 200ms", pointerEvents: idle ? "none" : "auto" }}>
-            <div className="seg" role="tablist" aria-label="Layout" style={{ transform: `scale(${s})`, transformOrigin: "right center" }}>
-              <button className="seg__btn" aria-selected={layout === "a"} onClick={() => pickLayout("a")}>List</button>
-              <button className="seg__btn" aria-selected={layout === "b"} onClick={() => pickLayout("b")}>Strip</button>
-            </div>
-            <button onClick={() => void goFull()} style={{ fontSize: 13 * s, fontWeight: 600, padding: `${8 * s}px ${14 * s}px`, borderRadius: 10 * s, border: "1px solid var(--border)", background: "transparent", color: "var(--text-secondary)", cursor: "pointer", whiteSpace: "nowrap" }}>
-              {full ? "Exit fullscreen" : "Fullscreen"}
-            </button>
-          </div>
-        </div>
-      </header>
-
-      {c && (
-        <div className="metric-strip" style={{ gridTemplateColumns: `repeat(${kpis.length}, minmax(0, 1fr))`, borderRadius: "var(--radius-lg)", overflow: "hidden", border: "1px solid var(--border)", flexShrink: 0 }}>
+        <div style={{ display: "flex", alignItems: "center", flexShrink: 0 }}>
           {kpis.map((k) => (
-            <div key={k.label} className="metric-strip__cell metric-strip__cell--flat" style={{ padding: `${14 * s}px ${18 * s}px` }}>
-              <div className="eyebrow" style={{ fontSize: 12 * s, color: "var(--text-muted)" }}>{k.label}</div>
-              <div className="tnum" style={{ fontSize: 40 * s, fontWeight: 700, lineHeight: 1.1, letterSpacing: "-0.02em", color: k.n ? k.color : "var(--text-faint)", marginTop: 4 * s }}>{k.n}</div>
+            <div key={k.label.join(" ")} style={{ display: "flex", alignItems: "center", gap: 12 * s, padding: `0 ${22 * s}px`, borderLeft: `${2 * s}px solid var(--border)` }}>
+              <span className="tnum" style={{ fontSize: 60 * s, fontWeight: 800, lineHeight: 1, letterSpacing: "-0.02em", color: k.n ? k.color : "var(--text-faint)" }}>{k.n}</span>
+              <span style={{ fontSize: 20 * s, fontWeight: 600, lineHeight: 1.2, color: "var(--text-muted)", whiteSpace: "nowrap" }}>{k.label[0]}<br />{k.label[1]}</span>
             </div>
           ))}
+          <button onClick={() => void goFull()} aria-label={full ? "Exit fullscreen" : "Fullscreen"} title={full ? "Exit fullscreen" : "Fullscreen"}
+            style={{ marginLeft: 16 * s, width: 64 * s, height: 64 * s, borderRadius: 14 * s, border: "1px solid var(--border-strong)", background: "var(--surface)", color: "var(--text-primary)", cursor: "pointer", display: "grid", placeItems: "center", padding: 0, flexShrink: 0 }}>
+            <svg width={34 * s} height={34 * s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+              <path d={full
+                ? "M8 3v3a2 2 0 0 1-2 2H3M21 8h-3a2 2 0 0 1-2-2V3M3 16h3a2 2 0 0 1 2 2v3M16 21v-3a2 2 0 0 1 2-2h3"
+                : "M8 3H5a2 2 0 0 0-2 2v3M21 8V5a2 2 0 0 0-2-2h-3M3 16v3a2 2 0 0 0 2 2h3M16 21h3a2 2 0 0 0 2-2v-3"} />
+            </svg>
+          </button>
         </div>
-      )}
+      </header>
 
       {layout === "b" && strip.length > 0 && (
         <div style={{ flexShrink: 0 }}>
@@ -505,6 +490,20 @@ export default function LiveFeedScreen({ isActive, tv = false }: { isActive: boo
             )}
           </>
         )}
+      </div>
+
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16 * s, flexShrink: 0 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 * s, padding: `${8 * s}px ${14 * s}px`, borderRadius: 999, border: `1px solid ${warn ? tint(AMBER, 45) : "var(--border)"}`, background: warn ? tint(AMBER, 12) : "var(--surface)", fontSize: 17 * s, fontWeight: 600, color: "var(--text-secondary)", whiteSpace: "nowrap" }}>
+          <span style={{ width: 10 * s, height: 10 * s, borderRadius: 999, background: warn ? AMBER : GREEN }} />
+          <span style={{ color: dataStale ? AMBER : undefined }}>{failed ? "Refresh failed" : "Live"} · updated {ageShort(okAt, now)}</span>
+          <span style={{ color: "var(--text-faint)" }}>·</span>
+          <span style={{ color: emailStale ? AMBER : undefined }}>last email {ageShort(emailAt, now)}</span>
+        </div>
+        {/* Hidden with the cursor on the TV, so nothing but the feed is on screen. */}
+        <div className="seg" role="tablist" aria-label="Layout" style={{ opacity: idle ? 0 : 1, transition: "opacity 200ms", pointerEvents: idle ? "none" : "auto", transform: `scale(${s * 1.15})`, transformOrigin: "right center" }}>
+          <button className="seg__btn" aria-selected={layout === "a"} onClick={() => pickLayout("a")}>List</button>
+          <button className="seg__btn" aria-selected={layout === "b"} onClick={() => pickLayout("b")}>Strip</button>
+        </div>
       </div>
 
       {undo && undo.until > now && (

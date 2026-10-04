@@ -1674,5 +1674,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0079",
+  "ts": "2026-10-04T16:53:18+00:00",
+  "kind": "measurement",
+  "headline": "TV feed: legend 17 -> 34px, original-style counts in the header, rows 92 -> 108px, fullscreen icon, List/Strip at the bottom",
+  "subject": "The TV's legend and counts are large again, its rows bigger, fullscreen an icon top right and the layout switch at the bottom",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 154,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]
