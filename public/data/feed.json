@@ -1646,5 +1646,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0077",
+  "ts": "2026-10-04T16:28:38+00:00",
+  "kind": "measurement",
+  "headline": "TV feed UI: theme tokens, one hairline panel, KPI strip, Needs action / Done sections, ~9 rows at 1080p, 3 s green hold",
+  "subject": "The office TV wears the tool's own design language, scrolls, and holds a finished row green for 3 s before it drops to Done",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 154,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]
