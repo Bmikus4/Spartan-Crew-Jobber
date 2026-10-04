@@ -151,7 +151,8 @@ function CountdownClock({ until, now, size }: { until: number; now: number; size
       <circle cx="50" cy="50" r="47" fill={`color-mix(in oklab, ${color} 14%, transparent)`} />
       <circle cx="50" cy="50" r="44" fill="none" stroke="var(--border-strong)" strokeWidth="5" />
       <circle cx="50" cy="50" r="44" fill="none" stroke={color} strokeWidth="5" strokeLinecap="round" strokeDasharray={`${C * f} ${C}`} transform="rotate(-90 50 50)" style={{ transition: "stroke-dasharray 900ms linear, stroke 900ms linear" }} />
-      {Array.from({ length: 12 }, (_, i) => {
+      {/* No marks at 3 and 9 o'clock: that is where the digits sit. */}
+      {Array.from({ length: 12 }, (_, i) => i).filter((i) => i !== 3 && i !== 9).map((i) => {
         const a = ((i * 30 - 90) * Math.PI) / 180;
         return <line key={i} x1={50 + Math.cos(a) * 36} y1={50 + Math.sin(a) * 36} x2={50 + Math.cos(a) * 39.5} y2={50 + Math.sin(a) * 39.5} stroke={color} strokeOpacity={i % 3 ? 0.35 : 0.8} strokeWidth={i % 3 ? 1.4 : 2.2} strokeLinecap="round" />;
       })}
@@ -159,7 +160,7 @@ function CountdownClock({ until, now, size }: { until: number; now: number; size
       <text x="50" y="50" textAnchor="middle" className="mono tnum" style={{ fontSize: 23, fontWeight: 700, fill: `color-mix(in oklab, ${color} 78%, var(--text-primary))` }}>
         {left === 0 ? "NOW" : `${h}:${two(m)}`}
       </text>
-      <text x="50" y="68" textAnchor="middle" className="mono tnum" style={{ fontSize: 13, fontWeight: 600, fill: "var(--text-muted)" }}>
+      <text x="50" y="70" textAnchor="middle" className="mono tnum" style={{ fontSize: 15, fontWeight: 700, fill: "var(--text-secondary)" }}>
         {left === 0 ? "started" : `${two(sec)}s`}
       </text>
     </svg>
@@ -215,8 +216,8 @@ function Row({ card, now, s, phase, onTick }: { card: FeedCard; now: number; s: 
 
   return (
     <div style={{
-      display: "grid", gridTemplateColumns: `${4 * s}px minmax(0, 1fr) ${104 * s}px ${240 * s}px ${72 * s}px`, alignItems: "center", columnGap: 20 * s,
-      minHeight: 108 * s, padding: `${14 * s}px ${20 * s}px ${14 * s}px 0`, borderBottom: "1px solid var(--border)",
+      display: "grid", gridTemplateColumns: `${4 * s}px minmax(0, 1fr) ${112 * s}px ${240 * s}px ${72 * s}px`, alignItems: "center", columnGap: 20 * s,
+      minHeight: 116 * s, padding: `${14 * s}px ${20 * s}px ${14 * s}px 0`, borderBottom: "1px solid var(--border)",
       background: done ? tint(GREEN, 15) : "transparent",
       opacity: phase === "fade" ? 0 : 1,
       transition: `background-color 200ms ease, opacity ${FADE_MS}ms ease`,
@@ -244,7 +245,7 @@ function Row({ card, now, s, phase, onTick }: { card: FeedCard; now: number; s: 
       </div>
 
       <div style={{ display: "grid", placeItems: "center" }}>
-        {urgent(card, now) && <CountdownClock until={deadline(card, now)!} now={now} size={96 * s} />}
+        {urgent(card, now) && <CountdownClock until={deadline(card, now)!} now={now} size={104 * s} />}
       </div>
 
       <div style={{ minWidth: 0 }}>

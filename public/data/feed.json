@@ -1702,5 +1702,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0081",
+  "ts": "2026-10-04T17:05:44+00:00",
+  "kind": "measurement",
+  "headline": "TV feed: countdown clock 96 -> 104px, seconds legible, no marks through the digits",
+  "subject": "The countdown clock's digits are no longer crossed by its 3 and 9 o'clock marks",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 154,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]
