@@ -41,9 +41,10 @@ import { authorizeMachineCall } from "../../lib/apiAuth";
 import { retryHeld, markThrew, MAX_RETRIES_PER_RUN, type RetryOutcome } from "../../lib/engine/retryHeld";
 import { rebuildThread } from "../../lib/threadMessagesDb";
 import { coerceThread } from "../../lib/engine/intake";
-import { handleThread } from "../../lib/engine/pipeline";
+import { handleThread, flagManualIfNeeded } from "../../lib/engine/pipeline";
 import { upsertTicketFromState } from "../../lib/ticketsDb";
 import { drySandbox } from "../../lib/engine/sweepSandbox";
+import { expirePast } from "../../lib/engine/expirePast";
 
 const NEEDS_A_PERSON = new Set(["lost", "unapplied", "unactionable", "unreconciled"]);
 import { reportError } from "../../lib/errorReport";
@@ -119,6 +120,16 @@ async function run(request: Request, dry: boolean): Promise<Response> {
       await markThrew(store, { thread_id: o.thread_id }, o.result).catch(() => {});
     }
   }
+  // Real runs only: a needs-a-person flag on a job that is over comes off, 20 a run (SP-40).
+  let expired = 0;
+  if (!dry) {
+    for (const s of expirePast(await store.flaggedOldestFirst(200), new Date().toISOString())) {
+      await store.put(s);
+      await flagManualIfNeeded(s, deps);
+      await upsertTicketFromState(s);
+      expired++;
+    }
+  }
   const stats = await store.sweepStats();
 
   const tally: Record<string, number> = {};
@@ -132,6 +143,7 @@ async function run(request: Request, dry: boolean): Promise<Response> {
     never_swept: stats.never_swept,
     swept,
     tally,
+    expired,
     // Only the rows that did something or could not be done. A run where 38 of 40 threads
     // hold exactly what they should is the healthy case, and printing all 38 buries the two.
     outcomes: outcomes.filter((o: SweepOutcome) => o.action !== "holds" && o.action !== "skipped" && o.action !== "exists"),

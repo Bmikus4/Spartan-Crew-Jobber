@@ -122,6 +122,22 @@ export class NeonStateStore implements StateStore {
    * be first in the queue again next run, and one permanently broken row would hold the
    * rotation still and starve everything behind it.
    */
+  /**
+   * Threads flagged for a person, oldest first, for expirePast (SP-40). Over-fetched: the
+   * date test is in code (expirePast.ts), and most rows near the head are expirable anyway.
+   */
+  async flaggedOldestFirst(limit: number): Promise<ConversationState[]> {
+    const sql = db();
+    if (!sql) return [];
+    await ensure(sql);
+    const rows = (await sql`
+      SELECT state FROM conversation_state
+      WHERE state->>'needs_human' = 'true' OR state ? 'pending_order' OR state ? 'attention' OR state ? 'retry_pending'
+      ORDER BY updated_at ASC
+      LIMIT ${limit}`) as { state: ConversationState }[];
+    return rows.map((r) => r.state);
+  }
+
   async markSwept(threadIds: string[]): Promise<void> {
     if (!threadIds.length) return;
     const sql = db();

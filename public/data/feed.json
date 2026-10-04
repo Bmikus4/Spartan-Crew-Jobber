@@ -2136,5 +2136,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0112",
+  "ts": "2026-10-04T21:27:07+00:00",
+  "kind": "measurement",
+  "headline": "SP-40: expirePast clears flags on threads whose every day is over by more than a day; label comes off; 20 a run",
+  "subject": "Needs-a-person flags on jobs that are over expire, twenty a sweep",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 173,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]
