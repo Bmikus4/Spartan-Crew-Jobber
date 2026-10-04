@@ -2080,5 +2080,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0108",
+  "ts": "2026-10-04T20:37:04+00:00",
+  "kind": "measurement",
+  "headline": "SP-18 engine half: rfc_message_id, in_reply_to, references mapped and inserted; inert until n8n sends them (D16)",
+  "subject": "Reply-chain headers in an n8n payload are stored with each message",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 170,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]

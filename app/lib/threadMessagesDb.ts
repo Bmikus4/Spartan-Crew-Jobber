@@ -16,6 +16,7 @@
 // ledgers actually read.
 // ============================================================================
 import { neon, type NeonQueryFunction } from "@neondatabase/serverless";
+import { idsIn } from "./mail/rfc822";
 
 let _sql: NeonQueryFunction<false, false> | null = null;
 let _ready = false;
@@ -203,7 +204,16 @@ export function messagesFromPayload(payload: unknown): StoredMessage[] {
     if (!message_id) continue;          // no id means no identity means not storable
     if (isAnUnsentDraft(r)) continue;   // the client never saw it — see the note above
     const from = addrOf(r.from ?? r.fromAddress);
+    // The reply-chain headers, once n8n's "Build Engine Payload" sends them (SP-18). Absent
+    // keys stay absent: "not sent" and "the message had none" are different facts.
+    const header = (v: unknown) => (Array.isArray(v) ? v.join(" ") : String(v ?? ""));
+    const chain = {
+      ...(r.rfc_message_id != null ? { rfc_message_id: idsIn(header(r.rfc_message_id))[0] || null } : {}),
+      ...(r.in_reply_to != null ? { in_reply_to: idsIn(header(r.in_reply_to)) } : {}),
+      ...(r.references != null ? { reference_ids: idsIn(header(r.references)) } : {}),
+    };
     out.push({
+      ...chain,
       message_id,
       thread_id,
       from_address: from,
@@ -233,10 +243,12 @@ export async function storeThreadMessages(payload: unknown):
     for (const m of msgs) {
       const rows = (await sql`
         INSERT INTO thread_messages
-          (message_id, thread_id, from_address, to_addresses, date_iso, subject, body, is_from_spartan)
+          (message_id, thread_id, from_address, to_addresses, date_iso, subject, body, is_from_spartan,
+           rfc_message_id, in_reply_to, reference_ids)
         VALUES (${m.message_id}, ${m.thread_id}, ${m.from_address},
                 ${JSON.stringify(m.to_addresses)}, ${m.date_iso}, ${m.subject},
-                ${m.body}, ${m.is_from_spartan})
+                ${m.body}, ${m.is_from_spartan},
+                ${m.rfc_message_id || null}, ${m.in_reply_to ?? null}, ${m.reference_ids ?? null})
         ON CONFLICT DO NOTHING
         RETURNING message_id`) as { message_id: string }[];
       if (rows.length) inserted++;

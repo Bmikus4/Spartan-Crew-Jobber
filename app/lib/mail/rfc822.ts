@@ -61,7 +61,7 @@ export function normaliseMessageId(s: string): string {
 }
 
 /** Every <id> in a header value, in the order written. */
-function idsIn(v: string): string[] {
+export function idsIn(v: string): string[] {
   const out: string[] = [];
   for (const m of String(v ?? "").matchAll(/<[^>\s]+>/g)) {
     const id = normaliseMessageId(m[0]);
