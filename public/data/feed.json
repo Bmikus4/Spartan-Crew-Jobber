@@ -1660,5 +1660,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0078",
+  "ts": "2026-10-04T16:35:29+00:00",
+  "kind": "measurement",
+  "headline": "TV feed: placeholder text no longer set as an id",
+  "subject": "'No order yet' on the TV is set in the text face; only real R and J numbers are mono",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 154,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]

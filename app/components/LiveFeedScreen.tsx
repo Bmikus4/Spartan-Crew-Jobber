@@ -189,7 +189,7 @@ function Row({ card, now, s, phase, onTick }: { card: FeedCard; now: number; s: 
         </div>
         <div style={{ fontSize: 17 * s, fontWeight: 500, color: "var(--text-secondary)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
           {/* The numbers lead so a long venue can never cut them: they find the job in OnSinch. */}
-          {numbers && <span className="mono" style={{ color: "var(--text-primary)", fontWeight: 600 }}>{numbers}</span>}
+          {numbers && <span className={card.r_number || card.j_number ? "mono" : undefined} style={{ color: "var(--text-primary)", fontWeight: 600 }}>{numbers}</span>}
           {numbers && <span style={{ color: "var(--text-faint)" }}> · </span>}
           {evidence
             ? <span style={{ color: GREEN, fontWeight: 600 }}>{evidence}</span>
@@ -226,7 +226,7 @@ function Tile({ card, now, s, onTick }: { card: FeedCard; now: number; s: number
         <div style={{ fontSize: 14 * s, fontWeight: 700, color: card.green ? GREEN : signal(card), whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{lead.status}</div>
         <div style={{ fontSize: 22 * s, fontWeight: 800, color: "var(--text-primary)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{card.company || card.subject}</div>
         <div style={{ fontSize: 14 * s, fontWeight: 500, color: "var(--text-secondary)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-          {numbers && <span className="mono" style={{ color: "var(--text-primary)" }}>{numbers} · </span>}
+          {numbers && <span className={card.r_number || card.j_number ? "mono" : undefined} style={{ color: "var(--text-primary)" }}>{numbers} · </span>}
           {urgent(card, now) && <span style={{ color: AMBER, fontWeight: 700 }}>48H · </span>}
           {t ? fmt(t, { weekday: "short", day: "numeric", month: "short" }) : it ? "Date TBC" : `Waiting since ${fmt(lead.at, { day: "numeric", month: "short" })}`}
         </div>
