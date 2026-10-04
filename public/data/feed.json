@@ -2192,5 +2192,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0116",
+  "ts": "2026-10-04T22:01:48+00:00",
+  "kind": "measurement",
+  "headline": "Labels: an unbound update reads Needs Updated (4 of 7 live Needs Built threads were changes to existing bookings); a lost order still reads Needs Built",
+  "subject": "A change to a booking the engine has not bound is labelled Order Needs Updated, not Built",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 177,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]

@@ -879,12 +879,21 @@ export async function flagUpdatedIfNeeded(next: ConversationState, deps: Pipelin
  *                 dangerous of the two and the easier to miss: the board shows an order
  *                 and everything looks done.
  *
+ * One exception to "no order": a thread classified as an UPDATE is a change to a booking
+ * that exists, whether or not the engine found it. On 2026-10-04 four of seven live
+ * "Needs Built" threads were changes to existing bookings (a moved shift, a date move, a
+ * PO, a new site contact) the engine had not bound, and "Needs Built" on them invites a
+ * duplicate. They read Order Needs Updated, unless the sweep found the thread's own order
+ * deleted (attention "lost"): then the booking really is gone and Needs Built is true.
+ *
  * It replaces the single `Manual` tag, which said "a person is needed" and left them to
  * work out which kind of needed. A label is a terminal marker and never a queue — nothing
  * downstream waits on it, and the sweep keeps trying either way.
  */
 export function needsLabelFor(s: ConversationState): "Order Needs Built" | "Order Needs Updated" {
-  return Number(s.onsinch_order_id) > 0 ? "Order Needs Updated" : "Order Needs Built";
+  if (Number(s.onsinch_order_id) > 0) return "Order Needs Updated";
+  if (s.classification === "update" && s.attention?.kind !== "lost") return "Order Needs Updated";
+  return "Order Needs Built";
 }
 
 export async function flagManualIfNeeded(next: ConversationState, deps: PipelineDeps): Promise<void> {

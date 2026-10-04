@@ -51,7 +51,8 @@ console.log("\n[2] red and blue come from the order, not the classification");
 {
   const p = project([needsCreated("x", { classification: "update" }), needsUpdated("y"), created("z", NOW - H)], new Map(), [], null, NOW);
   const by = new Map(p.cards.map((c) => [c.thread_id, c]));
-  ok(by.get("x")?.colour === "red" && by.get("x")?.items[0].kind === "needs-created", "an 'update' with no order is red and needs created");
+  // Red because no order is bound; needs UPDATED because an update's booking exists (needsLabelFor, 2026-10-04).
+  ok(by.get("x")?.colour === "red" && by.get("x")?.items[0].kind === "needs-updated", "an 'update' with no order is red and needs updated");
   ok(by.get("y")?.colour === "blue", "a need on an order is blue");
   ok(by.get("z")?.colour === "blue", "a created order is blue");
   ok(by.get("x")?.r_number === null && by.get("y")?.r_number === "R11312" && by.get("y")?.j_number === "J13925", "R and J numbers only where an order exists");
