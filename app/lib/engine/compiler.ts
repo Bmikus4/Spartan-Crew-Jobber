@@ -27,7 +27,7 @@ import { matchCompany, matchCompanyByDomain, matchContact, matchPlace, matchExis
 import { matchPlaceV2, matchedOnCityAlone, isAShell, tokenise, GENERIC } from "./venueMatch";
 import { buildIndex, searchVenues, applyRuledWording, type Building } from "./venueSearch";
 import { adjudicateVenue, type VenueJudge } from "./venueAdjudicate";
-import { assembleLinkQuestion, decideLink, type LinkJudge, type BlockView } from "./linkJudge";
+import { assembleLinkQuestion, decideLink, blocksOfNested, type LinkJudge, type BlockView } from "./linkJudge";
 import { resolveProfession, normProf, type ProfessionRec } from "./professions";
 import { PROFESSION_LIST } from "./professionList";
 import { resolveRateCard } from "./rates";
@@ -1047,6 +1047,21 @@ export async function resolveBlockVenues(
   return { facts: { ...facts, requests }, provision, notes, review: stranded.length > 0 };
 }
 
+/**
+ * Whether an order a thread names by its R number covers a day the thread asks for.
+ *
+ * `happening` is only an order's FIRST day. R11029 (a 7-14 Oct roadshow) reads 7 Oct, so
+ * a thread naming R11029 about its 14 Oct shift matched nothing, and the change was
+ * labelled for a new booking (2026-10-04). Its blocks carry every day. They are read only
+ * for the single order a thread names, and only when its first day misses, so this costs
+ * one GET at most. A failed read is no evidence, never a match.
+ */
+async function namedOrderCovers(order: OrderRec, wanted: Set<string>, onsinch: { orderWithBlocks(id: number): Promise<unknown> }): Promise<boolean> {
+  if (wanted.has((order.happening || "").slice(0, 10))) return true;
+  const nested = await onsinch.orderWithBlocks(Number(order.id)).catch(() => null);
+  return !!nested && blocksOfNested(nested, () => undefined).some((b) => wanted.has(b.day));
+}
+
 export async function compile(
   thread: HydratedThread,
   prior: ConversationState | undefined,
@@ -1516,15 +1531,15 @@ export async function compile(
            *
            * Guarded three ways, because an R number in a thread is usually noise: exactly
            * one number, it must name an order THIS client actually holds, and that order
-           * must be on a day this thread asks for. A number that fails any of them is a
-           * stale or copied reference and changes nothing.
+           * must cover a day this thread asks for (any of its days, not only the first:
+           * namedOrderCovers). A number that fails any of them is a stale or copied
+           * reference and changes nothing.
            */
           const named = rNumbersIn(thread.messages.map((m) => `${m.subject} ${m.body}`).join("\n"));
           if (named.length === 1 && String(inList.number ?? "") !== named[0]) {
             const wantedDays = new Set(facts.requests.map((r) => (r.date || "").slice(0, 10)).filter(Boolean));
-            const target = companyOrders.find(
-              (o: OrderRec) => String(o.number ?? "") === named[0] && wantedDays.has((o.happening || "").slice(0, 10))
-            );
+            const namedOrder = companyOrders.find((o: OrderRec) => String(o.number ?? "") === named[0]);
+            const target = namedOrder && (await namedOrderCovers(namedOrder, wantedDays, onsinch)) ? namedOrder : undefined;
             if (target) {
               notes.push(
                 `the thread names R${named[0]} but was bound to R${inList.number} (#${linkedOrderId}) — ` +
@@ -1562,6 +1577,14 @@ export async function compile(
         const days = facts.requests.map((r) => r.date).filter((d): d is string => !!d);
         const daySet = new Set(days.map((d) => d.slice(0, 10)));
         const sameDay = companyOrders.filter((o: OrderRec) => daySet.has(String(o.happening ?? "").slice(0, 10)));
+        // The one order the thread names by number joins the candidates when any of its
+        // days is asked for, even if it STARTS on another day. The judge and its check
+        // still decide; this only stops a multi-day order being invisible after day one.
+        const namedHere = rNumbersIn(thread.messages.map((m) => `${m.subject} ${m.body}`).join("\n"));
+        const namedOrder = namedHere.length === 1
+          ? companyOrders.find((o: OrderRec) => String(o.number ?? "") === namedHere[0] && !sameDay.includes(o))
+          : undefined;
+        if (namedOrder && (await namedOrderCovers(namedOrder, daySet, onsinch))) sameDay.push(namedOrder);
         if (sameDay.length) {
           const places = await onsinch.allPlaces().catch(() => undefined);
           const rated = rateOrdersForLink(sameDay, {

@@ -2234,5 +2234,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0119",
+  "ts": "2026-10-04T22:17:24+00:00",
+  "kind": "measurement",
+  "headline": "R-number span: a multi-day order named by the thread is a link candidate and a rebind target on any of its days (R11029, 7-14 Oct, was invisible on the 14th); the judge still decides",
+  "subject": "An order named by its R number counts on any day it covers, not only its first",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 178,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]

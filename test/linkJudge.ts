@@ -173,6 +173,46 @@ async function main() {
     delete process.env.SPARTAN_LINK_JUDGE;
   }
 
+  console.log("\n[11] a thread naming a MULTI-DAY order by number is judged against it on any of its days");
+  {
+    // R11029 runs 7-14 Oct; `happening` reads 7 Oct. On 2026-10-04 the client moved the
+    // 14 Oct shift on a thread whose subject names R11029, and the order never reached
+    // the judge because only first days were compared, so the change read as a new job.
+    const msg = { message_id: "m1", from: "kajaal@wearefamily.co.uk", to: ["bookings@spartancrew.co.uk"], date_iso: "2026-10-04T09:00:00Z",
+      subject: "Re: Price quote - R11029 WAF - Spotify Roadshow", body: "Hi, please can we move the 14/10 shift to the Shoreditch site. Thanks, Kajaal", is_from_spartan: false } as ThreadMessage;
+    const facts: ConversationFacts = { company_name: "We Are Family", contact_email: "kajaal@wearefamily.co.uk", location_text: "Shoreditch",
+      requests: [{ date: "2026-10-14", start_time: "09:00", end_time: "17:00", size: 2, task: "roadshow" }] };
+    const reasoner = {
+      async classifyAndExtract() { return { classification: "update", priority: "high", job_summary: "move a shift", facts }; },
+      async classify() { return { classification: "update", priority: "high", job_summary: "x" }; },
+      async extractFacts() { return facts; },
+      async composeReply() { return { subject: "", html: "", priority: "medium" }; },
+    };
+    const slot = (day: string) => ({ beginning: `${day}T09:00:00+01:00`, end: `${day}T17:00:00+01:00`, name: "Roadshow", Slot: [{ size: 2 }] });
+    const roadshow = (days: string[]) => ({ id: 2, number: "11029", happening: "2026-10-07T09:00:00+01:00", name: "WAF - Spotify Roadshow", Job: [{ id: 72, SlotTeam: days.map(slot) }] });
+    const onsinchWith = (order: unknown) => ({
+      async allCompanies() { return [{ id: 324, name: "We Are Family", invoice_name: "We Are Family" }]; },
+      async allPlaces() { return [{ id: 49, name: "ExCeL London", zip: "E16 1XL", active: true }]; },
+      async companyClients() { return [{ id: 9002, email: "kajaal@wearefamily.co.uk" }]; },
+      async companyOrdersWithJob() { return [{ id: 2, number: "11029", happening: "2026-10-07T09:00:00+01:00", name: "WAF - Spotify Roadshow", Job: [{ id: 72, pricelist_category_id: 315 }] }]; },
+      async orderWithBlocks() { return order; },
+    }) as never;
+    const run = (order: unknown, linkJudge: LinkJudge) => compile({ thread_id: "t-waf", messages: [msg] } as never, undefined, {
+      reasoner, onsinch: onsinchWith(order), now: () => Date.parse("2026-10-04T12:00:00Z"), repliesEnabled: false, seededRateCard: async () => 315, linkJudge,
+    } as never);
+
+    process.env.SPARTAN_LINK_JUDGE = "on";
+    const judge = scripted({ decision: "same", order_id: 2, quote: "move the 14/10 shift", reason: "the thread names R11029 and moves its 14 Oct shift" });
+    const spans = await run(roadshow(["2026-10-07", "2026-10-10", "2026-10-14"]), judge);
+    ok(judge.prompts.length === 1 && /11029/.test(judge.prompts[0]), "the named order reaches the judge although it starts on 7 Oct", `prompts=${judge.prompts.length}`);
+    ok(Number(spans.state.onsinch_order_id) === 2, "and the thread binds to it, not to a new booking", String(spans.state.onsinch_order_id));
+
+    const unasked = scripted({ decision: "same", order_id: 2, quote: "move the 14/10 shift", reason: "x" });
+    const short = await run(roadshow(["2026-10-07", "2026-10-08"]), unasked);
+    ok(unasked.prompts.length === 0 && !short.state.onsinch_order_id, "a named order with no block on an asked day is still not a candidate", `prompts=${unasked.prompts.length}`);
+    delete process.env.SPARTAN_LINK_JUDGE;
+  }
+
   console.log(`\n${fails === 0 ? "ALL PASS" : `${fails} FAILED`}\n`);
   process.exitCode = fails === 0 ? 0 : 1;
 }

@@ -177,6 +177,25 @@ const deps = (orders: unknown[]) =>
     );
   }
 
+  console.log("\n[5] the named order covers the asked day on a LATER day of its run — rebound");
+  {
+    // `happening` is an order's first day only. A multi-day order named by the thread
+    // must count on any day its blocks cover, or day two onward is invisible (R11029,
+    // 2026-10-04). Its blocks are read only for this one named order.
+    __resetListCache();
+    const RUN = { id: 13850, number: "10690", happening: "2026-03-02T08:00:00+00:00", name: "Delta Live - Proms run",
+      Job: [{ id: 9003, SlotTeam: [
+        { beginning: "2026-03-02T08:00:00+00:00", end: "2026-03-02T18:00:00+00:00", name: "Day 1", Slot: [{ size: 4 }] },
+        { beginning: `${DAY}T08:00:00+00:00`, end: `${DAY}T18:00:00+00:00`, name: "Day 8", Slot: [{ size: 4 }] },
+      ] }] };
+    const { state } = await compile(
+      thread("Re: Price quote - R10690 Delta Live - Proms run", "Can we make that 6 crew please."),
+      boundToProms54(),
+      deps([RUN, PROMS_54])
+    );
+    ok(Number(state.onsinch_order_id) === RUN.id, "bound to the named order, which covers the asked day after its first", `#${state.onsinch_order_id}`);
+  }
+
   console.log(fails ? `\n${fails} FAILED` : "\nALL PASS");
   process.exit(fails ? 1 : 0);
 })();
