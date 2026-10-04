@@ -50,5 +50,7 @@ export async function GET(request: Request): Promise<Response> {
 
   // 200 whatever the verdict: a non-200 here would mean "the check failed", which is a
   // different thing from "the check ran and the answer is bad", and n8n has to tell them apart.
-  return Response.json(health);
+  // Whether delete-and-repost can run. The kill switch is stored as a sensitive value and
+  // cannot be read back from Vercel; this says which way it is set, never the value.
+  return Response.json({ ...health, replace_path: process.env.SPARTAN_BLOCK_ORDER_REPLACE === "1" ? "blocked" : "armed" });
 }

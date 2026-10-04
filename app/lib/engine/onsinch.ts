@@ -451,8 +451,14 @@ export class OnsinchClient {
    */
   async attendanceCount(order_id: number): Promise<number> {
     const r = await this.t("GET", "/attendance" + qs({ limit: 1, with: "Order", Order__id: order_id }));
+    // A failed or count-less answer used to read as 0 crew, the one answer that lets a
+    // staffed order be deleted and reposted (SP-05). The caller refuses on a throw.
+    if (r.status >= 400) throw new OnsinchReadError("/attendance", r.status, "failed");
     const n = r.data?.pagination?.count;
-    return Number.isFinite(Number(n)) ? Number(n) : 0;
+    if (n === null || n === undefined || n === "" || !Number.isFinite(Number(n))) {
+      throw new OnsinchReadError("/attendance", r.status, "came back without a count");
+    }
+    return Number(n);
   }
 
   /**

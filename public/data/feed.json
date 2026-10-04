@@ -1842,5 +1842,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0091",
+  "ts": "2026-10-04T18:50:20+00:00",
+  "kind": "measurement",
+  "headline": "SP-05: attendanceCount throws on 4xx/5xx or a missing count, so a rebuild refuses as blind; health/intake reports replace_path",
+  "subject": "A failed staffing read blocks delete-and-repost instead of reading as zero crew",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 160,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]
