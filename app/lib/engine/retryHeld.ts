@@ -14,6 +14,7 @@
 // a bounded number of model calls; after that it stays held and labelled for a person.
 // ============================================================================
 import type { ConversationState } from "./types";
+import type { StateStore } from "./store";
 
 export const MAX_RETRIES_PER_RUN = 2;
 export const MAX_ATTEMPTS = 3;
@@ -50,4 +51,33 @@ export async function retryHeld(held: ConversationState[], io: RetryIO): Promise
     }
   }
   return outcomes;
+}
+
+/**
+ * An email the engine threw on is held for the sweep like a list outage (SP-15). n8n sends
+ * each message once, so before this a throw lost the email until the client wrote again. It
+ * counts as a held pass, so a thread that keeps throwing stops at MAX_ATTEMPTS and stays
+ * held and labelled for a person. A thread with no state yet gets a minimal one, enough for
+ * the label and the re-run; its messages are already in thread_messages from the capture.
+ */
+export async function markThrew(
+  store: StateStore,
+  thread: { thread_id: string; subject?: string },
+  err: unknown,
+): Promise<ConversationState> {
+  const prior = await store.get(thread.thread_id);
+  const why = String((err as Error)?.message ?? err).slice(0, 300);
+  const base = prior ?? ({
+    thread_id: thread.thread_id, subject: thread.subject, classification: "new-job", status: "error",
+    notes: [], facts: { requests: [] },
+  } as unknown as ConversationState);
+  const next: ConversationState = {
+    ...base,
+    retry_pending: "engine-threw",
+    retry_attempts: prior?.retry_pending ? (prior.retry_attempts ?? 1) + 1 : 1,
+    needs_human: true,
+    notes: [...(base.notes ?? []), `the engine threw on this thread (${why}) — held and tagged; the hourly sweep reads it again`],
+  };
+  await store.put(next);
+  return next;
 }

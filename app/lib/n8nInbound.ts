@@ -8,7 +8,10 @@
 // state. If no Gmail draft webhook is configured, the composed reply is included so n8n
 // can create the draft.
 
-import { handleThread } from "./engine/pipeline";
+import { handleThread, flagManualIfNeeded } from "./engine/pipeline";
+import { markThrew } from "./engine/retryHeld";
+import { NeonStateStore } from "./stateDb";
+import type { HydratedThread } from "./engine/types";
 import { activeIntake, mayRunEngine } from "./intakePath";
 import { coerceThread } from "./engine/intake";
 import { buildDeps } from "./deps";
@@ -23,6 +26,8 @@ export interface InboundIO {
   buildDeps: typeof buildDeps;
   handleThread: typeof handleThread;
   upsertTicket: typeof upsertTicketFromState;
+  /** Hold a thread the engine threw on, so the hourly sweep reads it again (SP-15). */
+  onThrew: (thread: HydratedThread, err: unknown) => Promise<void>;
 }
 
 export const productionInboundIO: InboundIO = {
@@ -31,6 +36,15 @@ export const productionInboundIO: InboundIO = {
   buildDeps,
   handleThread,
   upsertTicket: upsertTicketFromState,
+  async onThrew(thread, err) {
+    // The state store directly, not through buildDeps: buildDeps is what throws when the
+    // settings read fails (SP-17), and the hold must not depend on the thing that broke.
+    const latest = thread.messages[thread.messages.length - 1];
+    const held = await markThrew(new NeonStateStore(), { thread_id: thread.thread_id, subject: latest?.subject }, err);
+    await upsertTicketFromState(held);
+    // The label is best-effort here; the sweep's next pass labels a held thread anyway.
+    try { await flagManualIfNeeded(held, await buildDeps()); } catch (e) { console.error("[n8n-inbound] held but not labelled", e); }
+  },
 };
 
 export async function handleInbound(request: Request, io: InboundIO = productionInboundIO): Promise<Response> {
@@ -130,6 +144,9 @@ export async function handleInbound(request: Request, io: InboundIO = production
 ${String((err as Error)?.stack ?? "").slice(0, 1200)}`,
     });
     console.error("[n8n-inbound] pipeline failed", err);
+    // Held for the sweep: n8n will not send this message again. A failure to hold is
+    // logged and the 500 still goes back; the report above already reached a person.
+    await io.onThrew(thread, err).catch((e) => console.error("[n8n-inbound] could not hold the thread", e));
     return Response.json({ ok: false, error: String((err as Error)?.message ?? err) }, { status: 500 });
   }
 }

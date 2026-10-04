@@ -38,7 +38,7 @@ import { buildDeps } from "../../lib/deps";
 import { NeonStateStore } from "../../lib/stateDb";
 import { sweepAll, type SweepOutcome } from "../../lib/engine/sweep";
 import { authorizeMachineCall } from "../../lib/apiAuth";
-import { retryHeld, MAX_RETRIES_PER_RUN, type RetryOutcome } from "../../lib/engine/retryHeld";
+import { retryHeld, markThrew, MAX_RETRIES_PER_RUN, type RetryOutcome } from "../../lib/engine/retryHeld";
 import { rebuildThread } from "../../lib/threadMessagesDb";
 import { coerceThread } from "../../lib/engine/intake";
 import { handleThread } from "../../lib/engine/pipeline";
@@ -114,6 +114,9 @@ async function run(request: Request, dry: boolean): Promise<Response> {
     });
     for (const o of retried) if (o.result.startsWith("failed")) {
       void reportError({ route: "engine-threw", where: "api/reconcile (held retry)", what: o.result, detail: `thread ${o.thread_id}` });
+      // A re-run that threw is a held pass too, or a thread that always throws would be
+      // re-run, with its model calls, every hour for three days (SP-15).
+      await markThrew(store, { thread_id: o.thread_id }, o.result).catch(() => {});
     }
   }
   const stats = await store.sweepStats();

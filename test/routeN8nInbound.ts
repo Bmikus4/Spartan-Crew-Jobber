@@ -25,6 +25,7 @@ function rig() {
     buildDeps: (async () => ({ settings: {} })) as unknown as InboundIO["buildDeps"],
     handleThread: (async (t: { thread_id: string }) => { ran.push(t.thread_id); return { thread_id: t.thread_id, notes: [] }; }) as unknown as InboundIO["handleThread"],
     upsertTicket: async () => {},
+    onThrew: async () => {},
   };
   return { io, reports, ran };
 }
