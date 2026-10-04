@@ -25,19 +25,23 @@ async function states(): Promise<ConversationState[]> {
 /**
  * The newest CLIENT message per thread dates a need: conversation_state.updated_at
  * moves on every hourly sweep and would make each need look minutes old. The newest
- * message of any kind is the intake's pulse.
+ * message of OURS says whether that client has had a reply since (drafts are never
+ * stored, so an unsent draft cannot count as one). The newest message of any kind is
+ * the intake's pulse.
  */
-async function inbound(): Promise<{ byThread: Map<string, number>; latest: number | null }> {
+async function inbound(): Promise<{ byThread: Map<string, number>; outByThread: Map<string, number>; latest: number | null }> {
   const [rows, last] = await Promise.all([
-    db()`SELECT thread_id, date_iso, first_seen_at FROM thread_messages WHERE is_from_spartan = false` as unknown as Promise<{ thread_id: string; date_iso: string | null; first_seen_at: string | Date }[]>,
+    db()`SELECT thread_id, date_iso, first_seen_at, is_from_spartan FROM thread_messages` as unknown as Promise<{ thread_id: string; date_iso: string | null; first_seen_at: string | Date; is_from_spartan: boolean }[]>,
     db()`SELECT MAX(first_seen_at) AS last FROM thread_messages` as unknown as Promise<{ last: string | Date | null }[]>,
   ]);
   const byThread = new Map<string, number>();
+  const outByThread = new Map<string, number>();
   for (const r of rows) {
     const t = Date.parse(String(r.date_iso ?? "")) || new Date(r.first_seen_at).getTime();
-    if (t > (byThread.get(r.thread_id) ?? 0)) byThread.set(r.thread_id, t);
+    const m = r.is_from_spartan ? outByThread : byThread;
+    if (t > (m.get(r.thread_id) ?? 0)) m.set(r.thread_id, t);
   }
-  return { byThread, latest: last[0]?.last ? new Date(last[0].last).getTime() : null };
+  return { byThread, outByThread, latest: last[0]?.last ? new Date(last[0].last).getTime() : null };
 }
 
 /** Only clients waiting on Spartan; "Spartan waiting for client" is nobody's reply to write. */

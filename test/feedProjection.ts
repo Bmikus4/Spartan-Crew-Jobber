@@ -162,5 +162,16 @@ console.log("\n[11] when the job starts, for the countdown");
   ok(q.cards[0]?.starts_at === Date.parse("2026-10-05T05:00:00Z"), "a request's date and time are London's");
 }
 
+console.log("\n[12] how long the client has waited for a reply");
+{
+  const p = project([needsCreated("w"), needsCreated("r"), needsCreated("silent")],
+    new Map([["w", NOW - 5 * H], ["r", NOW - 5 * H]]), [], null, NOW,
+    new Map([["r", NOW - 2 * H], ["w", NOW - 9 * H]]));
+  const by = new Map(p.cards.map((c) => [c.thread_id, c]));
+  ok(by.get("w")?.awaiting_reply_since === NOW - 5 * H, "our last email was before theirs: waiting since theirs");
+  ok(by.get("r")?.awaiting_reply_since === null, "we replied after their email: not waiting");
+  ok(by.get("silent")?.awaiting_reply_since === null, "no client email on record: no clock");
+}
+
 console.log(fails ? `\n${fails} FAILED` : "\nALL PASS");
 process.exitCode = fails ? 1 : 0;

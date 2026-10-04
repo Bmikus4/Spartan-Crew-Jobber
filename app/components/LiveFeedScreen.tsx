@@ -136,29 +136,46 @@ function countdownText(left: number): string {
   return left < 3_600_000 ? "<1h" : `${Math.floor(left / 3_600_000)}h`;
 }
 
+/** How long a client has waited, read the same way: whole hours, then days past two. */
+function waitText(ms: number): string {
+  if (ms < 3_600_000) return "<1h";
+  return ms < URGENT_MS ? `${Math.floor(ms / 3_600_000)}h` : `${Math.floor(ms / 86_400_000)}d`;
+}
+
+type ClockKind = "start" | "reply";
 /**
- * The 48-hour countdown, after the follow-up timer on Leni's list (DueClock): a tinted
- * clock face in the urgency colour. Here the ring is the time left of the 48 hours and
- * drains continuously, and the hours to the job's start sit inside.
+ * The two clocks (Ben, 2026-10-04), after the follow-up timer on Leni's list (DueClock): a
+ * tinted face in a colour that walks green to red over 48 hours.
+ *   start  hours until the job's first block; the ring drains as it nears.
+ *   reply  how long the client has waited with nothing from us; the ring fills, and stays
+ *          red once it passes 48 hours.
+ * A word inside says which, because two rings side by side otherwise read alike.
  */
-function CountdownClock({ until, now, size }: { until: number; now: number; size: number }) {
-  const left = Math.max(0, until - now);
-  const f = Math.min(1, left / URGENT_MS);
-  const color = urgencyColour(left);
+function Clock({ kind, ms, size, label = true }: { kind: ClockKind; ms: number; size: number; label?: boolean }) {
+  const t = Math.max(0, ms);
+  const spent = kind === "start" ? 1 - Math.min(1, t / URGENT_MS) : Math.min(1, t / URGENT_MS);
+  const color = `hsl(${Math.round((1 - spent) * 130)} 78% 50%)`;
+  const ring = kind === "start" ? 1 - spent : spent;
+  const text = kind === "start" ? countdownText(t) : waitText(t);
   const C = 2 * Math.PI * 44;
   return (
-    <svg width={size} height={size} viewBox="0 0 100 100" role="img" aria-label={`Starts in ${countdownText(left)}`} style={{ flexShrink: 0, overflow: "visible" }}>
+    <svg width={size} height={size} viewBox="0 0 100 100" role="img" aria-label={kind === "start" ? `Starts in ${text}` : `Waiting ${text} for a reply`} style={{ flexShrink: 0, overflow: "visible" }}>
       <circle cx="50" cy="50" r="47" fill={`color-mix(in oklab, ${color} 14%, transparent)`} />
       <circle cx="50" cy="50" r="44" fill="none" stroke="var(--border-strong)" strokeWidth="5" />
-      <circle cx="50" cy="50" r="44" fill="none" stroke={color} strokeWidth="5" strokeLinecap="round" strokeDasharray={`${C * f} ${C}`} transform="rotate(-90 50 50)" style={{ transition: "stroke-dasharray 900ms linear, stroke 900ms linear" }} />
+      <circle cx="50" cy="50" r="44" fill="none" stroke={color} strokeWidth="5" strokeLinecap="round" strokeDasharray={`${C * ring} ${C}`} transform="rotate(-90 50 50)" style={{ transition: "stroke-dasharray 900ms linear, stroke 900ms linear" }} />
       {/* No marks at 3 and 9 o'clock: that is where the figure sits. */}
       {Array.from({ length: 12 }, (_, i) => i).filter((i) => i !== 3 && i !== 9).map((i) => {
         const a = ((i * 30 - 90) * Math.PI) / 180;
         return <line key={i} x1={50 + Math.cos(a) * 36} y1={50 + Math.sin(a) * 36} x2={50 + Math.cos(a) * 39.5} y2={50 + Math.sin(a) * 39.5} stroke={color} strokeOpacity={i % 3 ? 0.35 : 0.8} strokeWidth={i % 3 ? 1.4 : 2.2} strokeLinecap="round" />;
       })}
-      <text x="50" y="51" textAnchor="middle" dominantBaseline="central" className="tnum" style={{ fontSize: 32, fontWeight: 800, letterSpacing: "-0.02em", fill: `color-mix(in oklab, ${color} 78%, var(--text-primary))` }}>
-        {countdownText(left)}
+      <text x="50" y={label ? 46 : 51} textAnchor="middle" dominantBaseline="central" className="tnum" style={{ fontSize: label ? 29 : 32, fontWeight: 800, letterSpacing: "-0.02em", fill: `color-mix(in oklab, ${color} 78%, var(--text-primary))` }}>
+        {text}
       </text>
+      {label && (
+        <text x="50" y="69" textAnchor="middle" dominantBaseline="central" style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: "0.08em", fill: "var(--text-muted)" }}>
+          {kind === "start" ? "TO START" : "NO REPLY"}
+        </text>
+      )}
     </svg>
   );
 }
@@ -212,7 +229,7 @@ function Row({ card, now, s, phase, onTick }: { card: FeedCard; now: number; s: 
 
   return (
     <div style={{
-      display: "grid", gridTemplateColumns: `${4 * s}px minmax(0, 1fr) ${112 * s}px ${240 * s}px ${72 * s}px`, alignItems: "center", columnGap: 20 * s,
+      display: "grid", gridTemplateColumns: `${4 * s}px minmax(0, 1fr) ${108 * s}px ${108 * s}px ${240 * s}px ${72 * s}px`, alignItems: "center", columnGap: 20 * s,
       minHeight: 116 * s, padding: `${14 * s}px ${20 * s}px ${14 * s}px 0`, borderBottom: "1px solid var(--border)",
       background: done ? tint(GREEN, 15) : "transparent",
       opacity: phase === "fade" ? 0 : 1,
@@ -241,7 +258,10 @@ function Row({ card, now, s, phase, onTick }: { card: FeedCard; now: number; s: 
       </div>
 
       <div style={{ display: "grid", placeItems: "center" }}>
-        {urgent(card, now) && <CountdownClock until={deadline(card, now)!} now={now} size={104 * s} />}
+        {isOpen(card) && card.awaiting_reply_since != null && <Clock kind="reply" ms={now - card.awaiting_reply_since} size={100 * s} />}
+      </div>
+      <div style={{ display: "grid", placeItems: "center" }}>
+        {urgent(card, now) && <Clock kind="start" ms={deadline(card, now)! - now} size={100 * s} />}
       </div>
 
       <div style={{ minWidth: 0 }}>
@@ -489,10 +509,13 @@ export default function LiveFeedScreen({ isActive, tv = false }: { isActive: boo
             <span style={{ display: "flex", alignItems: "center", gap: 14 * s }}><span style={{ width: 32 * s, height: 32 * s, borderRadius: 8 * s, background: RED, flexShrink: 0 }} />Red = New job</span>
             <span style={{ display: "flex", alignItems: "center", gap: 14 * s }}><span style={{ width: 32 * s, height: 32 * s, borderRadius: 8 * s, background: BLUE, flexShrink: 0 }} />Blue = Update</span>
           </div>
-          {/* The clock's key. It counts to the job's first crew block, not to a reply. */}
-          <div style={{ display: "flex", alignItems: "center", gap: 12 * s, fontSize: 21 * s, fontWeight: 600, color: "var(--text-secondary)", whiteSpace: "nowrap" }}>
-            <CountdownClock until={now + 36 * 3_600_000} now={now} size={38 * s} />
-            = hours until the job starts, shown from 48h out (green → red)
+          {/* The clocks' key: one counts down to the job, the other up from the client's email. */}
+          <div style={{ display: "flex", alignItems: "center", gap: 10 * s, fontSize: 20 * s, fontWeight: 600, color: "var(--text-secondary)", whiteSpace: "nowrap" }}>
+            <Clock kind="reply" ms={5 * 3_600_000} size={38 * s} label={false} />
+            <span>= waiting for our reply</span>
+            <Clock kind="start" ms={36 * 3_600_000} size={38 * s} label={false} />
+            <span>= until the job starts</span>
+            <span style={{ color: "var(--text-muted)" }}>· green → red over 48h</span>
           </div>
         </div>
         <div style={{ display: "flex", alignItems: "center", flexShrink: 0 }}>

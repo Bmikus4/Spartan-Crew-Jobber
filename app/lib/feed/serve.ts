@@ -16,7 +16,7 @@ import type { ConversationState } from "../engine/types";
 export interface FeedDeps {
   states(): Promise<ConversationState[]>;
   /** Newest client message per thread, and the newest message of any kind (intake). */
-  inbound(): Promise<{ byThread: Map<string, number>; latest: number | null }>;
+  inbound(): Promise<{ byThread: Map<string, number>; outByThread?: Map<string, number>; latest: number | null }>;
   marks(): Promise<FeedMark[]>;
   /** Null when the follow-up feature is switched off: the reply lane does not exist. */
   replies: (() => Promise<ReplyNeed[]>) | null;
@@ -36,13 +36,13 @@ export async function serveFeed(deps: FeedDeps, now: number): Promise<{ status: 
     return { status: 500, body: { ok: false, error: "could not read the feed" } };
   }
 
-  let p = project(states, inbound.byThread, marks, replies, now);
+  let p = project(states, inbound.byThread, marks, replies, now, inbound.outByThread);
 
   let verify: { ran: boolean; wrote: number; note: string } | null = null;
   if (deps.verify) {
     try {
       verify = await deps.verify(p.cards, now, marks);
-      if (verify.wrote > 0) p = project(states, inbound.byThread, await deps.marks(), replies, now);
+      if (verify.wrote > 0) p = project(states, inbound.byThread, await deps.marks(), replies, now, inbound.outByThread);
     } catch (err) {
       console.error("[feed] verify failed", err);
       verify = { ran: true, wrote: 0, note: `verify failed: ${String((err as Error)?.message ?? err).slice(0, 160)}` };

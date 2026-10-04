@@ -1800,5 +1800,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0088",
+  "ts": "2026-10-04T18:35:28+00:00",
+  "kind": "measurement",
+  "headline": "TV feed: two clocks, reply wait (fills green->red over 48h) and job start (drains), both in the key",
+  "subject": "Each open row on the TV shows how long the client has waited for our reply beside the time until the job",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 158,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]

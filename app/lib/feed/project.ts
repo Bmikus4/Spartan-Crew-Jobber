@@ -85,6 +85,8 @@ export interface FeedCard {
   dates: string[];
   /** The first block that has not started yet (ms), for the 48-hour countdown; null when no time is known. */
   starts_at: number | null;
+  /** The client's latest email when nothing of ours has gone out since (ms): how long they have waited. */
+  awaiting_reply_since: number | null;
   crew: number | null;
   venue: string | null;
   r_number: string | null;
@@ -215,6 +217,7 @@ export function project(
   marks: FeedMark[],
   replies: ReplyNeed[] | null,
   now: number,
+  lastOutbound: Map<string, number> = new Map(),
 ): Projection {
   const today = londonDay(now);
   const dismissed = new Set(marks.filter((m) => m.mark === "dismissed").map((m) => m.thread_id));
@@ -236,6 +239,12 @@ export function project(
   };
 
   const counts: FeedCounts = { needs_created: 0, needs_updated: 0, needs_reply: 0, done: 0, older: 0 };
+  const awaiting = (thread: string): number | null => {
+    const inAt = lastInbound.get(thread);
+    if (!inAt) return null;
+    const outAt = lastOutbound.get(thread);
+    return outAt && outAt >= inAt ? null : inAt;
+  };
   const cards = new Map<string, FeedCard>();
 
   for (const s of states) {
@@ -274,6 +283,7 @@ export function project(
       contact: firstName(s.facts?.contact_name),
       dates: days,
       starts_at: nextStart(s, now),
+      awaiting_reply_since: awaiting(s.thread_id),
       crew: crewOf(s),
       venue: str(s.facts?.location_text),
       r_number: str(s.onsinch_order_number) ? `R${String(s.onsinch_order_number).replace(/^R/i, "")}` : null,
@@ -300,7 +310,7 @@ export function project(
     cards.set(r.thread_id, {
       thread_id: r.thread_id, colour: "neutral", lane: "reply", items: [item], green: false, at: item.at,
       order_id: null, company_id: null, company: r.company, contact: firstName(r.contact),
-      dates: [], starts_at: null, crew: null, venue: null, r_number: null, j_number: null, subject: r.subject,
+      dates: [], starts_at: null, awaiting_reply_since: item.at, crew: null, venue: null, r_number: null, j_number: null, subject: r.subject,
     });
   }
 
