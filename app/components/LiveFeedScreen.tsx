@@ -44,6 +44,8 @@ const BLUE = "var(--viz-blue)";
 const GREEN = "var(--up)";
 const AMBER = "var(--warn)";
 const GREY = "var(--text-muted)";
+/** The red/blue edge on each card, in px before scaling. */
+const STRIPE = 6;
 const tint = (c: string, pct: number) => `color-mix(in srgb, ${c} ${pct}%, transparent)`;
 
 const LAYOUT_KEY = "spartan.liveFeed.layout";
@@ -172,9 +174,9 @@ function ReplyClock({ ms, size }: { ms: number; size: number }) {
   const C = 2 * Math.PI * 44;
   return (
     <svg width={size} height={size} viewBox="0 0 100 100" role="img" aria-label={`Waiting ${text} for a reply`} style={{ flexShrink: 0, overflow: "visible" }}>
-      <circle cx="50" cy="50" r="47" fill={`color-mix(in oklab, ${color} 14%, transparent)`} />
-      <circle cx="50" cy="50" r="44" fill="none" stroke="var(--border-strong)" strokeWidth="5" />
-      <circle cx="50" cy="50" r="44" fill="none" stroke={color} strokeWidth="5" strokeLinecap="round" strokeDasharray={`${C * spent} ${C}`} transform="rotate(-90 50 50)" style={{ transition: "stroke-dasharray 900ms linear, stroke 900ms linear" }} />
+      <circle cx="50" cy="50" r="44" fill={`color-mix(in oklab, ${color} 14%, transparent)`} />
+      <circle cx="50" cy="50" r="44" fill="none" stroke="var(--border-strong)" strokeWidth="2.5" />
+      <circle cx="50" cy="50" r="44" fill="none" stroke={color} strokeWidth="2.5" strokeLinecap="round" strokeDasharray={`${C * spent} ${C}`} transform="rotate(-90 50 50)" style={{ transition: "stroke-dasharray 900ms linear, stroke 900ms linear" }} />
       {/* No marks at 3 and 9 o'clock: that is where the figure sits. */}
       {Array.from({ length: 12 }, (_, i) => i).filter((i) => i !== 3 && i !== 9).map((i) => {
         const a = ((i * 30 - 90) * Math.PI) / 180;
@@ -271,18 +273,19 @@ function Row({ card, now, s, phase, onTick }: { card: FeedCard; now: number; s: 
 
   return (
     <div style={{
-      display: "grid", gridTemplateColumns: `${12 * s}px minmax(0, 1fr) ${108 * s}px ${300 * s}px ${72 * s}px`, alignItems: "center", columnGap: 20 * s,
-      minHeight: 116 * s, padding: `${14 * s}px ${20 * s}px ${14 * s}px 0`,
-      border: "1px solid var(--border)", borderRadius: "var(--radius-lg)", overflow: "hidden",
+      // Equal side columns put the numbers in the true centre of the card, whatever the name's length.
+      display: "grid", gridTemplateColumns: "minmax(0, 1fr) auto minmax(0, 1fr)", alignItems: "center", columnGap: 24 * s,
+      minHeight: 116 * s, padding: `${14 * s}px ${20 * s}px ${14 * s}px ${(20 + STRIPE) * s}px`,
+      border: "1px solid var(--border)", borderRadius: "var(--radius-lg)",
+      // The legend's colour as an inset edge, kept when the row goes green so it still reads.
+      // A shadow, not a grid column, so the stripe can never change the row's height.
+      boxShadow: `inset ${STRIPE * s}px 0 0 ${signal(card)}`,
       // Mixed into the surface, not over transparent: the card sits on the page, not a panel.
       background: done ? `color-mix(in srgb, ${GREEN} 15%, var(--surface))` : "var(--surface)",
       opacity: phase === "fade" ? 0 : 1,
       transition: `background-color 200ms ease, opacity ${FADE_MS}ms ease`,
       animation: phase === "steady" ? "feedRowIn 400ms ease" : undefined,
     }}>
-      {/* The legend's colour, kept when the row goes green so it still reads. */}
-      <div style={{ alignSelf: "stretch", margin: `${-14 * s}px 0`, background: signal(card) }} />
-
       <div style={{ minWidth: 0, display: "flex", flexDirection: "column", gap: 6 * s }}>
         <div style={{ display: "flex", alignItems: "center", gap: 12 * s, minWidth: 0 }}>
           <span style={{ fontSize: 34 * s, fontWeight: 800, letterSpacing: "-0.01em", color: "var(--text-primary)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", minWidth: 0 }}>
@@ -292,21 +295,27 @@ function Row({ card, now, s, phase, onTick }: { card: FeedCard; now: number; s: 
           {hasReply(card) && it && <Tag s={s} color={GREY}>Needs reply</Tag>}
         </div>
         <div style={{ fontSize: 20 * s, fontWeight: 500, color: "var(--text-secondary)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-          {/* The numbers lead so a long venue can never cut them: they find the job in OnSinch. */}
-          {numbers && <span className={card.r_number || card.j_number ? "mono" : undefined} style={{ color: "var(--text-primary)", fontWeight: 600 }}>{numbers}</span>}
-          {numbers && <span style={{ color: "var(--text-faint)" }}> · </span>}
           {evidence
             ? <span style={{ color: GREEN, fontWeight: 600 }}>{evidence}</span>
             : <>{detail}{detail ? <span style={{ color: "var(--text-faint)" }}> · </span> : null}<span style={{ color: "var(--text-muted)" }}>{ago(lead.at, now)}</span></>}
         </div>
       </div>
 
-      <div style={{ display: "grid", placeItems: "center" }}>
-        {isOpen(card) && card.awaiting_reply_since != null && <ReplyClock ms={now - card.awaiting_reply_since} size={100 * s} />}
+      {/* The numbers find the job in OnSinch, so they get the centre and their own size. */}
+      <div className={card.r_number || card.j_number ? "mono" : undefined} style={{ textAlign: "center", whiteSpace: "nowrap", ...(card.r_number || card.j_number
+        ? { fontSize: 40 * s, fontWeight: 700, letterSpacing: "-0.01em", color: "var(--text-primary)" }
+        : { fontSize: 24 * s, fontWeight: 600, color: "var(--text-muted)" }) }}>
+        {numbers}
+      </div>
+
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 20 * s, minWidth: 0 }}>
+      {/* Fixed width with or without a clock, so the dates line up down the list. */}
+      <div style={{ width: 84 * s, height: 84 * s, display: "grid", placeItems: "center", flexShrink: 0 }}>
+        {isOpen(card) && card.awaiting_reply_since != null && <ReplyClock ms={now - card.awaiting_reply_since} size={84 * s} />}
       </div>
 
       {/* The job's own timing: its date beside a calendar, amber within 48 hours. */}
-      <div style={{ display: "flex", alignItems: "center", gap: 16 * s, minWidth: 0 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 16 * s, width: 250 * s, flexShrink: 0 }}>
         <CalendarIcon size={44 * s} color={urgent(card, now) ? AMBER : "var(--text-muted)"} />
         <div style={{ minWidth: 0 }}>
           <div className="eyebrow" style={{ fontSize: 14 * s, color: urgent(card, now) ? AMBER : "var(--text-muted)" }}>
@@ -318,8 +327,9 @@ function Row({ card, now, s, phase, onTick }: { card: FeedCard; now: number; s: 
         </div>
       </div>
 
-      <div style={{ display: "grid", placeItems: "center" }}>
+      <div style={{ width: 56 * s, display: "grid", placeItems: "center", flexShrink: 0 }}>
         {it && <Tick card={card} it={it} s={s} size={52} onTick={onTick} />}
+      </div>
       </div>
     </div>
   );

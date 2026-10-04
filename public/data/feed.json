@@ -2094,5 +2094,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0109",
+  "ts": "2026-10-04T20:50:07+00:00",
+  "kind": "measurement",
+  "headline": "TV cards: R/J centred, 6px stripe, 84px thin-ring clock",
+  "subject": "TV card numbers sit large in the centre, and the reply clock fits inside the card with a thin ring",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 170,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]
