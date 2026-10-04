@@ -27,6 +27,7 @@
 // than a bigger order the client asked for.
 // ============================================================================
 import type { DesiredOrder } from "./types";
+import { parseDates } from "./parseWork";
 
 export interface AmendmentVerdict {
   /** Total people before and after, chiefs included. */
@@ -44,7 +45,35 @@ const headcount = (o: DesiredOrder | null | undefined): number =>
 /** How much of the crew has to go before it is worth saying out loud. */
 const DEEP_CUT = 0.5;
 
-export function assessAmendment(prior: DesiredOrder | null | undefined, next: DesiredOrder | null | undefined): AmendmentVerdict {
+const WEEKDAYS = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
+
+/** Whether the text names the weekday of an ISO date ("drop Friday", "no longer need Fri"). */
+function namesWeekday(text: string, iso: string): boolean {
+  const name = WEEKDAYS[new Date(`${iso}T12:00:00Z`).getUTCDay()];
+  return new RegExp(`\\b(${name}|${name.slice(0, 3)})\\b`, "i").test(text);
+}
+
+/** "the 13th": a bare ordinal naming the day of the month. */
+function namesOrdinal(text: string, iso: string): boolean {
+  const d = Number(iso.slice(8, 10));
+  return new RegExp(`\\b${d}(st|nd|rd|th)\\b`, "i").test(text);
+}
+
+/** The client says something is coming off, even if it names the day only by position. */
+const STATES_A_REMOVAL = /\b(drop|remove|cancel|scrap|take off|no longer|(do not|don'?t|won'?t|will not) need)/i;
+
+const daysOf = (o: DesiredOrder | null | undefined): Set<string> =>
+  new Set((o?.slot_teams ?? []).map((t) => String(t.beginning ?? "").slice(0, 10)).filter(Boolean));
+
+/**
+ * `latest` is the client's own words in the email being applied (quoted history stripped)
+ * and its date, which anchors day-month mentions to a year.
+ */
+export function assessAmendment(
+  prior: DesiredOrder | null | undefined,
+  next: DesiredOrder | null | undefined,
+  latest?: { text: string; reference: Date },
+): AmendmentVerdict {
   const before = headcount(prior);
   const after = headcount(next);
 
@@ -56,6 +85,33 @@ export function assessAmendment(prior: DesiredOrder | null | undefined, next: De
       before, after, action: "hold",
       note: `this would empty an order of ${before} — read as a cancellation, which the engine cannot classify. Nothing was written.`,
     };
+  }
+
+  /**
+   * A DAY THAT VANISHES WITHOUT BEING MENTIONED IS A MISREAD, NOT A REQUEST (SP-10). The
+   * request list is replaced wholesale on every email (mergeFacts.ts), so a later email
+   * that talks about one day reads as the whole job and the other days drop out: 12 crew
+   * became 8 that way (characterisation A1). A removed day the client's latest words do
+   * not name (by date, weekday or "the 13th"), in an email that states no removal, holds
+   * for a person. "Drop Friday" and "please drop the second day" still apply.
+   * This is the interim guard; step 6 (SP-30) folds changes instead of replacing lists.
+   */
+  if (latest && !STATES_A_REMOVAL.test(latest.text)) {
+    const kept = daysOf(next);
+    const removed = [...daysOf(prior)].filter((d) => !kept.has(d));
+    if (removed.length) {
+      const named = new Set(parseDates(latest.text, latest.reference));
+      const silent = removed
+        .filter((d) => !named.has(d) && !namesWeekday(latest.text, d) && !namesOrdinal(latest.text, d))
+        .sort();
+      if (silent.length) {
+        const blocks = (prior?.slot_teams ?? []).filter((t) => silent.includes(String(t.beginning ?? "").slice(0, 10))).length;
+        return {
+          before, after, action: "hold",
+          note: `the latest email does not mention ${silent.join(", ")}, yet ${blocks} block(s) would be removed — held for a person; nothing was written`,
+        };
+      }
+    }
   }
   if (after >= before) return { before, after, action: "apply", note: null };
 

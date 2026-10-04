@@ -5,6 +5,7 @@
 // metrics here (not inside pure compile()) preserves compile's re-runnability.
 // ============================================================================
 import { compile, writeShape, type CompileDeps } from "./compiler";
+import { ownPart } from "./triage";
 import { selectLatest, normalizeThread } from "./normalize";
 import type { StateStore } from "./store";
 import type { MetricSink } from "./metrics";
@@ -552,7 +553,9 @@ export async function handleThread(
       return next;
     }
 
-    const amend = assessAmendment(prior?.desired_order, intended.desired);
+    const latestMsg = thread.messages.find((m) => m.message_id === latestId) ?? thread.messages[thread.messages.length - 1];
+    const amend = assessAmendment(prior?.desired_order, intended.desired,
+      latestMsg ? { text: ownPart(latestMsg.body ?? ""), reference: new Date(latestMsg.date_iso) } : undefined);
     if (amend.note) next.notes = [...next.notes, amend.note];
     if (amend.action === "hold") {
       next.pending_order = intended;
