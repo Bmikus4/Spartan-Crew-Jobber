@@ -117,6 +117,36 @@ async function main() {
     ok(api.pagesFetched.length === firstCount, "second call served from cache", `${api.pagesFetched.length} requests total`);
   }
 
+  // SP-04. The transport hands back a non-2xx without throwing, and the pager took
+  // `r.data?.data ?? []` whatever the status: a 500 on page 3 became 100 missing rows.
+  console.log("\n[5] a failed page is an error, never a shorter list");
+  {
+    const failing = (badPage: number, status: number): Transport => async (_m, path) => {
+      const page = Number(/[?&]page=(\d+)/.exec(path)?.[1] ?? 1);
+      if (page === badPage) return { status, data: { message: status === 429 ? "Too Many Requests" : "Server Error" } };
+      return { status: 200, data: { data: [{ id: page }], pagination: { pageCount: 5 } } };
+    };
+    const rejects = async (p: Promise<unknown>) => { try { await p; return false; } catch { return true; } };
+
+    __resetListCache();
+    ok(await rejects(new OnsinchClient(failing(3, 500)).allPlaces()), "500 on page 3: allPlaces rejects");
+    __resetListCache();
+    ok(await rejects(new OnsinchClient(failing(1, 429)).allCompanies()), "429 on page 1: allCompanies rejects");
+    __resetListCache();
+    const notAList: Transport = async () => ({ status: 200, data: { error: "nope" } });
+    ok(await rejects(new OnsinchClient(notAList).getOrders({ id: 1 })), "getOrders with no list rejects");
+
+    // A failure must not be cached: the next call reads again and gets the real list.
+    __resetListCache();
+    let down = true;
+    const flaky: Transport = async (m, p) => down ? { status: 500, data: null } : fakeApi(1).t(m, p, undefined);
+    const c = new OnsinchClient(flaky);
+    ok(await rejects(c.allPlaces()), "while it fails, it fails");
+    down = false;
+    const rows = await c.allPlaces();
+    ok(rows.length === 100, "and once it answers, the list is read fresh, not a cached failure", String(rows.length));
+  }
+
   console.log(fails ? `\n${fails} FAILED\n` : "\nALL PASS\n");
   process.exit(fails ? 1 : 0);
 }

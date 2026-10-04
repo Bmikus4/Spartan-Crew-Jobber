@@ -1275,7 +1275,15 @@ export async function compile(
     for (const r of rec.report.rolled) notes.push(`rolled the year forward — ${r}`);
 
     // company first (contact resolution needs it)
-    const co = await resolveCompany(facts, prior, onsinch, deps.aliases);
+    // Held, never guessed, as for the venue list: without the company list a new client is
+    // indistinguishable from a known one, and a known one would be created again (SP-04).
+    let co: Awaited<ReturnType<typeof resolveCompany>>;
+    try {
+      co = await resolveCompany(facts, prior, onsinch, deps.aliases);
+    } catch (err) {
+      blocked = true; needs_human = true; retryPending = "company-list";
+      co = { note: `the company list could not be read (${String((err as Error)?.message ?? err)}) — held and tagged, nothing booked; read again by the hourly sweep once the list is back` };
+    }
     company_id = co.id ?? company_id;
     provisionCompany = co.provision;
     if (co.note) notes.push(co.note);
@@ -1417,8 +1425,18 @@ export async function compile(
     // released only when a working list omits it AND a direct read of it comes back
     // empty too.
     let lostOrder: { id: number; number?: string } | undefined;
+    // A failed read of the client's orders is not an empty list: with a page missing, a
+    // live booking reads as absent and a second order is created for it (SP-04). Held.
+    let companyOrders: OrderRec[] | null = null;
     if (company_id) {
-      const companyOrders = await onsinch.companyOrdersWithJob(company_id);
+      try {
+        companyOrders = (await onsinch.companyOrdersWithJob(company_id)) as OrderRec[];
+      } catch (err) {
+        blocked = true; needs_human = true; retryPending = retryPending ?? "order-list";
+        notes.push(`the client's order list could not be read (${String((err as Error)?.message ?? err)}) — held and tagged, nothing booked; read again by the hourly sweep`);
+      }
+    }
+    if (company_id && companyOrders) {
 
       if (linkedOrderId) {
         const inList = companyOrders.find((o: OrderRec) => Number(o.id) === Number(linkedOrderId));
@@ -1609,11 +1627,19 @@ export async function compile(
     let pricelist_category_id = 0;
     let rateSource: DesiredOrder["rate_card_source"];
     if (company_id) {
-      const rate = await resolveRateCard(company_id, {
-        onsinch,
-        seededRateCard: deps.seededRateCard,
-        defaultCard: deps.defaultRateCard,
-      });
+      // The rate card is read off the same order list; a read that fails here is a hold,
+      // not "no history", which would price the job at the default card.
+      let rate: Awaited<ReturnType<typeof resolveRateCard>> = { card: null, source: "none" };
+      try {
+        rate = await resolveRateCard(company_id, {
+          onsinch,
+          seededRateCard: deps.seededRateCard,
+          defaultCard: deps.defaultRateCard,
+        });
+      } catch (err) {
+        blocked = true; needs_human = true; retryPending = retryPending ?? "order-list";
+        notes.push(`the client's pricing history could not be read (${String((err as Error)?.message ?? err)}) — held and tagged, nothing booked`);
+      }
       if (rate.card) {
         pricelist_category_id = rate.card;
         rateSource = rate.source === "none" ? undefined : rate.source;

@@ -162,6 +162,28 @@ function qs(filters: Record<string, string | number>): string {
   return parts.length ? "?" + parts.join("&") : "";
 }
 
+/** A list read that failed. Never an empty list: that is how a live order read as deleted. */
+export class OnsinchReadError extends Error {
+  constructor(public path: string, public status: number, why: string) {
+    super(`OnSinch GET ${path} ${why} (status ${status})`);
+    this.name = "OnsinchReadError";
+  }
+}
+
+/**
+ * The rows of a list response, or a throw (SP-04). The transport hands back a non-2xx
+ * without throwing, and every list read used to take `r.data?.data ?? []` whatever the
+ * status, so a 500 or 429 on page 3 silently shortened the list. In the sweep that could
+ * drop a live order from the client's list and declare it lost; in compile, miss a booking
+ * and create a second one. A 200 without `pagination` is still a list (not every endpoint
+ * is known to send it); listAll then treats it as one page, as before.
+ */
+function okList(r: { status: number; data: any }, path: string): any[] {
+  if (r.status >= 400) throw new OnsinchReadError(path, r.status, "failed");
+  if (!Array.isArray(r.data?.data)) throw new OnsinchReadError(path, r.status, "came back without a list");
+  return r.data.data;
+}
+
 export class OnsinchClient {
   constructor(private t: Transport) {}
 
@@ -172,7 +194,7 @@ export class OnsinchClient {
 
   async searchCompanies(filters: Record<string, string | number>) {
     const r = await this.t("GET", "/companies" + qs(filters));
-    return (r.data?.data ?? []) as any[];
+    return okList(r, "/companies");
   }
 
   async searchPlaces(filters: Record<string, string | number>) {
@@ -226,7 +248,7 @@ export class OnsinchClient {
 
   async getOrders(filters: Record<string, string | number>) {
     const r = await this.t("GET", "/orders" + qs({ ...filters, with: "Job" }));
-    return (r.data?.data ?? []) as any[];
+    return okList(r, "/orders");
   }
 
   /**
@@ -771,7 +793,7 @@ export class OnsinchClient {
   ): Promise<any[]> {
     const get = async (page: number) => {
       const r = await this.t("GET", path + qs({ ...filters, limit: 100, page }));
-      return { data: (r.data?.data ?? []) as any[], pagination: r.data?.pagination ?? {} };
+      return { data: okList(r, `${path} page ${page}`), pagination: r.data?.pagination ?? {} };
     };
 
     // Page 1 tells us how many there are.
