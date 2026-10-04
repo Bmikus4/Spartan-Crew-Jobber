@@ -89,6 +89,14 @@ export function postcodesIn(s?: string | null): string[] {
   return out;
 }
 
+/**
+ * Names that identify no building, matched against the WHOLE wording after normAddr
+ * ("client site", "TBC", "N/A" -> "n a"). Shared with scripts/venue-sweep.ts, which deleted
+ * 391 such rows from the tenant; a resolver that disagreed would grow them back.
+ */
+export const GENERIC =
+  /^(london|uk|england|britain|location|no location|venue|site|warehouse|office|home|house|various|tbc|tba|unknown|n a|none|test|placeholder|private residence|client site|customer site|on site|onsite|city|central london|central|studio|hotel|church|school|hall|park|the venue|address|tbd)$/;
+
 /** The outward half — "E16", "SW7". Coarse, and it survives a mistyped inward. */
 const outward = (pc: string) => pc.split(" ")[0];
 

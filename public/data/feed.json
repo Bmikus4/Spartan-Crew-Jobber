@@ -2108,5 +2108,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0110",
+  "ts": "2026-10-04T21:08:19+00:00",
+  "kind": "measurement",
+  "headline": "SP-35 code: Venue Task 6 and Q8; GENERIC moved into venueMatch.ts and shared with the venue sweep",
+  "subject": "A retired-only or generic venue holds at the placeholder instead of booking",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 171,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]

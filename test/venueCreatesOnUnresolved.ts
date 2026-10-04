@@ -92,15 +92,20 @@ async function main() {
     // booking crew to it means nothing. What changes is where the refusal LANDS -- a
     // new row carrying the client's text, not a placeholder carrying nothing.
     //
-    // Stated plainly because it is the accepted cost of the ruling: "London" and
-    // "Various" DO create rows now. Nothing deterministic separates them from "London
-    // Stadium", which this same guard also refuses (defect D1) and which is a real
-    // building the tenant holds. A guard strong enough to block the junk blocks the
-    // building too, and was tried: see study/venuecompare.ts, net -15 on 106 labelled
-    // wordings.
+    // "London Stadium" is refused a match by this same guard (defect D1) and still creates
+    // a row from the client's words: nothing deterministic separates it from junk, and a
+    // guard strong enough to block the junk blocked the building too (study/venuecompare.ts,
+    // net -15 on 106 labelled wordings).
+    //
+    // A wording that is NOTHING BUT a generic name is different (SP-35, Q8 of the 09-29
+    // spec): "London", "Various", "client site" hold at the placeholder and create nothing.
+    // The match is on the whole wording (venueMatch.ts GENERIC), so it cannot catch a
+    // building whose name merely contains a city.
     const r: any = await go("London");
     ok(r.id !== 2069, "the city row never wins", String(r.id));
-    ok(!!r.provision, "the refusal creates a row instead of discarding the words");
+    ok(!r.provision || r.provision.name === "No Location", "a bare city creates no row from the words", JSON.stringify(r.provision));
+    const s: any = await go("London Stadium");
+    ok(s.id !== 2069 && s.provision?.name === "London Stadium", "a building whose name contains the city still creates its row", JSON.stringify(s.provision));
   }
 
   console.log("\n[4] a venue that DOES resolve is unaffected");

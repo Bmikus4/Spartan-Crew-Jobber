@@ -24,7 +24,7 @@ import { markAttachments } from "./attachHere";
 import { composeOrder } from "./compose";
 import { validateOrder } from "./format";
 import { matchCompany, matchCompanyByDomain, matchContact, matchPlace, matchExistingOrder, rateOrdersForLink, rNumbersIn, normName, normAddr, type OrderRec } from "./resolve";
-import { matchPlaceV2, matchedOnCityAlone, isAShell, tokenise } from "./venueMatch";
+import { matchPlaceV2, matchedOnCityAlone, isAShell, tokenise, GENERIC } from "./venueMatch";
 import { buildIndex, searchVenues, applyRuledWording, type Building } from "./venueSearch";
 import { adjudicateVenue, type VenueJudge } from "./venueAdjudicate";
 import { assembleLinkQuestion, decideLink, type LinkJudge, type BlockView } from "./linkJudge";
@@ -700,6 +700,46 @@ export async function resolveVenueV3(
  * address. The whole suite passed, because nothing exercised this function.
  */
 export async function resolvePlace(
+  facts: ConversationFacts,
+  prior: ConversationState | undefined,
+  onsinch: OnsinchClient,
+  aliases?: CompileDeps["aliases"],
+  deps?: { venueJudge?: VenueJudge | null }
+): Promise<{ id?: number; provision?: DesiredOrder["provision_place"]; note?: string; unreadable?: boolean; judgeUnavailable?: boolean }> {
+  const text = facts.location_text?.trim();
+  const venueMoved = !!text && normAddr(text) !== normAddr(prior?.facts?.location_text ?? "");
+  const keepsPrior = !!prior?.place_id && !venueMoved;
+
+  /**
+   * TWO WORDINGS THAT NAME NO REAL BUILDING HOLD AT THE PLACEHOLDER (SP-35, 09-29 spec).
+   *
+   * Generic (Q8): "client site", "our warehouse" after normalising, "TBC", "various". The
+   * search would match one of the tenant's generic rows, or create another from the words.
+   *
+   * Retired only (Q3', Venue Task 6): every branch below prefers an active row, so landing on
+   * a retired one means no active row matched. A hard filter was measured worse: it creates a
+   * duplicate from the client's words, regrowing the pool the venue sweep shrank. Neither the
+   * retired row nor a duplicate: the placeholder, and a person sets the venue.
+   */
+  if (text && !keepsPrior && GENERIC.test(normAddr(text))) {
+    let places: PlaceCandidate[];
+    try { places = await onsinch.allPlaces(); } catch (err) {
+      return { unreadable: true, note: `the venue list could not be read (${String((err as Error)?.message ?? err)}) — held and tagged, nothing booked; read again by the hourly sweep once the list is back` };
+    }
+    return holdAtPlaceholder(places, `venue "${text}" names no building — used the "${PLACEHOLDER_PLACE_NAME}" placeholder and created nothing; set the real venue in OnSinch`);
+  }
+
+  const r = await resolvePlaceAny(facts, prior, onsinch, aliases, deps);
+  if (!r.id || keepsPrior) return r;
+  let places: PlaceCandidate[];
+  try { places = await onsinch.allPlaces(); } catch { return r; }
+  const row = places.find((p) => p.id === r.id);
+  if (!row || row.active !== false || normAddr(row.name) === normAddr(PLACEHOLDER_PLACE_NAME)) return r;
+  return holdAtPlaceholder(places,
+    `venue "${text ?? ""}" matched only retired venue rows (#${row.id} ${row.name}) — not booked onto a retired row and no duplicate created; set the real venue in OnSinch`);
+}
+
+async function resolvePlaceAny(
   facts: ConversationFacts,
   prior: ConversationState | undefined,
   onsinch: OnsinchClient,

@@ -86,10 +86,10 @@ const n = (s: unknown) => String(s ?? "").toLowerCase().replace(/[^a-z0-9]+/g, "
  */
 export const SENTINEL_NAME = "no location";
 
-/** Names that identify no building. Task 6 moves this into venueMatch.ts and imports
- *  it back, so the sweep and the live resolver cannot disagree about what is generic. */
-export const GENERIC =
-  /^(london|uk|england|britain|location|no location|venue|site|warehouse|office|home|house|various|tbc|tba|unknown|n a|none|test|placeholder|private residence|client site|customer site|on site|onsite|city|central london|central|studio|hotel|church|school|hall|park|the venue|address|tbd)$/;
+/** Names that identify no building: one list, in venueMatch.ts, so the sweep and the live
+ *  resolver cannot disagree about what is generic (SP-35). */
+export { GENERIC } from "../app/lib/engine/venueMatch";
+import { GENERIC } from "../app/lib/engine/venueMatch";
 
 /** Nothing here locates a job: no postcode, no coordinates, no city, no alias, no
  *  note, and an address that is either absent or a second copy of the name. */

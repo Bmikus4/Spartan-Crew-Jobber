@@ -23,10 +23,9 @@
 // one that would have failed had `anyActive` been doing anything at all.
 //
 // THIS IS NOT THE RETIRED-ONLY CHANGE. A retired row that is the only candidate
-// still wins here and still gets booked. That is deliberate: making `active` a
-// filter changes live behaviour on every thread and belongs in its own commit
-// with its own measurement, not smuggled in beside a simplification that provably
-// changes nothing.
+// still wins in the MATCHERS, deliberately: a hard `active` filter mints a duplicate
+// from the client's words. The retired-only case is handled one level up, in
+// resolvePlace, which holds it at the placeholder (SP-35, test/venueRetiredAndGeneric.ts).
 //
 // Run: npx tsx test/venueActivePreference.ts
 // ============================================================================

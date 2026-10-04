@@ -116,7 +116,9 @@ async function cases() {
     // only that neither city row wins.
     const r = await go("London");
     ok(r.id !== 2069, "the city row does not win", String(r.id));
-    ok(!!r.note && /names only a city/.test(r.note), "and the ticket says why", r.note ?? "(none)");
+    // Wording moved with Q8 (SP-35): a generic name now holds at the placeholder and says
+    // "names no building"; the older create path still says "names only a city".
+    ok(!!r.note && /names only a city|names no building/.test(r.note), "and the ticket says why", r.note ?? "(none)");
     const b = await go("Birmingham");
     ok(b.id !== 791, "Birmingham does not book the NEC either", String(b.id));
   }
