@@ -119,6 +119,7 @@ function Card({ card, now, s, compact, onTick }: { card: FeedCard; now: number; 
   const evidence = it ? evidenceLine(it) : null;
   const ticked = it?.green?.mark === "checked";
   const autoGreen = !!it?.green && !ticked;
+  const longStatus = !compact && lead.status.length > 20;
 
   const ident = [
     card.company,
@@ -139,19 +140,22 @@ function Card({ card, now, s, compact, onTick }: { card: FeedCard; now: number; 
       padding: `${(compact ? 12 : 18) * s}px ${(compact ? 14 : 20) * s}px`, paddingRight: (it ? (compact ? 62 : 84) : 20) * s,
       display: "flex", flexDirection: "column", gap: 6 * s,
     }}>
-      <div style={{ fontSize: (compact ? 25 : 42) * s, fontWeight: 800, lineHeight: 1.1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+      {/* "Order was created, check to verify" is the requester's wording and does not fit one
+          line at 42px in a third of 1080p; it was shown as "Order was created, ch...". A long
+          phrase takes two lines and the identity gives one back. */}
+      <div style={{ fontSize: (compact ? 25 : 42) * s, fontWeight: 800, lineHeight: 1.1, overflow: "hidden", ...(longStatus ? { display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" as const } : { whiteSpace: "nowrap", textOverflow: "ellipsis" }) }}>
         {lead.status}
       </div>
-      <div style={{ display: "flex", gap: 10 * s, alignItems: "center", flexWrap: "nowrap", fontSize: (compact ? 16 : 22) * s, fontWeight: 800, letterSpacing: "0.04em" }}>
+      <div style={{ display: "flex", gap: 10 * s, alignItems: "center", flexWrap: "nowrap", overflow: "hidden", fontSize: (compact ? 16 : 22) * s, fontWeight: 800, letterSpacing: "0.04em" }}>
         {card.colour !== "neutral" && <span style={{ background: chipBg, color: chipFg, borderRadius: 6 * s, padding: `${2 * s}px ${10 * s}px`, whiteSpace: "nowrap", flexShrink: 0 }}>{card.colour === "red" ? "NEW JOB" : "UPDATE"}</span>}
-        {reply && it && <span style={{ background: "#e5e7eb", color: "#1f2937", borderRadius: 6 * s, padding: `${2 * s}px ${10 * s}px`, whiteSpace: "nowrap", flexShrink: 0 }}>NEEDS REPLY</span>}
+        {reply && it && <span style={{ background: "#e5e7eb", color: "#1f2937", borderRadius: 6 * s, padding: `${2 * s}px ${10 * s}px`, whiteSpace: "nowrap", flexShrink: 0 }}>{compact ? "REPLY" : "NEEDS REPLY"}</span>}
         {/* The numbers sit here, not in the identity line, because that line is clamped and a
             long venue cut "R10616 J13989" to "R10616..." on the 1080p screen. The number is
             how somebody finds the job, so it is the one thing that may never be truncated. */}
         {numbers && <span style={{ letterSpacing: 0, whiteSpace: "nowrap", flexShrink: 0 }}>{numbers}</span>}
         <span style={{ fontWeight: 600, letterSpacing: 0, color: solid || card.green ? "rgba(255,255,255,0.85)" : C.dim, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{ago(lead.at, now)}</span>
       </div>
-      <div style={{ fontSize: (compact ? 18 : 29) * s, fontWeight: 600, lineHeight: 1.2, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
+      <div style={{ fontSize: (compact ? 18 : 29) * s, fontWeight: 600, lineHeight: 1.2, display: "-webkit-box", WebkitLineClamp: longStatus ? 1 : 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
         {ident || card.subject}
       </div>
       {evidence && !compact && (
