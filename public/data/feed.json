@@ -1716,5 +1716,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0082",
+  "ts": "2026-10-04T17:30:26+00:00",
+  "kind": "measurement",
+  "headline": "TV feed: timed rows first, clock shows '36h', key explains it counts to the job's start",
+  "subject": "Jobs with a countdown sit at the top of the TV, soonest first, and the clock reads whole hours",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 154,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]

@@ -125,43 +125,39 @@ function urgent(c: FeedCard, now: number): boolean {
   return at != null && at - now <= URGENT_MS;
 }
 
-const two = (n: number) => String(n).padStart(2, "0");
 /** Green at 48 hours to red at none, through yellow and orange: the hue walks the spectrum, not a blend. */
 const urgencyColour = (left: number) => `hsl(${Math.round(Math.min(1, Math.max(0, left / URGENT_MS)) * 130)} 78% 50%)`;
+/**
+ * Whole hours only, read from across the room (Ben, 2026-10-04): "36h". The last hour reads
+ * "<1h" rather than "0h", which would look like the job had started.
+ */
 function countdownText(left: number): string {
-  const h = Math.floor(left / 3_600_000), m = Math.floor((left % 3_600_000) / 60_000), sec = Math.floor((left % 60_000) / 1000);
-  return `${h}:${two(m)}:${two(sec)}`;
+  if (left <= 0) return "NOW";
+  return left < 3_600_000 ? "<1h" : `${Math.floor(left / 3_600_000)}h`;
 }
 
 /**
  * The 48-hour countdown, after the follow-up timer on Leni's list (DueClock): a tinted
- * clock face in the urgency colour. Here the ring is the time left of the 48 hours, a dot
- * walks it with the seconds, and the live time to the job's start sits inside.
+ * clock face in the urgency colour. Here the ring is the time left of the 48 hours and
+ * drains continuously, and the hours to the job's start sit inside.
  */
 function CountdownClock({ until, now, size }: { until: number; now: number; size: number }) {
   const left = Math.max(0, until - now);
   const f = Math.min(1, left / URGENT_MS);
   const color = urgencyColour(left);
   const C = 2 * Math.PI * 44;
-  const sec = Math.floor((left % 60_000) / 1000);
-  const dot = ((sec * 6 - 90) * Math.PI) / 180;
-  const h = Math.floor(left / 3_600_000), m = Math.floor((left % 3_600_000) / 60_000);
   return (
     <svg width={size} height={size} viewBox="0 0 100 100" role="img" aria-label={`Starts in ${countdownText(left)}`} style={{ flexShrink: 0, overflow: "visible" }}>
       <circle cx="50" cy="50" r="47" fill={`color-mix(in oklab, ${color} 14%, transparent)`} />
       <circle cx="50" cy="50" r="44" fill="none" stroke="var(--border-strong)" strokeWidth="5" />
       <circle cx="50" cy="50" r="44" fill="none" stroke={color} strokeWidth="5" strokeLinecap="round" strokeDasharray={`${C * f} ${C}`} transform="rotate(-90 50 50)" style={{ transition: "stroke-dasharray 900ms linear, stroke 900ms linear" }} />
-      {/* No marks at 3 and 9 o'clock: that is where the digits sit. */}
+      {/* No marks at 3 and 9 o'clock: that is where the figure sits. */}
       {Array.from({ length: 12 }, (_, i) => i).filter((i) => i !== 3 && i !== 9).map((i) => {
         const a = ((i * 30 - 90) * Math.PI) / 180;
         return <line key={i} x1={50 + Math.cos(a) * 36} y1={50 + Math.sin(a) * 36} x2={50 + Math.cos(a) * 39.5} y2={50 + Math.sin(a) * 39.5} stroke={color} strokeOpacity={i % 3 ? 0.35 : 0.8} strokeWidth={i % 3 ? 1.4 : 2.2} strokeLinecap="round" />;
       })}
-      <circle cx={50 + Math.cos(dot) * 44} cy={50 + Math.sin(dot) * 44} r="4.6" fill={color} stroke="var(--bg)" strokeWidth="1.6" />
-      <text x="50" y="50" textAnchor="middle" className="mono tnum" style={{ fontSize: 23, fontWeight: 700, fill: `color-mix(in oklab, ${color} 78%, var(--text-primary))` }}>
-        {left === 0 ? "NOW" : `${h}:${two(m)}`}
-      </text>
-      <text x="50" y="70" textAnchor="middle" className="mono tnum" style={{ fontSize: 15, fontWeight: 700, fill: "var(--text-secondary)" }}>
-        {left === 0 ? "started" : `${two(sec)}s`}
+      <text x="50" y="51" textAnchor="middle" dominantBaseline="central" className="tnum" style={{ fontSize: 32, fontWeight: 800, letterSpacing: "-0.02em", fill: `color-mix(in oklab, ${color} 78%, var(--text-primary))` }}>
+        {countdownText(left)}
       </text>
     </svg>
   );
@@ -430,12 +426,12 @@ export default function LiveFeedScreen({ isActive, tv = false }: { isActive: boo
     }
   }, [load]);
 
-  // Within the open group, a job starting in the next 48 hours goes first.
+  // Anything with a timer goes to the very top, soonest start first (Ben, 2026-10-04);
+  // everything else keeps the server's order.
   const cards = useMemo(() => {
     const list = data?.items ?? [];
-    return list.map((c, i) => ({ c, i, u: urgent(c, now) ? 0 : 1 }))
-      .sort((a, b) => (isOpen(a.c) && isOpen(b.c) && a.c.lane === b.c.lane ? a.u - b.u : 0) || a.i - b.i)
-      .map((x) => x.c);
+    const timed = list.filter((c) => urgent(c, now)).sort((a, b) => deadline(a, now)! - deadline(b, now)!);
+    return [...timed, ...list.filter((c) => !urgent(c, now))];
   }, [data, now]);
 
   let strip: FeedCard[] = [];
@@ -488,9 +484,16 @@ export default function LiveFeedScreen({ isActive, tv = false }: { isActive: boo
       <header style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 24 * s, flexShrink: 0 }}>
         {/* The legend: permanent, not interactive, exactly two entries. Large, because it is
             the key to every row's colour and is read from across the office. */}
-        <div aria-label="Legend" style={{ display: "flex", gap: 36 * s, alignItems: "center", fontSize: 34 * s, fontWeight: 800, letterSpacing: "-0.01em", color: "var(--text-primary)", whiteSpace: "nowrap", minWidth: 0, overflow: "hidden" }}>
-          <span style={{ display: "flex", alignItems: "center", gap: 14 * s }}><span style={{ width: 32 * s, height: 32 * s, borderRadius: 8 * s, background: RED, flexShrink: 0 }} />Red = New job</span>
-          <span style={{ display: "flex", alignItems: "center", gap: 14 * s }}><span style={{ width: 32 * s, height: 32 * s, borderRadius: 8 * s, background: BLUE, flexShrink: 0 }} />Blue = Update</span>
+        <div aria-label="Legend" style={{ display: "flex", flexDirection: "column", gap: 8 * s, minWidth: 0, overflow: "hidden" }}>
+          <div style={{ display: "flex", gap: 36 * s, alignItems: "center", fontSize: 34 * s, fontWeight: 800, letterSpacing: "-0.01em", color: "var(--text-primary)", whiteSpace: "nowrap" }}>
+            <span style={{ display: "flex", alignItems: "center", gap: 14 * s }}><span style={{ width: 32 * s, height: 32 * s, borderRadius: 8 * s, background: RED, flexShrink: 0 }} />Red = New job</span>
+            <span style={{ display: "flex", alignItems: "center", gap: 14 * s }}><span style={{ width: 32 * s, height: 32 * s, borderRadius: 8 * s, background: BLUE, flexShrink: 0 }} />Blue = Update</span>
+          </div>
+          {/* The clock's key. It counts to the job's first crew block, not to a reply. */}
+          <div style={{ display: "flex", alignItems: "center", gap: 12 * s, fontSize: 21 * s, fontWeight: 600, color: "var(--text-secondary)", whiteSpace: "nowrap" }}>
+            <CountdownClock until={now + 36 * 3_600_000} now={now} size={38 * s} />
+            = hours until the job starts, shown from 48h out (green → red)
+          </div>
         </div>
         <div style={{ display: "flex", alignItems: "center", flexShrink: 0 }}>
           {kpis.map((k) => (
