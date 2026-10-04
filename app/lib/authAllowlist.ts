@@ -2,8 +2,9 @@
 // baselines below):
 //   AUTH_ALLOWED_EMAILS = comma-separated exact addresses
 //   AUTH_ALLOWED_DOMAIN = comma-separated domains
-// If NEITHER env is set the allowlist is OPEN (login isn't broken before it's
-// configured) — the real lock is AUTH_REQUIRED (middleware) + this list together.
+// If NEITHER env is set the allowlist is open outside production (local and preview
+// sign-in keep working) and CLOSED in production apart from the baselines below (SP-22):
+// a production deploy that lost its env would otherwise let any Google account in.
 
 function list(envVal: string | undefined): string[] {
   return (envVal || "").toLowerCase().split(",").map((s) => s.trim()).filter(Boolean);
@@ -24,14 +25,14 @@ export function allowlistConfigured(): boolean {
   return list(process.env.AUTH_ALLOWED_EMAILS).length > 0 || list(process.env.AUTH_ALLOWED_DOMAIN).length > 0;
 }
 
-// True if this email may sign in. Open (true) until an allowlist is configured.
+// True if this email may sign in.
 export function isAllowedEmail(email?: string | null): boolean {
   const e = (email || "").trim().toLowerCase();
   if (!e || !e.includes("@")) return false;
   const domain = e.split("@")[1] || "";
   if (BASELINE_EMAILS.includes(e)) return true;
   if (BASELINE_DOMAINS.includes(domain)) return true;
-  if (!allowlistConfigured()) return true; // not yet locked down
+  if (!allowlistConfigured()) return process.env.VERCEL_ENV !== "production";
   if (list(process.env.AUTH_ALLOWED_EMAILS).includes(e)) return true;
   return list(process.env.AUTH_ALLOWED_DOMAIN).includes(domain);
 }

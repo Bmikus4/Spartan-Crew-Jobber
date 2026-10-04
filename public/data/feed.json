@@ -2024,5 +2024,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0104",
+  "ts": "2026-10-04T20:09:04+00:00",
+  "kind": "measurement",
+  "headline": "SP-22: isAllowedEmail closed in production with no allowlist env; preview and local unchanged; baselines unchanged",
+  "subject": "Production refuses unknown sign-ins when no allowlist is configured",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 169,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]
