@@ -1562,5 +1562,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0071",
+  "ts": "2026-10-04T01:17:18+00:00",
+  "kind": "measurement",
+  "headline": "TV feed: card 236 -> 250px for two-line phrases, strip shows R number only",
+  "subject": "A two-line status on the TV keeps its descenders, and a strip card shows its R number whole",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 154,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]

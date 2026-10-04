@@ -128,7 +128,8 @@ function Card({ card, now, s, compact, onTick }: { card: FeedCard; now: number; 
     card.crew ? `${card.crew} crew` : null,
     compact ? null : card.venue,
   ].filter(Boolean).join(" · ");
-  const numbers = card.colour === "neutral" ? null : card.r_number || card.j_number ? [card.r_number, card.j_number].filter(Boolean).join(" ") : "No order yet";
+  // The strip has room for one number, and the R number alone finds the order.
+  const numbers = card.colour === "neutral" ? null : card.r_number || card.j_number ? (compact ? card.r_number ?? card.j_number : [card.r_number, card.j_number].filter(Boolean).join(" ")) : "No order yet";
 
   return (
     <div style={{
@@ -143,7 +144,7 @@ function Card({ card, now, s, compact, onTick }: { card: FeedCard; now: number; 
       {/* "Order was created, check to verify" is the requester's wording and does not fit one
           line at 42px in a third of 1080p; it was shown as "Order was created, ch...". A long
           phrase takes two lines and the identity gives one back. */}
-      <div style={{ fontSize: (compact ? 25 : 42) * s, fontWeight: 800, lineHeight: 1.1, overflow: "hidden", ...(longStatus ? { display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" as const } : { whiteSpace: "nowrap", textOverflow: "ellipsis" }) }}>
+      <div style={{ fontSize: (compact ? 25 : 42) * s, fontWeight: 800, lineHeight: longStatus ? 1.2 : 1.1, overflow: "hidden", ...(longStatus ? { display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" as const } : { whiteSpace: "nowrap", textOverflow: "ellipsis" }) }}>
         {lead.status}
       </div>
       <div style={{ display: "flex", gap: 10 * s, alignItems: "center", flexWrap: "nowrap", overflow: "hidden", fontSize: (compact ? 16 : 22) * s, fontWeight: 800, letterSpacing: "0.04em" }}>
@@ -288,7 +289,7 @@ export default function LiveFeedScreen({ isActive, tv = false }: { isActive: boo
   const cards = useMemo(() => data?.items ?? [], [data]);
   const pad = 24 * s;
   const gap = 16 * s;
-  const cardH = 236 * s;
+  const cardH = 250 * s;
   const minW = 600 * s;
   const cols = Math.max(1, Math.floor((box.w - 2 * pad + gap) / (minW + gap)));
   const moreH = 40 * s;
