@@ -1758,5 +1758,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0085",
+  "ts": "2026-10-04T17:47:34+00:00",
+  "kind": "measurement",
+  "headline": "SP-06: judge failure books only an exact postcode+name match, else retry_pending venue-judge (max 3 held passes); venue judge timeout 30 s",
+  "subject": "A venue judge that fails holds the email; code no longer books the nearest search hit",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 156,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]

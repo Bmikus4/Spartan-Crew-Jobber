@@ -7,17 +7,20 @@
 // that hold an order. So a held first enquiry stayed held until the client wrote again
 // (workflow CPIRu7CpezvKjU8d, read 2026-10-01).
 //
-// The venue list is read ONCE before anything is re-run, and nothing is re-run while it
-// still fails: an outage costs one OnSinch read an hour and no model calls. MAX_PER_RUN
-// keeps the re-runs (one model call each) inside the sweep route's 60-second ceiling.
+// The venue and company lists are read ONCE before anything is re-run, and nothing is re-run
+// while either still fails: an outage costs two OnSinch reads an hour and no model calls.
+// MAX_PER_RUN keeps the re-runs inside the sweep route's ceiling. A thread held by the venue
+// judge (SP-06) re-runs until it has MAX_ATTEMPTS held passes, so a judge that stays down costs
+// a bounded number of model calls; after that it stays held and labelled for a person.
 // ============================================================================
 import type { ConversationState } from "./types";
 
 export const MAX_RETRIES_PER_RUN = 2;
+export const MAX_ATTEMPTS = 3;
 
 export interface RetryIO {
-  /** One read of the venue list; false when it still cannot be read. */
-  venueListReadable: () => Promise<boolean>;
+  /** One read of the venue and company lists; false while either still cannot be read. */
+  listsReadable: () => Promise<boolean>;
   /** Rebuild the thread from stored messages and run it; null when it cannot be rebuilt. */
   run: (threadId: string) => Promise<ConversationState | null>;
   /** False once the route is too close to its ceiling to start another re-run. */
@@ -27,10 +30,10 @@ export interface RetryIO {
 export interface RetryOutcome { thread_id: string; result: string }
 
 export async function retryHeld(held: ConversationState[], io: RetryIO): Promise<RetryOutcome[]> {
-  const due = held.filter((s) => s.retry_pending).slice(0, MAX_RETRIES_PER_RUN);
+  const due = held.filter((s) => s.retry_pending && (s.retry_attempts ?? 0) < MAX_ATTEMPTS).slice(0, MAX_RETRIES_PER_RUN);
   if (!due.length) return [];
-  if (!(await io.venueListReadable())) {
-    return due.map((s) => ({ thread_id: s.thread_id, result: "still held: the venue list cannot be read" }));
+  if (!(await io.listsReadable())) {
+    return due.map((s) => ({ thread_id: s.thread_id, result: "still held: the venue or company list cannot be read" }));
   }
   const outcomes: RetryOutcome[] = [];
   for (const s of due) {

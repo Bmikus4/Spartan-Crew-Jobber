@@ -104,7 +104,7 @@ async function run(request: Request, dry: boolean): Promise<Response> {
   let retried: RetryOutcome[] = [];
   if (!dry) {
     retried = await retryHeld(await store.heldForRetry(MAX_RETRIES_PER_RUN), {
-      venueListReadable: async () => { try { await deps.onsinch.allPlaces(); return true; } catch { return false; } },
+      listsReadable: async () => { try { await deps.onsinch.allPlaces(); await deps.onsinch.allCompanies(); return true; } catch { return false; } },
       run: async (threadId) => {
         const thread = await rebuildThread(threadId);
         const coerced = thread ? coerceThread(thread) : null;

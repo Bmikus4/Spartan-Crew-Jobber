@@ -203,11 +203,14 @@ export interface ConversationState {
   cancellation?: boolean;
   /**
    * Set when the thread was held for a reason that is not its own: the venue list could
-   * not be read. The idempotency fast path skips a thread already read at its latest
+   * not be read ("venue-list"), or the venue judge was unusable and no venue matched
+   * exactly ("venue-judge"). The idempotency fast path skips a thread already read at its latest
    * message, so without this a held email was only re-read when the client wrote again
    * (verified 2026-10-01). Cleared by the next compile that succeeds.
    */
   retry_pending?: string;
+  /** Consecutive compiles that ended held (retry_pending set); cleared with it. */
+  retry_attempts?: number;
   facts: ConversationFacts;
 
   // resolved entities — cached once known so we never re-resolve/guess

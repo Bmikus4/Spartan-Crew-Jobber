@@ -20,8 +20,18 @@
 // It is asked to answer "none" freely, because the costs are not symmetric: sending
 // crew to the wrong building wastes a day and a client, while declining creates a
 // duplicate row that a human can merge later.
+//
+// WITHOUT A USABLE MODEL, CODE DOES NOT CHOOSE (SP-06, Ben's ruling 2026-10-03: on a model
+// failure the code holds and tags; it never decides alone). It used to take the search's
+// top hit, and 8 bookings were made that way, at least 3 at the wrong building: "Level 50,
+// 8 Bishopsgate" became 100 Bishopsgate (#16308), "PaperMoon, The OWO" became Horse Guards
+// Parade (#15885). Now only an exact match books (the client's postcode is the building's and
+// its name is in the client's words); anything else is "undecided", which the compiler holds
+// for the hourly sweep to ask again.
 // ============================================================================
 import type { Building, VenueHit } from "./venueSearch";
+import { postcodesIn } from "./venueMatch";
+import { normAddr } from "./resolve";
 
 export interface AdjudicationInput {
   /** Exactly what the client wrote. Never normalised — the casing carries meaning. */
@@ -33,7 +43,8 @@ export interface AdjudicationInput {
 }
 
 export interface Adjudication {
-  decision: "match" | "none";
+  /** "none": nothing here is the venue. "undecided": no usable model, and no exact match. */
+  decision: "match" | "none" | "undecided";
   place_id: number | null;
   confidence: number;
   reason: string;
@@ -155,19 +166,7 @@ export async function adjudicateVenue(
     };
   }
 
-  if (!judge) {
-    /**
-     * No model configured. Fall back to the DETERMINISTIC answer rather than to the
-     * remembered one: search looked at every building in the tenant, and the alias
-     * store looked at one row somebody typed once.
-     */
-    if (best) {
-      return { decision: "match", place_id: best.building.place_id, confidence: 0.5,
-               reason: "no adjudicator configured — took the best search result", how: "model-unavailable" };
-    }
-    return { decision: "match", place_id: inp.remembered!.place_id, confidence: 0.5,
-             reason: "no adjudicator configured — took the remembered alias", how: "model-unavailable" };
-  }
+  if (!judge) return withoutModel(inp, "no venue judge is configured");
 
   /**
    * Three outcomes, not two. "the call failed" and "the model answered with an id
@@ -204,13 +203,8 @@ export async function adjudicateVenue(
   };
 
   const first = await ask();
-  if (first === "failed" || first === "out-of-set") {
-    // The model failed or answered out of set. The deterministic answer stands; a
-    // broken adjudicator must not cost the booking.
-    if (best) return { decision: "match", place_id: best.building.place_id, confidence: 0.4,
-                       reason: "adjudicator unusable — took the best search result", how: "model-unavailable" };
-    return { decision: "none", place_id: null, confidence: 0, reason: "adjudicator unusable and no search result", how: "model-unavailable" };
-  }
+  if (first === "failed") return withoutModel(inp, "the venue judge was unavailable");
+  if (first === "out-of-set") return withoutModel(inp, "the venue judge answered with a venue that was never offered");
 
   /**
    * SECOND PASS ON DISAGREEMENT. When the model overrules the deterministic top
@@ -244,4 +238,30 @@ export async function adjudicateVenue(
              how: "model-second-pass" };
   }
   return first;
+}
+
+/**
+ * Exact means both halves: a full postcode in the client's words equals the building's, AND
+ * one of the building's own spellings appears whole in the client's words. Postcode alone is
+ * not enough (a London postcode can hold several venues: 8 and 100 Bishopsgate), and a name
+ * alone is not enough (two Albert Halls).
+ */
+export function exactMatch(text: string, b: Building | undefined): boolean {
+  if (!b?.postcode || !postcodesIn(text).includes(b.postcode)) return false;
+  const words = ` ${normAddr(text)} `;
+  return [b.name, ...b.spellings].some((s) => {
+    const n = normAddr(s);
+    return n.length >= 3 && words.includes(` ${n} `);
+  });
+}
+
+/** No usable model: book only an exact match, otherwise hold. */
+function withoutModel(inp: AdjudicationInput, why: string): Adjudication {
+  const exact = [inp.candidates[0]?.building, inp.remembered?.building].find((b) => exactMatch(inp.text, b));
+  if (exact) {
+    return { decision: "match", place_id: exact.place_id, confidence: 0.5,
+             reason: `${why}, and the client's postcode and venue name match ${exact.name} exactly`, how: "model-unavailable" };
+  }
+  return { decision: "undecided", place_id: null, confidence: 0,
+           reason: `${why}, and no candidate matched name and postcode exactly`, how: "model-unavailable" };
 }

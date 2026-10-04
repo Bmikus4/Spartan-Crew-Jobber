@@ -15,8 +15,9 @@
 //   - a model that overrules the deterministic matcher is asked once more with the
 //     disagreement stated. Changing its mind under mild pressure means neither
 //     answer is safe, and that is a decline rather than a coin toss.
-//   - a broken, missing or out-of-credit model never costs the booking: the
-//     deterministic search result stands and the ticket says so.
+//   - a broken, missing or out-of-credit model never picks the building by code
+//     (SP-06): only an exact postcode-and-name match books; anything else is
+//     "undecided", which the compiler holds for the hourly sweep to ask again.
 //
 // Every test here uses a fake judge. No network, no spend, and the logic is what
 // needs pinning — a live call proves the wire, not the reasoning.
@@ -71,7 +72,7 @@ async function main() {
     const j = fake([{ decision: "match", place_id: 4242, confidence: 0.99, reason: "a venue I know about" }]);
     const r = await adjudicateVenue({ text: "O2 arena", remembered: { place_id: 2, source: "fuzzy" }, candidates: hitsFor("O2 arena") }, j);
     ok(r.place_id !== 4242, "the invented id is not used", String(r.place_id));
-    ok(r.place_id === 7, "the deterministic answer stands instead", String(r.place_id));
+    ok(r.decision === "undecided" && r.place_id === null, "and the search's top hit is not booked in its place", `${r.decision} ${r.place_id}`);
     ok(r.how === "model-unavailable", "and the ticket says the adjudicator was unusable", r.how);
   }
 
@@ -116,15 +117,23 @@ async function main() {
     ok(/Albert Halls/.test(r.reason), "and the reason reaches the ticket", r.reason);
   }
 
-  console.log("\n[5] no model, or a broken one, never costs the booking");
+  console.log("\n[5] no model, or a broken one: only an exact match books, the rest is undecided");
   {
     const none = await adjudicateVenue({ text: "O2 arena", remembered: { place_id: 2, source: "fuzzy" }, candidates: hitsFor("O2 arena") }, null);
-    ok(none.place_id === 7, "with no judge the SEARCH wins, not the remembered alias", String(none.place_id));
+    ok(none.decision === "undecided" && none.place_id === null, "with no judge, neither the search nor the alias is booked", `${none.decision} ${none.place_id}`);
     ok(none.how === "model-unavailable", "and it is said out loud", none.how);
 
     const thrower: VenueJudge = { async adjudicate() { throw new Error("402 out of credit"); } };
     const broke = await adjudicateVenue({ text: "O2 arena", remembered: null, candidates: hitsFor("O2 arena") }, thrower);
-    ok(broke.place_id === 7, "a judge that throws falls back to the search", String(broke.place_id));
+    ok(broke.decision === "undecided", "a judge that throws does not fall back to the search", `${broke.decision} ${broke.place_id}`);
+
+    // The 10-01 shape: the client's name matches one building, the postcode another.
+    const crossed = await adjudicateVenue({ text: "Royal Albert Hall, M2 5QR", remembered: null, candidates: hitsFor("Royal Albert Hall, M2 5QR") }, thrower);
+    ok(crossed.decision === "undecided", "a name from one building and a postcode from another is not exact", `${crossed.decision} ${crossed.place_id}`);
+
+    const exact = await adjudicateVenue({ text: "The O2, Peninsula Square, London SE10 0DX", remembered: null, candidates: hitsFor("The O2, Peninsula Square, London SE10 0DX") }, thrower);
+    ok(exact.decision === "match" && exact.place_id === 7, "postcode and name both match: it books", `${exact.decision} ${exact.place_id}`);
+    ok(/exactly/.test(exact.reason), "and the reason says why", exact.reason);
 
     const nothing = await adjudicateVenue({ text: "nowhere at all", remembered: null, candidates: [] }, null);
     ok(nothing.decision === "none" && nothing.how === "no-candidates", "and nothing in, nothing out", nothing.how);

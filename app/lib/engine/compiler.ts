@@ -618,7 +618,7 @@ export async function resolveVenueV3(
   places: PlaceCandidate[],
   remembered: number | null,
   deps?: { venueJudge?: VenueJudge | null }
-): Promise<{ id?: number; provision?: DesiredOrder["provision_place"]; note?: string } | null> {
+): Promise<{ id?: number; provision?: DesiredOrder["provision_place"]; note?: string; judgeUnavailable?: boolean } | null> {
   const index = venueIndex(places);
   /**
    * A wording Spartan has ruled on is rewritten to the venue's real name BEFORE the
@@ -654,6 +654,14 @@ export async function resolveVenueV3(
     candidates: hits,
   }, deps?.venueJudge ?? null);
 
+  // Not "none": "none" creates a venue from the client's words, and nobody decided that here.
+  // The note keeps the "searched N venues, <how>" shape the SP-06 verification counts.
+  if (verdict.decision === "undecided") {
+    return {
+      judgeUnavailable: true,
+      note: `venue "${locationText}" was not decided — searched ${searched} venues, ${verdict.how}: ${verdict.reason}; held and tagged, nothing booked; the hourly sweep asks again`,
+    };
+  }
   if (verdict.decision === "none" || !verdict.place_id) {
     return unresolvedVenue(places, locationText, unsettled(locationText, `was not settled against ${searched} venues (${verdict.how}: ${verdict.reason})`), false);
   }
@@ -685,7 +693,7 @@ export async function resolvePlace(
   onsinch: OnsinchClient,
   aliases?: CompileDeps["aliases"],
   deps?: { venueJudge?: VenueJudge | null }
-): Promise<{ id?: number; provision?: DesiredOrder["provision_place"]; note?: string; unreadable?: boolean }> {
+): Promise<{ id?: number; provision?: DesiredOrder["provision_place"]; note?: string; unreadable?: boolean; judgeUnavailable?: boolean }> {
   /**
    * A CLIENT WHO MOVES THE VENUE USED TO BE IGNORED, SILENTLY.
    *
@@ -903,6 +911,8 @@ export async function resolveBlockVenues(
   provision?: DesiredOrder["provision_place"];
   notes: string[];
   review: boolean;
+  /** A block's venue could not be decided: the whole thread holds, as for the job's own venue. */
+  held?: "venue-judge" | "venue-list";
 }> {
   const wordings = [
     ...new Set(
@@ -917,6 +927,17 @@ export async function resolveBlockVenues(
   const resolved = new Map<string, Awaited<ReturnType<typeof resolvePlace>>>();
   for (const w of wordings) {
     resolved.set(w, await resolvePlace({ requests: [], location_text: w } as ConversationFacts, undefined, onsinch, aliases, deps));
+  }
+
+  // An undecided or unreadable block venue has neither an id nor a provision, and the branches
+  // below would book it as "created on write" with nothing to create.
+  const undecided = [...resolved.values()].filter((g) => g.judgeUnavailable || g.unreadable);
+  if (undecided.length) {
+    return {
+      facts, provision: job.provision, review: false,
+      notes: undecided.map((g) => g.note ?? "a block's venue could not be decided"),
+      held: undecided.some((g) => g.unreadable) ? "venue-list" : "venue-judge",
+    };
   }
 
   // The order's single provision slot, and who holds it. When the JOB's own venue
@@ -1268,6 +1289,7 @@ export async function compile(
     provisionPlace = pl.provision;
     user_id = us.id ?? user_id;
     if (pl.unreadable) { blocked = true; needs_human = true; retryPending = "venue-list"; }
+    if (pl.judgeUnavailable) { blocked = true; needs_human = true; retryPending = "venue-judge"; }
     if (pl.note) notes.push(pl.note);
     if (us.note) notes.push(us.note);
 
@@ -1357,6 +1379,7 @@ export async function compile(
       // splits the second venue off. Withholding the whole booking over one block is
       // the failure Ben ruled out on 2026-08-09.
       if (blocks.review) review_flag = true;
+      if (blocks.held) { blocked = true; needs_human = true; retryPending = retryPending ?? blocks.held; }
     }
 
     // Order dedup vs OnSinch — never create a second job for an existing one, and
@@ -1957,6 +1980,9 @@ export async function compile(
     classification,
     cancellation,
     retry_pending: retryPending,
+    // Consecutive held passes. retryHeld stops at MAX_ATTEMPTS, so a judge that keeps failing
+    // costs at most that many model calls per thread; the hold and its label stay.
+    retry_attempts: retryPending ? (prior?.retry_pending ? (prior.retry_attempts ?? 1) + 1 : 1) : undefined,
     facts,
     company_id,
     user_id,

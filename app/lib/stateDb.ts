@@ -6,6 +6,7 @@
 import { neon, type NeonQueryFunction } from "@neondatabase/serverless";
 import type { StateStore } from "./engine/store";
 import type { ConversationState } from "./engine/types";
+import { MAX_ATTEMPTS } from "./engine/retryHeld";
 
 let _sql: NeonQueryFunction<false, false> | null = null;
 let _ready = false;
@@ -106,6 +107,7 @@ export class NeonStateStore implements StateStore {
     const rows = (await sql`
       SELECT state FROM conversation_state
       WHERE state->>'retry_pending' IS NOT NULL AND updated_at > now() - interval '3 days'
+        AND COALESCE((state->>'retry_attempts')::int, 0) < ${MAX_ATTEMPTS}
       ORDER BY updated_at DESC
       LIMIT ${limit}`) as { state: ConversationState }[];
     return rows.map((r) => r.state);

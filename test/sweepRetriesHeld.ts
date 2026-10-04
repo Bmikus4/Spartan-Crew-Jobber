@@ -60,7 +60,7 @@ function rig() {
   const stored = new Map([["t-v", [book]]]);
   let runs = 0, probes = 0;
   const io: RetryIO = {
-    venueListReadable: async () => { probes++; try { await onsinch.allPlaces(); return true; } catch { return false; } },
+    listsReadable: async () => { probes++; try { await onsinch.allPlaces(); return true; } catch { return false; } },
     run: async (id) => { runs++; const m = stored.get(id); return m ? handleThread({ thread_id: id, messages: m }, deps) : null; },
   };
   return {

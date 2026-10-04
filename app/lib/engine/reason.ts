@@ -553,7 +553,9 @@ export function createVenueJudge(cfg: { apiKey: string; model?: string; baseUrl?
     // Shorter than the reasoner's 25s: this call sits inside the same n8n invocation as
     // everything else and it is the LAST thing on the critical path. A venue the
     // matcher already has a good answer for is not worth a timeout for.
-    timeoutMs: Number(process.env.VENUE_TIMEOUT_MS || 15_000),
+    // 30 s: 15 s timed out in production (8 model-unavailable bookings to 10-01), and the routes
+    // now have 300 s. A code default, because an env var can silently go missing.
+    timeoutMs: Number(process.env.VENUE_TIMEOUT_MS || 30_000),
     // NOT 512: the default judge is a reasoning model and spends the budget thinking —
     // 4 of 14 live calls on 2026-09-30 ended `finish_reason: length` with no tool call,
     // and the fallback put order 16330 at the wrong venue on the same street.
