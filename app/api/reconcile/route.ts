@@ -43,6 +43,8 @@ import { rebuildThread } from "../../lib/threadMessagesDb";
 import { coerceThread } from "../../lib/engine/intake";
 import { handleThread } from "../../lib/engine/pipeline";
 import { upsertTicketFromState } from "../../lib/ticketsDb";
+
+const NEEDS_A_PERSON = new Set(["lost", "unapplied", "unactionable", "unreconciled"]);
 import { reportError } from "../../lib/errorReport";
 
 // A re-run is one model call plus an OnSinch create; none starts after this many ms.
@@ -94,6 +96,16 @@ async function run(request: Request, dry: boolean): Promise<Response> {
   const { swept, outcomes } = await sweepAll(states, sandboxed as typeof deps, {
     todayISO: new Date().toISOString(),
   });
+
+  // One ticket upsert per outcome that needs a person (SP-09): before this only held
+  // re-runs reached the tickets table, so the dashboard never saw a lost order.
+  if (!dry) {
+    const byId = new Map(states.map((s) => [s.thread_id, s]));
+    for (const o of outcomes) {
+      const s = NEEDS_A_PERSON.has(o.action) ? byId.get(o.thread_id) : undefined;
+      if (s) await upsertTicketFromState(s);
+    }
+  }
 
   // Stamped only on a real run. A dry run must leave no trace, and stamping one would
   // push every thread it looked at to the back of the queue without reconciling any of

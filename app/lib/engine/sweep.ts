@@ -31,7 +31,7 @@
 // that fails is treated as "nothing is known" rather than as evidence.
 // ============================================================================
 import type { ConversationState, DesiredOrder, DesiredSlotTeam } from "./types";
-import { logAction, flagSupervisedIfNeeded, flagManualIfNeeded, type PipelineDeps } from "./pipeline";
+import { logAction, flagSupervisedIfNeeded, flagManualIfNeeded, flagBuiltIfNeeded, type PipelineDeps } from "./pipeline";
 import { readLiveShape, readNestedShape, compareShapes, driftAgainst, driftKey, describeDrift, staffChangeSince, type LiveShape } from "./reconcile";
 
 /**
@@ -128,6 +128,19 @@ import { matchExistingOrder, rateOrdersForLink, rNumbersIn, type OrderRec } from
 import { assembleLinkQuestion, decideLink } from "./linkJudge";
 
 const ENGINE_WRITES = new Set(["create", "amend", "patch", "replace"]);
+
+/** Raise a person-needed outcome (types.ts `attention`), keeping needs_human as it was first. */
+function raise(s: ConversationState, kind: NonNullable<ConversationState["attention"]>["kind"], order_id: number, at: number): void {
+  s.attention = { kind, order_id, at, was_needs_human: s.attention ? s.attention.was_needs_human : s.needs_human === true };
+}
+
+/** The order is fine again: drop what the sweep raised and give needs_human back. True when there was something. */
+function settle(s: ConversationState): boolean {
+  if (!s.attention) return false;
+  s.needs_human = s.attention.was_needs_human;
+  s.attention = undefined;
+  return true;
+}
 
 /**
  * Why this order is not the engine's to correct, or null when it is.
@@ -394,7 +407,9 @@ export async function reconcileThread(
           (found.order_number ? ` (R${found.order_number})` : "") +
           `, matched on ${found.by}`,
       ];
+      const wasRaised = settle(state);
       await store.put(state);
+      if (wasRaised) await flagManualIfNeeded(state, deps);
       return { thread_id, order_id: found.order_id, action: "rebound", detail: `from #${order_id} by ${found.by}` };
     }
 
@@ -404,6 +419,7 @@ export async function reconcileThread(
      * is left for flagBuiltIfNeeded to clear on the next pass, which is what takes the
      * "Order Built" tag off a thread with no order.
      */
+    raise(state, "lost", order_id, now());
     state.onsinch_order_id = undefined;
     state.onsinch_order_number = undefined;
     state.onsinch_job_id = undefined;
@@ -416,6 +432,8 @@ export async function reconcileThread(
     state.notes = [...state.notes, `order #${order_id} has been deleted in OnSinch and nothing has replaced it`];
     await store.put(state);
     // Ops work from the labels: a note alone left a deleted booking looking booked in Gmail.
+    // Order Built comes off explicitly first; nothing else ever cleared it (SP-08).
+    await flagBuiltIfNeeded(state, deps);
     await flagManualIfNeeded(state, deps);
     return { thread_id, order_id, action: "lost" };
   }
@@ -427,16 +445,23 @@ export async function reconcileThread(
       state.reconcile = undefined;
       await store.put(state);
     }
+    const wasRaised = !!state.attention;
     // The attendance read sees only staffed blocks; the nested read sees the rest.
     const unapplied = nested ? unappliedDifference(target.slot_teams ?? [], nested, await apiUserId(deps)) : null;
     if (unapplied) {
       const note = `OnSinch does not hold what the client asked for on order #${order_id} and nobody has changed it by hand (${unapplied}) — apply it in OnSinch`;
+      raise(state, "unapplied", order_id, now());
       state.needs_human = true;
       state.review_only = false;
       if (state.notes[state.notes.length - 1] !== note) state.notes = [...state.notes, note];
       await store.put(state);
       await flagManualIfNeeded(state, deps);
       return { thread_id, order_id, action: "unapplied", detail: unapplied };
+    }
+    if (wasRaised) {
+      settle(state);
+      await store.put(state);
+      await flagManualIfNeeded(state, deps);
     }
     return { thread_id, order_id, action: "holds" };
   }
@@ -455,7 +480,9 @@ export async function reconcileThread(
     state.reconcile = undefined;
     const note = `order #${order_id} differs from the email but ${owner}, so the sweep leaves it as it is (${describeDrift(drift)})`;
     if (!state.notes.includes(note)) state.notes = [...state.notes, note];
+    const wasRaised = settle(state);
     await store.put(state);
+    if (wasRaised) await flagManualIfNeeded(state, deps);
     return { thread_id, order_id, action: "staff-changed", detail: owner };
   }
 
@@ -481,6 +508,7 @@ export async function reconcileThread(
    */
   const lever = drift.some((d) => d.where === "order") || !!state.last_ordered_teams?.length;
   if (!lever) {
+    raise(state, "unactionable", order_id, now());
     state.needs_human = true;
     state.review_only = false;
     state.notes = [
@@ -496,10 +524,12 @@ export async function reconcileThread(
       error: "no block correspondence — a derived window cannot be written",
     });
     await store.put(state);
+    await flagManualIfNeeded(state, deps);
     return { thread_id, order_id, action: "unactionable", detail: describeDrift(drift) };
   }
 
   if (attempts > SWEEP_RECONCILE_CEILING) {
+    raise(state, "unreconciled", order_id, now());
     state.needs_human = true;
     state.review_only = false;
     state.notes = [
@@ -514,6 +544,7 @@ export async function reconcileThread(
       error: `unreconciled after ${SWEEP_RECONCILE_CEILING} attempts`,
     });
     await store.put(state);
+    await flagManualIfNeeded(state, deps);
     return { thread_id, order_id, action: "unreconciled", detail: describeDrift(drift) };
   }
 
@@ -564,6 +595,7 @@ export async function reconcileThread(
    * nothing is going to be written to.
    */
   if (applied === 0) {
+    raise(state, "unactionable", order_id, now());
     state.needs_human = true;
     state.review_only = false;
     state.notes = [
@@ -579,6 +611,7 @@ export async function reconcileThread(
       error: "amendment declined every block — nothing was sent",
     });
     await store.put(state);
+    await flagManualIfNeeded(state, deps);
     return { thread_id, order_id, action: "unactionable", detail: describeDrift(drift) };
   }
 

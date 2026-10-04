@@ -649,6 +649,13 @@ export async function handleThread(
       console.error("[order-records] adopt skipped", err);
     }
   }
+  // A write that landed this pass answers whatever the sweep raised. needs_human is this
+  // pass's own (compile set it), so it is not restored from before the sweep.
+  if (next.attention && (next.order_action_log ?? []).slice((prior?.order_action_log ?? []).length)
+    .some((a) => a.ok && WROTE_TO_ONSINCH.has(a.kind))) {
+    next.attention = undefined;
+    await deps.store.put(next);
+  }
   await flagManualIfNeeded(next, deps);
   await flagBuiltIfNeeded(next, deps);
   await flagUpdatedIfNeeded(next, deps);
@@ -725,6 +732,10 @@ export function replySendArmed(settings: Partial<Settings> | undefined): boolean
 }
 
 export function cannotBeBooked(s: ConversationState): boolean {
+  // Held for a retry, or raised by the sweep: a person is needed whatever the email was
+  // classified as. Without this a confirmation-only thread whose order was deleted kept
+  // no label at all (SP-08), because "not a job" returned false below.
+  if (s.retry_pending || s.attention) return true;
   // An update the engine will not make is a Gmail tag (Ben, 2026-09-29; ops rarely open
   // the dashboard). It never cancels a booking, so a client cancelling one needs a person
   // — whatever the email was classified as: "we no longer need the crew" reads to the

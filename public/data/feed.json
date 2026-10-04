@@ -1772,5 +1772,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0086",
+  "ts": "2026-10-04T17:54:00+00:00",
+  "kind": "measurement",
+  "headline": "SP-08 + SP-09: sweep raises attention on lost/unapplied/unactionable/unreconciled; each posts one Needs label and one ticket upsert; Order Built cleared on lost; holds/rebound/staff-changed settle it",
+  "subject": "A deleted or unfixable order labels its thread whatever the email was classified as",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 157,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]

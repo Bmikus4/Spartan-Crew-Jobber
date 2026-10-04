@@ -211,6 +211,15 @@ export interface ConversationState {
   retry_pending?: string;
   /** Consecutive compiles that ended held (retry_pending set); cleared with it. */
   retry_attempts?: number;
+  /**
+   * The sweep found something only a person can settle on this thread's order: it is gone
+   * ("lost"), OnSinch does not hold what the client asked and nobody changed it by hand
+   * ("unapplied"), the engine has no lever on the difference ("unactionable"), or it would
+   * not take the change ("unreconciled"). It makes cannotBeBooked() true whatever the
+   * classification, so a confirmation-only thread whose order vanished is labelled too.
+   * `was_needs_human` is needs_human before the sweep raised it, restored when it clears.
+   */
+  attention?: { kind: "lost" | "unapplied" | "unactionable" | "unreconciled"; order_id: number; at: number; was_needs_human: boolean };
   facts: ConversationFacts;
 
   // resolved entities — cached once known so we never re-resolve/guess
