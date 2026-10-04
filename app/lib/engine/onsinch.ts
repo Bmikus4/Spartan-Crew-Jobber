@@ -187,6 +187,13 @@ function okList(r: { status: number; data: any }, path: string): any[] {
 export class OnsinchClient {
   constructor(private t: Transport) {}
 
+  /** The same client refusing every non-GET at the transport, so no method can write (dry runs). */
+  readOnly(): OnsinchClient {
+    const t = this.t;
+    return new OnsinchClient((method, path, body) =>
+      method === "GET" ? t(method, path, body) : Promise.reject(new Error(`read-only: refused ${method} ${path}`)));
+  }
+
   /** Token health check — GET /users/profile. */
   async profile() {
     return this.t("GET", "/users/profile");

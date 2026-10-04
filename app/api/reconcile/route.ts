@@ -43,6 +43,7 @@ import { rebuildThread } from "../../lib/threadMessagesDb";
 import { coerceThread } from "../../lib/engine/intake";
 import { handleThread } from "../../lib/engine/pipeline";
 import { upsertTicketFromState } from "../../lib/ticketsDb";
+import { drySandbox } from "../../lib/engine/sweepSandbox";
 
 const NEEDS_A_PERSON = new Set(["lost", "unapplied", "unactionable", "unreconciled"]);
 import { reportError } from "../../lib/errorReport";
@@ -68,25 +69,9 @@ async function run(request: Request, dry: boolean): Promise<Response> {
   const states = await store.forSweep(limit);
   const deps = await buildDeps();
 
-  /**
-   * A dry run must not be able to write, and "we promise not to call it" is not a
-   * mechanism. The executor's write methods are replaced outright, so a code path that
-   * reaches one throws instead of quietly altering a live order — and the store is
-   * swapped for one that drops its writes, since `reconcileThread` persists as it goes.
-   */
-  const sandboxed = dry
-    ? {
-        ...deps,
-        store: { get: store.get.bind(store), put: async () => {}, all: store.all.bind(store) },
-        executor: {
-          ...deps.executor,
-          amendOrderInPlace: undefined,
-          patchOrder: async () => {
-            throw new Error("dry run");
-          },
-        },
-      }
-    : deps;
+  // A dry run must not be able to write, and "we promise not to call it" is not a
+  // mechanism: drySandbox builds its deps from an allowlist of reads (SP-13).
+  const sandboxed = dry ? drySandbox(deps) : deps;
 
   // No `limit` here: the batch was already bounded by the query that chose it, and
   // sweepAll's limit counts only threads that PAID for an OnSinch read. Applying both

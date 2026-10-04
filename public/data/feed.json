@@ -1884,5 +1884,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0094",
+  "ts": "2026-10-04T19:06:52+00:00",
+  "kind": "measurement",
+  "headline": "SP-13: drySandbox passes only now/readThread, a read-only OnSinch and a no-op store; flags, metrics and the link judge are absent",
+  "subject": "A dry reconcile cannot write: its deps are built from an allowlist of reads",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 162,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]
