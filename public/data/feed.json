@@ -2122,5 +2122,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0111",
+  "ts": "2026-10-04T21:18:32+00:00",
+  "kind": "measurement",
+  "headline": "SP-52: scripts/env-names.mjs writes names only (58); test/envExample.ts fails on an unlisted name",
+  "subject": ".env.example lists every variable the app reads, checked by a test",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 172,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]
