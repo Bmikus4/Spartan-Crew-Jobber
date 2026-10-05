@@ -2540,5 +2540,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0126",
+  "ts": "2026-10-05T02:33:59+00:00",
+  "kind": "measurement",
+  "headline": "TV: +Nd removed from the weekday label",
+  "subject": "The weekday above a TV card's date no longer carries a +Nd count of further days",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 178,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]

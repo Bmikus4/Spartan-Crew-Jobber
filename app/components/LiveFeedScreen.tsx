@@ -281,7 +281,6 @@ function Row({ card, now, s, phase, onTick }: { card: FeedCard; now: number; s: 
   const day = nextDay(card, now) ?? card.dates[0] ?? null;
   const t = day ? Date.parse(`${day}T12:00:00Z`) : null;
   const sameYear = t != null && fmt(t, { year: "numeric" }) === fmt(now, { year: "numeric" });
-  const more = card.dates.length > 1 ? card.dates.length - 1 : 0;
   const evidence = it ? evidenceLine(it) : null;
   const numbers = numbersOf(card);
   const detail = [card.contact, card.crew ? `${card.crew} crew` : null, card.venue].filter(Boolean).join(" · ");
@@ -328,7 +327,7 @@ function Row({ card, now, s, phase, onTick }: { card: FeedCard; now: number; s: 
         <CalendarIcon size={44 * s} color={urgent(card, now) ? AMBER : "var(--text-muted)"} />
         <div style={{ minWidth: 0 }}>
           <div className="eyebrow" style={{ fontSize: 14 * s, color: urgent(card, now) ? AMBER : "var(--text-muted)" }}>
-            {!it ? "Waiting since" : t ? fmt(t, { weekday: "long" }) + (more ? ` +${more}d` : "") : "Date"}
+            {!it ? "Waiting since" : t ? fmt(t, { weekday: "long" }) : "Date"}
           </div>
           <div className="tnum" style={{ fontSize: 28 * s, fontWeight: 700, color: "var(--text-primary)", whiteSpace: "nowrap", marginTop: 2 * s }}>
             {!it ? fmt(lead.at, { day: "numeric", month: "short" }) : t ? fmt(t, sameYear ? { day: "numeric", month: "short" } : { day: "numeric", month: "short", year: "numeric" }) : "TBC"}
