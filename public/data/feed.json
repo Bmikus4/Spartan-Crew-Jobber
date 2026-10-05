@@ -2596,5 +2596,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0130",
+  "ts": "2026-10-05T21:01:09+00:00",
+  "kind": "measurement",
+  "headline": "Rebuild no longer drops Job.supervisor_id or Job.admin_note silently (OnSinch named admin_note as the job note, 2026-10-05)",
+  "subject": "A rebuild carries the job's supervisor and refuses to delete an order whose job holds a hand-written admin note",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 181,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]

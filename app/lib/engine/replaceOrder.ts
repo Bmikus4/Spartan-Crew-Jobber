@@ -248,8 +248,8 @@ export async function replaceProvisionalOrder(
  * Fields OnSinch accepts on an order that the engine never sets. Read off the live
  * order and put back on the rebuild, so a hand-raised draft comes back whole.
  *
- * `supervisor_id` and the job's `admin_note` live on the Job rather than the order and
- * are set through it; the rest are top-level.
+ * Top-level only. The job's own fields live on `Job` (an array under with=Job) and are
+ * handled in carryForward: see JOB FIELDS there.
  */
 const CARRIED_FIELDS = [
   "agency_invoice_address_id",
@@ -264,8 +264,11 @@ const CARRIED_FIELDS = [
  * are the one that matters: DELETE /orders cascades, and a PDF somebody uploaded is
  * not recreatable from anything the engine holds.
  */
+const liveJobs = (l: Record<string, unknown>) => ([] as Array<Record<string, unknown>>).concat((l.Job as never) ?? []);
+
 const CANNOT_CARRY: Array<[string, (live: Record<string, unknown>) => boolean]> = [
   ["an attachment", (l) => Array.isArray(l.Attachment) && (l.Attachment as unknown[]).length > 0],
+  ["a job admin note", (l) => liveJobs(l).some((j) => typeof j?.admin_note === "string" && j.admin_note.trim() !== "")],
 ];
 
 export function carryForward(
@@ -300,6 +303,17 @@ export function carryForward(
     add[f] = v;
     carried.push(f);
   }
+  /**
+   * JOB FIELDS. A rebuild used to drop both of these without a word, though a comment here
+   * said they were "set through" the job. `supervisor_id` is carried because the POST
+   * already sends it (format.ts), and the live one wins for the reason order_manager_id
+   * does: a person who put their name on the job outranks the engine's default.
+   * `admin_note` is the job's note field (OnSinch support, 2026-10-05, for PATCH /jobs), but
+   * nothing shows POST /orders accepts it inside Job, and a POST that refused it would run
+   * AFTER the delete. So a hand-written note stops the rebuild instead (CANNOT_CARRY).
+   */
+  const sup = Number(liveJobs(live)[0]?.supervisor_id);
+  if (sup > 0 && Number(mine.supervisor_id) !== sup) { add.supervisor_id = sup; carried.push("supervisor_id"); }
   const out = { ...desired, ...add } as DesiredOrder;
   const unsupported = CANNOT_CARRY.filter(([, has]) => has(live)).map(([name]) => name);
   return { desired: out, carried, unsupported };
