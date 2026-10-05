@@ -2526,5 +2526,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0125",
+  "ts": "2026-10-05T01:36:43+00:00",
+  "kind": "measurement",
+  "headline": "TV: 'Checked by' becomes 'Confirmed by'",
+  "subject": "A card a person confirmed reads 'Confirmed by', matching its button",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 178,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]
