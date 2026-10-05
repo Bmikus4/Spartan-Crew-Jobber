@@ -261,6 +261,17 @@ export function project(
   for (const m of [...marks].sort((a, b) => a.at - b.at)) if (GREEN_MARKS.has(m.mark) && !byKey.has(m.item_key)) byKey.set(m.item_key, m);
   // A tick outranks automatic evidence for what the card SAYS, not for when it went green.
   const ticked = new Map(marks.filter((m) => m.mark === "checked").map((m) => [m.item_key, m]));
+  /**
+   * The numbers of an order the verifier found for a thread the engine never bound, for the
+   * screen only: order_id stays null, because binding is the engine's and the TV never does it.
+   */
+  const foundNo = new Map<string, { r: string | null; j: string | null }>();
+  for (const m of marks) {
+    const e = m.evidence as { r_number?: unknown; j_number?: unknown } | null;
+    if ((m.mark === "matched" || m.mark === "order-found") && str(e?.r_number)) {
+      foundNo.set(m.item_key, { r: `R${String(e!.r_number).replace(/^R/i, "")}`, j: str(e?.j_number) });
+    }
+  }
   const green = (it: Omit<FeedItem, "green">): FeedItem["green"] => {
     const first = byKey.get(it.item_key);
     if (it.kind === "created-check" || it.kind === "updated-check") {
@@ -323,8 +334,8 @@ export function project(
       awaiting_reply_since: awaiting(s.thread_id),
       crew: crewOf(s),
       venue: str(s.facts?.location_text),
-      r_number: str(s.onsinch_order_number) ? `R${String(s.onsinch_order_number).replace(/^R/i, "")}` : null,
-      j_number: Number(s.onsinch_job_id) > 0 ? `J${s.onsinch_job_id}` : null,
+      r_number: str(s.onsinch_order_number) ? `R${String(s.onsinch_order_number).replace(/^R/i, "")}` : foundNo.get(it.item_key)?.r ?? null,
+      j_number: Number(s.onsinch_job_id) > 0 ? `J${s.onsinch_job_id}` : order_id ? null : foundNo.get(it.item_key)?.j ?? null,
       subject: s.subject ?? "",
     });
     if (!g) wants.set(s.thread_id, wantOf(s));

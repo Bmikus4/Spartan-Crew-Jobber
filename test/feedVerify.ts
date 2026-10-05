@@ -235,8 +235,10 @@ void (async () => {
     let w = await run([unbound("move", "update"), unbound("po", "new-job")], { "61": blackout });
     const move = w.filter((m) => m.thread_id === "move");
     ok(move.some((m) => m.mark === "matched" && ev(m) === "R10954, found by venue"), "three orders that day: the one at the thread's venue", move.map((m) => `${m.mark}:${ev(m)}`).join(" | "));
-    ok(ev(move.find((m) => m.mark === "staff-edit")) === "R10954: order, job, a block edited after the client's email", "an update goes green only on a person's edit after the email, naming the order");
+    ok(ev(move.find((m) => m.mark === "staff-edit")) === "order, job, a block edited after the client's email", "an update goes green only on a person's edit after the email");
     ok(ev(w.find((m) => m.thread_id === "po" && m.mark === "order-found")) === "order R10954 is in OnSinch", "a needed order that already exists is found");
+    const shown = project([unbound("move", "update"), unbound("po", "new-job")], new Map([["move", sent], ["po", sent]]), w, null, NOW).cards;
+    ok(shown.every((c) => c.r_number === "R10954" && c.order_id === null), "the screen shows the found numbers; the binding stays the engine's", shown.map((c) => `${c.r_number}/${c.order_id}`).join(","));
 
     w = await run([unbound("vague", "new-job", { company_id: 62, place_id: null })], { "62": [order(1, "1", 24, "2026-10-16T09:00:00+00:00", "2026-10-16T17:00:00+00:00"), order(2, "2", 49, "2026-10-16T09:00:00+00:00", "2026-10-16T17:00:00+00:00")] });
     ok(w.length === 0, "two orders that day and nothing to tell them apart: refused, the card stays open", w.map((m) => m.mark).join(","));
@@ -266,7 +268,7 @@ void (async () => {
     w = await run([bound("spark", 13726, [[nov(8), nov(12)]]), bound("engine", 13800, [[nov(8), nov(12)]]), bound("extra", 13900, [[nov(8), nov(12)]]), bound("built", 14000, [[nov(9), nov(13)]])],
       { "0": [spark, byEngine, extra, built] });
     const green = (id: string) => ev(w.find((m) => m.thread_id === id && m.mark === "staff-edit"));
-    ok(green("spark") === "already holds every shift asked for", "every shift asked for is on a block a person made", String(green("spark")));
+    ok(green("spark") === "every shift asked for" && (w.find((m) => m.thread_id === "spark" && m.mark === "staff-edit")?.evidence as { held?: boolean }).held === true, "every shift asked for is on a block a person made", String(green("spark")));
     ok(green("engine") === undefined, "blocks the engine wrote are not evidence");
     ok(green("extra") === undefined, "a block on a day the thread does not ask for keeps it open (Lux R11359)");
     ok(green("built") === "order, a block made by staff after the client's email", "an order a person built after the email, though the engine edited it last", String(green("built")));

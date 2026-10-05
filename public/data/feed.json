@@ -2498,5 +2498,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0123",
+  "ts": "2026-10-05T01:15:12+00:00",
+  "kind": "measurement",
+  "headline": "TV: found orders show their numbers; RR10954 display bug fixed",
+  "subject": "A need matched to a hand-booked order shows that order's R/J numbers, and a found order no longer reads RR",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 178,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]

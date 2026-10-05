@@ -73,11 +73,12 @@ function personName(by: string | null): string {
 function evidenceLine(it: FeedItem): string | null {
   const g = it.green;
   if (!g) return null;
-  const e = (g.evidence ?? {}) as { text?: string; at?: string; r_number?: string | null };
+  const e = (g.evidence ?? {}) as { text?: string; at?: string; r_number?: string | null; held?: boolean };
   const when = hhmm(Date.parse(e.at ?? "") || g.at);
   if (g.mark === "checked") return `Checked by ${personName(g.by)} ${when}`;
+  if (e.held) return "Already in OnSinch: every shift asked for";
   if (g.mark === "staff-edit") return `Changed in OnSinch by staff: ${e.text ?? "edited"}, ${when}`;
-  if (g.mark === "order-found") return `Order found in OnSinch: ${e.r_number ? `R${e.r_number}` : e.text ?? "it exists"}, ${when}`;
+  if (g.mark === "order-found") return `Order found in OnSinch: ${e.r_number ? `R${String(e.r_number).replace(/^R/i, "")}` : e.text ?? "it exists"}, ${when}`;
   return `${e.text ?? "Done by the system"}, ${when}`;
 }
 

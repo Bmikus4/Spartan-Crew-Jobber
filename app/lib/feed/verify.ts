@@ -390,7 +390,7 @@ export async function verify(
       const made = who ? null : createdSince(n.raw, item.at, engine);
       if (who) found.set(card, [stampChange(who)]);
       else if (made) found.set(card, [made]);
-      else if (holdsAll(n.raw, wants.get(card.thread_id), engine)) found.set(card, [{ at: now, creator: 0, text: "already holds every shift asked for", model: "Order", ref: "" }]);
+      else if (holdsAll(n.raw, wants.get(card.thread_id), engine)) found.set(card, [{ at: 0, creator: 0, text: "every shift asked for", model: "Order", ref: "" }]);
       if (timelineOk) stampsRead.push(card);
     }
   }
@@ -399,11 +399,10 @@ export async function verify(
     const item = openOrderItem(card)!;
     const latest = ch.reduce((a, b) => (b.at > a.at ? b : a));
     const text = [...new Set(ch.map((c) => c.text))].slice(0, 3).join(", ");
-    // An order the card never showed is named, so the evidence says which job it was.
-    const named = card.order_id ? text : `${bound(card)!.r_number ?? "the order"}: ${text}`;
+    // A shift comparison has no moment a person acted, so it carries no time and says so.
     await deps.addMark({
       item_key: item.item_key, thread_id: card.thread_id, mark: "staff-edit", by: null,
-      evidence: { text: named, at: new Date(latest.at).toISOString(), creator: latest.creator || null },
+      evidence: latest.at ? { text, at: new Date(latest.at).toISOString(), creator: latest.creator || null } : { text, held: true },
     });
     wrote++;
   }
