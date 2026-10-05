@@ -221,21 +221,32 @@ function Tag({ s, color, children }: { s: number; color: string; children: React
   );
 }
 
-function Tick({ card, it, s, size, onTick }: { card: FeedCard; it: FeedItem; s: number; size: number; onTick: (c: FeedCard, it: FeedItem, checked: boolean) => void }) {
+/**
+ * The tick, as a big red CONFIRM (Ben, 2026-10-04): the one thing on a card a person is
+ * meant to press, so it is the loudest thing on it. Pressed, it goes green and still
+ * undoes; green from evidence, it says Done and does nothing.
+ */
+function Tick({ card, it, s, height, onTick }: { card: FeedCard; it: FeedItem; s: number; height: number; onTick: (c: FeedCard, it: FeedItem, checked: boolean) => void }) {
   const ticked = it.green?.mark === "checked";
   const autoGreen = !!it.green && !ticked;
+  const h = height * s;
+  const label = ticked ? "Confirmed" : it.green ? "Done" : "Confirm";
   return (
     <button
-      aria-label={ticked ? "Undo check" : it.green ? "Done" : "Mark checked"}
+      aria-label={ticked ? "Undo confirm" : label}
       onClick={() => { if (!autoGreen) onTick(card, it, !ticked); }}
       style={{
-        width: size * s, height: size * s, borderRadius: 10 * s, flexShrink: 0, padding: 0, display: "grid", placeItems: "center",
-        cursor: autoGreen ? "default" : "pointer", transition: "background-color 200ms, border-color 200ms",
-        background: it.green ? GREEN : "transparent", border: `${1.5 * s}px solid ${it.green ? GREEN : "var(--border-strong)"}`,
+        height: h, minWidth: h * 2.9, padding: `0 ${h * 0.34}px`, borderRadius: h * 0.22, flexShrink: 0,
+        display: "inline-flex", alignItems: "center", justifyContent: "center", gap: h * 0.16,
+        fontSize: h * 0.4, fontWeight: 800, letterSpacing: "0.01em", color: "#fff", whiteSpace: "nowrap",
+        background: it.green ? GREEN : RED, border: "none",
+        boxShadow: it.green ? "none" : `0 ${h * 0.06}px ${h * 0.24}px ${tint(RED, 40)}`,
+        cursor: autoGreen ? "default" : "pointer", transition: "background-color 200ms, box-shadow 200ms",
       }}>
       {it.green && (
-        <svg width={size * 0.5 * s} height={size * 0.5 * s} viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3.2" strokeLinecap="round" strokeLinejoin="round"><polyline points="4.5 12.5 10 18 19.5 6.5" /></svg>
+        <svg width={h * 0.42} height={h * 0.42} viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3.4" strokeLinecap="round" strokeLinejoin="round"><polyline points="4.5 12.5 10 18 19.5 6.5" /></svg>
       )}
+      {label}
     </button>
   );
 }
@@ -330,8 +341,8 @@ function Row({ card, now, s, phase, onTick }: { card: FeedCard; now: number; s: 
         {isOpen(card) && card.awaiting_reply_since != null && <ReplyClock ms={now - card.awaiting_reply_since} size={84 * s} />}
       </div>
 
-      <div style={{ width: 56 * s, display: "grid", placeItems: "center", flexShrink: 0 }}>
-        {it && <Tick card={card} it={it} s={s} size={52} onTick={onTick} />}
+      <div style={{ width: 240 * s, display: "grid", placeItems: "center", flexShrink: 0 }}>
+        {it && <Tick card={card} it={it} s={s} height={64} onTick={onTick} />}
       </div>
       </div>
     </div>
@@ -356,7 +367,7 @@ function Tile({ card, now, s, onTick }: { card: FeedCard; now: number; s: number
           {t ? fmt(t, { weekday: "short", day: "numeric", month: "short" }) : it ? "Date TBC" : `Waiting since ${fmt(lead.at, { day: "numeric", month: "short" })}`}
         </div>
       </div>
-      {it && <div style={{ display: "grid", placeItems: "center" }}><Tick card={card} it={it} s={s} size={34} onTick={onTick} /></div>}
+      {it && <div style={{ display: "grid", placeItems: "center" }}><Tick card={card} it={it} s={s} height={34} onTick={onTick} /></div>}
     </div>
   );
 }
@@ -677,7 +688,7 @@ export default function LiveFeedScreen({ isActive, tv = false }: { isActive: boo
 
       {undo && undo.until > now && (
         <div role="status" style={{ position: "absolute", left: "50%", bottom: 32 * s, transform: "translateX(-50%)", background: "var(--surface-2)", color: "var(--text-primary)", border: "1px solid var(--border-strong)", borderRadius: 12 * s, padding: `${12 * s}px ${16 * s}px ${12 * s}px ${20 * s}px`, fontSize: 18 * s, fontWeight: 600, display: "flex", gap: 16 * s, alignItems: "center", boxShadow: "0 12px 32px rgba(0,0,0,0.35)" }}>
-          Marked checked{undo.card.company ? `: ${undo.card.company}` : ""}
+          Confirmed{undo.card.company ? `: ${undo.card.company}` : ""}
           <button onClick={() => { const u = undo; setUndo(null); void tick(u.card, u.item, false); }} style={{ fontSize: 15 * s, fontWeight: 700, padding: `${6 * s}px ${14 * s}px`, borderRadius: 8 * s, border: "none", background: "var(--accent)", color: "var(--accent-contrast)", cursor: "pointer" }}>Undo</button>
         </div>
       )}
