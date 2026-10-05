@@ -47,14 +47,15 @@ console.log("\n[1] the four phrases, byte for byte");
   ok(by.get("d")?.items[0].status === "Order was updated, check to verify", "a patch reads updated, check");
 }
 
-console.log("\n[2] red and blue come from the order, not the classification");
+console.log("\n[2] red and blue come from the need: created is red, updated is blue");
 {
   const p = project([needsCreated("x", { classification: "update" }), needsUpdated("y"), created("z", NOW - H)], new Map(), [], null, NOW);
   const by = new Map(p.cards.map((c) => [c.thread_id, c]));
-  // Red because no order is bound; needs UPDATED because an update's booking exists (needsLabelFor, 2026-10-04).
-  ok(by.get("x")?.colour === "red" && by.get("x")?.items[0].kind === "needs-updated", "an 'update' with no order is red and needs updated");
+  // Needs UPDATED because an update's booking exists (needsLabelFor, 2026-10-04), so blue
+  // although no order is bound: the colour must agree with the label beside it.
+  ok(by.get("x")?.colour === "blue" && by.get("x")?.items[0].kind === "needs-updated", "an 'update' with no order is blue and needs updated");
   ok(by.get("y")?.colour === "blue", "a need on an order is blue");
-  ok(by.get("z")?.colour === "blue", "a created order is blue");
+  ok(by.get("z")?.colour === "red", "a created order is red, a new job");
   ok(by.get("x")?.r_number === null && by.get("y")?.r_number === "R11312" && by.get("y")?.j_number === "J13925", "R and J numbers only where an order exists");
   const held = project([st({ thread_id: "h", status: "proposed", pending_order: {} as never })], new Map(), [], null, NOW);
   ok(held.cards[0]?.items[0].kind === "needs-created", "a held write is a need with no special case");

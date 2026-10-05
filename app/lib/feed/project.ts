@@ -320,7 +320,9 @@ export function project(
     const { order_id, ...item } = it;
     cards.set(s.thread_id, {
       thread_id: s.thread_id,
-      colour: order_id ? "blue" : "red",
+      // The legend's colour is the NEED, not whether an order is bound (Ben, 2026-10-04): an
+      // update the engine never bound read "Order needs updated" in red, against the key.
+      colour: item.kind === "needs-created" || item.kind === "created-check" ? "red" : "blue",
       lane: g ? "done" : "need",
       items: [{ ...item, green: g }],
       green: !!g,

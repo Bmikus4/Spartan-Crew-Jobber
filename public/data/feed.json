@@ -2554,5 +2554,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0127",
+  "ts": "2026-10-05T02:39:31+00:00",
+  "kind": "measurement",
+  "headline": "TV colour follows the need: created red, updated blue",
+  "subject": "A TV card's red or blue follows its need, so 'Order needs updated' is never red",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 178,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]
