@@ -2568,5 +2568,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0128",
+  "ts": "2026-10-05T11:37:32+00:00",
+  "kind": "measurement",
+  "headline": "Spartan automation paused for the week of 2026-10-05: 9 n8n workflows off, engine routes 503",
+  "subject": "SPARTAN_PAUSED=1 stops the engine's intake, sweep and mail routes with a 503 while the app stays usable",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 179,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]
