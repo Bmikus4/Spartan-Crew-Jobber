@@ -9,7 +9,7 @@
 // Verification is the opposite: it is extra evidence, and the feed is right without it.
 // A verifier that throws is reported in `health.verify` and the feed is served anyway.
 // ============================================================================
-import { project, type FeedCard, type FeedMark, type ReplyNeed } from "./project";
+import { project, type FeedCard, type FeedMark, type FeedWant, type ReplyNeed } from "./project";
 import { intakeHealth } from "../intakeHealth";
 import type { ConversationState } from "../engine/types";
 
@@ -21,7 +21,7 @@ export interface FeedDeps {
   /** Null when the follow-up feature is switched off: the reply lane does not exist. */
   replies: (() => Promise<ReplyNeed[]>) | null;
   /** Runs at most once per window across every screen; returns how many marks it wrote. */
-  verify?: (cards: FeedCard[], now: number, marks: FeedMark[]) => Promise<{ ran: boolean; wrote: number; note: string }>;
+  verify?: (cards: FeedCard[], now: number, marks: FeedMark[], wants: Map<string, FeedWant>) => Promise<{ ran: boolean; wrote: number; note: string }>;
   verifyStatus?: () => Promise<{ last_verify_at: string | null; note: string | null }>;
 }
 
@@ -41,7 +41,7 @@ export async function serveFeed(deps: FeedDeps, now: number): Promise<{ status: 
   let verify: { ran: boolean; wrote: number; note: string } | null = null;
   if (deps.verify) {
     try {
-      verify = await deps.verify(p.cards, now, marks);
+      verify = await deps.verify(p.cards, now, marks, p.wants);
       if (verify.wrote > 0) p = project(states, inbound.byThread, await deps.marks(), replies, now, inbound.outByThread);
     } catch (err) {
       console.error("[feed] verify failed", err);

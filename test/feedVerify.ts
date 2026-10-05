@@ -5,6 +5,12 @@
 // oldest-first (newest on the LAST page), `common_change` carrying
 // data.diffChanges.{Model}.{field}: {old, new}; Order rows naming the order NUMBER, Job
 // rows the job id, Slot and SlotTeam rows only themselves.
+//
+// NEGATIVE CONTROLS for [10] (each applied to app/lib/feed/verify.ts, run, confirmed red, reverted, 2026-10-04):
+//   - holdsAll counting the engine's own blocks       : "blocks the engine wrote are not evidence"
+//   - holdsAll without the no-extra-day check         : "a block on a day the thread does not ask for"
+//   - no sender-name filter for a client with no company : "no company: the sender's surname"
+//   - the venue score removed                         : "three orders that day" and both that follow
 // Run: npx tsx test/feedVerify.ts
 // ============================================================================
 import { verify, changeOf, readOnly, __resetVerifyCache, type VerifyDeps } from "../app/lib/feed/verify";
@@ -49,6 +55,7 @@ function fakeOnsinch(pages: unknown[][], opts: { timelineDown?: boolean; orders?
     if (nest) return { status: 200, data: { data: opts.nested?.[Number(nest[1])] ? [opts.nested[Number(nest[1])]] : [] } };
     const co = /^\/orders\?company_id=(\d+)/.exec(path);
     if (co) return { status: 200, data: { data: opts.orders?.[co[1]] ?? [], pagination: { pageCount: 1 } } };
+    if (/^\/orders\?limit=100&page=1&with=Job$/.test(path)) return { status: 200, data: { data: opts.orders?.recent ?? [] } };
     return { status: 404, data: {} };
   };
   return { t, calls };
@@ -72,7 +79,7 @@ void (async () => {
   const inbound = new Map(states.map((s) => [s.thread_id, wrote]));
   const cards = project(states, inbound, [], null, NOW).cards;
   // Every item's history already read, so a case can isolate the timeline.
-  const historyRead: FeedMark[] = cards.map((c) => ({ item_key: c.items[0].item_key, thread_id: c.thread_id, mark: "history", by: null, evidence: null, at: NOW }));
+  const historyRead: FeedMark[] = cards.map((c) => ({ item_key: c.items[0].item_key, thread_id: c.thread_id, mark: "stamps", by: null, evidence: null, at: NOW }));
 
   console.log("\n[1] reading a row");
   {
@@ -138,7 +145,7 @@ void (async () => {
     const { d, marks, saved } = deps(on.t, 50);
     await verify(cards, NOW, d);
     ok(marks.length === 1 && marks[0].thread_id === "a", "only the order a person stamped after the client's email", marks.map((m) => m.thread_id).join(","));
-    ok(!marks.some((m) => m.mark === "history"), "and no history is recorded as read while the timeline is down");
+    ok(!marks.some((m) => m.mark === "stamps"), "and no history is recorded as read while the timeline is down");
     ok(saved[0]?.id === null && /timeline unreadable/.test(saved[0].note), "the cursor is left where it was, and the note says why");
   }
 
@@ -164,7 +171,7 @@ void (async () => {
     const edit = marks.filter((m) => m.mark === "staff-edit");
     ok(edit.length === 1 && edit[0].thread_id === "a", "order a: a person edited it after the client's email", edit.map((m) => m.thread_id).join(","));
     ok((edit[0]?.evidence as { text: string } | undefined)?.text === "order, a block edited after the client's email", "and the evidence says what", JSON.stringify(edit[0]?.evidence));
-    ok(marks.filter((m) => m.mark === "history").length === 3, "all three are recorded as read");
+    ok(marks.filter((m) => m.mark === "stamps").length === 3, "all three are recorded as read");
     __resetVerifyCache();
     const again = fakeOnsinch([[]], { nested: {} });
     const second = deps(again.t, 99);
@@ -187,6 +194,82 @@ void (async () => {
     for (const m of ["POST", "PATCH", "PUT", "DELETE"]) await t(m, "/orders", [{}]).catch(() => refused++);
     await t("GET", "/orders");
     ok(refused === 4 && seen.length === 1 && seen[0] === "GET /orders", "four refusals, one GET", seen.join(","));
+  }
+
+  // Shaped like the live cases of 2026-10-04: three Blackout orders on one day at three
+  // venues, a roadshow named by its R number, a client with no company, and two orders
+  // whose blocks staff built before the engine touched them.
+  console.log("\n[10] a need the engine never bound: the order staff booked by hand");
+  {
+    const day = "2026-10-16";
+    const sent = Date.parse("2026-09-17T12:00:00Z");
+    const before = iso(sent - 30 * 24 * H), after = iso(sent + 24 * H);
+    const unbound = (id: string, kind: "update" | "new-job", over: Record<string, unknown> = {}) =>
+      ({ ...base, thread_id: id, classification: kind, status: "needs-info", company_id: 61, place_id: 24, order_action_log: [], facts: { requests: [{ date: day }] }, ...over }) as unknown as ConversationState;
+    const order = (id: number, number: string, place: number, b: string, e: string, o: { by?: number; made?: string; editor?: number; edited?: string; name?: string } = {}) => {
+      const stamp = { creator: o.by ?? 102, created: o.made ?? before, modifier: o.editor ?? 102, modified: o.edited ?? before };
+      return {
+        id, number, happening: b, name: o.name ?? `Blackout @ venue ${place}`, ...stamp,
+        Job: [{ id: id + 1, min_beginning: b, max_end: e, ...stamp, SlotTeam: [{ id: id + 2, ...stamp, Slot: [{ id: id + 3, beginning: b, end: e, SlotLocation: { place_id: place } }] }] }],
+      };
+    };
+    const run = async (states: ConversationState[], orders: Record<string, unknown[]>, marks: FeedMark[] = [], at = sent) => {
+      __resetVerifyCache();
+      const p = project(states, new Map(states.map((s) => [s.thread_id, at])), marks, null, NOW);
+      const nestedById: Record<number, unknown> = {};
+      for (const list of Object.values(orders)) for (const o of list as Array<{ id: number }>) nestedById[o.id] = o;
+      const on = fakeOnsinch([[]], { orders, nested: nestedById });
+      const { d, marks: wrote } = deps(on.t);
+      await verify(p.cards, NOW, d, marks, 60_000, p.wants);
+      return wrote;
+    };
+    // An undated thread is dated by its email: older than a fortnight it leaves the list
+    // before the verifier sees it, so those cases are written two days ago.
+    const ev = (m: FeedMark | undefined) => (m?.evidence as { text?: string } | null)?.text;
+
+    const blackout = [
+      order(15947, "10954", 24, "2026-10-16T09:00:00+00:00", "2026-10-16T17:00:00+00:00", { edited: after }),
+      order(16093, "11081", 853, "2026-10-16T06:00:00+00:00", "2026-10-16T12:00:00+00:00", { edited: after }),
+      order(16081, "11069", 49, "2026-10-16T06:00:00+00:00", "2026-10-16T12:00:00+00:00", { edited: after }),
+    ];
+    let w = await run([unbound("move", "update"), unbound("po", "new-job")], { "61": blackout });
+    const move = w.filter((m) => m.thread_id === "move");
+    ok(move.some((m) => m.mark === "matched" && ev(m) === "R10954, found by venue"), "three orders that day: the one at the thread's venue", move.map((m) => `${m.mark}:${ev(m)}`).join(" | "));
+    ok(ev(move.find((m) => m.mark === "staff-edit")) === "R10954: order, job, a block edited after the client's email", "an update goes green only on a person's edit after the email, naming the order");
+    ok(ev(w.find((m) => m.thread_id === "po" && m.mark === "order-found")) === "order R10954 is in OnSinch", "a needed order that already exists is found");
+
+    w = await run([unbound("vague", "new-job", { company_id: 62, place_id: null })], { "62": [order(1, "1", 24, "2026-10-16T09:00:00+00:00", "2026-10-16T17:00:00+00:00"), order(2, "2", 49, "2026-10-16T09:00:00+00:00", "2026-10-16T17:00:00+00:00")] });
+    ok(w.length === 0, "two orders that day and nothing to tell them apart: refused, the card stays open", w.map((m) => m.mark).join(","));
+
+    w = await run([unbound("waf", "update", { company_id: 324, place_id: null, subject: "Re: Price quote - R11029 WAF", facts: { requests: [] } })], { "324": [order(16035, "11029", 1188, "2026-10-13T09:00:00+00:00", "2026-10-22T15:00:00+00:00")] }, [], NOW - 2 * 24 * H);
+    ok(ev(w.find((m) => m.mark === "matched")) === "R11029, found by its reference", "an undated thread found by the R number in its subject");
+    ok(!w.some((m) => m.mark === "staff-edit"), "and not green: nobody touched it after the email");
+
+    w = await run([unbound("eav", "update", { company_id: 354, place_id: null, subject: "EAV6695 GTT", facts: { requests: [] } })], { "354": [order(16247, "11220", 127, "2026-09-30T15:00:00+00:00", "2026-09-30T17:00:00+00:00", { name: "Essential AV - EAV6695 GTT @ Shangri-La", edited: after })] }, [], NOW - 2 * 24 * H);
+    ok(ev(w.find((m) => m.mark === "matched")) === "R11220, found by its reference", "a client's own reference in the order name");
+
+    const recent = [order(16352, "11319", 7, "2026-10-10T08:00:00+00:00", "2026-10-10T14:00:00+00:00", { name: "Barnery Meek  @ Private residence" }), order(16361, "11328", 8, "2026-10-10T08:00:00+00:00", "2026-10-10T14:00:00+00:00", { name: "Divine Musiq @ Banham Park" })];
+    w = await run([unbound("barney", "new-job", { company_id: null, place_id: 7032, sender_email: "barney.meek@hotmail.co.uk", facts: { requests: [{ date: "2026-10-10" }] } }),
+      unbound("desk", "new-job", { company_id: null, place_id: null, sender_email: "info@somewhere.co.uk", facts: { requests: [{ date: "2026-10-10" }] } })], { recent });
+    ok(ev(w.find((m) => m.thread_id === "barney")) === "order R11319 is in OnSinch", "no company: the sender's surname on that day's order", w.map((m) => ev(m)).join(" | "));
+    ok(!w.some((m) => m.thread_id === "desk"), "a desk address names nobody and matches nothing");
+
+    // Bound orders: the stamps read once, with the engine's wanted shifts.
+    const wanted = (shifts: Array<[string, string]>) => ({ slot_teams: shifts.map(([b, e]) => ({ beginning: b, end: e, size: 2, place_id: 1446 })) });
+    const bound = (id: string, oid: number, shifts: Array<[string, string]>) => ({ ...needUpdate(id, oid, String(oid), oid + 1), desired_order: wanted(shifts), facts: { requests: shifts.map(([b]) => ({ date: b.slice(0, 10) })) } }) as unknown as ConversationState;
+    const nov = (h: number) => `2026-11-19T${String(h).padStart(2, "0")}:00:00+00:00`;
+    const spark = order(13726, "13726", 1446, nov(8), nov(12));
+    const byEngine = order(13800, "13800", 1446, nov(8), nov(12), { by: ENGINE, editor: ENGINE });
+    const extra = order(13900, "13900", 1446, nov(8), nov(12));
+    (extra.Job[0].SlotTeam as unknown[]).push({ id: 1, creator: ENGINE, Slot: [{ id: 2, beginning: "2026-11-18T08:00:00+00:00", end: "2026-11-18T12:00:00+00:00", SlotLocation: { place_id: 1446 } }] });
+    const built = order(14000, "14000", 1446, nov(8), nov(12), { made: after, editor: ENGINE, edited: iso(sent + 2 * 24 * H) });
+    w = await run([bound("spark", 13726, [[nov(8), nov(12)]]), bound("engine", 13800, [[nov(8), nov(12)]]), bound("extra", 13900, [[nov(8), nov(12)]]), bound("built", 14000, [[nov(9), nov(13)]])],
+      { "0": [spark, byEngine, extra, built] });
+    const green = (id: string) => ev(w.find((m) => m.thread_id === id && m.mark === "staff-edit"));
+    ok(green("spark") === "already holds every shift asked for", "every shift asked for is on a block a person made", String(green("spark")));
+    ok(green("engine") === undefined, "blocks the engine wrote are not evidence");
+    ok(green("extra") === undefined, "a block on a day the thread does not ask for keeps it open (Lux R11359)");
+    ok(green("built") === "order, a block made by staff after the client's email", "an order a person built after the email, though the engine edited it last", String(green("built")));
   }
 
   console.log(fails ? `\n${fails} FAILED` : "\nALL PASS");

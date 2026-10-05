@@ -110,7 +110,7 @@ console.log("\n[7] green needs, and how long done work stays");
   ok(p.cards.length === 0, "a done card leaves after a day");
   p = project([created("c", NOW - DONE_DWELL_MS + H)], new Map(), [], null, NOW);
   ok(p.cards.length === 1, "a create from 23 hours ago is still on the list");
-  p = project([needsUpdated("b")], new Map([["b", NOW - 3 * H]]), [mark(key, "b", NOW - H, "history")], null, NOW);
+  p = project([needsUpdated("b")], new Map([["b", NOW - 3 * H]]), [mark(key, "b", NOW - H, "stamps")], null, NOW);
   ok(p.cards[0]?.green === false, "a history record is not evidence of anything");
 }
 

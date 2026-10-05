@@ -58,13 +58,13 @@ export function liveFeedDeps(): FeedDeps {
     states, inbound, marks: allMarks,
     replies: followupsEnabled() ? replies : null,
     // verify() wraps this transport in readOnly() before its first call.
-    verify: (cards, now, marks) => verify(cards, now, {
+    verify: (cards, now, marks, wants) => verify(cards, now, {
       transport: httpTransport({
         baseUrl: process.env.ONSINCH_BASE_URL || "https://spartancrew.onsinch.com/api/v1",
         apiKey: process.env.ONSINCH_API_KEY || "",
       }),
       claim: claimVerify, save: saveVerify, addMark,
-    }, marks),
+    }, marks, undefined, wants),
     verifyStatus,
   };
 }

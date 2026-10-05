@@ -203,9 +203,12 @@ function CalendarIcon({ size, color }: { size: number; color: string }) {
   );
 }
 
+/**
+ * Nothing, not "No order yet", when the card has no numbers (Ben, 2026-10-04): an unbound
+ * need is often a job staff booked by hand, so the phrase was false 9 times in 12.
+ */
 function numbersOf(c: FeedCard, one = false): string | null {
-  if (c.colour === "neutral") return null;
-  if (!c.r_number && !c.j_number) return "No order yet";
+  if (c.colour === "neutral" || (!c.r_number && !c.j_number)) return null;
   return one ? c.r_number ?? c.j_number : [c.r_number, c.j_number].filter(Boolean).join(" ");
 }
 
@@ -303,9 +306,7 @@ function Row({ card, now, s, phase, onTick }: { card: FeedCard; now: number; s: 
       </div>
 
       {/* The numbers find the job in OnSinch, so they get the centre and their own size. */}
-      <div className={card.r_number || card.j_number ? "mono" : undefined} style={{ textAlign: "center", whiteSpace: "nowrap", ...(card.r_number || card.j_number
-        ? { fontSize: 40 * s, fontWeight: 700, letterSpacing: "-0.01em", color: "var(--text-primary)" }
-        : { fontSize: 24 * s, fontWeight: 600, color: "var(--text-muted)" }) }}>
+      <div className="mono" style={{ textAlign: "center", whiteSpace: "nowrap", fontSize: 40 * s, fontWeight: 700, letterSpacing: "-0.01em", color: "var(--text-primary)" }}>
         {numbers}
       </div>
 
@@ -349,7 +350,7 @@ function Tile({ card, now, s, onTick }: { card: FeedCard; now: number; s: number
         <div style={{ fontSize: 14 * s, fontWeight: 700, color: card.green ? GREEN : signal(card), whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{lead.status}</div>
         <div style={{ fontSize: 22 * s, fontWeight: 800, color: "var(--text-primary)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{card.company || card.subject}</div>
         <div style={{ fontSize: 14 * s, fontWeight: 500, color: "var(--text-secondary)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-          {numbers && <span className={card.r_number || card.j_number ? "mono" : undefined} style={{ color: "var(--text-primary)" }}>{numbers} · </span>}
+          {numbers && <span className="mono" style={{ color: "var(--text-primary)" }}>{numbers} · </span>}
           {isOpen(card) && card.awaiting_reply_since != null && <span className="tnum" style={{ color: replyColour(now - card.awaiting_reply_since), fontWeight: 700 }}>{waitText(now - card.awaiting_reply_since)} no reply · </span>}
           {t ? fmt(t, { weekday: "short", day: "numeric", month: "short" }) : it ? "Date TBC" : `Waiting since ${fmt(lead.at, { day: "numeric", month: "short" })}`}
         </div>

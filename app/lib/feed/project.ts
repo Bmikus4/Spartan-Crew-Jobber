@@ -16,17 +16,21 @@
 // ============================================================================
 import { cannotBeBooked, needsLabelFor, CHANGED_A_STANDING_ORDER } from "../engine/pipeline";
 import type { ConversationState, DesiredSlotTeam } from "../engine/types";
+import { rNumbersIn } from "../engine/resolve";
+import { PLACEHOLDER_PLACE_IDS } from "../engine/resolver";
 
 export type FeedKind = "needs-created" | "needs-updated" | "created-check" | "updated-check" | "needs-reply";
 export type FeedColour = "red" | "blue" | "neutral";
 export type FeedLane = "reply" | "need" | "done";
 /**
  * `made` is never stored: it is what the projection calls an order or update the engine
- * itself wrote, which is done the moment it is written (Ben, 2026-10-04). `history` and
- * `dismissed` are stored and are NOT green: `history` records that the verifier has
- * read an item's past once; `dismissed` takes a whole thread off the TV.
+ * itself wrote, which is done the moment it is written (Ben, 2026-10-04). `stamps`,
+ * `matched` and `dismissed` are stored and are NOT green: `stamps` records that the
+ * verifier has read an item's past once; `matched` carries the order it found for an
+ * update the engine never bound; `dismissed` takes a whole thread off the TV. Rows marked
+ * `history` (the stamps read before 2026-10-04) are still in the table and read by nothing.
  */
-export type MarkKind = "checked" | "staff-edit" | "order-found" | "made" | "history" | "dismissed";
+export type MarkKind = "checked" | "staff-edit" | "order-found" | "made" | "stamps" | "matched" | "dismissed";
 const GREEN_MARKS = new Set<MarkKind>(["checked", "staff-edit", "order-found"]);
 
 /** The requester's wording, byte for byte (test/feedProjection.ts pins it). */
@@ -116,6 +120,38 @@ export interface FeedCounts {
 export interface Projection {
   cards: FeedCard[];
   counts: FeedCounts;
+  /** Per thread, what the verifier looks for in OnSinch. Never served: it holds the client's address. */
+  wants: Map<string, FeedWant>;
+}
+
+/** What a thread asks for, in the terms an OnSinch order can be compared on. */
+export interface FeedWant {
+  /** R numbers (digits only) and client references ("EAV6695") the thread names. */
+  r_numbers: string[];
+  refs: string[];
+  /** The resolved venue; null when it is one of the engine's placeholders, which name no building. */
+  place_id: number | null;
+  /** Every block the engine wants, as instants, with its venue when it names a real one. */
+  shifts: Array<{ b: number; e: number; p: number | null }>;
+  sender: string | null;
+}
+
+/** "EAV6695", "HP1263": a client's own job reference. Postcodes ("SE9") are too short to match. */
+const REF = /\b[A-Z]{2,5}-?\d{3,6}\b/g;
+
+function wantOf(s: ConversationState): FeedWant {
+  const subject = s.subject ?? "";
+  const r_numbers = rNumbersIn(subject);
+  const refs = new Set<string>();
+  const cref = str((s.facts as { customer_reference?: unknown } | undefined)?.customer_reference);
+  if (cref) refs.add(cref);
+  for (const m of subject.matchAll(REF)) if (!/^R-?\d+$/i.test(m[0])) refs.add(m[0]);
+  const teams: DesiredSlotTeam[] = s.desired_order?.slot_teams?.length ? s.desired_order.slot_teams : s.last_ordered_teams ?? [];
+  const real = (v: unknown) => { const n = Number(v); return n > 0 && !PLACEHOLDER_PLACE_IDS.has(n) ? n : null; };
+  const shifts = teams
+    .map((t) => ({ b: Date.parse(String(t?.beginning ?? "")), e: Date.parse(String(t?.end ?? "")), p: real((t as { place_id?: unknown })?.place_id) }))
+    .filter((x) => Number.isFinite(x.b) && Number.isFinite(x.e));
+  return { r_numbers, refs: [...refs], place_id: real(s.place_id), shifts, sender: str(s.sender_email) };
 }
 
 /** Today in London as YYYY-MM-DD. en-CA formats as ISO. */
@@ -246,6 +282,7 @@ export function project(
     return outAt && outAt >= inAt ? null : inAt;
   };
   const cards = new Map<string, FeedCard>();
+  const wants = new Map<string, FeedWant>();
 
   for (const s of states) {
     if (!s?.thread_id || dismissed.has(s.thread_id)) continue;
@@ -290,6 +327,7 @@ export function project(
       j_number: Number(s.onsinch_job_id) > 0 ? `J${s.onsinch_job_id}` : null,
       subject: s.subject ?? "",
     });
+    if (!g) wants.set(s.thread_id, wantOf(s));
   }
 
   /**
@@ -321,6 +359,6 @@ export function project(
     // open work oldest first, the longest wait being the one to act on now; done work
     // newest first, so what just went green sits at the top of the done group
     (a.lane === "done" ? doneAt(b) - doneAt(a) : a.at - b.at));
-  return { cards: ordered, counts };
+  return { cards: ordered, counts, wants };
 }
 

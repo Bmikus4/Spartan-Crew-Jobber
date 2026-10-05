@@ -2484,5 +2484,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0122",
+  "ts": "2026-10-05T01:05:32+00:00",
+  "kind": "measurement",
+  "headline": "TV verifier: 10 of 12 open needs were already booked by hand; now found and cleared",
+  "subject": "The TV finds the OnSinch order staff booked by hand for a need the engine never bound, and greens it only on staff evidence",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 178,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]
