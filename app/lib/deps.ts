@@ -9,6 +9,7 @@
 
 import { createHash } from "node:crypto";
 import { OnsinchClient, httpTransport } from "./engine/onsinch";
+import { simulating } from "./paused";
 import { normName, normAddr } from "./engine/resolve";
 import { createOpenRouterReasoner, createVenueJudge, createLinkJudge, type Reasoner } from "./engine/reason";
 import { guardReasoner } from "./engine/spend";
@@ -683,6 +684,35 @@ function htmlFromText(text: string): string {
 }
 
 export async function buildDeps(): Promise<PipelineDeps> {
+  const deps = await liveDeps();
+  return simulating() ? simulatedDeps(deps) : deps;
+}
+
+/**
+ * SPARTAN_SIMULATE=1 at the one place every route builds its dependencies, so no path
+ * reaches OnSinch or the mailbox, whether or not it knows about the switch: the client
+ * refuses every non-GET at the transport, the labels and the internal draft are absent
+ * (absent is how a label step already says "not here", and it records nothing as
+ * applied), and replies are off so nothing is composed. handleThread records the order it
+ * would have written instead of calling the executor, so the refusal is a backstop that
+ * should never fire; if it does, the thread errors and the alarm says where.
+ */
+export function simulatedDeps(deps: PipelineDeps): PipelineDeps {
+  const client = deps.onsinch.readOnly();
+  const { createInternalDraft: _draft, sendReplyDraft: _send, ...rest } = executor(client);
+  return {
+    ...deps,
+    onsinch: client,
+    executor: { ...rest, async createReplyDraft() { return "draft-failed"; } },
+    repliesEnabled: false,
+    flagForManual: undefined,
+    flagOrderBuilt: undefined,
+    flagOrderUpdated: undefined,
+    flagSupervised: undefined,
+  };
+}
+
+async function liveDeps(): Promise<PipelineDeps> {
   const client = onsinch();
   const settings = await getSettings();
   return {

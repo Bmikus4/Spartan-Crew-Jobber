@@ -2582,5 +2582,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0129",
+  "ts": "2026-10-05T12:07:06+00:00",
+  "kind": "measurement",
+  "headline": "Simulation mode: intake open, every order recorded as [simulated] on the thread, OnSinch client read-only, labels and drafts off",
+  "subject": "SPARTAN_SIMULATE=1 runs intake and records each order the engine would write, writing nothing to OnSinch or Gmail",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 180,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]

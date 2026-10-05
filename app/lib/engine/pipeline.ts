@@ -13,6 +13,7 @@ import type { Actions, ConversationState, DesiredOrder, DesiredSlotTeam, Hydrate
 import { findCrossThreadMatches, crossThreadDraft, type ThreadShape, type InternalDraft } from "./crossThread";
 import { assessAmendment } from "./amendment";
 import { reportError } from "../errorReport";
+import { simulating } from "../paused";
 import type { AmendResult } from "./amendOrder";
 import { readLiveShape, driftAgainst, driftKey, describeDrift, type Drift } from "./reconcile";
 
@@ -396,7 +397,9 @@ export async function handleThread(
 
   const next = { ...state };
 
-  if (actions.createReplyDraft) {
+  if (actions.createReplyDraft && simulating()) {
+    next.notes = [...next.notes, "[simulated] would draft a reply to the client; nothing was drafted (SPARTAN_SIMULATE=1)"];
+  } else if (actions.createReplyDraft) {
     next.reply_draft_id = await executor.createReplyDraft(actions.createReplyDraft);
     await emit("reply_drafted", { priority: state.priority });
     if (replySendArmed(deps.settings) && executor.sendReplyDraft && next.reply_draft_id && next.reply_draft_id !== "draft-failed") {
@@ -472,7 +475,7 @@ export async function handleThread(
       next.pending_order = intended;
       next.status = "proposed";
       try {
-        await executor.createInternalDraft?.(draft);
+        if (!simulating()) await executor.createInternalDraft?.(draft);
       } catch (err) {
         // The email is how a human hears about this, but failing to draft it must not
         // turn a held thread into an errored one — the hold is the safety, not the mail.
@@ -567,7 +570,8 @@ export async function handleThread(
      *     twice for it
      *   - a cancellation — the engine never cancels or shrinks a booking
      */
-    await executeOrder(next, intended, deps, emit, prior?.place_id, prior?.desired_order?.intern_name);
+    if (simulating()) await simulateOrder(next, intended, deps, emit);
+    else await executeOrder(next, intended, deps, emit, prior?.place_id, prior?.desired_order?.intern_name);
   }
 
   // Teach the sender ledger what this thread turned out to be. It is what lets triage
@@ -663,7 +667,7 @@ function reportLabelFailure(deps: PipelineDeps, label: string, next: Conversatio
  * remembering to tag it. Off unless SPARTAN_SUPERVISED=1; ending the week is removing it.
  */
 export async function flagSupervisedIfNeeded(next: ConversationState, deps: PipelineDeps, since: number): Promise<void> {
-  if (!deps.flagSupervised || process.env.SPARTAN_SUPERVISED !== "1") return;
+  if (!deps.flagSupervised || process.env.SPARTAN_SUPERVISED !== "1" || simulating()) return;
   const wrote = (next.order_action_log ?? []).slice(since).filter((a) => a.ok && WROTE_TO_ONSINCH.has(a.kind));
   if (!wrote.length) return;
   const name = (id: unknown) =>
@@ -779,7 +783,7 @@ export function cannotBeBooked(s: ConversationState): boolean {
  * new workflow — and editing the live n8n is the recurring way this system breaks.
  */
 export async function flagBuiltIfNeeded(next: ConversationState, deps: PipelineDeps): Promise<void> {
-  if (!deps.flagOrderBuilt) return;
+  if (!deps.flagOrderBuilt || simulating()) return;
   const should = Number.isInteger(Number(next.onsinch_order_id)) && Number(next.onsinch_order_id) > 0;
   const already = next.built_flagged === true;
   if (should === already) return; // no transition, nothing to say
@@ -837,7 +841,7 @@ export const TAG_BLUE = { backgroundColor: "#4986e7", textColor: "#ffffff" } as 
 export const CHANGED_A_STANDING_ORDER: ReadonlySet<string> = new Set(["amend", "patch", "replace"]);
 
 export async function flagUpdatedIfNeeded(next: ConversationState, deps: PipelineDeps): Promise<void> {
-  if (!deps.flagOrderUpdated) return;
+  if (!deps.flagOrderUpdated || simulating()) return;
   if (next.updated_flagged === true) return;
   const change = [...(next.order_action_log ?? [])]
     .reverse()
@@ -897,7 +901,7 @@ export function needsLabelFor(s: ConversationState): "Order Needs Built" | "Orde
 }
 
 export async function flagManualIfNeeded(next: ConversationState, deps: PipelineDeps): Promise<void> {
-  if (!deps.flagForManual) return;
+  if (!deps.flagForManual || simulating()) return; // a simulation labels nothing, and records no label as applied
   const should = cannotBeBooked(next);
   const already = next.manual_flagged === true;
   /**
@@ -1473,6 +1477,30 @@ export function poOnlyIfChanged(desired: DesiredOrder, before: string | undefine
 }
 
 /** Execute a staged/intended order write and fold the result into state. */
+/**
+ * SPARTAN_SIMULATE=1: the write is recorded on the thread and made nowhere. The thread is
+ * left needing a person because that is the truth (nothing reached OnSinch, so ops build
+ * it by hand and the TV shows the need), and the notes say what the engine would have
+ * done, which is what a simulated week is read for afterwards.
+ */
+async function simulateOrder(
+  next: ConversationState,
+  intended: NonNullable<ConversationState["pending_order"]>,
+  deps: PipelineDeps,
+  emit: (type: any, meta?: Record<string, unknown>) => Promise<void>,
+): Promise<void> {
+  const teams = intended.desired.slot_teams ?? [];
+  const crew = teams.reduce((n, t) => n + (t.size || 0), 0);
+  const days = [...new Set(teams.map((t) => String(t.beginning ?? "").slice(0, 10)).filter(Boolean))];
+  const what = intended.kind === "create" ? "create an order" : `update order #${intended.order_id}`;
+  next.simulated = { ts: deps.now(), kind: intended.kind === "create" ? "create" : "patch", desired: intended.desired, ...(intended.order_id ? { order_id: intended.order_id } : {}) };
+  next.notes = [...next.notes, `[simulated] would ${what}: ${crew} crew across ${teams.length} block(s)${days.length ? ` on ${days.join(", ")}` : ""}; nothing was written (SPARTAN_SIMULATE=1)`];
+  next.needs_human = true;
+  next.review_only = false;
+  next.pending_order = undefined;
+  await emit("order_proposed", { kind: intended.kind, size: crew, simulated: true });
+}
+
 async function executeOrder(
   next: ConversationState,
   intended: NonNullable<ConversationState["pending_order"]>,

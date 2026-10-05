@@ -15,17 +15,17 @@ const ok = (cond: boolean, label: string) => { if (!cond) fails++; console.log(`
 
 const on = "1";
 console.log("\n[1] paused: every automation route stops");
-for (const p of AUTOMATION_ROUTES) ok(automationPaused(p, on), `${p} is paused`);
-ok(automationPaused("/api/mail-inbound/extra", on), "a sub-path of an automation route is paused");
+for (const p of AUTOMATION_ROUTES) ok(automationPaused(p, on, ""), `${p} is paused`);
+ok(automationPaused("/api/mail-inbound/extra", on, ""), "a sub-path of an automation route is paused");
 
 console.log("\n[2] paused: the human routes and the health probe stay open");
 for (const p of ["/api/health/intake", "/api/feed", "/api/feed/check", "/api/confirm-order", "/api/settings", "/api/auth/google", "/api/jobs"])
-  ok(!automationPaused(p, on), `${p} stays open`);
-ok(!automationPaused("/api/n8n-inbound-other", on), "a route that only shares a prefix is not paused");
+  ok(!automationPaused(p, on, ""), `${p} stays open`);
+ok(!automationPaused("/api/n8n-inbound-other", on, ""), "a route that only shares a prefix is not paused");
 
 console.log("\n[3] not paused unless the switch reads exactly 1");
-for (const v of ["", "0", "true", "on"]) ok(!automationPaused("/api/n8n-inbound", v), `SPARTAN_PAUSED=${JSON.stringify(v)} does not pause`);
-ok(automationPaused("/api/n8n-inbound", " 1 "), "a pasted value with spaces still pauses");
+for (const v of ["", "0", "true", "on"]) ok(!automationPaused("/api/n8n-inbound", v, ""), `SPARTAN_PAUSED=${JSON.stringify(v)} does not pause`);
+ok(automationPaused("/api/n8n-inbound", " 1 ", ""), "a pasted value with spaces still pauses");
 
 console.log("\n[4] the middleware asks before its auth switch, which is off by default");
 {
