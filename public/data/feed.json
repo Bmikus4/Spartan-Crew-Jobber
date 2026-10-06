@@ -2624,5 +2624,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0132",
+  "ts": "2026-10-06T02:54:21+00:00",
+  "kind": "measurement",
+  "headline": "Live again 2026-10-05: SPARTAN_SIMULATE removed from code and production, all 9 Spartan n8n workflows active",
+  "subject": "Simulation mode is gone: the engine writes to OnSinch and Gmail again, and SPARTAN_PAUSED remains the one hard off",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 180,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]

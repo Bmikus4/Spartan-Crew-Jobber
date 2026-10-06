@@ -334,17 +334,6 @@ export interface ConversationState {
    * need to know it even after the order is deleted. So it is set once and left.
    */
   updated_flagged?: boolean;
-  /**
-   * The write this thread would have made under SPARTAN_SIMULATE=1, made nowhere. Not
-   * `pending_order`: that field is the confirm queue (stateDb listProposed), and a
-   * simulated order offered there would read as one the engine held for a person.
-   */
-  simulated?: {
-    ts: number;
-    kind: "create" | "patch";
-    desired: DesiredOrder;
-    order_id?: number;
-  };
   // an order the engine WANTS to write but is holding for human confirm
   // (always set in draft-only mode; this is the dashboard confirm queue).
   pending_order?: {
