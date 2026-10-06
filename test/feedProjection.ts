@@ -7,7 +7,7 @@
 // made is done (green) the moment it is written (Ben, 2026-10-04).
 // Run: npx tsx test/feedProjection.ts
 // ============================================================================
-import { project, STATUS_TEXT, DONE_DWELL_MS, STALE_UNDATED_MS, dismissKey, londonInstant, type FeedMark } from "../app/lib/feed/project";
+import { project, STATUS_TEXT, DONE_DWELL_MS, STALE_UNDATED_MS, QUIET_MS, dismissKey, londonInstant, type FeedMark } from "../app/lib/feed/project";
 import type { ConversationState } from "../app/lib/engine/types";
 
 let fails = 0;
@@ -82,7 +82,7 @@ console.log("\n[4] keys");
   ok(keys.includes(`created-check:901:${NOW - H}`), "made key: kind, order, the write's ts");
 }
 
-console.log("\n[5] ordering: replies, then needs oldest first, then done newest first");
+console.log("\n[5] ordering: a day-long reply wait first, then needs by job date, then done newest first");
 {
   const inbound = new Map([["n-old", NOW - 9 * H], ["n-new", NOW - 1 * H]]);
   const p = project(
@@ -173,6 +173,57 @@ console.log("\n[12] how long the client has waited for a reply");
   ok(by.get("w")?.awaiting_reply_since === NOW - 5 * H, "our last email was before theirs: waiting since theirs");
   ok(by.get("r")?.awaiting_reply_since === null, "we replied after their email: not waiting");
   ok(by.get("silent")?.awaiting_reply_since === null, "no client email on record: no clock");
+}
+
+console.log("\n[13] the order of the list (Ben, 2026-10-04 and 10-05)");
+{
+  const day = (d: string) => ({ facts: { company_name: "X", requests: [{ date: d }] } });
+  const p = project([
+    created("done-old", NOW - 5 * H),
+    needsCreated("undated", { facts: { company_name: "X", requests: [{}] } }),
+    needsCreated("later", day("2026-10-16")),
+    needsCreated("quiet", day("2026-10-04")),
+    needsCreated("soon", day("2026-10-05")),
+    created("done-new", NOW - 1 * H),
+    needsCreated("later-longer", day("2026-10-16")),
+    needsCreated("red-wait", day("2026-10-20")),
+  ], new Map([["soon", NOW - 2 * H], ["later", NOW - 3 * H], ["later-longer", NOW - 5 * H], ["red-wait", NOW - 30 * H], ["undated", NOW - H], ["quiet", NOW - QUIET_MS - H]]), [], null, NOW);
+  const order = p.cards.map((c) => c.thread_id).join(",");
+  ok(order === "red-wait,soon,later-longer,later,undated,quiet,done-new,done-old", "red wait, nearest job, longer wait on a tie, undated, quiet, then done newest first", order);
+  const by = new Map(p.cards.map((c) => [c.thread_id, c]));
+  ok(by.get("quiet")?.quiet === true && by.get("red-wait")?.quiet === false && by.get("done-old")?.quiet === false, "quiet only on an open need silent for QUIET_MS");
+  ok(by.has("quiet") && p.counts.needs_created === 6, "sunk, never hidden, and still counted");
+}
+
+console.log("\n[14] a need that resolves without an engine write turns green instead of vanishing");
+{
+  const inbound = new Map([["a", NOW - 2 * H]]);
+  const key = `needs-created:a:0:${NOW - 2 * H}`;
+  let p = project([needsCreated("a")], inbound, [], null, NOW);
+  ok(p.remember.length === 1 && p.remember[0].mark === "open" && p.remember[0].item_key === key, "a need on screen is remembered as open");
+  const open = mark(key, "a", NOW - H, "open");
+  ok(project([needsCreated("a")], inbound, [open], null, NOW).remember.length === 0, "and remembered once");
+  const gone = st({ thread_id: "a", status: "ordered" });
+  p = project([gone], inbound, [open], null, NOW);
+  ok(p.cards.length === 0 && p.remember.length === 1 && p.remember[0].mark === "resolved" && p.remember[0].item_key === key, "when the thread stops yielding it, the projection asks for a resolved mark");
+  const res: FeedMark = { item_key: key, thread_id: "a", mark: "resolved", by: null, evidence: p.remember[0].evidence, at: NOW - 60_000 };
+  p = project([gone], inbound, [open, res], null, NOW);
+  const c = p.cards[0];
+  ok(c?.green === true && c.lane === "done" && c.items[0].kind === "needs-created" && c.colour === "red" && c.items[0].green?.mark === "resolved", "then it is a done card, as the need it was");
+  ok(c?.items[0].green?.at === NOW - 60_000 && p.counts.done === 1 && p.counts.needs_created === 0, "green from when it resolved, and counted done");
+  ok((c?.items[0].green?.evidence as { text?: string })?.text === "No order needed any more, per the system", "saying what happened");
+  ok(project([gone], inbound, [open, { ...res, at: NOW - DONE_DWELL_MS - 1 }], null, NOW).cards.length === 0, "it leaves after a day like any done card");
+  const naj = st({ thread_id: "a", classification: "not-a-job", status: "ordered" });
+  ok((project([naj], inbound, [open], null, NOW).remember[0]?.evidence as { text?: string })?.text === "Read as not a job by the system", "a reclassified thread says so");
+  p = project([created("a", NOW - 5 * H)], inbound, [open], null, NOW);
+  ok(p.remember[0]?.mark === "resolved" && (p.remember[0].evidence as { text?: string }).text === "Linked to an order by the system", "a thread left holding only a write OLDER than the need resolved it");
+  p = project([created("a", NOW - 30 * 60_000)], inbound, [open], null, NOW);
+  ok(p.remember.length === 0 && p.cards[0]?.items[0].kind === "created-check", "a write AFTER the need is the engine doing it: made, not resolved");
+  ok(project([gone], inbound, [], null, NOW).cards.length === 0, "a thread the TV never showed as a need stays off: no backfill");
+  ok(project([gone], inbound, [open, res, { item_key: dismissKey("a"), thread_id: "a", mark: "dismissed", by: "x", evidence: null, at: NOW }], null, NOW).cards.length === 0, "a dismissed thread stays gone");
+  const ticked = mark(key, "a", NOW - 30 * 60_000);
+  p = project([gone], inbound, [open, ticked], null, NOW);
+  ok(p.remember.length === 0 && p.cards[0]?.items[0].green?.mark === "checked", "a need ticked before it resolved stays in done as ticked");
 }
 
 console.log(fails ? `\n${fails} FAILED` : "\nALL PASS");

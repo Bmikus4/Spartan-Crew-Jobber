@@ -226,6 +226,10 @@ def commit_and_push(args, entry):
         die("git add", r.stdout + r.stderr)
 
     body = f"{entry['headline']}\n\nTicket {entry['id']}"
+    if args.body_file:
+        # What was broken, what happens now: the part of the message the ticket cannot carry.
+        with open(args.body_file, encoding="utf-8") as bf:
+            body = bf.read().strip() + "\n\n" + body
     with tempfile.NamedTemporaryFile("w", suffix=".txt", delete=False,
                                      encoding="utf-8", newline="\n") as f:
         f.write(f"{args.message}\n\n{body}\n\nCo-Authored-By: Claude Opus 5 <noreply@anthropic.com>\n")
@@ -263,6 +267,7 @@ def main():
     p = argparse.ArgumentParser(description="The session gate: confirm, ticket, commit, push.")
     p.add_argument("-m", "--message", help="commit subject: one line, a fact about the software")
     p.add_argument("--headline", help="how this ticket reads in a list; defaults to the subject")
+    p.add_argument("-F", "--body-file", help="commit body (what was broken, what happens now), placed above the headline and ticket id")
     p.add_argument("--kind", default="measurement",
                    choices=["measurement", "decision", "withdrawal", "control"])
     p.add_argument("--source", action="append", default=[],

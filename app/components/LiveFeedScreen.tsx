@@ -14,8 +14,9 @@
 // hours on 2026-10-01..03, so the data age and the last-email age are always on screen
 // and turn amber, and a failed refresh keeps the last good rows rather than clearing them.
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import type { FeedCard, FeedCounts, FeedItem } from "../lib/feed/project";
+import { deadline, nextDay, QUIET_MS, REPLY_RED_MS } from "../lib/feed/order";
 import { BrandMark, BrandWordmark } from "./BrandLogo";
 
 interface FeedResponse {
@@ -66,16 +67,18 @@ function ago(ms: number, now: number): string {
   if (h < 48) return `${h}h ago`;
   return `${Math.floor(h / 24)}d ago`;
 }
-function personName(by: string | null): string {
-  const local = String(by ?? "someone").split("@")[0].split(/[._-]/)[0];
-  return local ? local[0].toUpperCase() + local.slice(1) : "someone";
+/** The signer's first name as the tick recorded it; ticks before 2026-10-05 carry only an email. */
+function personName(by: string | null, name: unknown): string {
+  if (typeof name === "string" && name.trim()) return name.trim().split(/\s+/)[0];
+  const local = String(by ?? "").split("@")[0].split(/[._-]/)[0];
+  return local ? local[0].toUpperCase() + local.slice(1) : "";
 }
 function evidenceLine(it: FeedItem): string | null {
   const g = it.green;
   if (!g) return null;
-  const e = (g.evidence ?? {}) as { text?: string; at?: string; r_number?: string | null; held?: boolean };
+  const e = (g.evidence ?? {}) as { text?: string; at?: string; r_number?: string | null; held?: boolean; name?: string };
   const when = hhmm(Date.parse(e.at ?? "") || g.at);
-  if (g.mark === "checked") return `Confirmed by ${personName(g.by)} ${when}`;
+  if (g.mark === "checked") { const who = personName(g.by, e.name); return `Confirmed${who ? ` by ${who}` : ""} ${when}`; }
   if (e.held) return "Already in OnSinch: every shift asked for";
   if (g.mark === "staff-edit") return `Changed in OnSinch by staff: ${e.text ?? "edited"}, ${when}`;
   if (g.mark === "order-found") return `Order found in OnSinch: ${e.r_number ? `R${String(e.r_number).replace(/^R/i, "")}` : e.text ?? "it exists"}, ${when}`;
@@ -133,17 +136,6 @@ const hasReply = (c: FeedCard) => c.items.some((i) => i.kind === "needs-reply");
 const isOpen = (c: FeedCard) => c.lane !== "done";
 const signal = (c: FeedCard) => (c.colour === "red" ? RED : c.colour === "blue" ? BLUE : GREY);
 
-/** The first job day that has not passed, or null for an undated job. */
-function nextDay(c: FeedCard, now: number): string | null {
-  const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/London", year: "numeric", month: "2-digit", day: "2-digit" }).format(now);
-  return c.dates.find((d) => d >= today) ?? null;
-}
-/** When the countdown runs to: the job's first block not yet started, else the start of its next day. */
-function deadline(c: FeedCard, now: number): number | null {
-  if (c.starts_at != null) return c.starts_at;
-  const d = nextDay(c, now);
-  return d ? Date.parse(`${d}T00:00:00Z`) : null;
-}
 /** Starts within 48 hours and is still open. */
 function urgent(c: FeedCard, now: number): boolean {
   if (!isOpen(c)) return false;
@@ -151,8 +143,6 @@ function urgent(c: FeedCard, now: number): boolean {
   return at != null && at - now <= URGENT_MS;
 }
 
-/** A client waiting this long for our reply is red, and goes to the top (Ben, 2026-10-04). */
-const REPLY_RED_MS = 24 * 3_600_000;
 const replyColour = (ms: number) => `hsl(${Math.round((1 - Math.min(1, Math.max(0, ms) / REPLY_RED_MS)) * 130)} 78% 50%)`;
 
 /** How long a client has waited, read from across the room: whole hours, then days past two. */
@@ -537,20 +527,8 @@ export default function LiveFeedScreen({ isActive, tv = false }: { isActive: boo
     }
   }, [load]);
 
-  /**
-   * THE ORDER (Ben, 2026-10-04). Open orders above done ones. Within the open ones, every
-   * client who has waited a day or more for our reply comes first; then everything by how
-   * near the job is, nearest first, the longer wait breaking a tie. Undated jobs go last in
-   * their group. Done keeps the server's order: what went green most recently on top.
-   */
-  const cards = useMemo(() => {
-    const list = data?.items ?? [];
-    const waited = (c: FeedCard) => (c.awaiting_reply_since != null ? now - c.awaiting_reply_since : -1);
-    const red = (c: FeedCard) => (waited(c) >= REPLY_RED_MS ? 0 : 1);
-    const when = (c: FeedCard) => deadline(c, now) ?? Number.MAX_SAFE_INTEGER;
-    const open = list.filter(isOpen).sort((a, b) => red(a) - red(b) || when(a) - when(b) || waited(b) - waited(a));
-    return [...open, ...list.filter((c) => !isOpen(c))];
-  }, [data, now]);
+  // The server's order (orderCards, app/lib/feed/order.ts), where test/feedProjection.ts pins it.
+  const cards = data?.items ?? [];
 
   let strip: FeedCard[] = [];
   let stripMore = 0;
@@ -665,7 +643,13 @@ export default function LiveFeedScreen({ isActive, tv = false }: { isActive: boo
                 {warn ? "Nothing listed, but the sync is not healthy: see the cloud at the top right." : openCount === 0 && strip.length === 0 ? "Everything is checked." : "Nothing else waiting."}
               </div>
             )}
-            {openRows.map((card) => <Row key={card.thread_id} card={card} now={now} s={s} phase={phaseOf(card)} onTick={tick} />)}
+            {openRows.map((card, i) => (
+              <Fragment key={card.thread_id}>
+                {/* Sunk, not hidden (Ben, 2026-10-05): the label says why these sit lower. */}
+                {card.quiet && !openRows[i - 1]?.quiet && <Section s={s} label={`No word from the client for ${QUIET_MS / 86_400_000}+ days`} n={openRows.filter((x) => x.quiet).length} />}
+                <Row card={card} now={now} s={s} phase={phaseOf(card)} onTick={tick} />
+              </Fragment>
+            ))}
             <Section s={s} label="Done" n={doneRows.length} color={GREEN} />
             {doneRows.map((card) => <Row key={card.thread_id} card={card} now={now} s={s} phase="steady" onTick={tick} />)}
             {c && c.older > 0 && (

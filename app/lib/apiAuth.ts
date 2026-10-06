@@ -24,6 +24,8 @@ export interface Caller {
   kind: "human" | "service" | null;
   /** who to attribute the action to, for the audit trail */
   actor: string | null;
+  /** the signer's display name, for a screen to show; the actor stays the audit identity */
+  name?: string | null;
 }
 
 export interface CallerInputs {
@@ -50,7 +52,7 @@ export interface CallerInputs {
  */
 export function decideCaller(i: CallerInputs): Caller {
   if (i.secretMatches) return { ok: true, kind: "service", actor: "n8n" };
-  if (i.sessionName) return { ok: true, kind: "human", actor: i.sessionEmail || i.sessionName };
+  if (i.sessionName) return { ok: true, kind: "human", actor: i.sessionEmail || i.sessionName, name: i.sessionName };
   if (!i.secretConfigured && !i.authRequired && !i.isProduction) {
     return { ok: true, kind: "service", actor: "dev" };
   }

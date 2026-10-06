@@ -2610,5 +2610,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0131",
+  "ts": "2026-10-06T02:25:35+00:00",
+  "kind": "measurement",
+  "headline": "TV: resolved needs settle into Done, 7-day-quiet needs sink under a label, ordering pinned in order.ts, tick shows the signer's name",
+  "subject": "TV needs that resolve without an engine write go green; week-quiet needs sink",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 181,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]

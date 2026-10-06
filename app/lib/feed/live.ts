@@ -66,5 +66,6 @@ export function liveFeedDeps(): FeedDeps {
       claim: claimVerify, save: saveVerify, addMark,
     }, marks, undefined, wants),
     verifyStatus,
+    remember: async (ms) => { for (const m of ms) await addMark(m); },
   };
 }

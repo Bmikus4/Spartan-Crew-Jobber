@@ -13,7 +13,7 @@ export async function POST(request: Request): Promise<Response> {
   if (!caller.ok) return Response.json({ ok: false, error: "unauthorized" }, { status: 401 });
   const body = await request.json().catch(() => null);
   try {
-    const r = await applyCheck(body, caller.actor ?? "unknown", { addMark, removeCheck });
+    const r = await applyCheck(body, caller.actor ?? "unknown", { addMark, removeCheck }, caller.name ?? null);
     return Response.json(r.body, { status: r.status });
   } catch (err) {
     console.error("[feed/check] failed", err);

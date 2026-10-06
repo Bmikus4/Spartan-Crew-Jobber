@@ -8,7 +8,7 @@
 import { readFileSync } from "node:fs";
 import { serveFeed, type FeedDeps } from "../app/lib/feed/serve";
 import type { ConversationState } from "../app/lib/engine/types";
-import type { FeedMark } from "../app/lib/feed/project";
+import type { FeedCard, FeedMark } from "../app/lib/feed/project";
 
 let fails = 0;
 const ok = (cond: boolean, label: string, extra = "") => {
@@ -82,6 +82,22 @@ void (async () => {
       verify: async () => { marks.push({ item_key: "needs-updated:c:901:0", thread_id: "c", mark: "staff-edit", by: null, evidence: null, at: NOW }); return { ran: true, wrote: 1, note: "ok" }; },
     }), NOW);
     ok((g.body.items as { green: boolean }[])[0]?.green === true, "marks it writes show on the same refresh");
+  }
+
+  console.log("\n[6] the feed remembers a need, so one that resolves without a write turns green");
+  {
+    const marks: FeedMark[] = [];
+    const remember = async (ms: Array<Omit<FeedMark, "at">>) => { for (const m of ms) if (!marks.some((x) => x.item_key === m.item_key && x.mark === m.mark)) marks.push({ ...m, at: NOW }); };
+    const need = { ...created, thread_id: "n", status: "needs-info", onsinch_order_id: undefined, order_action_log: [] } as unknown as ConversationState;
+    await serveFeed(deps({ states: async () => [need], marks: async () => [...marks], remember }), NOW);
+    ok(marks.length === 1 && marks[0].mark === "open", "first refresh: the need is remembered");
+    const gone = { ...need, status: "ordered" } as ConversationState;
+    const r = await serveFeed(deps({ states: async () => [gone], marks: async () => [...marks], remember }), NOW + 60_000);
+    const items = r.body.items as FeedCard[];
+    ok(items.length === 1 && items[0].green && items[0].items[0].green?.mark === "resolved", "resolved: green on the same refresh, not gone");
+    const failing = await serveFeed(deps({ states: async () => [need], remember: boom }), NOW);
+    ok(failing.status === 200 && (failing.body.items as unknown[]).length === 1, "a failed memory write never costs the feed");
+    ok(/remember: async/.test(readFileSync("app/lib/feed/live.ts", "utf8")), "production wires memory to addMark");
   }
 
   console.log("\n[5] the route is guarded and serves through serveFeed");

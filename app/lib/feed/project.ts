@@ -18,6 +18,7 @@ import { cannotBeBooked, needsLabelFor, CHANGED_A_STANDING_ORDER } from "../engi
 import type { ConversationState, DesiredSlotTeam } from "../engine/types";
 import { rNumbersIn } from "../engine/resolve";
 import { PLACEHOLDER_PLACE_IDS } from "../engine/resolver";
+import { londonDay, orderCards, QUIET_MS } from "./order";
 
 export type FeedKind = "needs-created" | "needs-updated" | "created-check" | "updated-check" | "needs-reply";
 export type FeedColour = "red" | "blue" | "neutral";
@@ -29,9 +30,16 @@ export type FeedLane = "reply" | "need" | "done";
  * verifier has read an item's past once; `matched` carries the order it found for an
  * update the engine never bound; `dismissed` takes a whole thread off the TV. Rows marked
  * `history` (the stamps read before 2026-10-04) are still in the table and read by nothing.
+ *
+ * `open` and `resolved` are the feed's memory of a need, because the state alone forgets
+ * it: once the engine stops needing a person without writing anything (it reclassified the
+ * thread, or linked it to an order) the projection has nothing left to draw. `open` (not
+ * green) records that a need key was on the TV; `resolved` (green) records when its thread
+ * stopped yielding it. Without them the card vanished mid-list, which on a full screen
+ * reads as a job lost, not a job done.
  */
-export type MarkKind = "checked" | "staff-edit" | "order-found" | "made" | "stamps" | "matched" | "dismissed";
-const GREEN_MARKS = new Set<MarkKind>(["checked", "staff-edit", "order-found"]);
+export type MarkKind = "checked" | "staff-edit" | "order-found" | "made" | "stamps" | "matched" | "dismissed" | "open" | "resolved";
+const GREEN_MARKS = new Set<MarkKind>(["checked", "staff-edit", "order-found", "resolved"]);
 
 /** The requester's wording, byte for byte (test/feedProjection.ts pins it). */
 export const STATUS_TEXT: Record<FeedKind, string> = {
@@ -96,6 +104,8 @@ export interface FeedCard {
   r_number: string | null;
   j_number: string | null;
   subject: string;
+  /** An open need with no word from the client for QUIET_MS: listed below the fresh ones. */
+  quiet: boolean;
 }
 
 /** One follow-up alert, already narrowed to the fields the TV may show. */
@@ -122,6 +132,8 @@ export interface Projection {
   counts: FeedCounts;
   /** Per thread, what the verifier looks for in OnSinch. Never served: it holds the client's address. */
   wants: Map<string, FeedWant>;
+  /** `open` and `resolved` marks for serveFeed to store; the projection itself writes nothing. */
+  remember: Array<Omit<FeedMark, "at">>;
 }
 
 /** What a thread asks for, in the terms an OnSinch order can be compared on. */
@@ -154,10 +166,7 @@ function wantOf(s: ConversationState): FeedWant {
   return { r_numbers, refs: [...refs], place_id: real(s.place_id), shifts, sender: str(s.sender_email) };
 }
 
-/** Today in London as YYYY-MM-DD. en-CA formats as ISO. */
-export function londonDay(ms: number): string {
-  return new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/London", year: "numeric", month: "2-digit", day: "2-digit" }).format(ms);
-}
+export { londonDay, QUIET_MS };
 
 function jobDays(s: ConversationState): string[] {
   const days = new Set<string>();
@@ -294,20 +303,43 @@ export function project(
   };
   const cards = new Map<string, FeedCard>();
   const wants = new Map<string, FeedWant>();
+  const remember: Projection["remember"] = [];
+  // The newest need each thread showed on the TV, and every need key already remembered.
+  const lastOpen = new Map<string, FeedMark>();
+  const openKeys = new Set<string>();
+  for (const m of marks) {
+    if (m.mark !== "open") continue;
+    openKeys.add(m.item_key);
+    if (m.at >= (lastOpen.get(m.thread_id)?.at ?? -Infinity)) lastOpen.set(m.thread_id, m);
+  }
 
   for (const s of states) {
     if (!s?.thread_id || dismissed.has(s.thread_id)) continue;
+    const days = jobDays(s);
+    if (days.length && days[days.length - 1] < today) continue; // the job is over
+
     /**
-     * `not-a-job` is excluded EXCEPT where the engine's own predicate still holds: a client
+     * `not-a-job` yields nothing EXCEPT where the engine's own predicate still holds: a client
      * calling a booked job off reads to the model as not-a-job, and cannotBeBooked keeps
      * that thread as a need on purpose (pipeline.ts, verified 2026-10-01). Dropping it here
      * would hide the most dangerous update there is.
      */
-    if (s.classification === "not-a-job" && !cannotBeBooked(s)) continue;
-    const days = jobDays(s);
-    if (days.length && days[days.length - 1] < today) continue; // the job is over
-
-    const it = orderItem(s, lastInbound.get(s.thread_id));
+    let it = s.classification === "not-a-job" && !cannotBeBooked(s) ? null : orderItem(s, lastInbound.get(s.thread_id));
+    /**
+     * A need the TV showed, which the thread no longer yields, resolved without an engine
+     * write. So does one whose thread now yields only a write OLDER than the need: that is
+     * the order the need was about, not an answer to it.
+     */
+    const was = lastOpen.get(s.thread_id);
+    if (was && (!it || ((it.kind === "created-check" || it.kind === "updated-check") && it.at < was.at))) {
+      if (!byKey.has(was.item_key)) {
+        // Shown once stored: serveFeed writes this and projects again, so its time is the first sighting.
+        remember.push({ item_key: was.item_key, thread_id: s.thread_id, mark: "resolved", by: null, evidence: { text: resolvedText(s) } });
+        continue;
+      }
+      const kind = was.item_key.split(":")[0] as FeedKind;
+      it = { item_key: was.item_key, kind, status: STATUS_TEXT[kind], at: was.at, order_id: Number(s.onsinch_order_id) > 0 ? Number(s.onsinch_order_id) : null };
+    }
     if (!it) continue;
     const g = green(it);
     if (g && now - g.at > DONE_DWELL_MS) continue;
@@ -339,8 +371,10 @@ export function project(
       r_number: str(s.onsinch_order_number) ? `R${String(s.onsinch_order_number).replace(/^R/i, "")}` : foundNo.get(it.item_key)?.r ?? null,
       j_number: Number(s.onsinch_job_id) > 0 ? `J${s.onsinch_job_id}` : order_id ? null : foundNo.get(it.item_key)?.j ?? null,
       subject: s.subject ?? "",
+      quiet: !g && now - it.at > QUIET_MS,
     });
     if (!g) wants.set(s.thread_id, wantOf(s));
+    if (!g && !openKeys.has(it.item_key)) remember.push({ item_key: it.item_key, thread_id: s.thread_id, mark: "open", by: null, evidence: null });
   }
 
   /**
@@ -361,17 +395,17 @@ export function project(
     cards.set(r.thread_id, {
       thread_id: r.thread_id, colour: "neutral", lane: "reply", items: [item], green: false, at: item.at,
       order_id: null, company_id: null, company: r.company, contact: firstName(r.contact),
-      dates: [], starts_at: null, awaiting_reply_since: item.at, crew: null, venue: null, r_number: null, j_number: null, subject: r.subject,
+      dates: [], starts_at: null, awaiting_reply_since: item.at, crew: null, venue: null, r_number: null, j_number: null, subject: r.subject, quiet: false,
     });
   }
 
-  const LANE: Record<FeedLane, number> = { reply: 0, need: 1, done: 2 };
-  const doneAt = (c: FeedCard) => c.items[0].green?.at ?? c.at;
-  const ordered = [...cards.values()].sort((a, b) =>
-    LANE[a.lane] - LANE[b.lane] ||
-    // open work oldest first, the longest wait being the one to act on now; done work
-    // newest first, so what just went green sits at the top of the done group
-    (a.lane === "done" ? doneAt(b) - doneAt(a) : a.at - b.at));
-  return { cards: ordered, counts, wants };
+  return { cards: orderCards([...cards.values()], now), counts, wants, remember };
+}
+
+/** What the resolved card says happened. The engine wrote nothing, so this reads its state. */
+function resolvedText(s: ConversationState): string {
+  if (s.classification === "not-a-job") return "Read as not a job by the system";
+  if (Number(s.onsinch_order_id) > 0) return "Linked to an order by the system";
+  return "No order needed any more, per the system";
 }
 

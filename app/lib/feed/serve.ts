@@ -23,6 +23,8 @@ export interface FeedDeps {
   /** Runs at most once per window across every screen; returns how many marks it wrote. */
   verify?: (cards: FeedCard[], now: number, marks: FeedMark[], wants: Map<string, FeedWant>) => Promise<{ ran: boolean; wrote: number; note: string }>;
   verifyStatus?: () => Promise<{ last_verify_at: string | null; note: string | null }>;
+  /** Stores the projection's `open` and `resolved` marks; insert-once, so two screens agree. */
+  remember?: (marks: Array<Omit<FeedMark, "at">>) => Promise<void>;
 }
 
 export async function serveFeed(deps: FeedDeps, now: number): Promise<{ status: number; body: Record<string, unknown> }> {
@@ -37,17 +39,30 @@ export async function serveFeed(deps: FeedDeps, now: number): Promise<{ status: 
   }
 
   let p = project(states, inbound.byThread, marks, replies, now, inbound.outByThread);
+  let reread = false;
+
+  // Like verification, memory is extra: a failed write leaves a resolved need off the list
+  // for one refresh, which is what the feed did before it had memory at all.
+  if (deps.remember && p.remember.length) {
+    try {
+      await deps.remember(p.remember);
+      reread = p.remember.some((m) => m.mark === "resolved");
+    } catch (err) {
+      console.error("[feed] remember failed", err);
+    }
+  }
 
   let verify: { ran: boolean; wrote: number; note: string } | null = null;
   if (deps.verify) {
     try {
       verify = await deps.verify(p.cards, now, marks, p.wants);
-      if (verify.wrote > 0) p = project(states, inbound.byThread, await deps.marks(), replies, now, inbound.outByThread);
+      if (verify.wrote > 0) reread = true;
     } catch (err) {
       console.error("[feed] verify failed", err);
       verify = { ran: true, wrote: 0, note: `verify failed: ${String((err as Error)?.message ?? err).slice(0, 160)}` };
     }
   }
+  if (reread) p = project(states, inbound.byThread, await deps.marks(), replies, now, inbound.outByThread);
   const status = deps.verifyStatus ? await deps.verifyStatus().catch(() => null) : null;
 
   const intake = intakeHealth({ lastReceivedAt: inbound.latest, now });

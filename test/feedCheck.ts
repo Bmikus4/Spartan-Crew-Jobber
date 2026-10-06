@@ -47,6 +47,16 @@ void (async () => {
     ok(project([state], new Map(), [...s.rows.values()], null, NOW).cards[0]?.green === true, "and the card is green");
   }
 
+  console.log("\n[1b] the tick carries the signer's display name; the email stays the audit identity");
+  {
+    const s = memStore();
+    await applyCheck({ item_key: KEY, thread_id: "c", checked: true }, "benjamintmikus@gmail.com", s.store, "Ben Mikus");
+    const row = [...s.rows.values()][0];
+    ok(row.by === "benjamintmikus@gmail.com" && (row.evidence as { name?: string })?.name === "Ben Mikus", "by is the email, evidence.name the display name");
+    const route = readFileSync("app/api/feed/check/route.ts", "utf8");
+    ok(/caller\.name/.test(route), "the route passes the session's name");
+  }
+
   console.log("\n[2] undo removes the tick and leaves the verifier's evidence");
   {
     const s = memStore();
