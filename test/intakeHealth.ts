@@ -109,6 +109,28 @@ const MIN = 60_000;
     ok(n.bank_holiday === false, "not flagged as a holiday");
   }
 
+  console.log("\n[6b] only working-hours silence counts: the night before is not a fault");
+  {
+    // Tuesday 6 Oct 2026. The last mail was 23:05 London the night before (22:05Z) and
+    // intake polled cleanly all night. At 08:00 London (07:00Z) the old rule read 535
+    // minutes of quiet and emailed twice.
+    const last = at("2026-10-05T22:05:00Z");
+    const eight = intakeHealth({ lastReceivedAt: last, now: at("2026-10-06T07:00:00Z") });
+    ok(eight.within_working_hours && !eight.stale, "08:00 after a quiet night is not stale", eight.what);
+    ok(eight.minutes_since === 535, "though the age is still reported honestly", String(eight.minutes_since));
+    ok(!intakeHealth({ lastReceivedAt: last, now: at("2026-10-06T08:29:00Z") }).stale, "09:29, 89 minutes into the day, is not stale yet");
+    const late = intakeHealth({ lastReceivedAt: last, now: at("2026-10-06T08:30:00Z") });
+    ok(late.stale, "09:30 with nothing since 08:00 is", late.what);
+    ok(/first 90 minutes of the working day/.test(late.what), "and says it counts from the start of the day", late.what);
+    // Winter: 08:00 London is 08:00Z.
+    const jan = at("2026-01-27T22:00:00Z");
+    ok(!intakeHealth({ lastReceivedAt: jan, now: at("2026-01-28T09:29:00Z") }).stale, "in GMT the day starts at 08:00Z: 09:29Z is not stale");
+    ok(intakeHealth({ lastReceivedAt: jan, now: at("2026-01-28T09:30:00Z") }).stale, "and 09:30Z is");
+    // A real outage mid-day still alarms 90 minutes after the last mail.
+    const died = at("2026-10-01T15:05:00Z");
+    ok(intakeHealth({ lastReceivedAt: died, now: died + 90 * MIN }).stale, "a credential that dies at 16:05 London alarms at 17:35");
+  }
+
   console.log("[7] the holiday table is internally consistent");
   {
     // Transcribed by hand, so it is checked by machine rather than by reading. Every

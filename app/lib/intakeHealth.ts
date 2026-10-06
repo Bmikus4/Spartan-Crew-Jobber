@@ -97,6 +97,18 @@ export function holidayTableStale(ms: number): boolean {
   return Number(londonDate(ms).slice(0, 4)) > TABLE_LAST_YEAR;
 }
 
+/**
+ * 08:00 London on the London day of `ms`, as an instant. BST and GMT both come out right
+ * because the offset is read from the zone on that day, not assumed.
+ */
+function workStartOf(ms: number): number {
+  const guess = Date.parse(`${londonDate(ms)}T${String(WORK_START_HOUR).padStart(2, "0")}:00:00Z`);
+  const p = Object.fromEntries(new Intl.DateTimeFormat("en-GB", {
+    timeZone: ZONE, hour: "2-digit", minute: "2-digit", hourCycle: "h23",
+  }).formatToParts(new Date(guess)).map((x) => [x.type, x.value]));
+  return guess - ((Number(p.hour) * 60 + Number(p.minute)) - WORK_START_HOUR * 60) * 60_000;
+}
+
 export function withinWorkingHours(ms: number): boolean {
   const { weekday, hour } = londonParts(ms);
   if (weekday === "Sat" || weekday === "Sun") return false;
@@ -136,16 +148,26 @@ export function intakeHealth(
 ): IntakeHealth {
   const working = withinWorkingHours(now);
   const minutes = lastReceivedAt == null ? null : Math.floor((now - lastReceivedAt) / 60_000);
-
+  /**
+   * ONLY WORKING-HOURS SILENCE COUNTS. Measured from the last mail or from 08:00 London
+   * today, whichever is later. Counting the night as well alarmed at 08:00 on every morning
+   * the first email came after 09:30: on 2026-10-05 and 10-06 it emailed twice each morning
+   * ("quiet for 1024 minutes") while intake polled successfully every 5 minutes and nobody
+   * had written since the evening. Replayed over the 30 days to 2026-10-06 this drops the
+   * alarm on 4 working days, all of them false mornings, and keeps every real outage
+   * (the expired credential of 10-01 still alarms at 16:36Z, 90 minutes after it died).
+   */
+  const silent = lastReceivedAt == null ? null : Math.floor((now - Math.max(lastReceivedAt, workStartOf(now))) / 60_000);
   // No inbound row at all is the loudest case, not an empty answer: it is what a brand-new
   // deployment looks like AND what a database pointed at the wrong project looks like.
-  const quiet = minutes == null || minutes >= quietMinutes;
+  const quiet = silent == null || silent >= quietMinutes;
   const stale = working && quiet;
-
   const what =
     minutes == null
       ? "mail has NEVER reached the engine — inbound_raw has no rows at all"
-      : `no mail has reached the engine for ${minutes} minutes`;
+      : silent != null && silent < minutes && working
+        ? `no mail has reached the engine in the first ${silent} minutes of the working day (the last was ${minutes} minutes ago)`
+        : `no mail has reached the engine for ${minutes} minutes`;
 
   return {
     ok: !stale,

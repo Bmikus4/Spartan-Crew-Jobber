@@ -2680,5 +2680,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0136",
+  "ts": "2026-10-06T12:00:00+00:00",
+  "kind": "measurement",
+  "headline": "Intake alarm: silence measured from 08:00 London; 30-day replay drops 4 alarm days, all false mornings, keeps every real outage",
+  "subject": "The intake alarm counts only working-hours silence, so a quiet night no longer fires at 08:00",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 181,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]
