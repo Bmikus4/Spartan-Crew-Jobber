@@ -218,11 +218,22 @@ def append(feed, entry):
     FEED.write_text(json.dumps(feed, indent=1) + "\n", encoding="utf-8")
 
 
+def unappend(entry):
+    """
+    The ticket is written before `git add`, so a failed add or commit left it in the feed
+    while die() said "Nothing was written" (2026-10-05: S-0132, add refused a deleted
+    path). The next green run would then have committed a ticket naming no commit.
+    """
+    feed = [e for e in load_feed() if e.get("id") != entry["id"]]
+    FEED.write_text(json.dumps(feed, indent=1) + "\n", encoding="utf-8")
+
+
 # ----------------------------------------------------------------- 3. commit
 def commit_and_push(args, entry):
     paths = list(args.pathspec) + [str(FEED.relative_to(ROOT)).replace("\\", "/")]
     r = run("git add -- " + " ".join(f'"{p}"' for p in paths))
     if r.returncode != 0:
+        unappend(entry)
         die("git add", r.stdout + r.stderr)
 
     body = f"{entry['headline']}\n\nTicket {entry['id']}"
@@ -237,6 +248,8 @@ def commit_and_push(args, entry):
     try:
         r = run(f'git commit -F "{msg}"')
         if r.returncode != 0:
+            run('git reset -q -- "' + str(FEED.relative_to(ROOT)).replace("\\", "/") + '"')
+            unappend(entry)
             die("git commit", r.stdout + r.stderr)
         print(r.stdout.strip().splitlines()[0] if r.stdout.strip() else "committed")
     finally:
