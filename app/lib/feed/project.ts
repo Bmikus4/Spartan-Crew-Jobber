@@ -24,9 +24,15 @@ export type FeedKind = "needs-created" | "needs-updated" | "created-check" | "up
 export type FeedColour = "red" | "blue" | "neutral";
 export type FeedLane = "reply" | "need" | "done";
 /**
- * `made` is never stored: it is what the projection calls an order or update the engine
- * itself wrote, which is done the moment it is written (Ben, 2026-10-04). `stamps`,
- * `matched` and `dismissed` are stored and are NOT green: `stamps` records that the
+ * AN ORDER THE ENGINE WROTE IS NOT DONE UNTIL SOMEBODY CHECKS IT (Ben, 2026-10-05). Its
+ * card reads "Order was created/updated, check to verify" and stays open until a person
+ * confirms it or the verifier finds a staff edit made after the write. From 2026-10-04 to
+ * 10-05 such writes went green the moment they were made, and on 10-06 one green card named
+ * an order (R11361) that staff had already deleted and rebooked by hand. The sweep's
+ * "holds" can never close one: straight after a write OnSinch always matches what the
+ * engine wrote (verify.ts).
+ *
+ * `stamps`, `matched` and `dismissed` are stored and are NOT green: `stamps` records that the
  * verifier has read an item's past once; `matched` carries the order it found for an
  * update the engine never bound; `dismissed` takes a whole thread off the TV. Rows marked
  * `history` (the stamps read before 2026-10-04) are still in the table and read by nothing.
@@ -38,7 +44,7 @@ export type FeedLane = "reply" | "need" | "done";
  * stopped yielding it. Without them the card vanished mid-list, which on a full screen
  * reads as a job lost, not a job done.
  */
-export type MarkKind = "checked" | "staff-edit" | "order-found" | "made" | "stamps" | "matched" | "dismissed" | "open" | "resolved";
+export type MarkKind = "checked" | "staff-edit" | "order-found" | "stamps" | "matched" | "dismissed" | "open" | "resolved";
 const GREEN_MARKS = new Set<MarkKind>(["checked", "staff-edit", "order-found", "resolved"]);
 
 /** The requester's wording, byte for byte (test/feedProjection.ts pins it). */
@@ -121,7 +127,9 @@ export interface FeedCounts {
   needs_created: number;
   needs_updated: number;
   needs_reply: number;
-  /** Made by the engine, ticked, or verified in OnSinch, within the last day. */
+  /** Orders the engine wrote that nobody has checked yet. */
+  to_check: number;
+  /** Ticked, or verified in OnSinch, within the last day. */
   done: number;
   /** Undated needs nobody has written about for a fortnight. */
   older: number;
@@ -283,18 +291,12 @@ export function project(
   }
   const green = (it: Omit<FeedItem, "green">): FeedItem["green"] => {
     const first = byKey.get(it.item_key);
-    if (it.kind === "created-check" || it.kind === "updated-check") {
-      const shown = ticked.get(it.item_key) ?? first;
-      return shown
-        ? { mark: shown.mark, by: shown.by, evidence: shown.evidence, at: it.at }
-        : { mark: "made", by: null, evidence: { text: it.kind === "created-check" ? "Order created by the system" : "Order updated by the system" }, at: it.at };
-    }
     if (!first) return null;
     const shown = ticked.get(it.item_key) ?? first;
     return { mark: shown.mark, by: shown.by, evidence: shown.evidence, at: first.at };
   };
 
-  const counts: FeedCounts = { needs_created: 0, needs_updated: 0, needs_reply: 0, done: 0, older: 0 };
+  const counts: FeedCounts = { needs_created: 0, needs_updated: 0, needs_reply: 0, to_check: 0, done: 0, older: 0 };
   const awaiting = (thread: string): number | null => {
     const inAt = lastInbound.get(thread);
     if (!inAt) return null;
@@ -308,7 +310,7 @@ export function project(
   const lastOpen = new Map<string, FeedMark>();
   const openKeys = new Set<string>();
   for (const m of marks) {
-    if (m.mark !== "open") continue;
+    if (m.mark !== "open" || !/^needs-/.test(m.item_key)) continue;
     openKeys.add(m.item_key);
     if (m.at >= (lastOpen.get(m.thread_id)?.at ?? -Infinity)) lastOpen.set(m.thread_id, m);
   }
@@ -347,7 +349,8 @@ export function project(
 
     if (g) counts.done++;
     else if (it.kind === "needs-created") counts.needs_created++;
-    else counts.needs_updated++;
+    else if (it.kind === "needs-updated") counts.needs_updated++;
+    else counts.to_check++;
 
     const { order_id, ...item } = it;
     cards.set(s.thread_id, {
@@ -371,10 +374,14 @@ export function project(
       r_number: str(s.onsinch_order_number) ? `R${String(s.onsinch_order_number).replace(/^R/i, "")}` : foundNo.get(it.item_key)?.r ?? null,
       j_number: Number(s.onsinch_job_id) > 0 ? `J${s.onsinch_job_id}` : order_id ? null : foundNo.get(it.item_key)?.j ?? null,
       subject: s.subject ?? "",
-      quiet: !g && now - it.at > QUIET_MS,
+      quiet: !g && now - (lastInbound.get(s.thread_id) ?? it.at) > QUIET_MS,
     });
     if (!g) wants.set(s.thread_id, wantOf(s));
-    if (!g && !openKeys.has(it.item_key)) remember.push({ item_key: it.item_key, thread_id: s.thread_id, mark: "open", by: null, evidence: null });
+    // Needs only: a check's key is its write, and a remembered check would read as resolved
+    // on the next refresh, the write being older than the moment it was first seen.
+    if (!g && (it.kind === "needs-created" || it.kind === "needs-updated") && !openKeys.has(it.item_key)) {
+      remember.push({ item_key: it.item_key, thread_id: s.thread_id, mark: "open", by: null, evidence: null });
+    }
   }
 
   /**

@@ -93,8 +93,9 @@ export function changeOf(row: TimelineRow, engine: number | null): Change | null
 }
 
 /** The open need on a card that evidence could close, or null. An engine write is done already. */
+/** A check on an engine write is watched like an update: a staff edit after the write closes it. */
 function openOrderItem(c: FeedCard): FeedItem | null {
-  const it = c.items.find((i) => i.kind === "needs-created" || i.kind === "needs-updated");
+  const it = c.items.find((i) => i.kind !== "needs-reply");
   return it && !it.green ? it : null;
 }
 

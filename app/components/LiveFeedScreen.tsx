@@ -580,6 +580,7 @@ export default function LiveFeedScreen({ isActive, tv = false }: { isActive: boo
   const kpis: Array<{ label: [string, string]; n: number; color: string }> = c ? [
     { label: ["need", "created"], n: c.needs_created, color: RED },
     { label: ["need", "updated"], n: c.needs_updated, color: BLUE },
+    { label: ["to", "check"], n: c.to_check, color: "var(--text-primary)" },
     ...(data?.health.replies_enabled ? [{ label: ["need", "reply"] as [string, string], n: c.needs_reply, color: GREY }] : []),
     { label: ["within", "48 hours"], n: urgentCount, color: AMBER },
   ] : [];

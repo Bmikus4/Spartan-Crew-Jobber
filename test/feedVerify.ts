@@ -272,6 +272,15 @@ void (async () => {
     ok(green("engine") === undefined, "blocks the engine wrote are not evidence");
     ok(green("extra") === undefined, "a block on a day the thread does not ask for keeps it open (Lux R11359)");
     ok(green("built") === "order, a block made by staff after the client's email", "an order a person built after the email, though the engine edited it last", String(green("built")));
+
+    // A check on an engine write (Ben, 2026-10-05): watched like an update, closed only by a person.
+    const wroteAt = sent + H;
+    const made = (id: string, oid: number) => ({ ...base, thread_id: id, classification: "new-job", status: "ordered", company_id: 61, onsinch_order_id: oid, onsinch_order_number: String(oid), desired_order: wanted([[nov(8), nov(12)]]), facts: { requests: [{ date: "2026-11-19" }] }, order_action_log: [{ ts: wroteAt, kind: "create", order_id: oid, ok: true }] }) as unknown as ConversationState;
+    const touched = order(15000, "15000", 1446, nov(8), nov(12), { by: ENGINE, made: iso(wroteAt), editor: 102, edited: iso(wroteAt + 2 * H) });
+    const untouched = order(15100, "15100", 1446, nov(8), nov(12), { by: ENGINE, made: iso(wroteAt), editor: ENGINE, edited: iso(wroteAt) });
+    w = await run([made("touched", 15000), made("untouched", 15100)], { "0": [touched, untouched] });
+    ok(green("touched") !== undefined && !!w.find((m) => m.thread_id === "touched" && m.mark === "staff-edit")?.item_key.startsWith("created-check:"), "a staff edit after the engine's write closes its check", String(green("touched")));
+    ok(green("untouched") === undefined, "an engine order nobody touched stays open, though it holds every shift");
   }
 
   console.log(fails ? `\n${fails} FAILED` : "\nALL PASS");

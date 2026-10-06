@@ -2652,5 +2652,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0134",
+  "ts": "2026-10-06T03:11:32+00:00",
+  "kind": "measurement",
+  "headline": "TV: engine writes are 'check to verify' until confirmed or staff-edited (24 open up); verifier now watches them; to-check tile",
+  "subject": "An order the engine wrote stays open on the TV until a person or a staff edit checks it",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 180,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]

@@ -17,7 +17,7 @@ const ok = (cond: boolean, label: string, extra = "") => {
 };
 
 const NOW = Date.parse("2026-10-03T12:00:00Z");
-// A need: what the engine made is green already, so only a need shows what a tick does.
+// A need, though a tick closes a check on an engine write the same way.
 const KEY = "needs-updated:c:901:0";
 const state = {
   thread_id: "c", subject: "s", participants: [], last_message_id: "m", last_processed_epoch: NOW,
