@@ -452,13 +452,25 @@ function unresolvedVenue(
  * the eight companies stuck on the live board were the second kind, and creating
  * them would have made six duplicates of clients Spartan already had.
  */
-async function resolveCompany(
+const FUZZY_COMPANY = "on a name similarity";
+
+export async function resolveCompany(
   facts: ConversationFacts,
   prior: ConversationState | undefined,
   onsinch: OnsinchClient,
   aliases?: CompileDeps["aliases"]
 ): Promise<{ id?: number; provision?: DesiredOrder["provision_company"]; note?: string }> {
-  if (prior?.company_id) return { id: prior.company_id };
+  /**
+   * A prior company is settled only if it was not a guess. One that came from the fuzzy
+   * fallback is asked again on every email, so a domain that disagrees can still correct
+   * it: five RG Jones threads held 146 "F1 Sound Co" for good on a shared word (2026-10-05).
+   * Asked again and still unresolved, the guess stands rather than leaving no client.
+   */
+  if (prior?.company_id) {
+    if (!(prior.notes ?? []).some((n) => n.includes(FUZZY_COMPANY))) return { id: prior.company_id };
+    const again = await resolveCompany(facts, undefined, onsinch, aliases);
+    return again.id ? again : { id: prior.company_id };
+  }
 
   /**
    * No company name in the text is not the same as no evidence about the client.
@@ -522,11 +534,29 @@ async function resolveCompany(
      * same bug Ben killed for venues on 2026-08-25 — "venue matching must not come only
      * from what was remembered" — left standing on the company path.
      */
+    /**
+     * The sender's domain outranks a resemblance. The ordering note below ("never before
+     * the name") protects a SPECIFIC name from a shared domain; a fuzzy match is not
+     * specific. Live on 2026-10-05: "RG Jones Sound Engineering Ltd" resembled 146 "F1
+     * Sound Co" while every sender wrote from rgjones.co.uk, which is 457 "RG Jones" (5
+     * threads), and "Impact Immersive Ltd" resembled 189 "Immersive AV" from
+     * we-are-impact.com, which is 343 "Impact Collective" (2). A domain shared by two
+     * companies resolves to nothing, so this never picks between trading entities.
+     */
+    const byDomain = matchCompanyByDomain(facts.contact_email, companies);
+    if (byDomain && byDomain !== id) {
+      const owner = companies.find((c) => c.id === byDomain);
+      return {
+        id: byDomain,
+        note: `"${facts.company_name}" only resembled ${id} "${matched?.name ?? "?"}"; the sender's domain ` +
+          `(${facts.contact_email}) belongs to ${byDomain} "${owner?.name ?? "?"}", so the domain was used`,
+      };
+    }
     return {
       id,
       note:
         `company "${facts.company_name}" did not match any client exactly — booked against ` +
-        `${id} "${matched?.name ?? "?"}" on a name similarity. CHECK IT: the rate card is ` +
+        `${id} "${matched?.name ?? "?"}" ${FUZZY_COMPANY}. CHECK IT: the rate card is ` +
         `derived from that company's history, so the wrong client here prices the job wrong`,
     };
   }

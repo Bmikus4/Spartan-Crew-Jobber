@@ -2666,5 +2666,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0135",
+  "ts": "2026-10-06T03:20:08+00:00",
+  "kind": "measurement",
+  "headline": "RG Jones (5 threads) and Impact (2) were booked against look-alike clients 146 and 189; the domain now wins over a fuzzy name",
+  "subject": "A company name that only resembles a client gives way to the sender's domain, and a guessed company is asked again on the next email",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 181,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]
