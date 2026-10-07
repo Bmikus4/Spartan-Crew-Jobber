@@ -110,7 +110,7 @@ export interface FeedCard {
   r_number: string | null;
   j_number: string | null;
   subject: string;
-  /** An open need with no word from the client for QUIET_MS: listed below the fresh ones. */
+  /** Open, with nothing done on it by anyone for QUIET_MS: listed below the fresh ones. */
   quiet: boolean;
 }
 
@@ -303,6 +303,14 @@ export function project(
     const outAt = lastOutbound.get(thread);
     return outAt && outAt >= inAt ? null : inAt;
   };
+  // The latest thing a person or the engine did on each thread, from the marks: a tick, or a
+  // staff edit at the moment it was made rather than the moment the verifier noticed it.
+  const actedAt = new Map<string, number>();
+  for (const m of marks) {
+    if (!GREEN_MARKS.has(m.mark)) continue;
+    const t = Date.parse(String((m.evidence as { at?: unknown } | null)?.at ?? "")) || m.at;
+    if (t > (actedAt.get(m.thread_id) ?? 0)) actedAt.set(m.thread_id, t);
+  }
   const cards = new Map<string, FeedCard>();
   const wants = new Map<string, FeedWant>();
   const remember: Projection["remember"] = [];
@@ -353,6 +361,21 @@ export function project(
     else counts.to_check++;
 
     const { order_id, ...item } = it;
+    const r_number = str(s.onsinch_order_number) ? `R${String(s.onsinch_order_number).replace(/^R/i, "")}` : foundNo.get(it.item_key)?.r ?? null;
+    const j_number = Number(s.onsinch_job_id) > 0 ? `J${s.onsinch_job_id}` : order_id ? null : foundNo.get(it.item_key)?.j ?? null;
+    /**
+     * A JOB HAS NO TIMER (Ben, 2026-10-06). Once an order exists in OnSinch the reply clock is
+     * gone, and with it the clock's pull to the top of the list; it counts only for an enquiry
+     * nobody has booked yet.
+     */
+    const isJob = !!(order_id || r_number || j_number);
+    /**
+     * QUIET RESETS ON ANY UPDATE (Ben, 2026-10-06): the client's email, ours, an engine write,
+     * or a person's tick or edit. Measured from the client alone, a job the engine updated
+     * yesterday sank under "quiet" because the client had last written a week ago.
+     */
+    const lastWrite = Math.max(0, ...(s.order_action_log ?? []).filter((a) => a.ok).map((a) => epochMs(a.ts)));
+    const lastActivity = Math.max(lastInbound.get(s.thread_id) ?? 0, lastOutbound.get(s.thread_id) ?? 0, lastWrite, actedAt.get(s.thread_id) ?? 0) || it.at;
     cards.set(s.thread_id, {
       thread_id: s.thread_id,
       // The legend's colour is the NEED, not whether an order is bound (Ben, 2026-10-04): an
@@ -368,13 +391,13 @@ export function project(
       contact: firstName(s.facts?.contact_name),
       dates: days,
       starts_at: nextStart(s, now),
-      awaiting_reply_since: awaiting(s.thread_id),
+      awaiting_reply_since: isJob ? null : awaiting(s.thread_id),
       crew: crewOf(s),
       venue: str(s.facts?.location_text),
-      r_number: str(s.onsinch_order_number) ? `R${String(s.onsinch_order_number).replace(/^R/i, "")}` : foundNo.get(it.item_key)?.r ?? null,
-      j_number: Number(s.onsinch_job_id) > 0 ? `J${s.onsinch_job_id}` : order_id ? null : foundNo.get(it.item_key)?.j ?? null,
+      r_number,
+      j_number,
       subject: s.subject ?? "",
-      quiet: !g && now - (lastInbound.get(s.thread_id) ?? it.at) > QUIET_MS,
+      quiet: !g && now - lastActivity > QUIET_MS,
     });
     if (!g) wants.set(s.thread_id, wantOf(s));
     // Needs only: a check's key is its write, and a remembered check would read as resolved

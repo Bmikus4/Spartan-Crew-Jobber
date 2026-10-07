@@ -647,7 +647,7 @@ export default function LiveFeedScreen({ isActive, tv = false }: { isActive: boo
             {openRows.map((card, i) => (
               <Fragment key={card.thread_id}>
                 {/* Sunk, not hidden (Ben, 2026-10-05): the label says why these sit lower. */}
-                {card.quiet && !openRows[i - 1]?.quiet && <Section s={s} label={`No word from the client for ${QUIET_MS / 86_400_000}+ days`} n={openRows.filter((x) => x.quiet).length} />}
+                {card.quiet && !openRows[i - 1]?.quiet && <Section s={s} label={`Nothing new for ${QUIET_MS / 86_400_000}+ days`} n={openRows.filter((x) => x.quiet).length} />}
                 <Row card={card} now={now} s={s} phase={phaseOf(card)} onTick={tick} />
               </Fragment>
             ))}

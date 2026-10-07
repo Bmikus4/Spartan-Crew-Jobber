@@ -90,8 +90,9 @@ console.log("\n[5] ordering: a day-long reply wait first, then needs by job date
     [created("c-old", NOW - 8 * H), needsCreated("n-new"), created("c-new", NOW - 2 * H), needsUpdated("n-old")],
     inbound, [], [{ thread_id: "r", since_iso: new Date(NOW - 30 * H).toISOString(), company: "Acme", contact: "Jo Bloggs", subject: "Re: quote" }], NOW);
   const order = p.cards.map((c) => c.thread_id).join(",");
-  // The checks have no client wait, so on the same job day they follow the needs, oldest write first.
-  ok(order === "r,n-old,n-new,c-old,c-new", "lane order", order);
+  // n-old is an update on a booked job, so it has no clock (Ben, 2026-10-06) and no wait to
+  // rank by; on the same job day the enquiry still waiting on a reply goes first.
+  ok(order === "r,n-new,n-old,c-old,c-new", "lane order", order);
   ok(p.cards[0].colour === "neutral" && p.cards[0].contact === "Jo", "a reply-only card is neutral grey and shows a first name");
 }
 
@@ -175,6 +176,12 @@ console.log("\n[12] how long the client has waited for a reply");
   ok(by.get("w")?.awaiting_reply_since === NOW - 5 * H, "our last email was before theirs: waiting since theirs");
   ok(by.get("r")?.awaiting_reply_since === null, "we replied after their email: not waiting");
   ok(by.get("silent")?.awaiting_reply_since === null, "no client email on record: no clock");
+  const jobs = project([needsUpdated("u"), created("c", NOW - 6 * H), needsUpdated("m", { onsinch_order_id: undefined, onsinch_order_number: undefined, onsinch_job_id: undefined })],
+    new Map([["u", NOW - 5 * H], ["c", NOW - 5 * H], ["m", NOW - 5 * H]]),
+    [{ item_key: `needs-updated:m:0:${NOW - 5 * H}`, thread_id: "m", mark: "matched", by: null, evidence: { r_number: "11029", j_number: "J16100" }, at: NOW - H }], null, NOW);
+  const jb = new Map(jobs.cards.map((c) => [c.thread_id, c]));
+  ok(jb.get("u")?.awaiting_reply_since === null && jb.get("c")?.awaiting_reply_since === null, "a job has no clock, whether it needs updating or the engine wrote it (Ben, 2026-10-06)");
+  ok(jb.get("m")?.r_number === "R11029" && jb.get("m")?.awaiting_reply_since === null, "nor does a need matched to a job staff booked by hand");
 }
 
 console.log("\n[13] the order of the list (Ben, 2026-10-04 and 10-05)");
@@ -199,7 +206,13 @@ console.log("\n[13] the order of the list (Ben, 2026-10-04 and 10-05)");
   ok(by.get("quiet")?.quiet === true && by.get("red-wait")?.quiet === false && by.get("done-old")?.quiet === false, "quiet only on an open need silent for QUIET_MS");
   ok(by.has("quiet") && p.counts.needs_created === 6 && p.counts.to_check === 2, "sunk, never hidden, and still counted");
   const stale = project([created("c", NOW - 20 * 86_400_000)], new Map([["c", NOW - H]]), [], null, NOW);
-  ok(stale.cards[0]?.quiet === false, "a check is quiet by the client's silence, not the age of the write");
+  ok(stale.cards[0]?.quiet === false, "a client who wrote an hour ago keeps a card off quiet, however old the write");
+  const W = 8 * 86_400_000;
+  const reset = project([created("c", NOW - H), needsCreated("n"), needsCreated("q")], new Map([["c", NOW - W], ["n", NOW - W], ["q", NOW - W]]), [], null, NOW, new Map([["n", NOW - 2 * H]]));
+  const rs = new Map(reset.cards.map((c) => [c.thread_id, c]));
+  ok(rs.get("c")?.quiet === false, "an engine write after a week of silence takes the card off quiet (Ben, 2026-10-06)");
+  ok(rs.get("n")?.quiet === false, "so does an email of ours");
+  ok(rs.get("q")?.quiet === true, "a card nobody has touched for a week is still quiet");
 }
 
 console.log("\n[14] a need that resolves without an engine write turns green instead of vanishing");

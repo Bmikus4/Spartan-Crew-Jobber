@@ -2694,5 +2694,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0137",
+  "ts": "2026-10-07T01:54:40+00:00",
+  "kind": "measurement",
+  "headline": "TV: no timer once an order exists; quiet measured from the latest email, engine write, tick or staff edit",
+  "subject": "A job has no reply clock on the TV, and quiet resets on any update to the thread",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 181,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]

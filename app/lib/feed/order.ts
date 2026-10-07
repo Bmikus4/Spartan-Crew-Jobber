@@ -10,10 +10,10 @@ import type { FeedCard } from "./project";
 export const REPLY_RED_MS = 24 * 3_600_000;
 
 /**
- * THE DIAL for sinking old needs (Ben, 2026-10-05): a need whose client has sent nothing
- * for this long goes below every fresh need, under its own label. Sunk, never hidden:
- * no order exists for these, and hiding one could hide a lost booking. Whole days, because
- * the screen's label says it in days.
+ * THE DIAL for sinking old cards (Ben, 2026-10-05): open work nobody has touched for this
+ * long (no email either way, no engine write, no staff edit or tick; 10-06) goes below every
+ * fresh card, under its own label. Sunk, never hidden: hiding one could hide a lost booking.
+ * Whole days, because the screen's label says it in days.
  */
 export const QUIET_MS = 7 * 86_400_000;
 
