@@ -642,8 +642,9 @@ export function executor(client: OnsinchClient): Executor {
       const applied: string[] = [];
       // Not `specification`: PATCH /orders answers 204 and ignores it (S-0017, #15805), so
       // sending it reported a field as applied that never changed (SP-11).
+      // Not a PO without a digit, whatever an older stored order says (see compiler.ts).
       const po = p.desired.intern_name?.trim();
-      if (po) { body.intern_name = po; applied.push("intern_name"); }
+      if (po && /\d/.test(po)) { body.intern_name = po; applied.push("intern_name"); }
       if (!applied.length) return []; // nothing safe to send — do not call at all
       await client.patchOrder([body as { id: number }]);
       return applied;

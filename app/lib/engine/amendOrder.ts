@@ -222,9 +222,26 @@ function blockKey(b: { beginning?: string; profession_id?: number }): string | u
 export function pairBlocks(desired: DesiredSlotTeam[], live: LiveBlock[]): Pairing {
   if (!live.length) return { pairs: [], declined: "no slot team ids could be read back for the order" };
 
-  // The unambiguous case, and the one that covers an unstaffed order whose blocks cannot
-  // be read at all.
-  if (live.length === 1 && desired.length === 1) return { pairs: [{ id: live[0].id, index: 0 }] };
+  /**
+   * ONE BLOCK ON EACH SIDE PAIRS ONLY ON THE SAME DAY. It used to pair "whatever the shapes
+   * say", and on 2026-10-06 that moved a client's install: order #13709 (Legal Geek) held
+   * one Install on the 12th, the client wrote to ADD a derig on the 13th, the thread's
+   * order held only that derig, and the pairing PATCHed the install onto the 13th. With one
+   * block a side, an added day and a moved day look identical, so a different day (or a day
+   * that cannot be read) is a person's call. The caller reads an unstaffed block's day from
+   * the nested order, so this still amends the single-block order it was written for.
+   */
+  if (live.length === 1 && desired.length === 1) {
+    const liveDay = String(live[0].beginning ?? "").slice(0, 10);
+    const wantDay = String(desired[0].beginning ?? "").slice(0, 10);
+    if (liveDay && wantDay && liveDay === wantDay) return { pairs: [{ id: live[0].id, index: 0 }] };
+    return {
+      pairs: [],
+      declined: liveDay && wantDay
+        ? `the order's only block is on ${liveDay} and this thread asks for ${wantDay}; an added day cannot be told from a moved one, so a person decides`
+        : `the order's only block cannot be read back, so an added day cannot be told from a moved one`,
+    };
+  }
 
   const liveKeys = new Map<string, number>();
   for (const b of live) {
@@ -422,6 +439,13 @@ export async function amendOrderInPlace(
         const seen = shapes.teams.get(t.id);
         return seen ? { ...t, beginning: seen.beginning, profession_id: seen.profession_id } : t;
       });
+    }
+    // Nobody signed on means attendance cannot see the only block; the nested order can, and
+    // pairBlocks needs its day to tell a time change from an added day.
+    if (live.length === 1 && !(live[0] as LiveBlock).beginning) {
+      const nested = await readNestedShape(client, order_id).catch(() => null);
+      const seen = nested && !nested.unreadable ? nested.teams.get(live[0].id) : undefined;
+      if (seen) live = [{ ...live[0], beginning: seen.beginning, profession_id: seen.profession_id } as LiveBlock];
     }
     const paired = pairBlocks(next, live as LiveBlock[]);
     if (paired.declined) return { declined: `order #${order_id}: ${paired.declined}` };

@@ -1835,7 +1835,9 @@ export async function compile(
         specification: overruled
           ? facts.requests.map((r) => r.task).filter(Boolean).join("; ").slice(0, 200) || "Crew request read from the thread"
           : cls.job_summary,
-        intern_name: facts.customer_reference,
+        // A reference with no digit in it is not a PO: "RE: PO - Legal Geek - 12/10/26" gave
+        // "Legal Geek", which replaced the real PO 4672 on order #13709 (2026-10-06).
+        intern_name: /\d/.test(facts.customer_reference ?? "") ? facts.customer_reference : undefined,
         // Stamped on every order the engine builds, so "who built this" is answerable
         // from the order itself rather than from the API key that happened to post it.
         order_manager_id: Number.isInteger(ORDER_MANAGER_ID) && ORDER_MANAGER_ID > 0 ? ORDER_MANAGER_ID : undefined,

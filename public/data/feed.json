@@ -2708,5 +2708,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0138",
+  "ts": "2026-10-07T02:00:26+00:00",
+  "kind": "measurement",
+  "headline": "Order #13709: an added derig moved the client's install from the 12th to the 13th and overwrote PO 4672; one-block pairing now requires the same day",
+  "subject": "An added day no longer moves an order's only shift onto it, and a name read from a subject is never written as the PO",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 182,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]

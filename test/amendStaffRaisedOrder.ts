@@ -62,6 +62,8 @@ const order = (teams: DesiredSlotTeam[]): DesiredOrder =>
  */
 function fakeOnsinch(opts: {
   audit: Array<{ id: number; name: string }>;
+  /** Blocks as the nested order read shows them, whoever is signed on: id -> one position. */
+  nested?: Record<number, { size: number; beginning: string; end: string; profession_id: number }>;
   staffed?: Record<number, { size: number; beginning: string; end: string; slotlocation_id: number; profession_id: number }>;
 }) {
   const calls: string[] = [];
@@ -79,6 +81,10 @@ function fakeOnsinch(opts: {
       return { status: 201, data: { data: [{ id: 40999 }] } };
     }
     if (method !== "GET") return { status: 204, data: null };
+    if (path.startsWith("/orders") && path.includes("SlotTeam") && opts.nested) {
+      const SlotTeam = Object.entries(opts.nested).map(([id, slot]) => ({ id: Number(id), name: "Install", Slot: [{ id: Number(id) + 1, role: 0, ...slot }] }));
+      return page([{ id: ORDER, number: "10616", company_id: 501, Job: [{ id: JOB, SlotTeam }] }]);
+    }
     if (path.startsWith("/orders")) {
       return page([{ id: ORDER, number: "10687", company_id: 501, happening: `${DAY}T09:00:00+00:00`, Job: [{ id: JOB, min_beginning: `${DAY}T08:00:00+00:00`, max_end: `${DAY}T16:00:00+00:00` }] }]);
     }
@@ -113,12 +119,24 @@ const LIVE = (over: Partial<{ beginning: string; place_id: number }> = {}) => ({
 });
 
 (async () => {
-  console.log("\n[1] pairBlocks — one block on each side needs no key at all");
+  console.log("\n[1] pairBlocks — one block on each side pairs only on the same day");
   {
-    // Which is what carries an UNSTAFFED staff-raised order: nobody is signed on, so no
-    // shape is readable, and the pairing is still the only one there is.
-    const p = pairBlocks([block()], [{ id: 40988, name: "General" }] as LiveBlock[]);
-    ok(!p.declined && p.pairs.length === 1 && p.pairs[0].id === 40988, "the only pairing there is", JSON.stringify(p));
+    /**
+     * THIS USED TO PAIR WITH NO KEY AT ALL, and the inversion is the fix. On 2026-10-06
+     * order #13709 held one Install on the 12th; the client wrote to ADD a derig on the
+     * 13th, the thread's order held only that derig, and "the only pairing there is" moved
+     * the install onto the 13th. With one block a side an added day and a moved day are
+     * the same picture, so only a same-day pairing is safe to make.
+     */
+    const same = pairBlocks([block()], [{ id: 40988, name: "General", beginning: `${DAY}T08:00:00+00:00`, profession_id: 1 }]);
+    ok(!same.declined && same.pairs.length === 1 && same.pairs[0].id === 40988, "same day: the only pairing there is", JSON.stringify(same));
+    const added = pairBlocks(
+      [block({ beginning: "2026-10-13T08:00:00+01:00", end: "2026-10-13T14:00:00+01:00", size: 1 })],
+      [{ id: 35324, name: "Install", beginning: "2026-10-12T18:00:00+00:00", profession_id: 1 }],
+    );
+    ok(!!added.declined && /added day cannot be told from a moved one/.test(added.declined), "a different day is a person's call, not a move", String(added.declined));
+    const blind = pairBlocks([block()], [{ id: 40988, name: "General" }] as LiveBlock[]);
+    ok(!!blind.declined, "a block whose day cannot be read is not paired blind", String(blind.declined));
   }
 
   console.log("\n[2] pairBlocks — day and venue separate several blocks");
@@ -222,6 +240,24 @@ const LIVE = (over: Partial<{ beginning: string; place_id: number }> = {}) => ({
     const res = await amendOrderInPlace(client, { order_id: ORDER, previous: [], desired: order([block({ size: 2 })]) }, hooks);
     ok(!!res.refused && /signed on/.test(res.refused), "refused, and says why", String(res.refused).slice(0, 110));
     ok(patched.length === 0, "and no half-amendment went out — the whole thing stops");
+  }
+
+  console.log("\n[9] an unstaffed single block: its day comes from the nested read, and an added day is not a move");
+  {
+    const install = { size: 1, beginning: "2026-10-12T18:00:00+00:00", end: "2026-10-12T23:00:00+00:00", profession_id: 1 };
+    // Legal Geek, 2026-10-06: the thread holds only the derig on the 13th.
+    const derig = fakeOnsinch({ audit: [{ id: 35324, name: "Install" }], nested: { 35324: install } });
+    const res = await amendOrderInPlace(derig.client,
+      { order_id: ORDER, previous: [], desired: order([block({ beginning: "2026-10-13T08:00:00+01:00", end: "2026-10-13T14:00:00+01:00", size: 1 })]) }, hooks);
+    ok(!!res.declined && /added day cannot be told from a moved one/.test(res.declined), "declined, so a person adds the derig", String(res.declined));
+    ok(derig.patched.length === 0, "THE INSTALL IS NOT MOVED", JSON.stringify(derig.patched));
+    ok(derig.created.length === 0, "and nothing is appended blind");
+
+    // The same unstaffed order, asked to change the install's own hours on its own day.
+    const later = fakeOnsinch({ audit: [{ id: 35324, name: "Install" }], nested: { 35324: install } });
+    const res2 = await amendOrderInPlace(later.client,
+      { order_id: ORDER, previous: [], desired: order([block({ beginning: "2026-10-12T19:00:00+01:00", end: "2026-10-13T01:00:00+01:00", size: 1 })]) }, hooks);
+    ok(!!res2.amended && later.patched.length === 1 && later.patched[0]?.[0]?.id === 35324, "a same-day time change still amends the unstaffed block", JSON.stringify(res2).slice(0, 140));
   }
 
   console.log("\n[8] REPLACEORDER WILL NOT DESTROY AN ORDER OPS RAISED");
