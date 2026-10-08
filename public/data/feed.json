@@ -2778,5 +2778,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0143",
+  "ts": "2026-10-08T04:22:14+00:00",
+  "kind": "measurement",
+  "headline": "v2 processMessage + /api/bot/process (shadow by default); already-booked check",
+  "subject": "A captured email can be taken through interpretation, planning and the bot, with every decision recorded",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 186,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]

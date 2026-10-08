@@ -102,6 +102,16 @@ ok(positionsFor(12) === null, "12 crew: not decided here");
     ok(op?.kind === "create_order" && op.company_id === "137" && op.client_email === "crew@eventconcept.com" && op.po === "E15626" && op.shifts[0].place_id === "29" && op.shifts[0].positions.length === 2, "a new order: Event Concept, the sender as client, the PO, crew chief + 3", JSON.stringify(op));
   }
 
+  console.log("already booked by hand (every engine order in To Confirm on 10-07)");
+  {
+    const d = await plan(msg("crew@eventconcept.com", "4 crew Friday 9th 09:00-17:00 at Business Design Centre"), I([r({ date: "2026-10-09", start: "09:00", end: "17:00", crew: 4, venue: "Business Design Centre" })], { intent: "booking" }), world);
+    ok(d.kind === "none" && /R11352/.test((d as any).reason), "a shift ops already built is not booked again", JSON.stringify(d));
+  }
+  {
+    const d = await plan(msg("crew@eventconcept.com", "4 crew at Business Design Centre, 32 Upper St, London on 14/10 18:45-20:45"), I([r({ date: "2026-10-14", start: "18:45", end: "20:45", crew: 4, venue: "Business Design Centre, 32 Upper St, London" })], { intent: "booking" }), world);
+    ok(d.kind === "write" && (d.ops[0].op as any).shifts[0].place_id === "29", "a venue written with its address matches on the name before the comma", JSON.stringify(d).slice(0, 200));
+  }
+
   if (fails) { console.log(`\n${fails} FAILED`); process.exit(1); }
   console.log("\nall passed");
 })();

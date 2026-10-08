@@ -144,6 +144,17 @@ export async function plan(msg: Message, i: Interpretation, world: World, thread
       why.push(`R${named.number}: add a shift on ${r.date} ${r.start}-${r.end}, ${r.crew} crew`);
     }
   } else if (news.length) {
+    // Already booked: a client's order holding a live shift over exactly the asked window on
+    // that day. Measured 10-07: every engine order in To Confirm duplicated one ops had built
+    // by hand. Some booked and some not is for a person to untangle.
+    const orders = await world.companyOrders(companyId);
+    const bookedIn = (r: Request) => {
+      const w = shiftWindow(r.date!, r.start!, r.end!);
+      return orders.find((o) => teams(o).some((t) => t.slots.some((s) => Date.parse(s.beginning) === Date.parse(w.beginning) && Date.parse(s.end) === Date.parse(w.end))));
+    };
+    const booked = news.map(bookedIn);
+    if (booked.every(Boolean)) return { kind: "none", reason: `already booked: ${[...new Set(booked.map((o) => `R${o.number}`))].join(", ")}` };
+    if (booked.some(Boolean)) return handoff(`part of this is already booked (${booked.filter(Boolean).map((o) => `R${o.number}`).join(", ")})`);
     const shifts: ShiftSpec[] = [];
     for (const r of news) {
       const positions = positionsFor(r.crew!);
@@ -151,7 +162,11 @@ export async function plan(msg: Message, i: Interpretation, world: World, thread
       if (r.crew_chief && positions.length === 1) return handoff("a crew chief was asked for on a crew of 3 or fewer");
       const venue = r.venue ?? news.find((x) => x.venue)?.venue;
       if (!venue) return handoff("no venue in the email");
-      const places = (await world.placesNamed(venue)).filter((p) => normName(p.name) === normName(venue));
+      // Exact names only, never a resemblance. Clients often write the address after the name
+      // ("The Peninsula, 1 Grosvenor Place, ..."), so the name before the first comma is tried too.
+      let places = (await world.placesNamed(venue)).filter((p) => normName(p.name) === normName(venue));
+      const head = venue.split(",")[0].trim();
+      if (!places.length && head !== venue) places = (await world.placesNamed(head)).filter((p) => normName(p.name) === normName(head));
       if (places.length !== 1) return handoff(`${places.length} OnSinch venues are named "${venue}"`);
       shiftWindow(r.date!, r.start!, r.end!);
       shifts.push({ name: "Crew", date: r.date!, start: r.start!, end: r.end!, place_id: String(places[0].id), place_label: places[0].name, positions });
