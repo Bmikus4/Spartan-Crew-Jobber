@@ -12,11 +12,11 @@
 // ============================================================================
 import contracts from "./contracts.json";
 import { checkContract, type Contract, type Verdict } from "./contract";
-import { openNode, harvestFields } from "./builder";
+import { openNode, openCreateForm, harvestFields } from "./builder";
 import { openBot, versionSignals, BASE, activeRole, AGENCY_ROLE_LABEL } from "./session";
 import { WIZARD_HOOKS } from "./wizard";
 
-export const BENCH = { order: 16514, slot: 59383 };
+export const BENCH = { order: 16514, slot: 59383, shift: 42275, location: 17253 };
 const C = contracts as unknown as Record<string, Contract>;
 
 export type CanaryResult = { tier: Verdict["tier"]; surfaces: { surface: string; tier: Verdict["tier"]; reasons: string[] }[]; role: string; at: string };
@@ -31,6 +31,16 @@ export async function runCanary(): Promise<CanaryResult> {
     for (const [surface, model, id] of [["builder.Slot", "Slot", BENCH.slot], ["builder.Order", "Order", BENCH.order]] as const) {
       const sel = await openNode(bot.page, BENCH.order, model, id);
       if (!sel) { surfaces.push({ surface, tier: "block", reasons: [`bench node ${model}:${id} not found on order ${BENCH.order}`] }); continue; }
+      const v = checkContract(C[surface], { version: await versionSignals(bot.page), fields: await harvestFields(bot.page, sel) });
+      surfaces.push({ surface, tier: v.tier, reasons: v.reasons });
+    }
+    // The create forms open unsaved from the context menu; nothing is saved here either.
+    for (const [surface, parent, menu, model, field] of [
+      ["builder.SlotTeam.create", { model: "SlotLocation", id: BENCH.location }, "Add shift", "SlotTeam", "data[SlotTeam][SlotLocation][id]"],
+      ["builder.Slot.create", { model: "SlotTeam", id: BENCH.shift }, "Add position", "Slot", "data[Slot][slotteam_id]"],
+    ] as const) {
+      const sel = await openCreateForm(bot.page, BENCH.order, parent, menu, model, field);
+      if (!sel) { surfaces.push({ surface, tier: "block", reasons: [`"${menu}" did not open a new ${model} form`] }); continue; }
       const v = checkContract(C[surface], { version: await versionSignals(bot.page), fields: await harvestFields(bot.page, sel) });
       surfaces.push({ surface, tier: v.tier, reasons: v.reasons });
     }

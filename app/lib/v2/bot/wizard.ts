@@ -17,7 +17,7 @@
 // ============================================================================
 import type { Locator, Page } from "playwright-core";
 import { BASE, versionSignals, type Bot } from "./session";
-import { checkNewOrder, wizardRole, type Op, type PositionSpec } from "./ops";
+import { checkNewOrder, rowsFor, wizardRole, type Op } from "./ops";
 import type { VersionSignals } from "./contract";
 
 type CreateOp = Extract<Op, { kind: "create_order" }>;
@@ -39,15 +39,6 @@ async function missingHooks(page: Page, hooks: string[]): Promise<string[]> {
   for (const h of hooks) if ((await page.locator(`[data-cy="${h}"]`).count()) === 0) out.push(`hook gone: ${h}`);
   return out;
 }
-const DEFAULT_PROFESSION = "1";
-
-/** The first row is the wizard's default (Crew, staff member); every other position is added. */
-export function rowsFor(positions: PositionSpec[]): PositionSpec[] | null {
-  const i = positions.findIndex((p) => p.profession_id === DEFAULT_PROFESSION && !p.role);
-  if (i < 0) return null;
-  return [positions[i], ...positions.filter((_, j) => j !== i)];
-}
-
 export function unbenched(op: CreateOp): string[] {
   const out: string[] = [];
   op.shifts.forEach((s, i) => {

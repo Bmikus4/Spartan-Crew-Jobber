@@ -12,6 +12,17 @@ export type PositionSpec = { size: number; profession_id: string; role?: "crew_c
 
 /** The wizard's role values (its select's data-value), as NewOrder carries them. */
 export const wizardRole = (p: PositionSpec) => (p.role === "crew_chief" ? "CREWBOSS" : "WORKER");
+/**
+ * The first row of a new shift is plain Crew (the wizard's default row, the new-shift form's
+ * one position); every other position is added after it. Null when there is no plain Crew
+ * position: changing the first row's profession is not benched.
+ */
+export function rowsFor(positions: PositionSpec[]): PositionSpec[] | null {
+  const i = positions.findIndex((p) => p.profession_id === "1" && !p.role);
+  if (i < 0) return null;
+  return [positions[i], ...positions.filter((_, j) => j !== i)];
+}
+
 /** The API's Slot.role for the same, as read back: 1 crew chief, 0 staff member. */
 export const apiRole = (p: PositionSpec) => (p.role === "crew_chief" ? 1 : 0);
 export type ShiftSpec = { name: string; date: string; start: string; end: string; place_id: string; place_label: string; positions: PositionSpec[] };
@@ -21,7 +32,9 @@ export type Op =
   | { kind: "set_position_size"; order_id: number; slot_id: number; size: number }
   | { kind: "set_position_times"; order_id: number; slot_id: number; date: string; start: string; end: string }
   | { kind: "set_po"; order_id: number; po: string }
-  | { kind: "cancel_position"; order_id: number; slot_id: number };
+  | { kind: "cancel_position"; order_id: number; slot_id: number }
+  | { kind: "add_shift"; order_id: number; location_id: number; name: string; date: string; start: string; end: string; positions: PositionSpec[] }
+  | { kind: "add_position"; order_id: number; shift_id: number; date: string; start: string; end: string; position: PositionSpec };
 
 /** Idempotency: the source message plus the operation's content. A retried email can never write twice. */
 export function opKey(source: string, op: Op): string {
@@ -80,23 +93,36 @@ export function shiftWindow(date: string, start: string, end: string): { beginni
 export const builderDate = (iso: string) => { const [y, m, d] = iso.split("-"); return `${d}.${m}.${y}`; };
 export const builderTime = (hhmm: string) => { const [h, m] = hhmm.split(":"); return `${Number(h)}:${m}`; };
 
+/** A London window as the builder's four date/time fields of one model; an overnight end gets the next day. */
+export function windowFields(model: string, date: string, start: string, end: string): Record<string, string> {
+  const w = shiftWindow(date, start, end);
+  const endDate = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/London" }).format(new Date(w.end));
+  return {
+    [`data[${model}][beginning][date]`]: builderDate(date), [`data[${model}][beginning][time]`]: builderTime(start),
+    [`data[${model}][end][date]`]: builderDate(endDate), [`data[${model}][end][time]`]: builderTime(end),
+  };
+}
+
+/** The new-shift form: name, window, and its first position (plain Crew; see rowsFor). */
+export function shiftCreateFields(op: Extract<Op, { kind: "add_shift" }>, first: PositionSpec): Record<string, string> {
+  if (!Number.isInteger(first.size) || first.size < 1) throw new Error(`refusing size ${first.size}`);
+  return { "data[SlotTeam][name]": op.name, "data[SlotTeam][profession_id]": first.profession_id, "data[SlotTeam][size]": String(first.size), ...windowFields("SlotTeam", op.date, op.start, op.end) };
+}
+
+/** The new-position form. Its window must be set: the form defaults to an unrelated day (10-08). */
+export function positionCreateFields(date: string, start: string, end: string, p: PositionSpec): Record<string, string> {
+  if (!Number.isInteger(p.size) || p.size < 1) throw new Error(`refusing size ${p.size}`);
+  return { "data[Slot][profession_id]": p.profession_id, "data[Slot][role]": String(apiRole(p)), "data[Slot][size]": String(p.size), ...windowFields("Slot", date, start, end) };
+}
+
 /** The builder fields an edit operation sets, by form. Nothing outside the contract's fill list. */
 export function builderEdit(op: Op): { model: "Slot" | "Order"; id: number; set: Record<string, string> } {
   switch (op.kind) {
     case "set_position_size":
       if (!Number.isInteger(op.size) || op.size < 1) throw new Error(`refusing size ${op.size}`);
       return { model: "Slot", id: op.slot_id, set: { "data[Slot][size]": String(op.size) } };
-    case "set_position_times": {
-      const w = shiftWindow(op.date, op.start, op.end);
-      const endDate = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/London" }).format(new Date(w.end));
-      return {
-        model: "Slot", id: op.slot_id,
-        set: {
-          "data[Slot][beginning][date]": builderDate(op.date), "data[Slot][beginning][time]": builderTime(op.start),
-          "data[Slot][end][date]": builderDate(endDate), "data[Slot][end][time]": builderTime(op.end),
-        },
-      };
-    }
+    case "set_position_times":
+      return { model: "Slot", id: op.slot_id, set: windowFields("Slot", op.date, op.start, op.end) };
     case "set_po":
       if (!/\d/.test(op.po)) throw new Error("refusing a PO with no digit in it");
       return { model: "Order", id: op.order_id, set: { "data[Order][intern_name]": op.po } };

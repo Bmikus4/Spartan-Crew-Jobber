@@ -16,9 +16,9 @@ import { httpTransport, OnsinchClient } from "../../engine/onsinch";
 import contracts from "./contracts.json";
 import type { Contract } from "./contract";
 import { acquireLease, releaseLease, ledgerGet, ledgerIntent, ledgerSet, type LedgerStatus } from "./db";
-import { apiRole, builderDate, builderEdit, opKey, shiftWindow, utcToLondon, type Op } from "./ops";
+import { apiRole, builderDate, builderEdit, opKey, positionCreateFields, rowsFor, shiftCreateFields, shiftWindow, utcToLondon, type Op, type PositionSpec } from "./ops";
 import { openBot } from "./session";
-import { cancelNode, editNode, type EditOutcome } from "./builder";
+import { cancelNode, createChild, editNode, type EditOutcome } from "./builder";
 import { createOrder } from "./wizard";
 
 export type RunResult = { op_key: string; status: LedgerStatus | "busy" | "seen"; reasons: string[]; detail?: Record<string, unknown> };
@@ -38,6 +38,19 @@ export async function readOrder(orderId: number): Promise<any | null> {
   return rowsOf(r)[0] ?? null;
 }
 
+export const teamsOf = (o: any): { id: number; slots: any[] }[] =>
+  ([] as any[]).concat(o?.Job ?? []).flatMap((j: any) => ([] as any[]).concat(j.SlotTeam ?? []))
+    .map((t: any) => ({ id: Number(t.id), slots: ([] as any[]).concat(t.Slot ?? []).filter((s: any) => s.cancelled !== true) }));
+
+/** Does this set of live positions hold exactly these positions over this window? */
+export function holdsPositions(slots: any[], date: string, start: string, end: string, want: PositionSpec[]): boolean {
+  const w = shiftWindow(date, start, end);
+  const sig = (b: string, e: string, size: unknown, prof: unknown, role: unknown) => `${Date.parse(b)}|${Date.parse(e)}|${Number(size)}|${String(prof)}|${Number(role ?? 0)}`;
+  const got = slots.map((s) => sig(s.beginning, s.end, s.size, s.profession_id, s.role)).sort().join(" ");
+  const asked = want.map((p) => sig(w.beginning, w.end, p.size, p.profession_id, apiRole(p))).sort().join(" ");
+  return got === asked;
+}
+
 export const slotsOf = (o: any): any[] =>
   ([] as any[]).concat(o?.Job ?? []).flatMap((j: any) => ([] as any[]).concat(j.SlotTeam ?? [])).flatMap((s: any) => ([] as any[]).concat(s.Slot ?? []));
 
@@ -51,6 +64,14 @@ export function mismatches(op: Op, order: any): string[] {
   if (!order) return ["order no longer reads back"];
   if (op.kind === "set_po") return (order.intern_name ?? "") === op.po ? [] : [`PO reads "${order.intern_name}"`];
   if (op.kind === "create_order") return createMismatches(op, order);
+  // An added shift is there when some shift holds exactly the asked positions over the asked
+  // window; the same test, run first, stops a re-sent request from adding it twice.
+  if (op.kind === "add_shift") return teamsOf(order).some((t) => holdsPositions(t.slots, op.date, op.start, op.end, op.positions)) ? [] : ["no shift holds the asked positions"];
+  if (op.kind === "add_position") {
+    const team = teamsOf(order).find((t) => t.id === op.shift_id);
+    if (!team) return [`shift ${op.shift_id} not on the order`];
+    return team.slots.some((s) => holdsPositions([s], op.date, op.start, op.end, [op.position])) ? [] : ["the shift holds no such position"];
+  }
   const slot = slotsOf(order).find((s) => Number(s.id) === op.slot_id);
   if (!slot) return [`position ${op.slot_id} not on the order`];
   if (op.kind === "set_position_size") return Number(slot.size) === op.size ? [] : [`size reads ${slot.size}`];
@@ -149,7 +170,8 @@ async function preflight(op: Op, order: any, testOnly: boolean): Promise<string[
   if (op.kind === "create_order") return testOnly && op.company_id !== "515" ? ["bench mode: creates only on TEST 515"] : [];
   if (!order) return [`order ${op.order_id} not found`];
   if (testOnly && Number(order.company_id) !== 515) return ["bench mode: writes only on TEST 515"];
-  if (op.kind === "set_po") return [];
+  if (op.kind === "set_po" || op.kind === "add_shift") return [];
+  if (op.kind === "add_position") return teamsOf(order).some((t) => t.id === op.shift_id) ? [] : [`shift ${op.shift_id} is not on order ${op.order_id}`];
   const slot = slotsOf(order).find((s) => Number(s.id) === op.slot_id);
   if (!slot) return [`position ${op.slot_id} is not on order ${op.order_id}`];
   if (slot.cancelled === true && op.kind !== "cancel_position") return [`position ${op.slot_id} is cancelled`];
@@ -211,6 +233,42 @@ export async function runOp(source: string, op: Op, opts: { testOnly: boolean } 
     if (mismatches(op, before).length === 0) {
       await ledgerSet(key, "verified", { noop: true });
       return { op_key: key, status: "verified", reasons: ["already so in OnSinch; nothing sent"] };
+    }
+    if (op.kind === "add_shift" || op.kind === "add_position") {
+      const rows = op.kind === "add_shift" ? rowsFor(op.positions) : [op.position];
+      if (!rows) { await ledgerSet(key, "blocked", { reasons: ["no plain Crew position for the new shift's first row"] }); return { op_key: key, status: "blocked", reasons: ["not benched"] }; }
+      const bot = await openBot();
+      phase = "browser";
+      const steps: string[] = [];
+      let out: EditOutcome;
+      try {
+        let shiftId = op.kind === "add_position" ? op.shift_id : 0;
+        let todo = rows;
+        if (op.kind === "add_shift") {
+          const known = new Set(teamsOf(before).map((t) => t.id));
+          out = await createChild(bot, CONTRACTS["builder.SlotTeam.create"], op.order_id, { model: "SlotLocation", id: op.location_id }, "Add shift", "SlotTeam", "data[SlotTeam][SlotLocation][id]", shiftCreateFields(op, rows[0]));
+          steps.push(`shift: ${out.stage}`);
+          if (out.stage === "submitted") {
+            const fresh = teamsOf(await readOrder(op.order_id)).filter((t) => !known.has(t.id));
+            if (fresh.length !== 1) out = { stage: "unknown", reasons: [`${fresh.length} new shifts appeared after the save`] };
+            else shiftId = fresh[0].id;
+          }
+          todo = rows.slice(1);
+        } else out = { stage: "submitted", before: {}, response: null, verdict: { tier: "ok", reasons: [] } };
+        for (const p of todo) {
+          if (out.stage !== "submitted") break;
+          out = await createChild(bot, CONTRACTS["builder.Slot.create"], op.order_id, { model: "SlotTeam", id: shiftId }, "Add position", "Slot", "data[Slot][slotteam_id]", positionCreateFields(op.date, op.start, op.end, p));
+          steps.push(`position ${p.profession_id}/${p.role ?? "staff"}: ${out.stage}`);
+        }
+      } finally { await bot.close(); }
+      // A shift saved without its crew chief is a half-made change: it is reported as such,
+      // never left looking like a refusal.
+      const partial = op.kind === "add_shift" && steps[0] === "shift: submitted" && out.stage !== "submitted";
+      if (out.stage !== "submitted" && !partial) { await ledgerSet(key, out.stage, { reasons: out.reasons, steps }); return { op_key: key, status: out.stage, reasons: out.reasons }; }
+      const bad = mismatches(op, await readOrder(op.order_id));
+      if (partial) bad.unshift(`stopped part-way: ${steps.join(", ")}`, ...("reasons" in out ? out.reasons : []));
+      await ledgerSet(key, bad.length ? "mismatch" : "verified", { readback: bad, steps });
+      return { op_key: key, status: bad.length ? "mismatch" : "verified", reasons: bad };
     }
     if (op.kind === "cancel_position") {
       const cursor = await auditCursor();

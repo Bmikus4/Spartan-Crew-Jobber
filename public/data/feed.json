@@ -2750,5 +2750,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0141",
+  "ts": "2026-10-08T03:30:36+00:00",
+  "kind": "measurement",
+  "headline": "OnSinch bot: add shift (with crew chief), add position; canary covers create forms",
+  "subject": "The bot can add a shift or a position to an existing order, on TEST",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 183,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]

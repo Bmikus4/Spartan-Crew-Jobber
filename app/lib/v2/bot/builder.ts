@@ -79,11 +79,46 @@ export async function editNode(bot: Bot, contract: Contract, orderId: number, mo
 }
 
 async function editNodeInner(bot: Bot, contract: Contract, orderId: number, model: string, id: number, set: Record<string, string>, clicked: { yes: boolean }, fresh?: FreshRead): Promise<EditOutcome> {
-  const { page } = bot;
   for (const k of Object.keys(set)) if (!contract.fill.includes(k)) return { stage: "blocked", reasons: [`${k} is not in ${contract.surface}'s fill list`] };
-  const sel = await openNode(page, orderId, model, id);
+  const sel = await openNode(bot.page, orderId, model, id);
   if (!sel) return { stage: "blocked", reasons: [`${model}:${id} is not on order ${orderId}'s builder`] };
+  return fillAndSave(bot, sel, contract, orderId, model, set, clicked, fresh);
+}
 
+/**
+ * Opens a parent node's context-menu action that creates a child ("Add shift" on a
+ * location, "Add position" on a shift) and returns the new, unsaved form. Nothing is
+ * written until Save. The form must name the parent it was opened from.
+ */
+export async function openCreateForm(page: Page, orderId: number, parent: { model: string; id: number }, menuText: string, formModel: string, parentField: string): Promise<string | null> {
+  if (!(await openNode(page, orderId, parent.model, parent.id))) return null;
+  await page.locator(`[id="${parent.model}:${parent.id}_anchor"]`).click({ button: "right" });
+  const item = page.locator(".vakata-context li a").filter({ hasText: menuText });
+  if ((await item.count()) !== 1 || (await item.innerText()).trim() !== menuText) return null;
+  await item.click();
+  const sel = `#${formModel}BuilderForm`;
+  await page.locator(`${sel} input[name="${parentField}"][value="${parent.id}"]`).waitFor({ state: "attached", timeout: 20000 });
+  await page.waitForLoadState("networkidle");
+  if ((await page.locator(`${sel} input[name="data[${formModel}][id]"]`).count()) !== 0) return null;
+  return sel;
+}
+
+/** A new child record through its create form: the same fill, guard and save as an edit. */
+export async function createChild(bot: Bot, contract: Contract, orderId: number, parent: { model: string; id: number }, menuText: string, formModel: string, parentField: string, set: Record<string, string>): Promise<EditOutcome> {
+  const clicked = { yes: false };
+  try {
+    for (const k of Object.keys(set)) if (!contract.fill.includes(k)) return { stage: "blocked", reasons: [`${k} is not in ${contract.surface}'s fill list`] };
+    const sel = await openCreateForm(bot.page, orderId, parent, menuText, formModel, parentField);
+    if (!sel) return { stage: "blocked", reasons: [`"${menuText}" on ${parent.model}:${parent.id} did not open a new ${formModel} form`] };
+    return await fillAndSave(bot, sel, contract, orderId, formModel, set, clicked);
+  } catch (e) {
+    if (clicked.yes) throw e;
+    return { stage: "blocked", reasons: [`bot error before submit: ${String((e as Error)?.message ?? e).slice(0, 200)}`] };
+  }
+}
+
+async function fillAndSave(bot: Bot, sel: string, contract: Contract, orderId: number, model: string, set: Record<string, string>, clicked: { yes: boolean }, fresh?: FreshRead): Promise<EditOutcome> {
+  const { page } = bot;
   const verdict = checkContract(contract, { version: await versionSignals(page), fields: await harvestFields(page, sel) });
   if (verdict.tier === "block") return { stage: "blocked", reasons: ["form changed: protocol update needed", ...verdict.reasons], verdict };
 
@@ -92,8 +127,20 @@ async function editNodeInner(bot: Bot, contract: Contract, orderId: number, mode
   for (const [name, value] of Object.entries(set)) {
     const input = form.locator(`[name="${name}"]`);
     if ((await input.count()) !== 1) return { stage: "blocked", reasons: [`${name}: ${await input.count()} inputs`] };
-    await input.fill(value);
-    await input.press("Tab");
+    const kind = await input.evaluate((e) => (e.tagName === "SELECT" ? "select" : e.classList.contains("date-picker") ? "date" : "text"));
+    if (kind === "select") {
+      await input.selectOption(value);
+    } else if (kind === "date") {
+      // The bootstrap date picker restores its own date on blur after a programmatic fill
+      // (measured 10-08 on the new-shift form); typed keys and Enter are what it accepts.
+      await input.click();
+      await input.press("Control+a");
+      await input.pressSequentially(value, { delay: 20 });
+      await input.press("Enter");
+    } else {
+      await input.fill(value);
+      await input.press("Tab");
+    }
   }
   await page.keyboard.press("Escape");
   const filled = await formPairs(page, sel);

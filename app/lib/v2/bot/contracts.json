@@ -608,5 +608,743 @@
   "fill": [],
   "derived": [],
   "benched_at": "2026-10-08T02:20:00.000Z"
+ },
+ "builder.SlotTeam.create": {
+  "surface": "builder.SlotTeam.create",
+  "version": {
+   "appka": "3.2.137",
+   "scriptTag": "1790780528",
+   "bundle": null
+  },
+  "fields": [
+   {
+    "name": "_method",
+    "type": "hidden",
+    "required": false,
+    "hidden": true
+   },
+   {
+    "name": "data[_Token][key]",
+    "type": "hidden",
+    "required": false,
+    "hidden": true
+   },
+   {
+    "name": "data[SlotTeam][status]",
+    "type": "hidden",
+    "required": false,
+    "hidden": true
+   },
+   {
+    "name": "data[SlotTeam][concept]",
+    "type": "hidden",
+    "required": false,
+    "hidden": true
+   },
+   {
+    "name": "data[SlotTeam][job_id]",
+    "type": "hidden",
+    "required": false,
+    "hidden": true
+   },
+   {
+    "name": "data[SlotTeam][name]",
+    "type": "text",
+    "required": false,
+    "hidden": false
+   },
+   {
+    "name": "data[SlotTeam][profession_id]",
+    "type": "select",
+    "required": false,
+    "hidden": false
+   },
+   {
+    "name": "data[SlotTeam][beginning][date]",
+    "type": "text",
+    "required": false,
+    "hidden": false
+   },
+   {
+    "name": "data[SlotTeam][beginning][time]",
+    "type": "text",
+    "required": false,
+    "hidden": false
+   },
+   {
+    "name": "data[SlotTeam][end][date]",
+    "type": "text",
+    "required": false,
+    "hidden": false
+   },
+   {
+    "name": "data[SlotTeam][end][time]",
+    "type": "text",
+    "required": false,
+    "hidden": false
+   },
+   {
+    "name": "data[SlotTeam][hours]",
+    "type": "text",
+    "required": false,
+    "hidden": false
+   },
+   {
+    "name": "data[SlotTeam][size]",
+    "type": "number",
+    "required": false,
+    "hidden": false
+   },
+   {
+    "name": "data[SlotTeam][backup_size]",
+    "type": "number",
+    "required": false,
+    "hidden": false
+   },
+   {
+    "name": "data[SlotTeam][featured]",
+    "type": "hidden",
+    "required": false,
+    "hidden": true
+   },
+   {
+    "name": "data[SlotTeam][featured]",
+    "type": "checkbox",
+    "required": false,
+    "hidden": false
+   },
+   {
+    "name": "data[SlotTeam][applicant_size]",
+    "type": "number",
+    "required": false,
+    "hidden": false
+   },
+   {
+    "name": "data[SlotTeam][applicant_requirements]",
+    "type": "hidden",
+    "required": false,
+    "hidden": true
+   },
+   {
+    "name": "data[SlotTeam][applicant_requirements]",
+    "type": "checkbox",
+    "required": false,
+    "hidden": false
+   },
+   {
+    "name": "data[SlotTeam][lockstatus]",
+    "type": "hidden",
+    "required": false,
+    "hidden": true
+   },
+   {
+    "name": "data[SlotTeam][lockstatus]",
+    "type": "checkbox",
+    "required": false,
+    "hidden": false
+   },
+   {
+    "name": "data[SlotTeam][hidden]",
+    "type": "hidden",
+    "required": false,
+    "hidden": true
+   },
+   {
+    "name": "data[SlotTeam][hidden]",
+    "type": "checkbox",
+    "required": false,
+    "hidden": false
+   },
+   {
+    "name": "data[SlotTeam][staff_clock_in]",
+    "type": "select",
+    "required": false,
+    "hidden": false
+   },
+   {
+    "name": "data[SlotTeam][Contactlist]",
+    "type": "hidden",
+    "required": false,
+    "hidden": true
+   },
+   {
+    "name": "data[SlotTeam][Contactlist][]",
+    "type": "select",
+    "required": false,
+    "hidden": false
+   },
+   {
+    "name": "data[SlotTeam][SlotTag][tag_id]",
+    "type": "hidden",
+    "required": false,
+    "hidden": true
+   },
+   {
+    "name": "data[SlotTeam][SlotTag][tag_id][]",
+    "type": "select",
+    "required": false,
+    "hidden": false
+   },
+   {
+    "name": "data[SlotTeam][SlotLocation][id]",
+    "type": "hidden",
+    "required": false,
+    "hidden": true
+   },
+   {
+    "name": "data[SlotTeam][description]",
+    "type": "textarea",
+    "required": false,
+    "hidden": false
+   },
+   {
+    "name": "data[SlotTeam][crewboss_description]",
+    "type": "textarea",
+    "required": false,
+    "hidden": false
+   },
+   {
+    "name": "data[SlotTeam][admin_note]",
+    "type": "textarea",
+    "required": false,
+    "hidden": false
+   },
+   {
+    "name": "data[SlotTeam][SlotRequirement][0][toolId]",
+    "type": "hidden",
+    "required": false,
+    "hidden": true
+   },
+   {
+    "name": "data[SlotTeam][SlotRequirement][0][scope]",
+    "type": "select",
+    "required": false,
+    "hidden": false
+   },
+   {
+    "name": "data[SlotTeam][SlotRequirement][0][requirement_id]",
+    "type": "select",
+    "required": false,
+    "hidden": false
+   },
+   {
+    "name": "data[SlotTeam][SlotRequirement][0][subject]",
+    "type": "select",
+    "required": false,
+    "hidden": false
+   },
+   {
+    "name": "data[SlotTeam][SlotRequirement][0][operator]",
+    "type": "select",
+    "required": false,
+    "hidden": false
+   },
+   {
+    "name": "data[SlotTeam][SlotRequirement][0][value]",
+    "type": "text",
+    "required": false,
+    "hidden": false
+   },
+   {
+    "name": "data[SlotTeam][SlotRequirement][0][value]",
+    "type": "select",
+    "required": false,
+    "hidden": false
+   },
+   {
+    "name": "data[SlotTeam][SlotRequirement][0][percentage]",
+    "type": "number",
+    "required": false,
+    "hidden": false
+   },
+   {
+    "name": "data[SlotTeam][SlotRequirement][0][expiration]",
+    "type": "number",
+    "required": false,
+    "hidden": false
+   },
+   {
+    "name": "data[_Token][fields]",
+    "type": "hidden",
+    "required": false,
+    "hidden": true
+   },
+   {
+    "name": "data[_Token][unlocked]",
+    "type": "hidden",
+    "required": false,
+    "hidden": true
+   }
+  ],
+  "fill": [
+   "data[SlotTeam][name]",
+   "data[SlotTeam][profession_id]",
+   "data[SlotTeam][size]",
+   "data[SlotTeam][beginning][date]",
+   "data[SlotTeam][beginning][time]",
+   "data[SlotTeam][end][date]",
+   "data[SlotTeam][end][time]"
+  ],
+  "derived": [],
+  "benched_at": "2026-10-08T03:19:04.527Z"
+ },
+ "builder.Slot.create": {
+  "surface": "builder.Slot.create",
+  "version": {
+   "appka": "3.2.137",
+   "scriptTag": "1790780528",
+   "bundle": null
+  },
+  "fields": [
+   {
+    "name": "_method",
+    "type": "hidden",
+    "required": false,
+    "hidden": true
+   },
+   {
+    "name": "data[_Token][key]",
+    "type": "hidden",
+    "required": false,
+    "hidden": true
+   },
+   {
+    "name": "data[Slot][concept]",
+    "type": "hidden",
+    "required": false,
+    "hidden": true
+   },
+   {
+    "name": "data[Slot][slotteam_id]",
+    "type": "hidden",
+    "required": false,
+    "hidden": true
+   },
+   {
+    "name": "data[Slot][slotlocation_id]",
+    "type": "hidden",
+    "required": false,
+    "hidden": true
+   },
+   {
+    "name": "data[Slot][slotpart_id]",
+    "type": "hidden",
+    "required": false,
+    "hidden": true
+   },
+   {
+    "name": "data[Slot][job_id]",
+    "type": "hidden",
+    "required": false,
+    "hidden": true
+   },
+   {
+    "name": "data[Slot][beginning][date]",
+    "type": "text",
+    "required": false,
+    "hidden": false
+   },
+   {
+    "name": "data[Slot][beginning][time]",
+    "type": "text",
+    "required": false,
+    "hidden": false
+   },
+   {
+    "name": "data[Slot][end][date]",
+    "type": "text",
+    "required": false,
+    "hidden": false
+   },
+   {
+    "name": "data[Slot][end][time]",
+    "type": "text",
+    "required": false,
+    "hidden": false
+   },
+   {
+    "name": "data[Slot][endDateSent]",
+    "type": "hidden",
+    "required": false,
+    "hidden": true
+   },
+   {
+    "name": "data[Slot][hours]",
+    "type": "text",
+    "required": false,
+    "hidden": false
+   },
+   {
+    "name": "data[Slot][SlotBreak][]",
+    "type": "hidden",
+    "required": false,
+    "hidden": true
+   },
+   {
+    "name": "data[Slot][SlotBreak][0][beginning]",
+    "type": "text",
+    "required": false,
+    "hidden": false
+   },
+   {
+    "name": "data[Slot][SlotBreak][0][end]",
+    "type": "text",
+    "required": false,
+    "hidden": false
+   },
+   {
+    "name": "data[Slot][size]",
+    "type": "number",
+    "required": true,
+    "hidden": false
+   },
+   {
+    "name": "data[Slot][applicant_size]",
+    "type": "number",
+    "required": true,
+    "hidden": false
+   },
+   {
+    "name": "data[Slot][applicant_requirements]",
+    "type": "hidden",
+    "required": false,
+    "hidden": true
+   },
+   {
+    "name": "data[Slot][applicant_requirements]",
+    "type": "checkbox",
+    "required": false,
+    "hidden": false
+   },
+   {
+    "name": "data[Slot][profession_id]",
+    "type": "select",
+    "required": true,
+    "hidden": false
+   },
+   {
+    "name": "data[Slot][role]",
+    "type": "select",
+    "required": false,
+    "hidden": false
+   },
+   {
+    "name": "data[Slot][name]",
+    "type": "text",
+    "required": true,
+    "hidden": false
+   },
+   {
+    "name": "data[Slot][staff_name]",
+    "type": "text",
+    "required": true,
+    "hidden": false
+   },
+   {
+    "name": "data[Slot][featured]",
+    "type": "hidden",
+    "required": false,
+    "hidden": true
+   },
+   {
+    "name": "data[Slot][featured]",
+    "type": "checkbox",
+    "required": false,
+    "hidden": false
+   },
+   {
+    "name": "data[Slot][status]",
+    "type": "select",
+    "required": true,
+    "hidden": false
+   },
+   {
+    "name": "data[Slot][concept]",
+    "type": "select",
+    "required": true,
+    "hidden": false
+   },
+   {
+    "name": "data[Slot][lockstatus]",
+    "type": "hidden",
+    "required": false,
+    "hidden": true
+   },
+   {
+    "name": "data[Slot][lockstatus]",
+    "type": "checkbox",
+    "required": false,
+    "hidden": false
+   },
+   {
+    "name": "data[Slot][hidden]",
+    "type": "hidden",
+    "required": false,
+    "hidden": true
+   },
+   {
+    "name": "data[Slot][hidden]",
+    "type": "checkbox",
+    "required": false,
+    "hidden": false
+   },
+   {
+    "name": "data[Slot][leavable_hours]",
+    "type": "number",
+    "required": true,
+    "hidden": false
+   },
+   {
+    "name": "data[Slot][block_after_hours]",
+    "type": "number",
+    "required": true,
+    "hidden": false
+   },
+   {
+    "name": "data[Slot][meeting_time]",
+    "type": "number",
+    "required": true,
+    "hidden": false
+   },
+   {
+    "name": "data[Slot][group_number]",
+    "type": "select",
+    "required": false,
+    "hidden": false
+   },
+   {
+    "name": "data[Slot][antigroup_number]",
+    "type": "select",
+    "required": false,
+    "hidden": false
+   },
+   {
+    "name": "data[Slot][SlotTag][tag_id]",
+    "type": "hidden",
+    "required": false,
+    "hidden": true
+   },
+   {
+    "name": "data[Slot][SlotTag][tag_id][]",
+    "type": "select",
+    "required": false,
+    "hidden": false
+   },
+   {
+    "name": "data[Slot][SlotTag][0][tag_id]",
+    "type": "hidden",
+    "required": false,
+    "hidden": true
+   },
+   {
+    "name": "data[Slot][SlotTag][0][SlotPrice][price_h]",
+    "type": "text",
+    "required": false,
+    "hidden": false
+   },
+   {
+    "name": "data[Slot][SlotTag][0][SlotPrice][price_fix]",
+    "type": "text",
+    "required": false,
+    "hidden": false
+   },
+   {
+    "name": "data[Slot][SlotTag][0][SlotPrice][price_percentage]",
+    "type": "text",
+    "required": false,
+    "hidden": false
+   },
+   {
+    "name": "data[Slot][SlotTag][0][SlotPrice][wage_h]",
+    "type": "text",
+    "required": false,
+    "hidden": false
+   },
+   {
+    "name": "data[Slot][SlotTag][0][SlotPrice][wage_fix]",
+    "type": "text",
+    "required": false,
+    "hidden": false
+   },
+   {
+    "name": "data[Slot][SlotTag][0][SlotPrice][wage_percentage]",
+    "type": "text",
+    "required": false,
+    "hidden": false
+   },
+   {
+    "name": "data[Slot][SlotRequirement][0][toolId]",
+    "type": "hidden",
+    "required": false,
+    "hidden": true
+   },
+   {
+    "name": "data[Slot][SlotRequirement][0][requirement_id]",
+    "type": "select",
+    "required": false,
+    "hidden": false
+   },
+   {
+    "name": "data[Slot][SlotRequirement][0][subject]",
+    "type": "select",
+    "required": false,
+    "hidden": false
+   },
+   {
+    "name": "data[Slot][SlotRequirement][0][operator]",
+    "type": "select",
+    "required": false,
+    "hidden": false
+   },
+   {
+    "name": "data[Slot][SlotRequirement][0][value]",
+    "type": "text",
+    "required": false,
+    "hidden": false
+   },
+   {
+    "name": "data[Slot][SlotRequirement][0][value]",
+    "type": "select",
+    "required": false,
+    "hidden": false
+   },
+   {
+    "name": "data[Slot][SlotRequirement][0][percentage]",
+    "type": "number",
+    "required": false,
+    "hidden": false
+   },
+   {
+    "name": "data[Slot][SlotRequirement][0][expiration]",
+    "type": "number",
+    "required": false,
+    "hidden": false
+   },
+   {
+    "name": "data[Slot][SlotRequirement][0][SlotPrice][requirement_id]",
+    "type": "hidden",
+    "required": false,
+    "hidden": true
+   },
+   {
+    "name": "data[Slot][SlotRequirement][0][SlotPrice][subject]",
+    "type": "hidden",
+    "required": false,
+    "hidden": true
+   },
+   {
+    "name": "data[Slot][SlotRequirement][0][SlotPrice][price_h]",
+    "type": "text",
+    "required": false,
+    "hidden": false
+   },
+   {
+    "name": "data[Slot][SlotRequirement][0][SlotPrice][price_fix]",
+    "type": "text",
+    "required": false,
+    "hidden": false
+   },
+   {
+    "name": "data[Slot][SlotRequirement][0][SlotPrice][wage_h]",
+    "type": "text",
+    "required": false,
+    "hidden": false
+   },
+   {
+    "name": "data[Slot][SlotRequirement][0][SlotPrice][wage_fix]",
+    "type": "text",
+    "required": false,
+    "hidden": false
+   },
+   {
+    "name": "data[Slot][SlotEffect][effect_id]",
+    "type": "hidden",
+    "required": false,
+    "hidden": true
+   },
+   {
+    "name": "data[Slot][SlotEffect][effect_id][]",
+    "type": "select",
+    "required": false,
+    "hidden": false
+   },
+   {
+    "name": "data[Slot][default_prices]",
+    "type": "hidden",
+    "required": false,
+    "hidden": true
+   },
+   {
+    "name": "data[Slot][pricelist_price]",
+    "type": "hidden",
+    "required": false,
+    "hidden": true
+   },
+   {
+    "name": "data[Slot][pricelist_price]",
+    "type": "checkbox",
+    "required": false,
+    "hidden": false
+   },
+   {
+    "name": "data[Slot][price_h]",
+    "type": "text",
+    "required": false,
+    "hidden": false
+   },
+   {
+    "name": "data[Slot][price_fix]",
+    "type": "text",
+    "required": false,
+    "hidden": false
+   },
+   {
+    "name": "data[Slot][rating_wage]",
+    "type": "hidden",
+    "required": false,
+    "hidden": true
+   },
+   {
+    "name": "data[Slot][rating_wage]",
+    "type": "checkbox",
+    "required": false,
+    "hidden": false
+   },
+   {
+    "name": "data[Slot][wage_h]",
+    "type": "text",
+    "required": false,
+    "hidden": false
+   },
+   {
+    "name": "data[Slot][wage_fix]",
+    "type": "text",
+    "required": false,
+    "hidden": false
+   },
+   {
+    "name": "data[_Token][fields]",
+    "type": "hidden",
+    "required": false,
+    "hidden": true
+   },
+   {
+    "name": "data[_Token][unlocked]",
+    "type": "hidden",
+    "required": false,
+    "hidden": true
+   }
+  ],
+  "fill": [
+   "data[Slot][profession_id]",
+   "data[Slot][role]",
+   "data[Slot][size]",
+   "data[Slot][beginning][date]",
+   "data[Slot][beginning][time]",
+   "data[Slot][end][date]",
+   "data[Slot][end][time]"
+  ],
+  "derived": [],
+  "benched_at": "2026-10-08T03:19:07.859Z"
  }
 }

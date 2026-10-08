@@ -4,7 +4,7 @@
 //
 // Offline.  npx tsx test/v2BotPure.ts
 // ============================================================================
-import { londonToUtc, shiftWindow, opKey, builderEdit, checkNewOrder, type Op } from "../app/lib/v2/bot/ops";
+import { londonToUtc, shiftWindow, opKey, builderEdit, checkNewOrder, shiftCreateFields, positionCreateFields, rowsFor, type Op } from "../app/lib/v2/bot/ops";
 import { checkContract, parseBody, unexpectedChanges, asMap, canonical, type Contract } from "../app/lib/v2/bot/contract";
 import { mismatches, liveFormValues } from "../app/lib/v2/bot/run";
 import { saveUrl, cancelUrl } from "../app/lib/v2/bot/builder";
@@ -108,6 +108,24 @@ const form = asMap([["data[Slot][beginning][date]", "3.12.2027"], ["data[Slot][b
 ok(Object.entries(live).every(([k, v]) => form.get(k) === canonical(k, v)), "OnSinch's UTC values match the form's London wall clock", JSON.stringify(live));
 const summer = liveFormValues("Slot", 1, { Job: [{ SlotTeam: [{ Slot: [{ id: 1, beginning: "2026-07-01T07:00:00+00:00", end: "2026-07-01T15:00:00+00:00", size: 1 }] }] }] });
 ok(summer["data[Slot][beginning][time]"] === "08:00", "in summer 07:00Z is the form's 8:00", summer["data[Slot][beginning][time]"]);
+
+console.log("adding shifts and positions");
+const shiftOp = { kind: "add_shift" as const, order_id: 16517, location_id: 17256, name: "Extra day", date: "2027-12-09", start: "21:30", end: "01:30",
+  positions: [{ size: 1, profession_id: "36", role: "crew_chief" as const }, { size: 2, profession_id: "1" }] };
+const sf = shiftCreateFields(shiftOp, rowsFor(shiftOp.positions)![0]);
+ok(sf["data[SlotTeam][profession_id]"] === "1" && sf["data[SlotTeam][size]"] === "2" && sf["data[SlotTeam][end][date]"] === "10.12.2027", "the new-shift form gets the plain Crew row and an overnight end date", JSON.stringify(sf));
+const pf = positionCreateFields("2027-12-09", "21:30", "01:30", shiftOp.positions[0]);
+ok(pf["data[Slot][role]"] === "1" && pf["data[Slot][profession_id]"] === "36" && pf["data[Slot][beginning][time]"] === "21:30", "the crew chief position is role 1, profession 36, with the shift's window", JSON.stringify(pf));
+ok(rowsFor([{ size: 1, profession_id: "36", role: "crew_chief" }]) === null, "a shift with no plain Crew position is not benched");
+// R11466's Derig after the add bench, 10-08: the cancelled row must not count.
+const derig = { Job: [{ SlotTeam: [{ id: 42280, Slot: [
+  { id: 59389, beginning: "2027-12-09T21:30:00+00:00", end: "2027-12-10T01:30:00+00:00", size: 3, profession_id: 1, role: 0, cancelled: true },
+  { id: 59390, beginning: "2027-12-09T21:30:00+00:00", end: "2027-12-10T01:30:00+00:00", size: 1, profession_id: 36, role: 1 },
+  { id: 59397, beginning: "2027-12-09T21:30:00+00:00", end: "2027-12-10T01:30:00+00:00", size: 2, profession_id: 1, role: 0 },
+] }] }] };
+ok(mismatches(shiftOp, derig).length === 0, "a shift already holding exactly these positions reads as done (no duplicate)");
+ok(mismatches({ ...shiftOp, positions: [{ size: 3, profession_id: "1" }] }, derig).length === 1, "a shift with a different crew count is not the same shift");
+ok(mismatches({ kind: "add_position", order_id: 1, shift_id: 42280, date: "2027-12-09", start: "21:30", end: "01:30", position: { size: 3, profession_id: "1" } }, derig).length === 1, "a cancelled position does not satisfy an add");
 
 console.log("guard URL patterns");
 // The URLs OnSinch's builder actually called on 10-08. If a pattern stops matching them,
