@@ -14,6 +14,7 @@ import { automationPaused } from "./app/lib/paused";
 //
 // Never require a human session for:
 //  - /api/auth*         the login flow itself (Google OAuth + session probe)
+//  - /api/bot           the OnSinch browser bot; authenticated by its own BOT_SECRET
 //  - /api/n8n-inbound    authenticated by its own N8N_WEBHOOK_SECRET
 //  - /api/dedupe         same secret; the n8n dedupe claim (replaces Airtable)
 //  - /api/sweep-ingest   same secret; the 12-month historical sweep (test corpus)
@@ -38,7 +39,7 @@ import { automationPaused } from "./app/lib/paused";
 //    POSTs a fixed request shape and cannot add a custom header — so it authenticates on
 //    a secret inside the webhook URL (HTTP Basic, or ?k=) and the route does that check
 //    itself. Same fail-closed-in-production rule as the others.
-const SKIP = ["/api/auth", "/api/n8n-inbound", "/api/mail-inbound", "/api/mail-poll", "/api/dedupe", "/api/sweep-ingest", "/api/health", "/api/reconcile"];
+const SKIP = ["/api/auth", "/api/bot", "/api/n8n-inbound", "/api/mail-inbound", "/api/mail-poll", "/api/dedupe", "/api/sweep-ingest", "/api/health", "/api/reconcile"];
 
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;

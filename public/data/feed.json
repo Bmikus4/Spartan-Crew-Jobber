@@ -2722,5 +2722,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0139",
+  "ts": "2026-10-08T02:55:24+00:00",
+  "kind": "measurement",
+  "headline": "OnSinch browser bot: create, size, times, PO verified on TEST (local + Vercel)",
+  "subject": "A browser bot can now make OnSinch writes in the staff screens, TEST only",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 183,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]

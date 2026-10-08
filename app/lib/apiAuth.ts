@@ -178,3 +178,20 @@ export function authorizeCronCall(request: Request): Caller {
     isProduction: process.env.NODE_ENV === "production",
   });
 }
+
+/**
+ * The OnSinch browser bot (/api/bot/*). Its own secret, BOT_SECRET in `x-bot-secret`, and
+ * deliberately not N8N_WEBHOOK_SECRET: the bot writes to OnSinch, and a leak of the intake
+ * secret must not be enough to drive it. No session is consulted, so a logged-in dashboard
+ * user cannot make the bot write. The decision is decideMachineCall's, like every gate here.
+ */
+export function authorizeBotCall(request: Request): Caller {
+  const secret = (process.env.BOT_SECRET || "").trim();
+  const presented = request.headers.get("x-bot-secret") || "";
+  return decideMachineCall({
+    secretMatches: Boolean(secret && presented && safeEqual(presented, secret)),
+    secretConfigured: Boolean(secret),
+    authRequired: process.env.AUTH_REQUIRED === "true",
+    isProduction: process.env.NODE_ENV === "production",
+  });
+}

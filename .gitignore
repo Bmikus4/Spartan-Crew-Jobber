@@ -36,3 +36,4 @@ n8n/backups/*.json
 
 # The audit harness's own output, rewritten by every run of `npx tsx audit/run.mts`.
 audit/out/
+.tmp-v2/

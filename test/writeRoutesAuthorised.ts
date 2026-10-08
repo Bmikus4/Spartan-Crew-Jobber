@@ -64,7 +64,7 @@ const WRITES = /export\s+async\s+function\s+(POST|PUT|PATCH|DELETE)\b/;
  * this to anything that merely looks like a check is not.
  */
 const AUTHORITY =
-  /authorizeAction|authorizeMachineCall|authorizeMailWebhook|authorizeCronCall|ADMIN_SECRET|WEBHOOK_SECRET|INTERNAL_API_SECRET|safeEqual|getIronSession/;
+  /authorizeAction|authorizeMachineCall|authorizeMailWebhook|authorizeCronCall|authorizeBotCall|ADMIN_SECRET|WEBHOOK_SECRET|INTERNAL_API_SECRET|safeEqual|getIronSession/;
 
 console.log("\n[1] the sweep found the routes");
 ok(routes.length >= 8, `${routes.length} route files under app/api`, routes.join(" "));
