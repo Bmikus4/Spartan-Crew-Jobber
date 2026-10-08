@@ -140,10 +140,16 @@ ok(!cancelUrl(1651).test(CANCEL) && !cancelUrl(16517).test("https://spartancrew.
 console.log("template-string escapes");
 // Inside a template string "\?" or "\s" silently becomes "?" or "s". A RegExp built from
 // one must double every backslash; a single one is the bug, every time it has appeared.
-for (const f of readdirSync(BOT).filter((x) => x.endsWith(".ts"))) {
-  const src = readFileSync(join(BOT, f), "utf8");
-  const bad = [...src.matchAll(/new RegExp\(`([^`]*)`/g)].map((m) => m[1]).filter((body) => /(^|[^\\])\\[^\\$]/.test(body));
-  ok(bad.length === 0, `${f}: no single-backslash escape in a template RegExp`, bad.join(" | "));
+// A control character in source (a "\b" that became a backspace on its way into a file)
+// makes a regex silently match nothing; it happened once on 10-08 and is checked for too.
+const V2 = join(BOT, "..");
+for (const dir of readdirSync(V2)) {
+  for (const f of readdirSync(join(V2, dir)).filter((x) => x.endsWith(".ts"))) {
+    const src = readFileSync(join(V2, dir, f), "utf8");
+    const bad = [...src.matchAll(/new RegExp\(`([^`]*)`/g)].map((m) => m[1]).filter((body) => /(^|[^\\])\\[^\\$]/.test(body));
+    ok(bad.length === 0, `${dir}/${f}: no single-backslash escape in a template RegExp`, bad.join(" | "));
+    ok(!/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/.test(src), `${dir}/${f}: no control characters`);
+  }
 }
 
 if (fails) { console.log(`\n${fails} FAILED`); process.exit(1); }

@@ -2764,5 +2764,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0142",
+  "ts": "2026-10-08T03:57:33+00:00",
+  "kind": "measurement",
+  "headline": "v2 interpretation: grounded extraction + planner (R11425, Legal Geek pinned); not wired yet",
+  "subject": "Emails can be read into grounded requests and planned into bot operations",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 186,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]
