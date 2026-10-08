@@ -16,9 +16,9 @@ import { httpTransport, OnsinchClient } from "../../engine/onsinch";
 import contracts from "./contracts.json";
 import type { Contract } from "./contract";
 import { acquireLease, releaseLease, ledgerGet, ledgerIntent, ledgerSet, type LedgerStatus } from "./db";
-import { builderDate, builderEdit, opKey, shiftWindow, utcToLondon, type Op } from "./ops";
+import { apiRole, builderDate, builderEdit, opKey, shiftWindow, utcToLondon, type Op } from "./ops";
 import { openBot } from "./session";
-import { editNode } from "./builder";
+import { cancelNode, editNode, type EditOutcome } from "./builder";
 import { createOrder } from "./wizard";
 
 export type RunResult = { op_key: string; status: LedgerStatus | "busy" | "seen"; reasons: string[]; detail?: Record<string, unknown> };
@@ -54,6 +54,7 @@ export function mismatches(op: Op, order: any): string[] {
   const slot = slotsOf(order).find((s) => Number(s.id) === op.slot_id);
   if (!slot) return [`position ${op.slot_id} not on the order`];
   if (op.kind === "set_position_size") return Number(slot.size) === op.size ? [] : [`size reads ${slot.size}`];
+  if (op.kind === "cancel_position") return slot.cancelled === true ? [] : ["position is not cancelled"];
   if (op.kind === "set_position_times") {
     const w = shiftWindow(op.date, op.start, op.end);
     const bad: string[] = [];
@@ -61,7 +62,7 @@ export function mismatches(op: Op, order: any): string[] {
     if (Date.parse(slot.end) !== Date.parse(w.end)) bad.push(`ends ${slot.end}, expected ${w.end}`);
     return bad;
   }
-  return [`no verification for ${op.kind}`];
+  return [`no verification for ${(op as Op).kind}`];
 }
 
 function createMismatches(op: Extract<Op, { kind: "create_order" }>, order: any): string[] {
@@ -70,13 +71,13 @@ function createMismatches(op: Extract<Op, { kind: "create_order" }>, order: any)
   if ((order.intern_name ?? "") !== (op.po ?? "")) bad.push(`PO "${order.intern_name}"`);
   const teams = ([] as any[]).concat(order.Job ?? []).flatMap((j: any) => ([] as any[]).concat(j.SlotTeam ?? []));
   if (teams.length !== op.shifts.length) return [...bad, `${teams.length} shifts, expected ${op.shifts.length}`];
-  const want = op.shifts.flatMap((s) => s.positions.map((p) => ({ ...shiftWindow(s.date, s.start, s.end), size: p.size, place: s.place_id, prof: p.profession_id })));
+  const want = op.shifts.flatMap((s) => s.positions.map((p) => ({ ...shiftWindow(s.date, s.start, s.end), size: p.size, place: s.place_id, prof: p.profession_id, role: apiRole(p) })));
   const got = slotsOf(order).filter((s) => s.cancelled !== true);
-  const key = (b: string, e: string, size: number, prof: string) => `${Date.parse(b)}|${Date.parse(e)}|${size}|${prof}`;
+  const key = (b: string, e: string, size: number, prof: string, role: number) => `${Date.parse(b)}|${Date.parse(e)}|${size}|${prof}|${role}`;
   const have = new Map<string, number>();
-  for (const s of got) { const k = key(s.beginning, s.end, Number(s.size), String(s.profession_id)); have.set(k, (have.get(k) ?? 0) + 1); }
+  for (const s of got) { const k = key(s.beginning, s.end, Number(s.size), String(s.profession_id), Number(s.role ?? 0)); have.set(k, (have.get(k) ?? 0) + 1); }
   for (const w of want) {
-    const k = key(w.beginning, w.end, w.size, w.prof);
+    const k = key(w.beginning, w.end, w.size, w.prof, w.role);
     if (!have.get(k)) bad.push(`no position ${w.beginning}..${w.end} x${w.size}`); else have.set(k, have.get(k)! - 1);
   }
   if (got.length !== want.length) bad.push(`${got.length} positions, expected ${want.length}`);
@@ -99,7 +100,7 @@ export function liveFormValues(model: "Slot" | "Order", id: number, order: any):
 }
 
 /** The database fields each edit may change, as OnSinch's audit names them. */
-const AUDIT_FIELDS: Record<string, string[]> = { set_position_size: ["size"], set_position_times: ["beginning", "end"], set_po: ["intern_name"] };
+const AUDIT_FIELDS: Record<string, string[]> = { set_position_size: ["size"], set_position_times: ["beginning", "end"], set_po: ["intern_name"], cancel_position: ["cancelled"] };
 
 async function auditPage(t: any, page?: number): Promise<{ rows: any[]; pageCount: number }> {
   const r = await t("GET", `/timelineAudits?action=common_change&limit=100&page=${page ?? 1}`);
@@ -151,13 +152,30 @@ async function preflight(op: Op, order: any, testOnly: boolean): Promise<string[
   if (op.kind === "set_po") return [];
   const slot = slotsOf(order).find((s) => Number(s.id) === op.slot_id);
   if (!slot) return [`position ${op.slot_id} is not on order ${op.order_id}`];
-  if (slot.cancelled === true) return [`position ${op.slot_id} is cancelled`];
+  if (slot.cancelled === true && op.kind !== "cancel_position") return [`position ${op.slot_id} is cancelled`];
   const growOnly = op.kind === "set_position_size" && op.size > Number(slot.size);
   if (!growOnly) {
     const n = await attendingOn(op.order_id, op.slot_id);
     if (n > 0) return [`signed-on crew: ${n} on position ${op.slot_id}; ops must make this change`];
   }
   return [];
+}
+
+/** After a builder write: ledger the outcome, read the order back, check the audit row. */
+async function finish(key: string, op: Op, out: EditOutcome, orderId: number, model: string, id: number, cursor: number): Promise<RunResult> {
+  if (out.stage !== "submitted") {
+    await ledgerSet(key, out.stage, { reasons: out.reasons });
+    return { op_key: key, status: out.stage, reasons: out.reasons };
+  }
+  await ledgerSet(key, "submitted", { before: out.before, response: out.response as Record<string, unknown>, version_tier: out.verdict.tier });
+  const after = await readOrder(orderId);
+  const bad = mismatches(op, after);
+  const names = model === "Order" ? [String(id), String(after?.number ?? "")] : [String(id)];
+  const extras = await auditExtras(model, names, cursor, AUDIT_FIELDS[op.kind] ?? []);
+  if (extras === null) bad.push("no audit row found for the save");
+  else if (extras.length) bad.push(`audit shows other fields changed: ${[...new Set(extras)].join(", ")}`);
+  await ledgerSet(key, bad.length ? "mismatch" : "verified", { readback: bad });
+  return { op_key: key, status: bad.length ? "mismatch" : "verified", reasons: [...bad, ...out.verdict.reasons] };
 }
 
 export async function runOp(source: string, op: Op, opts: { testOnly: boolean } = { testOnly: true }): Promise<RunResult> {
@@ -180,8 +198,10 @@ export async function runOp(source: string, op: Op, opts: { testOnly: boolean } 
       let out;
       try { out = await createOrder(bot, op); } finally { await bot.close(); }
       if (out.stage !== "submitted") { await ledgerSet(key, out.stage, { reasons: out.reasons }); return { op_key: key, status: out.stage, reasons: out.reasons }; }
-      await ledgerSet(key, "submitted", { order_id: out.order_id, number: out.number, version: out.version });
-      const bad = mismatches(op, await readOrder(out.order_id));
+      await ledgerSet(key, "submitted", { order_id: out.order_id, number: out.number, client_user_id: out.client_user_id, version: out.version });
+      const created = await readOrder(out.order_id);
+      const bad = mismatches(op, created);
+      if (created && String(created.user_id) !== out.client_user_id) bad.push(`client reads ${created.user_id}, expected ${out.client_user_id}`);
       await ledgerSet(key, bad.length ? "mismatch" : "verified", { readback: bad });
       return { op_key: key, status: bad.length ? "mismatch" : "verified", reasons: bad, detail: { order_id: out.order_id, number: out.number } };
     }
@@ -191,6 +211,15 @@ export async function runOp(source: string, op: Op, opts: { testOnly: boolean } 
     if (mismatches(op, before).length === 0) {
       await ledgerSet(key, "verified", { noop: true });
       return { op_key: key, status: "verified", reasons: ["already so in OnSinch; nothing sent"] };
+    }
+    if (op.kind === "cancel_position") {
+      const cursor = await auditCursor();
+      if (cursor === null) { await ledgerSet(key, "blocked", { reasons: ["audit log unreadable"] }); return { op_key: key, status: "blocked", reasons: ["audit log unreadable"] }; }
+      const bot = await openBot();
+      phase = "browser";
+      let out;
+      try { out = await cancelNode(bot, op.order_id, "Slot", op.slot_id); } finally { await bot.close(); }
+      return finish(key, op, out, op.order_id, "Slot", op.slot_id, cursor);
     }
     const edit = builderEdit(op);
     const contract = CONTRACTS[`builder.${edit.model}`];
@@ -202,19 +231,7 @@ export async function runOp(source: string, op: Op, opts: { testOnly: boolean } 
     let out;
     const fresh = async () => liveFormValues(edit.model, edit.id, await readOrder(orderId!));
     try { out = await editNode(bot, contract, orderId!, edit.model, edit.id, edit.set, fresh); } finally { await bot.close(); }
-    if (out.stage !== "submitted") {
-      await ledgerSet(key, out.stage, { reasons: out.reasons });
-      return { op_key: key, status: out.stage, reasons: out.reasons };
-    }
-    await ledgerSet(key, "submitted", { before: out.before, response: out.response as Record<string, unknown>, version_tier: out.verdict.tier });
-    const after = await readOrder(orderId!);
-    const bad = mismatches(op, after);
-    const names = edit.model === "Order" ? [String(edit.id), String(after?.number ?? "")] : [String(edit.id)];
-    const extras = await auditExtras(edit.model, names, cursor, AUDIT_FIELDS[op.kind] ?? []);
-    if (extras === null) bad.push("no audit row found for the save");
-    else if (extras.length) bad.push(`audit shows other fields changed: ${[...new Set(extras)].join(", ")}`);
-    await ledgerSet(key, bad.length ? "mismatch" : "verified", { readback: bad });
-    return { op_key: key, status: bad.length ? "mismatch" : "verified", reasons: [...bad, ...out.verdict.reasons] };
+    return finish(key, op, out, orderId!, edit.model, edit.id, cursor);
   } catch (e) {
     const msg = String((e as Error)?.message ?? e).slice(0, 300);
     const status = phase === "pre" ? "blocked" : "unknown";

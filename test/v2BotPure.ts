@@ -7,6 +7,11 @@
 import { londonToUtc, shiftWindow, opKey, builderEdit, checkNewOrder, type Op } from "../app/lib/v2/bot/ops";
 import { checkContract, parseBody, unexpectedChanges, asMap, canonical, type Contract } from "../app/lib/v2/bot/contract";
 import { mismatches, liveFormValues } from "../app/lib/v2/bot/run";
+import { saveUrl, cancelUrl } from "../app/lib/v2/bot/builder";
+import { readdirSync, readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+const BOT = join(dirname(fileURLToPath(import.meta.url)), "..", "app", "lib", "v2", "bot");
 
 let fails = 0;
 const ok = (cond: boolean, label: string, extra = "") => {
@@ -38,15 +43,20 @@ ok(t["data[Slot][beginning][date]"] === "01.12.2027" && t["data[Slot][end][date]
 ok(throws(() => builderEdit({ kind: "set_po", order_id: 1, po: "Legal Geek" })), "a PO with no digit is refused (Legal Geek)");
 
 console.log("NewOrder check");
-const op: Extract<Op, { kind: "create_order" }> = { kind: "create_order", company_id: "515", company_name: "TEST - Eventz", job_name: "x", shifts: [{ name: "s", date: "2027-12-01", start: "08:00", end: "12:00", place_id: "5", place_label: "Spartan Crew", positions: [{ size: 2, profession_id: "1" }] }] };
+const op: Extract<Op, { kind: "create_order" }> = { kind: "create_order", company_id: "515", company_name: "TEST - Eventz", client_email: "accounts@spartancrew.co.uk", job_name: "x", shifts: [{ name: "s", date: "2027-12-01", start: "08:00", end: "12:00", place_id: "5", place_label: "Spartan Crew", positions: [{ size: 2, profession_id: "1" }] }] };
 const pos = { lockstatus: true, hidden: true, concept: true, beginning: "2027-12-01T08:00:00.000Z", end: "2027-12-01T12:00:00.000Z", size: 2, role: "WORKER", professionId: "1", location: { placeId: "5" } };
-const vars = (p: object, extra: object = {}) => ({ input: { internName: "", companyId: "515", quote: false, provisional: false, jobs: [{ shifts: [{ positions: [{ ...pos, ...p }] }] }], ...extra } });
-ok(checkNewOrder(vars({}), op).length === 0, "the benched R11463 mutation passes", checkNewOrder(vars({}), op).join("; "));
-ok(checkNewOrder(vars({ beginning: "2027-12-01T07:00:00.000Z" }), op).length === 1, "an hour off is caught");
-ok(checkNewOrder(vars({ size: 3 }), op).length === 1, "a wrong crew size is caught");
-ok(checkNewOrder(vars({}, { companyId: "137" }), op).length === 1, "a wrong company is caught");
-ok(checkNewOrder(vars({ hidden: false }), op).length === 1, "a published position is caught");
-ok(checkNewOrder(vars({ location: { placeId: "6922" } }), op).length === 1, "a wrong venue is caught");
+const vars = (p: object, extra: object = {}) => ({ input: { internName: "", companyId: "515", userId: "1591", quote: false, provisional: false, jobs: [{ shifts: [{ positions: [{ ...pos, ...p }] }] }], ...extra } });
+ok(checkNewOrder(vars({}), op, "1591").length === 0, "the benched R11463 mutation passes", checkNewOrder(vars({}), op, "1591").join("; "));
+ok(checkNewOrder(vars({ beginning: "2027-12-01T07:00:00.000Z" }), op, "1591").length === 1, "an hour off is caught");
+ok(checkNewOrder(vars({ size: 3 }), op, "1591").length === 1, "a wrong crew size is caught");
+ok(checkNewOrder(vars({}, { companyId: "137" }), op, "1591").length === 1, "a wrong company is caught");
+ok(checkNewOrder(vars({ hidden: false }), op, "1591").length === 1, "a published position is caught");
+ok(checkNewOrder(vars({ location: { placeId: "6922" } }), op, "1591").length === 1, "a wrong venue is caught");
+ok(checkNewOrder(vars({}, { userId: "777" }), op, "1591").length === 1, "a wrong client contact is caught");
+const ccOp = { ...op, shifts: [{ ...op.shifts[0], positions: [{ size: 1, profession_id: "36", role: "crew_chief" as const }, { size: 2, profession_id: "1" }] }] };
+const ccVars = (chief: object) => ({ input: { internName: "", companyId: "515", userId: "1591", quote: false, provisional: false, jobs: [{ shifts: [{ positions: [{ ...pos }, { ...pos, size: 1, professionId: "36", role: "CREWBOSS", ...chief }] }] }] } });
+ok(checkNewOrder(ccVars({}), ccOp, "1591").length === 0, "crew chief + crew passes in either row order", checkNewOrder(ccVars({}), ccOp, "1591").join("; "));
+ok(checkNewOrder(ccVars({ role: "WORKER" }), ccOp, "1591").length === 1, "a crew chief sent as a staff member is caught");
 
 console.log("contracts");
 const c: Contract = {
@@ -81,7 +91,7 @@ const r11464 = { company_id: 515, intern_name: "BENCH-2001", Job: [{ SlotTeam: [
   { Slot: [{ id: 59385, beginning: "2027-12-03T22:00:00+00:00", end: "2027-12-04T02:00:00+00:00", size: 2, profession_id: 1, hidden: true }] },
   { Slot: [{ id: 59384, beginning: "2027-12-02T07:30:00+00:00", end: "2027-12-02T15:00:00+00:00", size: 3, profession_id: 1, hidden: true }] },
 ] }] };
-const create: Extract<Op, { kind: "create_order" }> = { kind: "create_order", company_id: "515", company_name: "TEST - Eventz", job_name: "x", po: "BENCH-2001", shifts: [
+const create: Extract<Op, { kind: "create_order" }> = { kind: "create_order", company_id: "515", company_name: "TEST - Eventz", client_email: "accounts@spartancrew.co.uk", job_name: "x", po: "BENCH-2001", shifts: [
   { name: "Install", date: "2027-12-02", start: "07:30", end: "15:00", place_id: "5", place_label: "Spartan Crew", positions: [{ size: 3, profession_id: "1" }] },
   { name: "Derig", date: "2027-12-03", start: "22:00", end: "02:00", place_id: "5", place_label: "Spartan Crew", positions: [{ size: 2, profession_id: "1" }] },
 ] };
@@ -98,6 +108,25 @@ const form = asMap([["data[Slot][beginning][date]", "3.12.2027"], ["data[Slot][b
 ok(Object.entries(live).every(([k, v]) => form.get(k) === canonical(k, v)), "OnSinch's UTC values match the form's London wall clock", JSON.stringify(live));
 const summer = liveFormValues("Slot", 1, { Job: [{ SlotTeam: [{ Slot: [{ id: 1, beginning: "2026-07-01T07:00:00+00:00", end: "2026-07-01T15:00:00+00:00", size: 1 }] }] }] });
 ok(summer["data[Slot][beginning][time]"] === "08:00", "in summer 07:00Z is the form's 8:00", summer["data[Slot][beginning][time]"]);
+
+console.log("guard URL patterns");
+// The URLs OnSinch's builder actually called on 10-08. If a pattern stops matching them,
+// the in-flight guard stops running without a word: the first cancels went out that way.
+const SAVE = "https://spartancrew.onsinch.com/admin/orders/builder/16514?model=Slot&ajax=save_node&tab=tab_1_1&path=Order:16514.Job:16577.SlotLocation:17253.SlotTeam:42275.Slot:59383";
+const CANCEL = "https://spartancrew.onsinch.com/admin/orders/builder/16517?ajax=cancel";
+ok(saveUrl(16514, "Slot").test(SAVE), "the save pattern matches the real save URL");
+ok(!saveUrl(16514, "Order").test(SAVE) && !saveUrl(1651, "Slot").test(SAVE), "and not another model's or order's");
+ok(cancelUrl(16517).test(CANCEL), "the cancel pattern matches the real cancel URL");
+ok(!cancelUrl(1651).test(CANCEL) && !cancelUrl(16517).test("https://spartancrew.onsinch.com/admin/orders/builder/165170ajax=cancel"), "and not a near miss");
+
+console.log("template-string escapes");
+// Inside a template string "\?" or "\s" silently becomes "?" or "s". A RegExp built from
+// one must double every backslash; a single one is the bug, every time it has appeared.
+for (const f of readdirSync(BOT).filter((x) => x.endsWith(".ts"))) {
+  const src = readFileSync(join(BOT, f), "utf8");
+  const bad = [...src.matchAll(/new RegExp\(`([^`]*)`/g)].map((m) => m[1]).filter((body) => /(^|[^\\])\\[^\\$]/.test(body));
+  ok(bad.length === 0, `${f}: no single-backslash escape in a template RegExp`, bad.join(" | "));
+}
 
 if (fails) { console.log(`\n${fails} FAILED`); process.exit(1); }
 console.log("\nall passed");

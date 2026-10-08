@@ -2736,5 +2736,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0140",
+  "ts": "2026-10-08T03:18:07+00:00",
+  "kind": "measurement",
+  "headline": "OnSinch bot: crew chief creates, client by email, cancel position; guard must see every request",
+  "subject": "Bot creates carry a Crew Chief and the asking client, and positions can be cancelled",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 183,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]

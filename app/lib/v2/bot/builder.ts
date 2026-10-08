@@ -25,6 +25,14 @@ export type EditOutcome =
   | { stage: "unknown"; reasons: string[] }
   | { stage: "submitted"; before: Record<string, string>; response: unknown; verdict: Verdict };
 
+/**
+ * The save and cancel endpoints as the builder calls them (captured 10-08). Pinned against
+ * the real URLs in test/v2BotPure.ts: when a pattern stops matching, the in-flight guard
+ * silently stops running, which is how the first cancels went out unchecked.
+ */
+export const saveUrl = (orderId: number, model: string) => new RegExp(`/admin/orders/builder/${orderId}\\?model=${model}&ajax=save_node(&|$)`);
+export const cancelUrl = (orderId: number) => new RegExp(`/admin/orders/builder/${orderId}\\?ajax=cancel$`);
+
 export async function harvestFields(page: Page, formSelector: string): Promise<FieldShape[]> {
   return page.locator(formSelector).evaluate((f) =>
     [...(f as HTMLFormElement).elements].filter((e) => (e as HTMLInputElement).name).map((e) => {
@@ -103,8 +111,10 @@ async function editNodeInner(bot: Bot, contract: Contract, orderId: number, mode
   }
 
   const guard: string[] = [];
-  const pattern = new RegExp(`/admin/orders/builder/${orderId}\\?model=${model}&ajax=save_node`);
+  const inspected = { yes: false };
+  const pattern = saveUrl(orderId, model);
   await page.route((u) => pattern.test(u.toString()), async (route) => {
+    inspected.yes = true;
     const req = route.request();
     const sent = parseBody(req.postData() ?? "", req.headers()["content-type"] ?? "");
     const bad = sent.length ? unexpectedChanges(before, sent, set, contract.derived) : ["request body unreadable"];
@@ -119,6 +129,9 @@ async function editNodeInner(bot: Bot, contract: Contract, orderId: number, mode
   await page.unroute((u) => pattern.test(u.toString()));
   if (guard.length) return { stage: "blocked", reasons: ["request in flight", ...guard] };
   if (!res) return { stage: "unknown", reasons: ["no answer to the save within 30s"] };
+  // A guard that never ran is not a guard that passed: a URL pattern that stopped matching
+  // would otherwise let every save through unchecked (it happened to the cancel, 10-08).
+  if (!inspected.yes) return { stage: "unknown", reasons: ["the save was answered but the guard never saw the request"] };
   let body: any = null;
   try { body = await res.json(); } catch { return { stage: "unknown", reasons: [`save answered ${res.status()} with no JSON`] }; }
   if (body?.result !== true) return { stage: "failed", reasons: [String(body?.message ?? "result not true")], response: body };
@@ -131,4 +144,59 @@ export async function captureContract(page: Page, orderId: number, model: string
   const sel = await openNode(page, orderId, model, id);
   if (!sel) return null;
   return { surface, version: await versionSignals(page), fields: await harvestFields(page, sel), fill, derived, benched_at: new Date().toISOString() };
+}
+
+/**
+ * Cancels one node through its context menu (the "Cancel" ops use; the record stays, marked
+ * cancelled). Measured 10-08 on TEST: a bootbox asks "Are you sure you want to cancel
+ * selected item(s) and all its children items?", OK posts `?ajax=cancel` with
+ * `selected[]=<Model:id>`, and OnSinch answers {result: true, message}. The request must
+ * name exactly this one node: the tree supports multi-select, and a cancel of a shift
+ * cascades to every position under it.
+ */
+export const CANCEL_PROMPT = "Are you sure you want to cancel selected item(s) and all its children items?";
+
+export async function cancelNode(bot: Bot, orderId: number, model: string, id: number): Promise<EditOutcome> {
+  const { page } = bot;
+  const clicked = { yes: false };
+  try {
+    const sel = await openNode(page, orderId, model, id);
+    if (!sel) return { stage: "blocked", reasons: [`${model}:${id} is not on order ${orderId}'s builder`] };
+    if ((await activeRole(page)) !== AGENCY_ROLE_LABEL) return { stage: "blocked", reasons: ["not in the agency role"] };
+    await page.locator(`[id="${model}:${id}_anchor"]`).click({ button: "right" });
+    const item = page.locator(".vakata-context li a").filter({ hasText: "Cancel" });
+    if ((await item.count()) !== 1 || (await item.innerText()).trim() !== "Cancel") return { stage: "blocked", reasons: ["context menu has no single Cancel item"] };
+    await item.click();
+    const box = page.locator(".bootbox").first();
+    await box.waitFor({ state: "attached", timeout: 10000 });
+    const prompt = (await box.locator(".bootbox-body").innerText()).trim();
+    if (prompt !== CANCEL_PROMPT) {
+      await box.locator('button[data-bb-handler="cancel"]').click().catch(() => {});
+      return { stage: "blocked", reasons: [`unexpected confirmation: "${prompt.slice(0, 120)}"`] };
+    }
+    const guard: string[] = [];
+    const inspected = { yes: false };
+    const pattern = cancelUrl(orderId);
+    await page.route((u) => pattern.test(u.toString()), async (route) => {
+      inspected.yes = true;
+      const sent = new URLSearchParams(route.request().postData() ?? "").getAll("selected[]");
+      if (sent.length !== 1 || sent[0] !== `${model}:${id}`) { guard.push(`cancel would select ${JSON.stringify(sent)}`); return route.abort(); }
+      return route.continue();
+    });
+    const answer = page.waitForResponse((r) => pattern.test(r.url()) && r.request().method() === "POST", { timeout: 30000 }).catch(() => null);
+    if (bot.alarms.length) return { stage: "blocked", reasons: ["page raised", ...bot.alarms] };
+    clicked.yes = true;
+    await box.locator('button[data-bb-handler="confirm"]').click();
+    const res = await answer;
+    if (guard.length) return { stage: "blocked", reasons: ["request in flight", ...guard] };
+    if (!res) return { stage: "unknown", reasons: ["no answer to the cancel within 30s"] };
+    if (!inspected.yes) return { stage: "unknown", reasons: ["the cancel was answered but the guard never saw the request"] };
+    let body: any = null;
+    try { body = await res.json(); } catch { return { stage: "unknown", reasons: [`cancel answered ${res.status()} with no JSON`] }; }
+    if (body?.result !== true) return { stage: "failed", reasons: [String(body?.message ?? JSON.stringify(body?.errors ?? body)).slice(0, 200)], response: body };
+    return { stage: "submitted", before: {}, response: { message: body.message }, verdict: { tier: "ok", reasons: [] } };
+  } catch (e) {
+    if (clicked.yes) throw e;
+    return { stage: "blocked", reasons: [`bot error before submit: ${String((e as Error)?.message ?? e).slice(0, 200)}`] };
+  }
 }

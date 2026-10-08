@@ -9,10 +9,15 @@
 import { createHash } from "node:crypto";
 
 export type PositionSpec = { size: number; profession_id: string; role?: "crew_chief" };
+
+/** The wizard's role values (its select's data-value), as NewOrder carries them. */
+export const wizardRole = (p: PositionSpec) => (p.role === "crew_chief" ? "CREWBOSS" : "WORKER");
+/** The API's Slot.role for the same, as read back: 1 crew chief, 0 staff member. */
+export const apiRole = (p: PositionSpec) => (p.role === "crew_chief" ? 1 : 0);
 export type ShiftSpec = { name: string; date: string; start: string; end: string; place_id: string; place_label: string; positions: PositionSpec[] };
 
 export type Op =
-  | { kind: "create_order"; company_id: string; company_name: string; job_name: string; po?: string; shifts: ShiftSpec[] }
+  | { kind: "create_order"; company_id: string; company_name: string; client_email: string; job_name: string; po?: string; shifts: ShiftSpec[] }
   | { kind: "set_position_size"; order_id: number; slot_id: number; size: number }
   | { kind: "set_position_times"; order_id: number; slot_id: number; date: string; start: string; end: string }
   | { kind: "set_po"; order_id: number; po: string }
@@ -108,10 +113,11 @@ export function builderEdit(op: Op): { model: "Slot" | "Order"; id: number; set:
 // option or a company, and this is the last place that can be caught for free.
 // ---------------------------------------------------------------------------
 
-export function checkNewOrder(vars: any, op: Extract<Op, { kind: "create_order" }>): string[] {
+export function checkNewOrder(vars: any, op: Extract<Op, { kind: "create_order" }>, clientUserId: string): string[] {
   const bad: string[] = [];
   const input = vars?.input;
   if (!input) return ["no input in NewOrder variables"];
+  if (String(input.userId) !== clientUserId) bad.push(`client ${input.userId} != ${clientUserId} (${op.client_email})`);
   if (String(input.companyId) !== op.company_id) bad.push(`companyId ${input.companyId} != ${op.company_id}`);
   if ((input.internName ?? "") !== (op.po ?? "")) bad.push(`PO "${input.internName}" != "${op.po ?? ""}"`);
   if (input.quote !== false || input.provisional !== false) bad.push("quote/provisional set");
@@ -122,18 +128,19 @@ export function checkNewOrder(vars: any, op: Extract<Op, { kind: "create_order" 
   op.shifts.forEach((want, i) => {
     const got = shifts[i];
     const w = shiftWindow(want.date, want.start, want.end);
-    const pos = got.positions ?? [];
+    const pos = (got.positions ?? []) as any[];
     if (pos.length !== want.positions.length) { bad.push(`shift ${i}: ${pos.length} positions, expected ${want.positions.length}`); return; }
-    pos.forEach((p: any, j: number) => {
-      const wp = want.positions[j];
+    for (const [j, p] of pos.entries()) {
       if (Date.parse(p.beginning) !== Date.parse(w.beginning)) bad.push(`shift ${i} pos ${j}: begins ${p.beginning}, expected ${w.beginning}`);
       if (Date.parse(p.end) !== Date.parse(w.end)) bad.push(`shift ${i} pos ${j}: ends ${p.end}, expected ${w.end}`);
-      if (Number(p.size) !== wp.size) bad.push(`shift ${i} pos ${j}: size ${p.size}, expected ${wp.size}`);
-      if (String(p.professionId) !== wp.profession_id) bad.push(`shift ${i} pos ${j}: profession ${p.professionId}, expected ${wp.profession_id}`);
       if (String(p.location?.placeId) !== want.place_id) bad.push(`shift ${i} pos ${j}: place ${p.location?.placeId}, expected ${want.place_id}`);
-      if (!wp.role && p.role !== "WORKER") bad.push(`shift ${i} pos ${j}: role ${p.role}, expected WORKER`);
       if (p.hidden !== true || p.concept !== true) bad.push(`shift ${i} pos ${j}: would be visible to staff`);
-    });
+    }
+    // Positions are compared as a set: the wizard's row order is not part of the booking.
+    const sig = (size: unknown, prof: unknown, role: unknown) => `${Number(size)}|${String(prof)}|${String(role)}`;
+    const sent = pos.map((p) => sig(p.size, p.professionId, p.role)).sort().join(" ");
+    const asked = want.positions.map((p) => sig(p.size, p.profession_id, wizardRole(p))).sort().join(" ");
+    if (sent !== asked) bad.push(`shift ${i}: positions ${sent}, expected ${asked}`);
   });
   return bad;
 }
