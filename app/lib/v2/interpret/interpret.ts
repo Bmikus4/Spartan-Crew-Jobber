@@ -53,8 +53,13 @@ export function ground(x: Extraction, newest: string, sentIso: string): Interpre
     const venue = r.venue && quoteIn(newest, r.venue.quote) && r.venue.quote.toLowerCase().includes(String(r.venue.value).toLowerCase()) ? String(r.venue.value) : undefined;
     const chief = check(`${tag} crew chief`, r.crew_chief, (q) => (/chief|crew ?boss|supervisor/i.test(q) ? true : null));
     const trade = r.trade && quoteIn(newest, r.trade.quote) ? r.trade.value : undefined;
+    // The model sometimes gives the target's day or time as a bare value, its words being the
+    // target's own quote ("the derig on Friday 3rd December 2027"). That quote is then what
+    // is parsed: still the client's words, read here.
+    const inTarget = <T>(v: Grounded<T> | T | null | undefined): Grounded<T> | undefined =>
+      v == null ? undefined : typeof v === "object" ? (v as Grounded<T>) ?? undefined : { value: v as T, quote: r.target!.quote };
     const target = r.target && quoteIn(newest, r.target.quote)
-      ? { quote: r.target.quote, date: check(`${tag} target date`, r.target.date, (q) => parseDate(q, sentIso)), start: check(`${tag} target start`, r.target.start, parseTime) }
+      ? { quote: r.target.quote, date: check(`${tag} target date`, inTarget<string>(r.target.date), (q) => parseDate(q, sentIso)), start: check(`${tag} target start`, inTarget<string>(r.target.start), parseTime) }
       : undefined;
     const own = problems.slice(before);
     if (trade && !BENCHED_TRADES.test(trade.trim())) own.push(`${tag}: trade "${trade}" is not one the system books`);

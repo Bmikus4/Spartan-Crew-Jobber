@@ -2848,5 +2848,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0148",
+  "ts": "2026-10-09T12:01:52+00:00",
+  "kind": "measurement",
+  "headline": "v2: bare target day grounded from target quote; e2e email->browser verified on TEST (4/4)",
+  "subject": "A time change's target day given as a bare value is read from the target's own words",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 187,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]

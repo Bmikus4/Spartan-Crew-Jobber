@@ -96,6 +96,13 @@ console.log("changes");
   ok(i.requests[0].problems.length === 0 && i.requests[0].crew === 4 && i.requests[0].crew_add === 2, "a total and an increase both ground", JSON.stringify(i.requests[0]));
 }
 {
+  // Measured 10-09 (TEST e2e, and Legal Geek's live email): the target's day as a bare value.
+  const text = "please increase the hours on the derig on Friday 3rd December 2027 to 5 hours";
+  const t = (date: string) => ground(ex([req({ action: "change_times", duration_minutes: g(300, "5 hours"), target: { quote: "the derig on Friday 3rd December 2027", date: date as any, start: null } as any })], { intent: "change" }), text, sent);
+  ok(t("2027-12-03").requests[0].target?.date === "2027-12-03" && t("2027-12-03").requests[0].problems.length === 0, "a bare target day is read from the target's own words");
+  ok(t("2027-12-04").requests[0].target?.date === undefined && t("2027-12-04").requests[0].problems.length > 0, "and refused when those words say another day");
+}
+{
   const i = ground(ex([req({ action: "change_times", date: { value: "2026-10-16" } as any, start: g("09:00", "09:00") })], { intent: "change" }), "move it to 09:00", sent);
   ok(i.requests[0].problems.some((p) => p.includes("no words quoted")), "a value the model gave without its words is refused by name", JSON.stringify(i.requests[0].problems));
 }
