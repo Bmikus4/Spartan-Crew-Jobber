@@ -19,10 +19,14 @@ import { captureInboundRaw } from "./inboundRawDb";
 import { replyDeliveryForWire } from "./settingsDb";
 import { upsertTicketFromState } from "./ticketsDb";
 import { reportError } from "./errorReport";
+import { v2Engine } from "./paused";
+import type { decideOnce } from "./v2/process";
 
 export interface InboundIO {
   capture: typeof captureInboundRaw;
   report: typeof reportError;
+  /** The rebuild's decision on one captured message (SPARTAN_ENGINE=v2). */
+  decide: typeof decideOnce;
   buildDeps: typeof buildDeps;
   handleThread: typeof handleThread;
   upsertTicket: typeof upsertTicketFromState;
@@ -33,6 +37,8 @@ export interface InboundIO {
 export const productionInboundIO: InboundIO = {
   capture: captureInboundRaw,
   report: reportError,
+  // Loaded on use: the rebuild pulls in the browser bot, which the old path never needs.
+  decide: async (id) => (await import("./v2/process")).decideOnce(id),
   buildDeps,
   handleThread,
   upsertTicket: upsertTicketFromState,
@@ -54,6 +60,29 @@ export async function handleInbound(request: Request, io: InboundIO = production
 
   // Durable capture FIRST — no inbound is ever lost, and re-posts dedupe.
   const cap = await io.capture(payload, "n8n");
+
+  /**
+   * UNDER THE REBUILD THE OLD ENGINE NEVER RUNS HERE. The rebuild decides on the one
+   * message n8n polled (n8n.latest_message_id; the thread's newest as a fallback), never on
+   * the thread's history: an old message re-read as new is how a stale request gets
+   * written. Shadow only: a decision is recorded in v2_decisions and nothing is written.
+   */
+  if (v2Engine()) {
+    const p = (payload ?? {}) as { n8n?: { latest_message_id?: unknown } };
+    const message_id = String(p.n8n?.latest_message_id ?? "") || coerceThread(payload)?.messages.slice(-1)[0]?.message_id || "";
+    if (!message_id) {
+      void io.report({ route: "mail-undeliverable", where: "api/n8n-inbound (v2)", what: "a delivery named no message, so the rebuild did not decide on it", detail: `kept in inbound_raw as ${cap.dedup_key}` });
+      return Response.json({ ok: true, captured: cap.captured, engine: "v2", decided: false, dedup_key: cap.dedup_key });
+    }
+    try {
+      const r = await io.decide(message_id);
+      if (r.skipped === "message not captured") void io.report({ route: "mail-undeliverable", where: "api/n8n-inbound (v2)", what: "the message was not in thread_messages, so the rebuild did not decide on it", detail: `${message_id}; inbound_raw ${cap.dedup_key}` });
+      return Response.json({ ok: true, captured: cap.captured, engine: "v2", message_id, decision: r.decision?.kind ?? null, skipped: r.skipped ?? null });
+    } catch (err) {
+      void io.report({ route: "engine-threw", where: "api/n8n-inbound (v2)", what: String((err as Error)?.message ?? err), detail: `message ${message_id}; replay with POST /api/bot/process` });
+      return Response.json({ ok: false, engine: "v2", message_id, error: String((err as Error)?.message ?? err).slice(0, 300) }, { status: 500 });
+    }
+  }
 
   /**
    * AFTER THE CUTOVER THIS ROUTE IS INERT, and does not depend on n8n being switched off.

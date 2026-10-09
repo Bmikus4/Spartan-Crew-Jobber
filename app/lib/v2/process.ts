@@ -81,6 +81,17 @@ export type Processed = { message_id: string; skipped?: string; interpretation?:
 
 const NOT_CLIENT = /spartancrew\.co\.uk|no-?reply|mailer-daemon|postmaster|onsinch|sinch\.cz/i;
 
+/**
+ * Intake's entry, in shadow: each message is decided once. n8n posts the whole thread on
+ * every new message, and a re-post must not buy a second model call or a second decision.
+ */
+export async function decideOnce(message_id: string): Promise<Processed> {
+  const sql = await db();
+  const seen = (await sql`SELECT kind FROM v2_decisions WHERE message_id = ${message_id}`) as any[];
+  if (seen.length) return { message_id, skipped: `already decided (${seen[0].kind})` };
+  return processMessage(message_id, { execute: false });
+}
+
 export async function processMessage(message_id: string, opts: { execute: boolean; world?: World } = { execute: false }): Promise<Processed> {
   const sql = await db();
   const rows = (await sql`SELECT message_id, thread_id, from_address, date_iso, subject, body, is_from_spartan FROM thread_messages WHERE message_id = ${message_id}`) as any[];

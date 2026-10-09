@@ -45,7 +45,7 @@ export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
   if (!pathname.startsWith("/api/")) return NextResponse.next();
   // Before the auth switch below, which is off by default: a pause must hold whatever AUTH_REQUIRED says.
-  if (automationPaused(pathname)) return NextResponse.json({ ok: false, paused: true, error: "automation paused (SPARTAN_PAUSED=1)" }, { status: 503 });
+  if (automationPaused(pathname)) return NextResponse.json({ ok: false, paused: true, error: "automation paused (SPARTAN_PAUSED=1, or an old-engine route under SPARTAN_ENGINE=v2)" }, { status: 503 });
   /**
    * A PREVIEW IS NEVER A PLACE TO BE OPEN, WHATEVER THE SWITCH SAYS.
    *

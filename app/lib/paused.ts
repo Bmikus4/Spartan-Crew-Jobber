@@ -10,7 +10,19 @@
  */
 export const AUTOMATION_ROUTES = ["/api/n8n-inbound", "/api/mail-inbound", "/api/mail-poll", "/api/dedupe", "/api/sweep-ingest", "/api/reconcile"];
 
-export function automationPaused(pathname: string, flag: string | undefined = process.env.SPARTAN_PAUSED): boolean {
-  if ((flag || "").trim() !== "1") return false;
-  return AUTOMATION_ROUTES.some((p) => pathname === p || pathname.startsWith(p + "/"));
+/**
+ * SPARTAN_ENGINE=v2: the rebuild decides on what the n8n intake captures, and the old
+ * engine's own routes stay shut. Intake and its dedupe claim are the only automation the
+ * rebuild shares with the old engine, so they are the only ones that open. Without this,
+ * lifting SPARTAN_PAUSED would hand the sweeps and the mail hooks back to the old engine.
+ */
+export const OLD_ENGINE_ROUTES = AUTOMATION_ROUTES.filter((p) => p !== "/api/n8n-inbound" && p !== "/api/dedupe");
+
+export function v2Engine(flag: string | undefined = process.env.SPARTAN_ENGINE): boolean {
+  return (flag || "").trim().toLowerCase() === "v2";
+}
+
+export function automationPaused(pathname: string, flag: string | undefined = process.env.SPARTAN_PAUSED, engine: string | undefined = process.env.SPARTAN_ENGINE): boolean {
+  const shut = (flag || "").trim() === "1" ? AUTOMATION_ROUTES : v2Engine(engine) ? OLD_ENGINE_ROUTES : [];
+  return shut.some((p) => pathname === p || pathname.startsWith(p + "/"));
 }

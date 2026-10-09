@@ -8,7 +8,7 @@
 // Offline.  npx tsx test/automationPaused.ts
 // ============================================================================
 import { readFileSync } from "node:fs";
-import { automationPaused, AUTOMATION_ROUTES } from "../app/lib/paused";
+import { automationPaused, AUTOMATION_ROUTES, OLD_ENGINE_ROUTES } from "../app/lib/paused";
 
 let fails = 0;
 const ok = (cond: boolean, label: string) => { if (!cond) fails++; console.log(`  ${cond ? "PASS" : "FAIL"}  ${label}`); };
@@ -34,6 +34,13 @@ console.log("\n[4] the middleware asks before its auth switch, which is off by d
   const enforced = mw.indexOf("const enforced");
   ok(pause > 0 && enforced > 0 && pause < enforced, "the pause check runs before AUTH_REQUIRED can wave a request through");
 }
+
+console.log("\n[5] SPARTAN_ENGINE=v2: intake and its dedupe claim open, the old engine's own routes stay shut");
+for (const p of OLD_ENGINE_ROUTES) ok(automationPaused(p, "", "v2"), `${p} stays shut under v2`);
+for (const p of ["/api/n8n-inbound", "/api/dedupe"]) ok(!automationPaused(p, "", "v2"), `${p} is open under v2`);
+ok(OLD_ENGINE_ROUTES.length === AUTOMATION_ROUTES.length - 2, `exactly two routes open under v2 (${OLD_ENGINE_ROUTES.length} shut)`);
+ok(automationPaused("/api/n8n-inbound", "1", "v2"), "SPARTAN_PAUSED=1 still stops intake under v2");
+ok(!automationPaused("/api/mail-poll", "", ""), "control: no switch, nothing shut");
 
 console.log(fails ? `\n${fails} FAILED\n` : "\nALL PASS\n");
 process.exitCode = fails ? 1 : 0;

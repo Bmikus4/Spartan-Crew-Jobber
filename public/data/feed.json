@@ -2792,5 +2792,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0144",
+  "ts": "2026-10-09T10:03:45+00:00",
+  "kind": "measurement",
+  "headline": "SPARTAN_ENGINE=v2: intake -> v2 decision per polled message, shadow",
+  "subject": "The n8n intake can feed the rebuild in shadow, with the old engine's routes kept shut",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 186,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]
