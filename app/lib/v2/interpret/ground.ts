@@ -66,7 +66,8 @@ export function parseTime(raw: string): string | null {
 
 /** "3hr call", "4hrs", "2-hour", "6 hours", "2.5 hrs" -> minutes. */
 export function parseDuration(raw: string): number | null {
-  const m = /(\d+(?:\.\d+)?)\s*-?\s*(?:hours?|hrs?|h)\b/.exec(norm(raw));
+  // Booking forms put the label first: "Call hours: 4" (EMS, measured 10-09).
+  const m = /(\d+(?:\.\d+)?)\s*-?\s*(?:hours?|hrs?|h)\b/.exec(norm(raw)) ?? /\b(?:call\s+)?(?:hours|hrs)\s*[:\-]\s*(\d+(?:\.\d+)?)\b/.exec(norm(raw));
   if (!m) return null;
   const mins = Math.round(Number(m[1]) * 60);
   return mins > 0 && mins <= 24 * 60 ? mins : null;
@@ -85,7 +86,9 @@ const WORDS: Record<string, number> = { one: 1, two: 2, three: 3, four: 4, five:
 /** "3 x Crew", "x3", "X2 Crew", "2 crew", "4 x 2hr crew", "four crew" -> 3/3/2/2/4/4. */
 export function parseCount(raw: string): number | null {
   const q = norm(raw);
-  let m = /^x\s*(\d{1,3})\b/.exec(q) ?? /\b(\d{1,3})\s*x\b/.exec(q) ?? /^(\d{1,3})\b/.exec(q);
+  // "No. of crew: 3", "Crew required: 4": a booking form's labelled field (EMS, measured 10-09).
+  let m = /^x\s*(\d{1,3})\b/.exec(q) ?? /\b(\d{1,3})\s*x\b/.exec(q) ?? /^(\d{1,3})\b/.exec(q)
+    ?? /^(?:no\.?\s*of|number\s+of)?\s*(?:crew|staff|hands)\s*(?:required|needed)?\s*[:\-]\s*(\d{1,3})\b/.exec(q);
   if (m) { const n = Number(m[1]); return n > 0 && n <= 200 ? n : null; }
   m = /^(one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)\b/.exec(q);
   return m ? WORDS[m[1]] : null;

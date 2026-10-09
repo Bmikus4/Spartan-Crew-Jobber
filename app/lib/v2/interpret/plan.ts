@@ -89,7 +89,7 @@ export async function plan(msg: Message, i: Interpretation, world: World, thread
   if (problems.length) return handoff(...problems);
   if (i.intent === "quote_request") return handoff("the client asked for a quote");
   if (i.intent === "unclear") return handoff("the request is unclear");
-  if (i.intent === "info_only" && !i.po) return { kind: "none", reason: "no change asked for" };
+  if (i.intent === "info_only" && !i.po) return { kind: "none", reason: ["no change asked for", ...(i.notes ?? [])].join("; ") };
 
   const companyId = matchCompanyByDomain(msg.from, await world.companies());
   if (!companyId) return handoff(`no single client company for ${msg.from}`);
@@ -182,5 +182,6 @@ export async function plan(msg: Message, i: Interpretation, world: World, thread
     if ((order.intern_name ?? "") !== i.po) ops.push({ source: src(200), op: { kind: "set_po", order_id: Number(order.id), po: i.po } });
     why.push(`R${order.number}: PO ${i.po}`);
   }
-  return ops.length ? { kind: "write", ops, why } : { kind: "none", reason: why.join("; ") || "already as asked" };
+  const notes = i.notes ?? [];
+  return ops.length ? { kind: "write", ops, why: [...why, ...notes] } : { kind: "none", reason: [why.join("; ") || "already as asked", ...notes].join("; ") };
 }

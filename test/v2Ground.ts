@@ -77,6 +77,14 @@ eq(parseDate("tomorrow (Sunday)", "2026-10-09T09:22:39Z"), null, "a weekday that
 eq(parseDate("tomorrow 11th", "2026-10-09T09:22:39Z"), null, "a day number that disagrees: no date");
 eq(parseDate("30th", "2026-08-31T23:30:00Z"), "2026-09-30", "a bare day counts from the London day it was sent (1 Sep, not 31 Aug)");
 
+console.log("booking-form fields (EMS 10-09)");
+eq(parseCount("No. of crew:  3"), 3, "No. of crew: 3");
+eq(parseCount("Crew required - 4"), 4, "Crew required - 4");
+eq(parseCount("crew"), null, "a label with no number is no count");
+eq(parseCount("No. of crew: TBC"), null, "No. of crew: TBC");
+eq(parseDuration("Call hours:  4"), 240, "Call hours: 4");
+eq(parseDuration("Hours: 5.5"), 330, "Hours: 5.5");
+
 console.log("PO references (10-09)");
 ok(poAfterLabel("PO 48963", "48963"), "PO 48963");
 ok(poAfterLabel("Job code - FH0730", "FH0730"), "Job code - FH0730");

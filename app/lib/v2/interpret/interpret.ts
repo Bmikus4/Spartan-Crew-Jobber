@@ -20,7 +20,8 @@ export type Request = {
   problems: string[];
 };
 
-export type Interpretation = { intent: Extraction["intent"]; po?: string; requests: Request[]; problems: string[] };
+/** problems block the email (no write); notes are kept with the decision and block nothing. */
+export type Interpretation = { intent: Extraction["intent"]; po?: string; requests: Request[]; problems: string[]; notes?: string[] };
 
 /** Trades the bot has been benched on, by the words clients use. Anything else goes to ops. */
 const BENCHED_TRADES = /^(general )?(crew|crew members?|labou?rers?|hands?|stagehands?|local crew|crewing)$/i;
@@ -65,10 +66,14 @@ export function ground(x: Extraction, newest: string, sentIso: string): Interpre
     return { action: r.action, date, start, end, crew, crew_add: add, venue, crew_chief: chief, trade, target, problems: own };
   });
 
+  // A PO is cosmetic (Ben: 1 in 50): one that is not proven is left off with a note, and
+  // never blocks the booking it came with. EMS writes its job number unlabelled ("J46250 -
+  // 13/10/26 @ ..."); refusing the booking for that would hand ops a booking the bot can do.
   let po: string | undefined;
+  const notes: string[] = [];
   if (x.po) {
     if (quoteIn(newest, x.po.quote) && poAfterLabel(x.po.quote, x.po.value)) po = x.po.value;
-    else problems.push(`PO "${x.po.value}" is not a single reference after a PO label in the email`);
+    else notes.push(`PO "${x.po.value}" left off: not a single reference after a PO label`);
   }
-  return { intent: x.intent, po, requests, problems: problems.filter((p) => !requests.some((r) => r.problems.includes(p))) };
+  return { intent: x.intent, po, requests, problems: problems.filter((p) => !requests.some((r) => r.problems.includes(p))), notes };
 }

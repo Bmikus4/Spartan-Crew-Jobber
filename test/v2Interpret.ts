@@ -76,6 +76,13 @@ console.log("changes");
   const i = ground(ex([], { po: g("Legal Geek", "Legal Geek") }), "RE: PO - Legal Geek - 12/10/26", sent);
   ok(i.po === undefined, "a PO with no digit is refused (Legal Geek, #13709)");
 }
+{
+  // EMS 10-09: the job number leads the subject with no PO label. The booking stands; the PO is left off.
+  const text = "J46250 - 13/10/26 @ The Carter Building\nNo. of crew:  3";
+  const i = ground(ex([req({ date: g("2026-10-13", "13/10/26"), start: g("09:00", "09:00"), duration_minutes: g(240, "4 hours"), crew: g(3, "No. of crew:  3") })], { po: g("J46250", "J46250") }), text + "\n09:00 for 4 hours", "2026-10-09T10:13:37Z");
+  ok(i.po === undefined && i.problems.length === 0 && i.requests[0].problems.length === 0, "an unlabelled PO is left off and blocks nothing", JSON.stringify(i.problems));
+  ok((i.notes ?? []).some((n) => n.includes("J46250")), "and the decision says so", JSON.stringify(i.notes));
+}
 
 if (fails) { console.log(`\n${fails} FAILED`); process.exit(1); }
 console.log("\nall passed");

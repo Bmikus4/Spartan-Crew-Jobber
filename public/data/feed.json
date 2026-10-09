@@ -2820,5 +2820,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0146",
+  "ts": "2026-10-09T10:30:59+00:00",
+  "kind": "measurement",
+  "headline": "v2: form fields grounded; unproven PO dropped with a note",
+  "subject": "A booking form's labelled crew and hours read, and an unproven PO no longer blocks a booking",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 186,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]
