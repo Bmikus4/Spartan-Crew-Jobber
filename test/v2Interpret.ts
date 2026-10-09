@@ -83,6 +83,22 @@ console.log("changes");
   ok(i.po === undefined && i.problems.length === 0 && i.requests[0].problems.length === 0, "an unlabelled PO is left off and blocks nothing", JSON.stringify(i.problems));
   ok((i.notes ?? []).some((n) => n.includes("J46250")), "and the decision says so", JSON.stringify(i.notes));
 }
+{
+  // Wonder London 10-09: a new length and no time is a time change the planner can finish.
+  const text = "Could I request the hours increase to 8hours (currently 6hours) Tuesday 13th October 2 x Crew 8hours (instead of 6)";
+  const i = ground(ex([req({ action: "change_times", date: g("2026-10-13", "Tuesday 13th October"), duration_minutes: g(480, "8hours") })], { intent: "change" }), text, "2026-10-09T10:15:44Z");
+  ok(i.requests[0].problems.length === 0 && i.requests[0].duration === 480 && !i.requests[0].end, "the length is kept for the planner, with no end invented here", JSON.stringify(i.requests[0]));
+}
+{
+  // Legal Geek 10-09: "add 2 more, making it 4 x Crew" carries both; the planner checks them against the shift.
+  const text = "could I add 2 more, making it 4 x Crew 6 hours on Friday 16th October";
+  const i = ground(ex([req({ action: "change_crew", date: g("2026-10-16", "Friday 16th October"), crew: g(4, "4 x Crew"), crew_add: g(2, "add 2 more") })], { intent: "change" }), text, "2026-10-09T09:18:14Z");
+  ok(i.requests[0].problems.length === 0 && i.requests[0].crew === 4 && i.requests[0].crew_add === 2, "a total and an increase both ground", JSON.stringify(i.requests[0]));
+}
+{
+  const i = ground(ex([req({ action: "change_times", date: { value: "2026-10-16" } as any, start: g("09:00", "09:00") })], { intent: "change" }), "move it to 09:00", sent);
+  ok(i.requests[0].problems.some((p) => p.includes("no words quoted")), "a value the model gave without its words is refused by name", JSON.stringify(i.requests[0].problems));
+}
 
 if (fails) { console.log(`\n${fails} FAILED`); process.exit(1); }
 console.log("\nall passed");

@@ -80,6 +80,7 @@ function extractBody(msg) {
 const FLAT_HEADER_KEYS = [
   'From', 'To', 'Cc', 'Bcc', 'Subject', 'Date', 'Message-ID', 'In-Reply-To',
   'References', 'Reply-To', 'Content-Type', 'MIME-Version',
+  'X-Original-Sender', 'X-Google-Group-Id',
 ];
 
 function headerMap(msg) {
@@ -170,6 +171,9 @@ const TRIAGE_HEADERS = [
   'list-unsubscribe', 'list-id', 'list-help', 'precedence', 'auto-submitted',
   'x-spam-flag', 'x-spam-status', 'x-campaign-id', 'x-mailer',
   'authentication-results', 'return-path', 'reply-to', 'in-reply-to', 'references',
+  // info@spartancrew.co.uk is a Google Group: it rewrites From to itself ("'Luke Elmer'
+  // via Info" <info@...>), and only these two keep the client who wrote it (10-09).
+  'x-original-sender', 'x-google-group-id',
 ];
 
 /** One Gmail message resource -> one engine ThreadMessage. */

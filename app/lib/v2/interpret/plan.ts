@@ -14,6 +14,7 @@
 import type { Op, PositionSpec, ShiftSpec } from "../bot/ops";
 import { shiftWindow, utcToLondon } from "../bot/ops";
 import type { Interpretation, Request } from "./interpret";
+import { addMinutes } from "./ground";
 import { matchCompanyByDomain, rNumbersIn, normName } from "../../engine/resolve";
 
 export type World = {
@@ -65,7 +66,18 @@ export function targetShift(order: any, r: Request): { id: number; slots: any[] 
   return cands[0];
 }
 
-async function findOrder(msg: Message, companyId: number, world: World, threadOrderId: number | null, day?: string): Promise<any | string> {
+/**
+ * The OnSinch places a venue name means. Exact names only, never a resemblance. Clients
+ * often write the address after the name ("The Peninsula, 1 Grosvenor Place, ..."), so the
+ * name before the first comma is tried too.
+ */
+async function placesFor(world: World, venue: string): Promise<{ id: number; name: string }[]> {
+  const exact = (await world.placesNamed(venue)).filter((p) => normName(p.name) === normName(venue));
+  const head = venue.split(",")[0].trim();
+  return exact.length || head === venue ? exact : (await world.placesNamed(head)).filter((p) => normName(p.name) === normName(head));
+}
+
+async function findOrder(msg: Message, companyId: number, world: World, threadOrderId: number | null, day?: string, venue?: string): Promise<any | string> {
   const rs = rNumbersIn(`${msg.subject}\n${msg.text}`);
   if (rs.length > 1) return `the email names ${rs.length} orders`;
   if (rs.length === 1) {
@@ -81,6 +93,13 @@ async function findOrder(msg: Message, companyId: number, world: World, threadOr
   if (!day) return "no order is named";
   const onDay = orders.filter((o) => teams(o).some((t) => t.slots.some((s) => dayOf(s.beginning) === day)));
   if (onDay.length === 1) return onDay[0];
+  // Several bookings that day: the venue the client wrote can name one (Blackout 10-09, three
+  // orders on the 13th, "Wonder London - Old Billingsgate"). Its place must be on that day.
+  if (onDay.length > 1 && venue) {
+    const ids = new Set((await placesFor(world, venue)).map((p) => p.id));
+    const atVenue = onDay.filter((o) => teams(o).some((t) => t.slots.some((s) => dayOf(s.beginning) === day && ids.has(Number(s.SlotLocation?.place_id)))));
+    if (atVenue.length === 1) return atVenue[0];
+  }
   return onDay.length ? `${onDay.length} of the client's orders have a shift on ${day}` : `no booking for this client on ${day}`;
 }
 
@@ -101,15 +120,21 @@ export async function plan(msg: Message, i: Interpretation, world: World, thread
   const changes = i.requests.filter((r) => r.action !== "new_shift");
 
   for (const [n, r] of changes.entries()) {
-    const order = await findOrder(msg, companyId, world, threadOrderId, r.target?.date ?? r.date);
+    const order = await findOrder(msg, companyId, world, threadOrderId, r.target?.date ?? r.date, r.venue);
     if (typeof order === "string") return handoff(order);
     const shift = targetShift(order, r);
     if (typeof shift === "string") return handoff(`R${order.number}: ${shift}`);
     const first = shift.slots[0];
     const date = dayOf(first.beginning);
     if (r.action === "change_times") {
+      // "Tuesday 13th 2 x Crew 8 hours": a count written beside a time change says which shift
+      // the client means, so it must be that shift's size or this is another shift.
+      const size = shift.slots.reduce((a, s) => a + Number(s.size), 0);
+      if (r.crew && r.crew !== size) return handoff(`R${order.number} shift ${shift.id}: the email says ${r.crew} crew, the shift has ${size}`);
       const start = r.start ?? utcToLondon(first.beginning).time;
-      const end = r.end ?? utcToLondon(first.end).time;
+      // "Increase hours to 8 (currently 6)": the client gave a length, not a time. The
+      // shift keeps its start and the end moves (Ben, 10-09).
+      const end = r.end ?? (r.duration ? addMinutes(start, r.duration) : utcToLondon(first.end).time);
       for (const s of shift.slots) ops.push({ source: `${src(n)}:${s.id}`, op: { kind: "set_position_times", order_id: Number(order.id), slot_id: Number(s.id), date, start, end } });
       why.push(`R${order.number} shift ${shift.id}: times to ${start}-${end}`);
     } else if (r.action === "cancel_shift") {
@@ -120,7 +145,12 @@ export async function plan(msg: Message, i: Interpretation, world: World, thread
       const crew = shift.slots.filter((s) => Number(s.role) !== 1 && Number(s.profession_id) === 1);
       if (crew.length !== 1) return handoff(`R${order.number} shift ${shift.id}: ${crew.length} crew positions`);
       const chiefSize = chief.reduce((a, s) => a + Number(s.size), 0);
-      const total = r.crew ?? chiefSize + Number(crew[0].size) + (r.crew_add ?? 0);
+      const current = chiefSize + Number(crew[0].size);
+      // "Add 2 more, making it 4 x Crew": both written, so both must hold against the shift
+      // as it stands. If they disagree the client and OnSinch see different shifts.
+      if (r.crew && r.crew_add && r.crew !== current + r.crew_add)
+        return handoff(`R${order.number} shift ${shift.id}: ${r.crew_add} more on ${current} makes ${current + r.crew_add}, not the ${r.crew} written`);
+      const total = r.crew ?? current + (r.crew_add ?? 0);
       const shape = positionsFor(total);
       if (!shape) return handoff(`R${order.number}: ${total} crew is not a shape the system builds`);
       if ((shape.length === 2) !== (chiefSize === 1)) return handoff(`R${order.number}: ${total} crew changes whether the shift needs a crew chief`);
@@ -162,11 +192,7 @@ export async function plan(msg: Message, i: Interpretation, world: World, thread
       if (r.crew_chief && positions.length === 1) return handoff("a crew chief was asked for on a crew of 3 or fewer");
       const venue = r.venue ?? news.find((x) => x.venue)?.venue;
       if (!venue) return handoff("no venue in the email");
-      // Exact names only, never a resemblance. Clients often write the address after the name
-      // ("The Peninsula, 1 Grosvenor Place, ..."), so the name before the first comma is tried too.
-      let places = (await world.placesNamed(venue)).filter((p) => normName(p.name) === normName(venue));
-      const head = venue.split(",")[0].trim();
-      if (!places.length && head !== venue) places = (await world.placesNamed(head)).filter((p) => normName(p.name) === normName(head));
+      const places = await placesFor(world, venue);
       if (places.length !== 1) return handoff(`${places.length} OnSinch venues are named "${venue}"`);
       shiftWindow(r.date!, r.start!, r.end!);
       shifts.push({ name: "Crew", date: r.date!, start: r.start!, end: r.end!, place_id: String(places[0].id), place_label: places[0].name, positions });

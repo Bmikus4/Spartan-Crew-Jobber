@@ -2834,5 +2834,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0147",
+  "ts": "2026-10-09T11:07:10+00:00",
+  "kind": "measurement",
+  "headline": "v2: info@ group author recovered; change by length; total+increase checked; venue picks among same-day orders",
+  "subject": "Group-relayed client mail keeps its author; a new length, and an increase with its total, can be planned",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 187,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]

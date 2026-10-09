@@ -184,6 +184,22 @@ function isAnUnsentDraft(r: Record<string, unknown>): boolean {
   return labels.some((l) => String(l).trim().toUpperCase() === "DRAFT");
 }
 
+/**
+ * The real author of mail that came through one of our Google Groups (info@ is one).
+ * The group rewrites From to its own address, so a client's booking arrived "from
+ * info@spartancrew.co.uk" and read as Spartan's own mail (Vivid, 6 crew, 10-09; 29 such
+ * messages since January). Google keeps the author in X-Original-Sender. Trusted only on a
+ * message the group itself relayed (X-Google-Group-Id) and from one of our addresses:
+ * anything else could claim an author it is not.
+ */
+export function groupAuthor(r: Record<string, unknown>): string | null {
+  const h = (r.headers ?? {}) as Record<string, unknown>;
+  if (!h["x-google-group-id"]) return null;
+  if (!/@spartancrew\.co\.uk$/i.test(addrOf(r.from ?? r.fromAddress))) return null;
+  const author = addrOf(h["x-original-sender"]);
+  return author && author.includes("@") && !/@spartancrew\.co\.uk$/i.test(author) ? author : null;
+}
+
 export function messagesFromPayload(payload: unknown): StoredMessage[] {
   if (!payload || typeof payload !== "object") return [];
   const b = payload as Record<string, unknown>;
@@ -203,7 +219,7 @@ export function messagesFromPayload(payload: unknown): StoredMessage[] {
     const message_id = String(r.message_id ?? r.messageId ?? r.id ?? r.email_id ?? "").trim();
     if (!message_id) continue;          // no id means no identity means not storable
     if (isAnUnsentDraft(r)) continue;   // the client never saw it — see the note above
-    const from = addrOf(r.from ?? r.fromAddress);
+    const from = groupAuthor(r) ?? addrOf(r.from ?? r.fromAddress);
     // The reply-chain headers, once n8n's "Build Engine Payload" sends them (SP-18). Absent
     // keys stay absent: "not sent" and "the message had none" are different facts.
     const header = (v: unknown) => (Array.isArray(v) ? v.join(" ") : String(v ?? ""));
@@ -222,7 +238,7 @@ export function messagesFromPayload(payload: unknown): StoredMessage[] {
       subject: String(r.subject ?? ""),
       body: String(r.body ?? r.text ?? r.bodyContent ?? "") || null,
       is_from_spartan:
-        typeof r.is_from_spartan === "boolean"
+        typeof r.is_from_spartan === "boolean" && !groupAuthor(r)
           ? r.is_from_spartan
           : /@spartancrew\.co\.uk$/i.test(from),
     });

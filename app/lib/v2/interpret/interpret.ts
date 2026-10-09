@@ -11,6 +11,8 @@ export type Request = {
   date?: string;
   start?: string;
   end?: string;
+  /** A new length with no time: "increase hours to 8". The planner keeps the start. */
+  duration?: number;
   crew?: number;
   crew_add?: number;
   venue?: string;
@@ -30,6 +32,7 @@ export function ground(x: Extraction, newest: string, sentIso: string): Interpre
   const problems: string[] = [];
   const check = <T>(name: string, g: Grounded<T> | undefined, parse: (q: string) => T | null): T | undefined => {
     if (!g) return undefined;
+    if (typeof g !== "object" || typeof g.quote !== "string") { problems.push(`${name}: a value with no words quoted for it`); return undefined; }
     if (!quoteIn(newest, g.quote)) { problems.push(`${name}: "${g.quote}" is not in the email`); return undefined; }
     const v = parse(g.quote);
     if (v === null || v !== g.value) { problems.push(`${name}: "${g.quote}" reads as ${JSON.stringify(v)}, not ${JSON.stringify(g.value)}`); return undefined; }
@@ -58,12 +61,12 @@ export function ground(x: Extraction, newest: string, sentIso: string): Interpre
     const need = (cond: boolean, what: string) => { if (!cond) own.push(`${tag}: no ${what} the client wrote`); };
     switch (r.action) {
       case "new_shift": need(!!date, "day"); need(!!start, "start time"); need(!!end, "end time or duration"); need(!!crew, "crew count"); break;
-      case "change_times": need(!!(date || target?.date), "day"); need(!!(start || end), "new time"); break;
-      case "change_crew": need(!!(date || target?.date), "day"); need(!!(crew || add), "crew count"); if (crew && add) own.push(`${tag}: both a total and an increase`); break;
+      case "change_times": need(!!(date || target?.date), "day"); need(!!(start || end || dur), "new time or length"); break;
+      case "change_crew": need(!!(date || target?.date), "day"); need(!!(crew || add), "crew count"); break; // a total AND an increase must agree with the shift: plan.ts checks
       case "cancel_shift": need(!!(date || target?.date), "day"); break;
       default: own.push(`${tag}: not an operation the system performs`);
     }
-    return { action: r.action, date, start, end, crew, crew_add: add, venue, crew_chief: chief, trade, target, problems: own };
+    return { action: r.action, date, start, end, duration: start || end ? undefined : dur, crew, crew_add: add, venue, crew_chief: chief, trade, target, problems: own };
   });
 
   // A PO is cosmetic (Ben: 1 in 50): one that is not proven is left off with a note, and
