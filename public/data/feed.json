@@ -2806,5 +2806,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0145",
+  "ts": "2026-10-09T10:20:05+00:00",
+  "kind": "measurement",
+  "headline": "v2 shadow: decide newly stored messages; PO needs a label; today/tomorrow read",
+  "subject": "Intake decides on the messages a delivery adds, not the thread's first message",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 186,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]

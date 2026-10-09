@@ -77,6 +77,8 @@ export interface CaptureResult {
   /** How many messages in this payload had not been stored before. A run of zeroes on real
    *  traffic means n8n changed shape and messagesFromPayload is extracting nothing. */
   messages_stored: number;
+  /** The messages this delivery stored for the first time: what is new in the thread. */
+  new_message_ids: string[];
 }
 
 /**
@@ -90,7 +92,7 @@ export async function captureInboundRaw(payload: unknown, source = "n8n"): Promi
     message_id ||
     "sha:" + createHash("sha256").update(JSON.stringify(payload ?? null)).digest("hex").slice(0, 32);
   const sql = db();
-  if (!sql) return { ok: false, captured: false, dedup_key, thread_id, message_id, messages_stored: 0 };
+  if (!sql) return { ok: false, captured: false, dedup_key, thread_id, message_id, messages_stored: 0, new_message_ids: [] };
   try {
     await ensure(sql);
     // Messages FIRST. A crash between the two loses a dedup record — harmless, because
@@ -116,10 +118,10 @@ export async function captureInboundRaw(payload: unknown, source = "n8n"): Promi
       ON CONFLICT (dedup_key) DO NOTHING
       RETURNING id`) as { id: number }[];
     return { ok: true, captured: rows.length > 0, dedup_key, thread_id, message_id,
-             messages_stored: msgs.inserted };
+             messages_stored: msgs.inserted, new_message_ids: msgs.ids };
   } catch (err) {
     console.error("[inbound_raw] capture failed", err);
-    return { ok: false, captured: false, dedup_key, thread_id, message_id, messages_stored: 0 };
+    return { ok: false, captured: false, dedup_key, thread_id, message_id, messages_stored: 0, new_message_ids: [] };
   }
 }
 

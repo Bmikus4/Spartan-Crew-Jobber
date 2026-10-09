@@ -4,7 +4,7 @@
 //
 // Offline.  npx tsx test/v2Ground.ts
 // ============================================================================
-import { latestText, quoteIn, parseTime, parseDuration, parseCount, parseDate, addMinutes } from "../app/lib/v2/interpret/ground";
+import { latestText, quoteIn, parseTime, parseDuration, parseCount, parseDate, addMinutes, poAfterLabel } from "../app/lib/v2/interpret/ground";
 
 let fails = 0;
 const ok = (cond: boolean, label: string, extra = "") => {
@@ -66,6 +66,25 @@ ok(quoteIn(latest, "15:30PM  on the 30th"), "a quote matches across case and spa
 ok(!quoteIn(latest, "6 x crew"), "a quote from the history does not count as the client's new words");
 ok(!quoteIn(latest, ""), "an empty quote grounds nothing");
 ok(latestText("Hi\n-----Original Message-----\nFrom: x\nold").trim() === "Hi", "a forwarded original is dropped");
+
+console.log("relative days (Fairholme 10-09: \"2 crew for tomorrow at 4:30pm\")");
+eq(parseDate("tomorrow", "2026-10-09T09:22:39Z"), "2026-10-10", "tomorrow, from the day it was sent");
+eq(parseDate("today", "2026-10-09T09:22:39Z"), "2026-10-09", "today");
+eq(parseDate("tomorrow", "2026-10-09T23:30:00Z"), "2026-10-11", "sent 00:30 London on the 10th: tomorrow is the 11th");
+eq(parseDate("tomorrow at 4:30pm", "2026-10-09T09:22:39Z"), "2026-10-10", "a time beside it is not a second date");
+eq(parseDate("tomorrow (Saturday)", "2026-10-09T09:22:39Z"), "2026-10-10", "a weekday that agrees");
+eq(parseDate("tomorrow (Sunday)", "2026-10-09T09:22:39Z"), null, "a weekday that disagrees: no date");
+eq(parseDate("tomorrow 11th", "2026-10-09T09:22:39Z"), null, "a day number that disagrees: no date");
+eq(parseDate("30th", "2026-08-31T23:30:00Z"), "2026-09-30", "a bare day counts from the London day it was sent (1 Sep, not 31 Aug)");
+
+console.log("PO references (10-09)");
+ok(poAfterLabel("PO 48963", "48963"), "PO 48963");
+ok(poAfterLabel("Job code - FH0730", "FH0730"), "Job code - FH0730");
+ok(poAfterLabel("13/10 British museum ref:2871", "2871"), "ref:2871");
+ok(poAfterLabel("PO number: PO-2026-114", "PO-2026-114"), "a reference that starts with PO");
+ok(!poAfterLabel("please find attached PO for Legal Geek - Truman Brewery 12/10/26", "Legal Geek - Truman Brewery 12/10/26"), "an event name after 'PO for' is not a PO");
+ok(!poAfterLabel("Re: Price quote - R11221 We Are Family", "R11221"), "Spartan's own order number with no PO label is not a PO");
+ok(!poAfterLabel("PO 489631", "48963"), "a prefix of the written reference is not it");
 
 if (fails) { console.log(`\n${fails} FAILED`); process.exit(1); }
 console.log("\nall passed");

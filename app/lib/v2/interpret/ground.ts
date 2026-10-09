@@ -102,9 +102,41 @@ const MONTHS = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "
  * 7 days before it is read as that recent past day, e.g. a late-arriving confirmation).
  * A weekday that contradicts the date is null: one of the two is wrong and neither is chosen.
  */
+/** The day an email was sent, in London: 23:30 UTC in summer is already tomorrow there. */
+export function londonDay(sentIso: string): string {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/London" }).format(new Date(sentIso));
+}
+
+/**
+ * A PO is a single reference written straight after a PO label: "PO 48963", "Job code -
+ * FH0730", "ref:2871". Measured 10-09: "find attached PO for Legal Geek - Truman Brewery
+ * 12/10/26" names an event, and "Price quote - R11221" is Spartan's own order number.
+ */
+export function poAfterLabel(text: string, value: string): boolean {
+  if (!/^[a-z0-9][a-z0-9\-\/_.]*$/i.test(value) || !/\d/.test(value)) return false;
+  const esc = value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(`\\b(p\\.?o\\.?|purchase order|job (code|no\\.?|number|ref)|ref(erence)?)\\s*(number|no\\.?)?\\s*[:#\\-]?\\s*${esc}(?![a-z0-9])`, "i").test(text);
+}
+
 export function parseDate(raw: string, sentIso: string): string | null {
   const q = norm(raw).replace(/,/g, " ");
-  const sent = new Date(sentIso.slice(0, 10) + "T12:00:00Z");
+  const sentDay = londonDay(sentIso);
+  // "today" / "tomorrow" are the client's own words counted from the day they sent them.
+  // Anything else in the same quote must agree, or the date does not exist.
+  const rel = /\b(today|tonight|tomorrow)\b/.exec(q);
+  if (rel) {
+    const day = new Date(Date.parse(sentDay + "T12:00:00Z") + (rel[1] === "tomorrow" ? 864e5 : 0));
+    const iso = day.toISOString().slice(0, 10);
+    const rest = q.replace(rel[0], " ");
+    const wd = /\b(mon|tue|wed|thu|fri|sat|sun)[a-z]*\b/.exec(rest)?.[1];
+    if (wd && ["sun", "mon", "tue", "wed", "thu", "fri", "sat"][day.getUTCDay()] !== wd) return null;
+    if (/\d/.test(rest.replace(/\b\d{1,2}([:.]\d{2})?\s*(am|pm)\b|\b\d{1,2}:\d{2}\b/g, ""))) {
+      const other = parseDate(rest, sentIso);
+      if (other !== iso) return null;
+    }
+    return iso;
+  }
+  const sent = new Date(sentDay + "T12:00:00Z");
   const weekday = /\b(mon|tue|wed|thu|fri|sat|sun)[a-z]*\b/.exec(q)?.[1] ?? null;
   let d: number, mo: number | null = null, y: number | null = null;
   let m = /\b(\d{1,2})[/.](\d{1,2})(?:[/.](\d{2}|\d{4}))?\b/.exec(q);

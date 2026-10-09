@@ -20,13 +20,13 @@ import { replyDeliveryForWire } from "./settingsDb";
 import { upsertTicketFromState } from "./ticketsDb";
 import { reportError } from "./errorReport";
 import { v2Engine } from "./paused";
-import type { decideOnce } from "./v2/process";
+import type { decideDelivery } from "./v2/process";
 
 export interface InboundIO {
   capture: typeof captureInboundRaw;
   report: typeof reportError;
-  /** The rebuild's decision on one captured message (SPARTAN_ENGINE=v2). */
-  decide: typeof decideOnce;
+  /** The rebuild's decisions on the messages a delivery added (SPARTAN_ENGINE=v2). */
+  decide: typeof decideDelivery;
   buildDeps: typeof buildDeps;
   handleThread: typeof handleThread;
   upsertTicket: typeof upsertTicketFromState;
@@ -38,7 +38,7 @@ export const productionInboundIO: InboundIO = {
   capture: captureInboundRaw,
   report: reportError,
   // Loaded on use: the rebuild pulls in the browser bot, which the old path never needs.
-  decide: async (id) => (await import("./v2/process")).decideOnce(id),
+  decide: async (ids) => (await import("./v2/process")).decideDelivery(ids),
   buildDeps,
   handleThread,
   upsertTicket: upsertTicketFromState,
@@ -62,25 +62,21 @@ export async function handleInbound(request: Request, io: InboundIO = production
   const cap = await io.capture(payload, "n8n");
 
   /**
-   * UNDER THE REBUILD THE OLD ENGINE NEVER RUNS HERE. The rebuild decides on the one
-   * message n8n polled (n8n.latest_message_id; the thread's newest as a fallback), never on
-   * the thread's history: an old message re-read as new is how a stale request gets
-   * written. Shadow only: a decision is recorded in v2_decisions and nothing is written.
+   * UNDER THE REBUILD THE OLD ENGINE NEVER RUNS HERE. The rebuild decides on what this
+   * delivery stored for the first time (decideDelivery says why not n8n's message id).
+   * Shadow only: decisions are recorded in v2_decisions and nothing is written.
    */
   if (v2Engine()) {
-    const p = (payload ?? {}) as { n8n?: { latest_message_id?: unknown } };
-    const message_id = String(p.n8n?.latest_message_id ?? "") || coerceThread(payload)?.messages.slice(-1)[0]?.message_id || "";
-    if (!message_id) {
-      void io.report({ route: "mail-undeliverable", where: "api/n8n-inbound (v2)", what: "a delivery named no message, so the rebuild did not decide on it", detail: `kept in inbound_raw as ${cap.dedup_key}` });
-      return Response.json({ ok: true, captured: cap.captured, engine: "v2", decided: false, dedup_key: cap.dedup_key });
+    if (!cap.ok) {
+      void io.report({ route: "mail-undeliverable", where: "api/n8n-inbound (v2)", what: "capture failed, so the rebuild did not decide on this delivery", detail: `dedup ${cap.dedup_key}, thread ${cap.thread_id ?? "?"}` });
+      return Response.json({ ok: false, engine: "v2", error: "capture failed" }, { status: 500 });
     }
     try {
-      const r = await io.decide(message_id);
-      if (r.skipped === "message not captured") void io.report({ route: "mail-undeliverable", where: "api/n8n-inbound (v2)", what: "the message was not in thread_messages, so the rebuild did not decide on it", detail: `${message_id}; inbound_raw ${cap.dedup_key}` });
-      return Response.json({ ok: true, captured: cap.captured, engine: "v2", message_id, decision: r.decision?.kind ?? null, skipped: r.skipped ?? null });
+      const r = await io.decide(cap.new_message_ids);
+      return Response.json({ ok: true, captured: cap.captured, engine: "v2", decided: r.map((x) => ({ message_id: x.message_id, decision: x.decision?.kind ?? null, skipped: x.skipped ?? null })) });
     } catch (err) {
-      void io.report({ route: "engine-threw", where: "api/n8n-inbound (v2)", what: String((err as Error)?.message ?? err), detail: `message ${message_id}; replay with POST /api/bot/process` });
-      return Response.json({ ok: false, engine: "v2", message_id, error: String((err as Error)?.message ?? err).slice(0, 300) }, { status: 500 });
+      void io.report({ route: "engine-threw", where: "api/n8n-inbound (v2)", what: String((err as Error)?.message ?? err), detail: `new messages ${cap.new_message_ids.join(", ")}; replay each with POST /api/bot/process` });
+      return Response.json({ ok: false, engine: "v2", error: String((err as Error)?.message ?? err).slice(0, 300) }, { status: 500 });
     }
   }
 

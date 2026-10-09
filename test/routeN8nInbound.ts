@@ -21,9 +21,9 @@ function rig() {
   const ran: string[] = [];
   const decided: string[] = [];
   const io: InboundIO = {
-    capture: (async () => ({ ok: true, captured: true, dedup_key: "k-1", thread_id: null, message_id: null, messages_stored: 0 })) as InboundIO["capture"],
+    capture: (async () => ({ ok: true, captured: true, dedup_key: "k-1", thread_id: null, message_id: null, messages_stored: 0, new_message_ids: [] })) as InboundIO["capture"],
     report: (async (a: { route: string; where: string }) => { reports.push({ route: a.route, where: a.where }); return false; }) as InboundIO["report"],
-    decide: (async (id: string) => { decided.push(id); return { message_id: id, decision: { kind: "none", reason: "test" } }; }) as InboundIO["decide"],
+    decide: (async () => { throw new Error("v2 must not run without SPARTAN_ENGINE=v2"); }) as InboundIO["decide"],
     buildDeps: (async () => ({ settings: {} })) as unknown as InboundIO["buildDeps"],
     handleThread: (async (t: { thread_id: string }) => { ran.push(t.thread_id); return { thread_id: t.thread_id, notes: [] }; }) as unknown as InboundIO["handleThread"],
     upsertTicket: async () => {},
@@ -59,35 +59,43 @@ async function main() {
       ok(r.reports.length === 0, "and nothing was reported", String(r.reports.length));
     }
 
-    console.log("\n[3] SPARTAN_ENGINE=v2: the rebuild decides on the polled message; the old engine never runs");
+    console.log("\n[3] SPARTAN_ENGINE=v2: the rebuild decides on what the delivery stored new; the old engine never runs");
     process.env.SPARTAN_ENGINE = "v2";
-    const thread = { thread_id: "t2", messages: [
-      { message_id: "old", from: "a@b.c", to: [], date_iso: "2026-10-01T10:00:00Z", subject: "Crew", body: "4 crew please" },
-      { message_id: "new", from: "a@b.c", to: [], date_iso: "2026-10-04T10:00:00Z", subject: "Re: Crew", body: "make it 5" },
+    // n8n.latest_message_id is the Gmail thread id, i.e. the FIRST message (measured 10-09).
+    const thread = { thread_id: "old", n8n: { latest_message_id: "old" }, messages: [
+      { message_id: "old", from: "a@b.c", to: [], date_iso: "2026-08-14T10:00:00Z", subject: "PO", body: "PO for an event" },
+      { message_id: "new", from: "a@b.c", to: [], date_iso: "2026-10-09T09:18:00Z", subject: "Re: PO", body: "make it 5" },
     ] };
+    const stored = (ids: string[]) => (async () => ({ ok: true, captured: true, dedup_key: "k-2", thread_id: "old", message_id: "old", messages_stored: ids.length, new_message_ids: ids })) as InboundIO["capture"];
     {
       const r = rig();
-      const res = await handleInbound(post({ ...thread, n8n: { latest_message_id: "old" } }), r.io);
+      r.io.capture = stored(["new"]);
+      r.io.decide = (async (ids: string[]) => { r.decided.push(...ids); return ids.map((id) => ({ message_id: id, decision: { kind: "none" as const, reason: "test" } })); }) as InboundIO["decide"];
+      const res = await handleInbound(post(thread), r.io);
       const body = await res.json();
-      ok(res.status === 200 && r.decided.join() === "old", "decided on n8n.latest_message_id, not the thread's newest", `${res.status} ${r.decided.join()}`);
+      ok(res.status === 200 && r.decided.join() === "new", "decided on the newly stored message, not n8n's (first-message) id", `${res.status} ${r.decided.join()}`);
       ok(r.ran.length === 0, "the old engine did not run");
-      ok(body.engine === "v2" && body.decision === "none", "the decision is in the answer", JSON.stringify(body));
+      ok(body.engine === "v2" && body.decided?.[0]?.decision === "none", "the decision is in the answer", JSON.stringify(body));
     }
     {
       const r = rig();
-      await handleInbound(post(thread), r.io);
-      ok(r.decided.join() === "new", "without latest_message_id: the thread's newest message", r.decided.join());
+      r.io.capture = stored([]);
+      r.io.decide = (async (ids: string[]) => { r.decided.push(`[${ids.join()}]`); return []; }) as InboundIO["decide"];
+      const res = await handleInbound(post(thread), r.io);
+      ok(res.status === 200 && r.decided.join() === "[]" && r.ran.length === 0, "a re-post stores nothing new, so nothing is decided", r.decided.join());
     }
     {
       const r = rig();
+      r.io.capture = stored(["new"]);
       r.io.decide = (async () => { throw new Error("openrouter 502"); }) as InboundIO["decide"];
       const res = await handleInbound(post(thread), r.io);
       ok(res.status === 500 && r.reports[0]?.route === "engine-threw" && r.ran.length === 0, "a failed decision is reported, and does not fall back to the old engine", `${res.status} ${r.reports[0]?.route} ${r.ran.join()}`);
     }
     {
       const r = rig();
-      const res = await handleInbound(post({ foo: 1 }), r.io);
-      ok(res.status === 200 && r.decided.length === 0 && r.reports[0]?.route === "mail-undeliverable", "a delivery naming no message is reported, nothing decided", `${res.status} ${r.reports[0]?.route}`);
+      r.io.capture = (async () => ({ ok: false, captured: false, dedup_key: "k-3", thread_id: "old", message_id: null, messages_stored: 0, new_message_ids: [] })) as InboundIO["capture"];
+      const res = await handleInbound(post(thread), r.io);
+      ok(res.status === 500 && r.decided.length === 0 && r.reports[0]?.route === "mail-undeliverable", "a failed capture is reported, nothing decided", `${res.status} ${r.reports[0]?.route}`);
     }
     delete process.env.SPARTAN_ENGINE;
   } finally {

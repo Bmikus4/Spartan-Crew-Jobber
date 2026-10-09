@@ -4,7 +4,7 @@
 // is dropped and named in `problems`. A request with problems produces no write.
 // ============================================================================
 import type { Extraction, Grounded, RawRequest } from "./extract";
-import { addMinutes, parseCount, parseDate, parseDuration, parseTime, quoteIn } from "./ground";
+import { addMinutes, parseCount, parseDate, parseDuration, parseTime, poAfterLabel, quoteIn } from "./ground";
 
 export type Request = {
   action: RawRequest["action"];
@@ -67,8 +67,8 @@ export function ground(x: Extraction, newest: string, sentIso: string): Interpre
 
   let po: string | undefined;
   if (x.po) {
-    if (quoteIn(newest, x.po.quote) && x.po.quote.includes(x.po.value) && /\d/.test(x.po.value)) po = x.po.value;
-    else problems.push(`PO "${x.po.value}" is not grounded in the email or has no digit`);
+    if (quoteIn(newest, x.po.quote) && poAfterLabel(x.po.quote, x.po.value)) po = x.po.value;
+    else problems.push(`PO "${x.po.value}" is not a single reference after a PO label in the email`);
   }
   return { intent: x.intent, po, requests, problems: problems.filter((p) => !requests.some((r) => r.problems.includes(p))) };
 }

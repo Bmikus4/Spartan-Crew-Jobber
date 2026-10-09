@@ -68,7 +68,7 @@ async function main() {
     __resetListCache();
     const store = new InMemoryStore();
     const io: InboundIO = {
-      capture: (async () => ({ ok: true, captured: true, dedup_key: "k", thread_id: "t-x", message_id: "v1", messages_stored: 1 })) as InboundIO["capture"],
+      capture: (async () => ({ ok: true, captured: true, dedup_key: "k", thread_id: "t-x", message_id: "v1", messages_stored: 1, new_message_ids: ["v1"] })) as InboundIO["capture"],
       report: (async () => false) as InboundIO["report"],
       decide: (async () => { throw new Error("v2 must not run here"); }) as InboundIO["decide"],
       buildDeps: (async () => ({ settings: {} })) as unknown as InboundIO["buildDeps"],

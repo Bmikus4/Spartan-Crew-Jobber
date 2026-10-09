@@ -81,15 +81,38 @@ export type Processed = { message_id: string; skipped?: string; interpretation?:
 
 const NOT_CLIENT = /spartancrew\.co\.uk|no-?reply|mailer-daemon|postmaster|onsinch|sinch\.cz/i;
 
+const addr = (from: unknown) => String(from ?? "").replace(/.*</, "").replace(/>.*/, "").trim().toLowerCase();
+
 /**
- * Intake's entry, in shadow: each message is decided once. n8n posts the whole thread on
- * every new message, and a re-post must not buy a second model call or a second decision.
+ * Intake's entry, in shadow. n8n posts the whole thread whenever anything in it is new,
+ * Spartan's own replies included, so what to decide on is what this delivery stored for the
+ * first time. Measured 10-09: deciding on n8n's message id read each thread's FIRST message
+ * (it is the Gmail thread id), and planned a 14 August PO email onto #13709 as new.
+ *
+ * Of several new client messages only the newest is read; the older ones go to ops. Read
+ * apart, "4 crew" then "make it 5" would be acted on twice. Each message is decided once:
+ * a re-post buys no second model call.
  */
-export async function decideOnce(message_id: string): Promise<Processed> {
+export async function decideDelivery(newIds: string[]): Promise<Processed[]> {
+  if (!newIds.length) return [];
   const sql = await db();
-  const seen = (await sql`SELECT kind FROM v2_decisions WHERE message_id = ${message_id}`) as any[];
-  if (seen.length) return { message_id, skipped: `already decided (${seen[0].kind})` };
-  return processMessage(message_id, { execute: false });
+  const rows = (await sql`SELECT message_id, thread_id, from_address, date_iso, is_from_spartan FROM thread_messages WHERE message_id = ANY(${newIds}) ORDER BY date_iso, first_seen_at`) as any[];
+  const client = rows.filter((r) => !r.is_from_spartan && !NOT_CLIENT.test(addr(r.from_address)));
+  const newest = client[client.length - 1];
+  const out: Processed[] = [];
+  for (const r of client.slice(0, -1)) {
+    const decision: Decision = { kind: "handoff", reasons: [`arrived with a later client message (${newest.message_id}) in one delivery; read them together`] };
+    await sql`
+      INSERT INTO v2_decisions (message_id, thread_id, from_address, sent_at, kind, decision, code_version)
+      VALUES (${r.message_id}, ${r.thread_id}, ${addr(r.from_address)}, ${r.date_iso}, 'handoff', ${JSON.stringify(decision)}::jsonb, ${process.env.VERCEL_GIT_COMMIT_SHA ?? "local"})
+      ON CONFLICT (message_id) DO NOTHING`;
+    out.push({ message_id: r.message_id, decision });
+  }
+  if (newest) {
+    const seen = (await sql`SELECT kind FROM v2_decisions WHERE message_id = ${newest.message_id}`) as any[];
+    out.push(seen.length ? { message_id: newest.message_id, skipped: `already decided (${seen[0].kind})` } : await processMessage(newest.message_id, { execute: false }));
+  }
+  return out;
 }
 
 export async function processMessage(message_id: string, opts: { execute: boolean; world?: World } = { execute: false }): Promise<Processed> {
@@ -97,7 +120,7 @@ export async function processMessage(message_id: string, opts: { execute: boolea
   const rows = (await sql`SELECT message_id, thread_id, from_address, date_iso, subject, body, is_from_spartan FROM thread_messages WHERE message_id = ${message_id}`) as any[];
   const m = rows[0];
   if (!m) return { message_id, skipped: "message not captured" };
-  const from = String(m.from_address ?? "").replace(/.*</, "").replace(/>.*/, "").trim().toLowerCase();
+  const from = addr(m.from_address);
   const record = async (kind: string, interpretation: unknown, decision: unknown, executed: unknown = null) => {
     await sql`
       INSERT INTO v2_decisions (message_id, thread_id, from_address, sent_at, kind, interpretation, decision, executed, code_version)

@@ -232,14 +232,14 @@ export function messagesFromPayload(payload: unknown): StoredMessage[] {
 
 /** Store every message in a payload. Never throws: intake must not fail on a ledger error. */
 export async function storeThreadMessages(payload: unknown):
-  Promise<{ ok: boolean; inserted: number; seen: number }> {
+  Promise<{ ok: boolean; inserted: number; seen: number; ids: string[] }> {
   const msgs = messagesFromPayload(payload);
-  if (!msgs.length) return { ok: true, inserted: 0, seen: 0 };
+  if (!msgs.length) return { ok: true, inserted: 0, seen: 0, ids: [] };
   const sql = db();
-  if (!sql) return { ok: false, inserted: 0, seen: msgs.length };
+  if (!sql) return { ok: false, inserted: 0, seen: msgs.length, ids: [] };
   try {
     await ensure(sql);
-    let inserted = 0;
+    const ids: string[] = [];
     for (const m of msgs) {
       const rows = (await sql`
         INSERT INTO thread_messages
@@ -251,12 +251,12 @@ export async function storeThreadMessages(payload: unknown):
                 ${m.rfc_message_id || null}, ${m.in_reply_to ?? null}, ${m.reference_ids ?? null})
         ON CONFLICT DO NOTHING
         RETURNING message_id`) as { message_id: string }[];
-      if (rows.length) inserted++;
+      if (rows.length) ids.push(m.message_id);
     }
-    return { ok: true, inserted, seen: msgs.length };
+    return { ok: true, inserted: ids.length, seen: msgs.length, ids };
   } catch (err) {
     console.error("[thread_messages] store failed", err);
-    return { ok: false, inserted: 0, seen: msgs.length };
+    return { ok: false, inserted: 0, seen: msgs.length, ids: [] };
   }
 }
 
