@@ -2904,5 +2904,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0152",
+  "ts": "2026-10-10T22:48:56+00:00",
+  "kind": "measurement",
+  "headline": "TV tile grid: 7 -> ~14 jobs visible at 1080p, legend-safe Confirm, more-below count",
+  "subject": "Each job on the office TV is its own tile, about fourteen to a screen instead of seven",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 187,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]

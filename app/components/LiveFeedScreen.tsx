@@ -6,9 +6,10 @@
 // writes only its own record (app/lib/feed/check.ts). The same component runs in the app
 // shell and fullscreen on the TV; `s` (scale) is the only difference.
 //
-// IT WEARS THE TOOL'S OWN DESIGN LANGUAGE (globals.css): the theme tokens, one bordered
-// card per job (Ben, 10-04: separate cards, not hairline rows), the KPI strip, eyebrow labels, mono ids, colour only as a
-// signal. Heavy type is spent on one thing per row, the client's name.
+// IT WEARS THE TOOL'S OWN DESIGN LANGUAGE (globals.css): the theme tokens, one tile per job
+// in a grid (Ben, 2026-10-10: each job its own tile; full-width rows showed 7 of 36 open jobs
+// at 1080p), the KPI strip, eyebrow labels, mono ids, colour only as a signal. Heavy type is
+// spent on one thing per tile, the client's name.
 //
 // AN EMPTY SCREEN MUST NEVER LOOK LIKE "ALL CLEAR". Intake was silently down for 53
 // hours on 2026-10-01..03, so the data age and the last-email age are always on screen
@@ -16,7 +17,7 @@
 
 import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import type { FeedCard, FeedCounts, FeedItem } from "../lib/feed/project";
-import { deadline, nextDay, QUIET_MS, REPLY_RED_MS } from "../lib/feed/order";
+import { deadline, londonDay, nextDay, QUIET_MS, REPLY_RED_MS } from "../lib/feed/order";
 import { BrandMark, BrandWordmark } from "./BrandLogo";
 
 interface FeedResponse {
@@ -33,7 +34,6 @@ const CHIME_GAP_MS = 10_000;
 const UNDO_MS = 10_000;
 const IDLE_CURSOR_MS = 3_000;
 const URGENT_MS = 48 * 3_600_000;
-const STRIP = 5;
 /** A row that has just gone green holds its place this long, then fades and drops to the done group (Ben, 2026-10-04). */
 const HOLD_MS = 3_000;
 const RETURN_TO_TOP_MS = 20_000;
@@ -45,17 +45,21 @@ const BLUE = "var(--viz-blue)";
 const GREEN = "var(--up)";
 const AMBER = "var(--warn)";
 const GREY = "var(--text-muted)";
-/** The red/blue edge on each card, in px before scaling. */
+/** The red/blue edge on each tile, in px before scaling. */
 const STRIPE = 6;
 const tint = (c: string, pct: number) => `color-mix(in srgb, ${c} ${pct}%, transparent)`;
-
-const LAYOUT_KEY = "spartan.liveFeed.layout";
-function readLayout(): "a" | "b" {
-  try { return window.localStorage.getItem(LAYOUT_KEY) === "b" ? "b" : "a"; } catch { return "a"; }
-}
-function saveLayout(v: "a" | "b") {
-  try { window.localStorage.setItem(LAYOUT_KEY, v); } catch { /* private window: the toggle still works for this visit */ }
-}
+/**
+ * THE DIAL for density: a tile's narrowest width, in px before scaling. 420 puts four across
+ * the 1920px TV, about fourteen jobs on one screen; raise it for fewer, larger tiles.
+ */
+const TILE_MIN = 420;
+/**
+ * Confirm wears the tool's primary button, not red (2026-10-10). Red means "New job" in the
+ * legend, and a red button on every blue tile contradicted the legend fourteen times a
+ * screen. Set CONFIRM_FILL to RED and CONFIRM_TEXT to "#fff" to restore the 10-04 look.
+ */
+const CONFIRM_FILL = "var(--accent)";
+const CONFIRM_TEXT = "var(--accent-contrast)";
 
 const hhmm = (ms: number) => new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/London", hour: "2-digit", minute: "2-digit" }).format(ms);
 const fmt = (ms: number, o: Intl.DateTimeFormatOptions) => new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/London", ...o }).format(ms);
@@ -153,44 +157,26 @@ function waitText(ms: number): string {
 
 /**
  * THE REPLY CLOCK, after the follow-up timer on Leni's list (DueClock): how long the client
- * has waited with nothing from us. A tinted face whose ring fills and whose colour walks
- * green to red over 24 hours, and stays red after. It is the TV's only clock: the job's own
- * timing is its date beside a calendar (Ben, 2026-10-04).
+ * has waited with nothing from us. A ring that fills and whose colour walks green to red
+ * over 24 hours, and stays red after, with the wait beside it in words. It is the TV's only
+ * clock: the job's own timing is its date (Ben, 2026-10-04). The words sit outside the ring
+ * because inside a tile-sized ring "NO REPLY" rendered at 5px.
  */
-function ReplyClock({ ms, size }: { ms: number; size: number }) {
+function WaitClock({ ms, s }: { ms: number; s: number }) {
   const t = Math.max(0, ms);
   const spent = Math.min(1, t / REPLY_RED_MS);
   const color = replyColour(t);
   const text = waitText(t);
-  const C = 2 * Math.PI * 44;
+  const C = 2 * Math.PI * 40;
   return (
-    <svg width={size} height={size} viewBox="0 0 100 100" role="img" aria-label={`Waiting ${text} for a reply`} style={{ flexShrink: 0, overflow: "visible" }}>
-      <circle cx="50" cy="50" r="44" fill={`color-mix(in oklab, ${color} 14%, transparent)`} />
-      <circle cx="50" cy="50" r="44" fill="none" stroke="var(--border-strong)" strokeWidth="2.5" />
-      <circle cx="50" cy="50" r="44" fill="none" stroke={color} strokeWidth="2.5" strokeLinecap="round" strokeDasharray={`${C * spent} ${C}`} transform="rotate(-90 50 50)" style={{ transition: "stroke-dasharray 900ms linear, stroke 900ms linear" }} />
-      {/* No marks at 3 and 9 o'clock: that is where the figure sits. */}
-      {Array.from({ length: 12 }, (_, i) => i).filter((i) => i !== 3 && i !== 9).map((i) => {
-        const a = ((i * 30 - 90) * Math.PI) / 180;
-        return <line key={i} x1={50 + Math.cos(a) * 36} y1={50 + Math.sin(a) * 36} x2={50 + Math.cos(a) * 39.5} y2={50 + Math.sin(a) * 39.5} stroke={color} strokeOpacity={i % 3 ? 0.35 : 0.8} strokeWidth={i % 3 ? 1.4 : 2.2} strokeLinecap="round" />;
-      })}
-      <text x="50" y="46" textAnchor="middle" dominantBaseline="central" className="tnum" style={{ fontSize: 29, fontWeight: 800, letterSpacing: "-0.02em", fill: `color-mix(in oklab, ${color} 78%, var(--text-primary))` }}>
-        {text}
-      </text>
-      <text x="50" y="69" textAnchor="middle" dominantBaseline="central" style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: "0.08em", fill: "var(--text-muted)" }}>
-        NO REPLY
-      </text>
-    </svg>
-  );
-}
-
-function CalendarIcon({ size, color }: { size: number; color: string }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }} aria-hidden>
-      <rect x="3" y="5" width="18" height="16" rx="2.5" />
-      <line x1="3" y1="10" x2="21" y2="10" /><line x1="8" y1="3" x2="8" y2="7" /><line x1="16" y1="3" x2="16" y2="7" />
-      <circle cx="8" cy="14" r="0.7" fill={color} /><circle cx="12" cy="14" r="0.7" fill={color} /><circle cx="16" cy="14" r="0.7" fill={color} />
-      <circle cx="8" cy="17.5" r="0.7" fill={color} /><circle cx="12" cy="17.5" r="0.7" fill={color} />
-    </svg>
+    <span role="img" aria-label={`Waiting ${text} for a reply`} style={{ display: "inline-flex", alignItems: "center", gap: 10 * s, minWidth: 0 }}>
+      <svg width={30 * s} height={30 * s} viewBox="0 0 100 100" aria-hidden style={{ flexShrink: 0 }}>
+        <circle cx="50" cy="50" r="40" fill={`color-mix(in oklab, ${color} 16%, transparent)`} stroke="var(--border-strong)" strokeWidth="12" />
+        <circle cx="50" cy="50" r="40" fill="none" stroke={color} strokeWidth="12" strokeLinecap="round" strokeDasharray={`${C * spent} ${C}`} transform="rotate(-90 50 50)" style={{ transition: "stroke-dasharray 900ms linear, stroke 900ms linear" }} />
+      </svg>
+      <span className="tnum" style={{ fontSize: 20 * s, fontWeight: 800, color: `color-mix(in oklab, ${color} 78%, var(--text-primary))` }}>{text}</span>
+      <span style={{ fontSize: 16 * s, fontWeight: 600, color: "var(--text-muted)", whiteSpace: "nowrap" }}>no reply</span>
+    </span>
   );
 }
 
@@ -198,23 +184,42 @@ function CalendarIcon({ size, color }: { size: number; color: string }) {
  * Nothing, not "No order yet", when the card has no numbers (Ben, 2026-10-04): an unbound
  * need is often a job staff booked by hand, so the phrase was false 9 times in 12.
  */
-function numbersOf(c: FeedCard, one = false): string | null {
+function numbersOf(c: FeedCard): string | null {
   if (c.colour === "neutral" || (!c.r_number && !c.j_number)) return null;
-  return one ? c.r_number ?? c.j_number : [c.r_number, c.j_number].filter(Boolean).join(" ");
+  return [c.r_number, c.j_number].filter(Boolean).join("  ");
 }
 
-function Tag({ s, color, children }: { s: number; color: string; children: React.ReactNode }) {
+/** The system's reason, minus the Gmail message ids it quotes: ops cannot act on a hex id. */
+const cleanNote = (n: string) => n.replace(/\s*\((?:[0-9a-f]{16})\)/g, "");
+
+/**
+ * The job's own timing, top right of the tile: its next day, said as Today or Tomorrow when
+ * it is, amber within 48 hours, with the count of further days a multi-day job runs. A
+ * reply-only card has no job, so it shows the day the client wrote instead.
+ */
+function When({ card, it, lead, now, s }: { card: FeedCard; it: FeedItem | null; lead: FeedItem; now: number; s: number }) {
+  const day = nextDay(card, now) ?? card.dates[0] ?? null;
+  const t = day ? Date.parse(`${day}T12:00:00Z`) : null;
+  const today = londonDay(now);
+  const tomorrow = londonDay(Date.parse(`${today}T12:00:00Z`) + 86_400_000);
+  const sameYear = t != null && fmt(t, { year: "numeric" }) === fmt(now, { year: "numeric" });
+  const more = day ? card.dates.filter((d) => d > day).length : 0;
+  const hot = urgent(card, now);
+  const label = !it ? "Waiting since" : !day || t == null ? "Date" : day === today ? "Today" : day === tomorrow ? "Tomorrow" : fmt(t, { weekday: "long" });
+  const value = !it ? fmt(lead.at, { day: "numeric", month: "short" }) : t != null ? fmt(t, sameYear ? { day: "numeric", month: "short" } : { day: "numeric", month: "short", year: "numeric" }) : "TBC";
   return (
-    <span style={{ color, background: tint(color, 14), border: `1px solid ${tint(color, 30)}`, borderRadius: 6 * s, padding: `${3 * s}px ${10 * s}px`, fontSize: 17 * s, fontWeight: 700, whiteSpace: "nowrap", flexShrink: 0, lineHeight: 1.35 }}>
-      {children}
-    </span>
+    <div style={{ textAlign: "right", flexShrink: 0 }}>
+      <div className="eyebrow" style={{ fontSize: 13 * s, letterSpacing: "0.14em", color: hot ? AMBER : "var(--text-muted)" }}>{label}</div>
+      <div className="tnum" style={{ fontSize: 28 * s, fontWeight: 700, lineHeight: 1.15, marginTop: 4 * s, whiteSpace: "nowrap", color: hot ? AMBER : t != null || !it ? "var(--text-primary)" : "var(--text-muted)" }}>{value}</div>
+      {more > 0 && <div className="tnum" style={{ fontSize: 14 * s, fontWeight: 600, color: "var(--text-muted)", marginTop: 2 * s, whiteSpace: "nowrap" }}>+{more} more {more === 1 ? "day" : "days"}</div>}
+    </div>
   );
 }
 
 /**
- * The tick, as a big red CONFIRM (Ben, 2026-10-04): the one thing on a card a person is
- * meant to press, so it is the loudest thing on it. Pressed, it goes green and still
- * undoes; green from evidence, it says Done and does nothing.
+ * The tick, as CONFIRM (Ben, 2026-10-04): the one thing on a tile a person is meant to
+ * press, so it is the loudest thing on it. Pressed, it goes green and still undoes; green
+ * from evidence, it says Done and does nothing.
  */
 function Tick({ card, it, s, height, onTick }: { card: FeedCard; it: FeedItem; s: number; height: number; onTick: (c: FeedCard, it: FeedItem, checked: boolean) => void }) {
   const ticked = it.green?.mark === "checked";
@@ -228,13 +233,14 @@ function Tick({ card, it, s, height, onTick }: { card: FeedCard; it: FeedItem; s
       style={{
         height: h, minWidth: h * 2.9, padding: `0 ${h * 0.34}px`, borderRadius: h * 0.22, flexShrink: 0,
         display: "inline-flex", alignItems: "center", justifyContent: "center", gap: h * 0.16,
-        fontSize: h * 0.4, fontWeight: 800, letterSpacing: "0.01em", color: "#fff", whiteSpace: "nowrap",
-        background: it.green ? GREEN : RED, border: "none",
-        boxShadow: it.green ? "none" : `0 ${h * 0.06}px ${h * 0.24}px ${tint(RED, 40)}`,
-        cursor: autoGreen ? "default" : "pointer", transition: "background-color 200ms, box-shadow 200ms",
+        fontSize: h * 0.4, fontWeight: 800, letterSpacing: "0.01em", whiteSpace: "nowrap",
+        // A green from evidence cannot be pressed, so it is a label in the button's place, not a filled button.
+        color: autoGreen ? GREEN : it.green ? "#fff" : CONFIRM_TEXT, background: autoGreen ? "transparent" : it.green ? GREEN : CONFIRM_FILL,
+        border: autoGreen ? `1px solid ${tint(GREEN, 45)}` : "none",
+        cursor: autoGreen ? "default" : "pointer", transition: "background-color 200ms, color 200ms",
       }}>
       {it.green && (
-        <svg width={h * 0.42} height={h * 0.42} viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3.4" strokeLinecap="round" strokeLinejoin="round"><polyline points="4.5 12.5 10 18 19.5 6.5" /></svg>
+        <svg width={h * 0.42} height={h * 0.42} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.4" strokeLinecap="round" strokeLinejoin="round"><polyline points="4.5 12.5 10 18 19.5 6.5" /></svg>
       )}
       {label}
     </button>
@@ -263,108 +269,71 @@ function SyncCloud({ s, state, why }: { s: number; state: "ok" | "offline" | "er
 
 type Phase = "steady" | "hold" | "fade";
 
-/** One row: signal rule, name and status, ids and detail, date, tick. */
-function Row({ card, now, s, phase, onTick }: { card: FeedCard; now: number; s: number; phase: Phase; onTick: (c: FeedCard, it: FeedItem, checked: boolean) => void }) {
+const clamp = (lines: number): React.CSSProperties => ({ display: "-webkit-box", WebkitLineClamp: lines, WebkitBoxOrient: "vertical", overflow: "hidden", overflowWrap: "anywhere" });
+
+/**
+ * One job, one tile. Read top to bottom it answers, in order: which colour (the edge), what
+ * to do (the status, verbatim), for whom, when, which order in OnSinch, why the system could
+ * not do it, and how long the client has waited. The footer is pinned to the bottom so every
+ * Confirm in a grid row sits on one line.
+ */
+function JobTile({ card, now, s, phase, onTick }: { card: FeedCard; now: number; s: number; phase: Phase; onTick: (c: FeedCard, it: FeedItem, checked: boolean) => void }) {
   const it = orderItem(card);
   const lead = it ?? card.items[0];
   const done = card.green;
-  const day = nextDay(card, now) ?? card.dates[0] ?? null;
-  const t = day ? Date.parse(`${day}T12:00:00Z`) : null;
-  const sameYear = t != null && fmt(t, { year: "numeric" }) === fmt(now, { year: "numeric" });
   const evidence = it ? evidenceLine(it) : null;
   const numbers = numbersOf(card);
-  // The system's own line leads: it is what tells ops why this card needs them.
-  const detail = [done ? null : card.note, card.contact, card.crew ? `${card.crew} crew` : null, card.venue].filter(Boolean).join(" · ");
-
+  const note = !done && card.note ? cleanNote(card.note) : null;
+  const meta = [card.contact, card.crew ? `${card.crew} crew` : null, card.venue].filter(Boolean).join(" · ");
+  const sig = signal(card);
   return (
-    <div style={{
-      // Equal side columns put the numbers in the true centre of the card; the fixed middle keeps
-      // every date at the same x down the list, with or without numbers.
-      display: "grid", gridTemplateColumns: `minmax(0, 1fr) ${330 * s}px minmax(0, 1fr)`, alignItems: "center", columnGap: 24 * s,
-      minHeight: 116 * s, padding: `${14 * s}px ${20 * s}px ${14 * s}px ${(20 + STRIPE) * s}px`,
+    <article className="feed-tile" data-open={isOpen(card) ? "" : undefined} style={{
+      display: "flex", flexDirection: "column", gap: 10 * s, minWidth: 0, minHeight: 250 * s,
+      padding: `${(18 + STRIPE) * s}px ${20 * s}px ${16 * s}px`,
       border: "1px solid var(--border)", borderRadius: "var(--radius-lg)",
-      // The legend's colour as an inset edge, kept when the row goes green so it still reads.
-      // A shadow, not a grid column, so the stripe can never change the row's height.
-      boxShadow: `inset ${STRIPE * s}px 0 0 ${signal(card)}`,
-      // Mixed into the surface, not over transparent: the card sits on the page, not a panel.
-      background: done ? `color-mix(in srgb, ${GREEN} 15%, var(--surface))` : "var(--surface)",
+      // The legend's colour as an inset top edge, kept when the tile goes green so it still reads.
+      boxShadow: `inset 0 ${STRIPE * s}px 0 0 ${sig}`,
+      background: done ? `color-mix(in srgb, ${GREEN} 13%, var(--surface))` : "var(--surface)",
       opacity: phase === "fade" ? 0 : 1,
       transition: `background-color 200ms ease, opacity ${FADE_MS}ms ease`,
       animation: phase === "steady" ? "feedRowIn 400ms ease" : undefined,
     }}>
-      <div style={{ minWidth: 0, display: "flex", flexDirection: "column", gap: 6 * s }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 12 * s, minWidth: 0 }}>
-          <span style={{ fontSize: 34 * s, fontWeight: 800, letterSpacing: "-0.01em", color: "var(--text-primary)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", minWidth: 0 }}>
-            {card.company || card.subject || "Unknown client"}
-          </span>
-          <Tag s={s} color={done ? GREEN : signal(card)}>{lead.status}</Tag>
-          {hasReply(card) && it && <Tag s={s} color={GREY}>Needs reply</Tag>}
-        </div>
-        <div style={{ fontSize: 20 * s, fontWeight: 500, color: "var(--text-secondary)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-          {evidence
-            ? <span style={{ color: GREEN, fontWeight: 600 }}>{evidence}</span>
-            : <>{detail}{detail ? <span style={{ color: "var(--text-faint)" }}> · </span> : null}<span style={{ color: "var(--text-muted)" }}>{ago(lead.at, now)}</span></>}
-        </div>
-      </div>
-
-      {/* The numbers find the job in OnSinch, so they get the centre and their own size. */}
-      <div className="mono" style={{ textAlign: "center", whiteSpace: "nowrap", fontSize: 40 * s, fontWeight: 700, letterSpacing: "-0.01em", color: "var(--text-primary)" }}>
-        {numbers}
-      </div>
-
-      <div style={{ display: "flex", alignItems: "center", gap: 20 * s, minWidth: 0 }}>
-      {/* The job's own timing, straight after the numbers (Ben): its date beside a calendar, amber within 48 hours. */}
-      <div style={{ display: "flex", alignItems: "center", gap: 16 * s, width: 250 * s, flexShrink: 0 }}>
-        <CalendarIcon size={44 * s} color={urgent(card, now) ? AMBER : "var(--text-muted)"} />
-        <div style={{ minWidth: 0 }}>
-          <div className="eyebrow" style={{ fontSize: 14 * s, color: urgent(card, now) ? AMBER : "var(--text-muted)" }}>
-            {!it ? "Waiting since" : t ? fmt(t, { weekday: "long" }) : "Date"}
+      <div style={{ display: "flex", alignItems: "flex-start", gap: 16 * s, minWidth: 0 }}>
+        <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 8 * s }}>
+          <div style={{ fontSize: 17 * s, fontWeight: 700, lineHeight: 1.3, color: done ? GREEN : sig, ...clamp(1) }}>
+            {lead.status}
+            {hasReply(card) && it && <span style={{ color: GREY }}> · Needs reply</span>}
           </div>
-          <div className="tnum" style={{ fontSize: 28 * s, fontWeight: 700, color: "var(--text-primary)", whiteSpace: "nowrap", marginTop: 2 * s }}>
-            {!it ? fmt(lead.at, { day: "numeric", month: "short" }) : t ? fmt(t, sameYear ? { day: "numeric", month: "short" } : { day: "numeric", month: "short", year: "numeric" }) : "TBC"}
+          {/* No client matched: the subject line, quoted and dimmer, so it never reads as a client's name. */}
+          <div style={{ fontSize: 30 * s, fontWeight: 800, letterSpacing: "-0.015em", lineHeight: 1.12, color: card.company ? "var(--text-primary)" : "var(--text-secondary)", ...clamp(2) }}>
+            {card.company || (card.subject ? `“${card.subject}”` : "Unknown client")}
           </div>
         </div>
+        <When card={card} it={it} lead={lead} now={now} s={s} />
       </div>
 
-      {/* Pushed to the far side; fixed width so the ticks line up whether or not a clock shows. */}
-      <div style={{ marginLeft: "auto", width: 84 * s, height: 84 * s, display: "grid", placeItems: "center", flexShrink: 0 }}>
-        {isOpen(card) && card.awaiting_reply_since != null && <ReplyClock ms={now - card.awaiting_reply_since} size={84 * s} />}
-      </div>
+      {/* The numbers find the job in OnSinch. */}
+      {numbers && <div className="mono" style={{ fontSize: 25 * s, fontWeight: 600, color: "var(--text-primary)", whiteSpace: "pre" }}>{numbers}</div>}
 
-      <div style={{ width: 240 * s, display: "grid", placeItems: "center", flexShrink: 0 }}>
-        {it && <Tick card={card} it={it} s={s} height={64} onTick={onTick} />}
-      </div>
-      </div>
-    </div>
-  );
-}
+      {/* The system's own line leads: it is what tells ops why this tile needs them. */}
+      {evidence
+        ? <div style={{ fontSize: 17 * s, fontWeight: 600, lineHeight: 1.35, color: GREEN, ...clamp(2) }}>{evidence}</div>
+        : note && <div style={{ fontSize: 17 * s, fontWeight: 500, lineHeight: 1.35, color: "var(--text-secondary)", ...clamp(2) }}>{note}</div>}
+      {meta && <div style={{ fontSize: 16 * s, fontWeight: 500, color: "var(--text-muted)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{meta}</div>}
 
-/** Layout B's strip: the same signals, folded into a cell of the KPI-strip grid. */
-function Tile({ card, now, s, onTick }: { card: FeedCard; now: number; s: number; onTick: (c: FeedCard, it: FeedItem, checked: boolean) => void }) {
-  const it = orderItem(card);
-  const lead = it ?? card.items[0];
-  const day = nextDay(card, now) ?? card.dates[0] ?? null;
-  const t = day ? Date.parse(`${day}T12:00:00Z`) : null;
-  const numbers = numbersOf(card, true);
-  return (
-    <div style={{ background: card.green ? tint(GREEN, 15) : "var(--surface)", boxShadow: `inset ${3 * s}px 0 0 ${signal(card)}`, padding: `${12 * s}px ${14 * s}px ${12 * s}px ${18 * s}px`, display: "flex", gap: 10 * s, minWidth: 0, transition: "background-color 200ms" }}>
-      <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 4 * s }}>
-        <div style={{ fontSize: 14 * s, fontWeight: 700, color: card.green ? GREEN : signal(card), whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{lead.status}</div>
-        <div style={{ fontSize: 22 * s, fontWeight: 800, color: "var(--text-primary)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{card.company || card.subject}</div>
-        <div style={{ fontSize: 14 * s, fontWeight: 500, color: "var(--text-secondary)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-          {numbers && <span className="mono" style={{ color: "var(--text-primary)" }}>{numbers} · </span>}
-          {isOpen(card) && card.awaiting_reply_since != null && <span className="tnum" style={{ color: replyColour(now - card.awaiting_reply_since), fontWeight: 700 }}>{waitText(now - card.awaiting_reply_since)} no reply · </span>}
-          {t ? fmt(t, { weekday: "short", day: "numeric", month: "short" }) : it ? "Date TBC" : `Waiting since ${fmt(lead.at, { day: "numeric", month: "short" })}`}
-        </div>
+      <div style={{ marginTop: "auto", paddingTop: 14 * s, borderTop: "1px solid var(--border)", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 * s, minWidth: 0 }}>
+        {isOpen(card) && card.awaiting_reply_since != null
+          ? <WaitClock ms={now - card.awaiting_reply_since} s={s} />
+          : <span style={{ fontSize: 16 * s, fontWeight: 500, color: "var(--text-muted)", whiteSpace: "nowrap" }}>{ago(lead.at, now)}</span>}
+        {it && <Tick card={card} it={it} s={s} height={50} onTick={onTick} />}
       </div>
-      {it && <div style={{ display: "grid", placeItems: "center" }}><Tick card={card} it={it} s={s} height={34} onTick={onTick} /></div>}
-    </div>
+    </article>
   );
 }
 
 function Section({ s, label, n, color }: { s: number; label: string; n: number; color?: string }) {
   return (
-    <div className="eyebrow" style={{ position: "sticky", top: 0, zIndex: 1, background: "var(--bg)", padding: `${12 * s}px ${20 * s}px`, fontSize: 13 * s, color: color ?? "var(--text-muted)" }}>
+    <div className="eyebrow" style={{ gridColumn: "1 / -1", position: "sticky", top: 0, zIndex: 1, background: "var(--bg)", padding: `${12 * s}px ${4 * s}px`, fontSize: 14 * s, color: color ?? "var(--text-muted)" }}>
       <span className="slash" style={{ color: "inherit" }}>/</span>{label} <span className="tnum" style={{ color: "var(--text-faint)" }}>· {n}</span>
     </div>
   );
@@ -380,7 +349,6 @@ export default function LiveFeedScreen({ isActive, tv = false }: { isActive: boo
   const [failKind, setFailKind] = useState<null | "offline" | "error">(null);
   const failed = failKind !== null;
   const [now, setNow] = useState(() => Date.now());
-  const [layout, setLayout] = useState<"a" | "b">("a");
   const [full, setFull] = useState(false);
   const [idle, setIdle] = useState(false);
   const [undo, setUndo] = useState<{ card: FeedCard; item: FeedItem; until: number } | null>(null);
@@ -393,8 +361,6 @@ export default function LiveFeedScreen({ isActive, tv = false }: { isActive: boo
   const wasGreen = useRef<Set<string> | null>(null);
 
   const s = full || tv ? 1 : 0.72;
-
-  useEffect(() => { setLayout(readLayout()); }, []);
 
   const load = useCallback(async () => {
     let res: Response;
@@ -442,7 +408,7 @@ export default function LiveFeedScreen({ isActive, tv = false }: { isActive: boo
     return () => document.removeEventListener("fullscreenchange", on);
   }, []);
 
-  // The cursor and the controls hide after three idle seconds on the TV.
+  // The cursor hides after three idle seconds on the TV.
   useEffect(() => {
     if (!full && !tv) { setIdle(false); return; }
     let t = window.setTimeout(() => setIdle(true), IDLE_CURSOR_MS);
@@ -508,7 +474,6 @@ export default function LiveFeedScreen({ isActive, tv = false }: { isActive: boo
       else await rootRef.current?.requestFullscreen();
     } catch { /* the browser refused; the screen still works windowed */ }
   };
-  const pickLayout = (v: "a" | "b") => { unlockAudio(); setLayout(v); saveLayout(v); };
 
   const tick = useCallback(async (card: FeedCard, item: FeedItem, checked: boolean) => {
     unlockAudio();
@@ -531,25 +496,28 @@ export default function LiveFeedScreen({ isActive, tv = false }: { isActive: boo
   // The server's order (orderCards, app/lib/feed/order.ts), where test/feedProjection.ts pins it.
   const cards = data?.items ?? [];
 
-  let strip: FeedCard[] = [];
-  let stripMore = 0;
-  let rest = cards;
-  if (layout === "b") {
-    const open = cards.filter((c) => isOpen(c) && !settling.has(c.thread_id));
-    strip = open.slice(0, STRIP);
-    stripMore = open.length - strip.length;
-    const inStrip = new Set(strip);
-    rest = cards.filter((c) => !inStrip.has(c));
-  }
-
-  // Open rows, with any row still settling held at the place it stood.
-  const settlingRows = rest.filter((c) => settling.has(c.thread_id));
-  const openRows = rest.filter((c) => isOpen(c) && !settling.has(c.thread_id));
+  // Open tiles, with any tile still settling held at the place it stood.
+  const settlingRows = cards.filter((c) => settling.has(c.thread_id));
+  const openRows = cards.filter((c) => isOpen(c) && !settling.has(c.thread_id));
   for (const c of [...settlingRows].sort((a, b) => settling.get(a.thread_id)!.index - settling.get(b.thread_id)!.index)) {
     openRows.splice(Math.min(settling.get(c.thread_id)!.index, openRows.length), 0, c);
   }
-  const doneRows = rest.filter((c) => !isOpen(c) && !settling.has(c.thread_id));
-  useEffect(() => { shown.current = [...strip, ...openRows, ...doneRows].map((c) => c.thread_id); });
+  const doneRows = cards.filter((c) => !isOpen(c) && !settling.has(c.thread_id));
+  useEffect(() => { shown.current = [...openRows, ...doneRows].map((c) => c.thread_id); });
+
+  /**
+   * THE TV CANNOT SCROLL, SO IT SAYS WHAT IS BELOW. Open tiles whose top is under the fold
+   * are counted every second and named at the foot of the grid; without it the 22nd job
+   * waiting looked exactly like there being 21.
+   */
+  const [below, setBelow] = useState(0);
+  useEffect(() => {
+    const el = listRef.current;
+    if (!el) return;
+    const fold = el.getBoundingClientRect().bottom - 40 * s;
+    const n = [...el.querySelectorAll("[data-open]")].filter((t) => t.getBoundingClientRect().top > fold).length;
+    setBelow((b) => (b === n ? b : n));
+  }, [now, data, s]);
   const phaseOf = (c: FeedCard): Phase => {
     const st = settling.get(c.thread_id);
     if (!st) return "steady";
@@ -588,9 +556,9 @@ export default function LiveFeedScreen({ isActive, tv = false }: { isActive: boo
 
   return (
     <div ref={rootRef} style={{ position: "relative", height: "100%", width: "100%", background: "var(--bg)", color: "var(--text-primary)", display: "flex", flexDirection: "column", gap: 16 * s, padding: pad, cursor: idle ? "none" : undefined, overflow: "hidden" }}>
-      <style>{`@keyframes feedRowIn { from { opacity: 0; transform: translateY(${6 * s}px); } to { opacity: 1; transform: none; } }`}</style>
+      <style>{`@keyframes feedRowIn { from { opacity: 0; transform: translateY(${6 * s}px); } to { opacity: 1; transform: none; } } .feed-tile > * { flex-shrink: 0; }`}</style>
 
-      <header style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 24 * s, flexShrink: 0 }}>
+      <header style={{ display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: 24 * s, rowGap: 14 * s, flexShrink: 0 }}>
         {/* The legend: permanent, not interactive, exactly two entries. Large, because it is
             the key to every row's colour and is read from across the office. */}
         <div style={{ display: "flex", alignItems: "center", gap: 26 * s, minWidth: 0 }}>
@@ -625,50 +593,43 @@ export default function LiveFeedScreen({ isActive, tv = false }: { isActive: boo
         </div>
       </header>
 
-      {layout === "b" && strip.length > 0 && (
-        <div style={{ flexShrink: 0 }}>
-          <div style={{ display: "grid", gridTemplateColumns: `repeat(${STRIP}, minmax(0, 1fr))`, gap: 1, background: "var(--border)", border: "1px solid var(--border)", borderRadius: "var(--radius-lg)", overflow: "hidden" }}>
-            {strip.map((card) => <Tile key={card.thread_id} card={card} now={now} s={s} onTick={tick} />)}
-            {Array.from({ length: STRIP - strip.length }, (_, i) => <div key={`pad${i}`} style={{ background: "var(--surface)" }} />)}
-          </div>
-          {stripMore > 0 && <div style={{ fontSize: 14 * s, fontWeight: 600, color: "var(--text-muted)", marginTop: 8 * s }}>+{stripMore} more needing action, in the list below</div>}
-        </div>
-      )}
-
-      <div ref={listRef} onScroll={() => { lastScrollAt.current = Date.now(); }} style={{ flex: 1, minHeight: 0, overflowY: "auto", overflowX: "hidden", display: "grid", alignContent: "start", gap: 10 * s }}>
+      {/* max-content rows: "auto" rows in this height-bound scroller shrank below their tallest tile, so a
+          Confirm sat on top of the next row. */}
+      <div style={{ position: "relative", flex: 1, minHeight: 0, display: "flex" }}>
+      <div ref={listRef} onScroll={() => { lastScrollAt.current = Date.now(); }} style={{ flex: 1, minHeight: 0, overflowY: "auto", overflowX: "hidden", display: "grid", gridTemplateColumns: `repeat(auto-fill, minmax(min(100%, ${TILE_MIN * s}px), 1fr))`, gridAutoRows: "max-content", alignContent: "start", gap: 14 * s, paddingBottom: 8 * s }}>
         {data == null ? (
-          <div style={{ padding: 40 * s, fontSize: 22 * s, fontWeight: 600, color: failed ? AMBER : "var(--text-muted)" }}>{failed ? "The feed could not be read. Retrying." : "Loading…"}</div>
+          <div style={{ gridColumn: "1 / -1", padding: 40 * s, fontSize: 22 * s, fontWeight: 600, color: failed ? AMBER : "var(--text-muted)" }}>{failed ? "The feed could not be read. Retrying." : "Loading…"}</div>
         ) : (
           <>
             {openRows.length === 0 && (
-              <div style={{ padding: `${22 * s}px ${20 * s}px`, border: "1px solid var(--border)", borderRadius: "var(--radius-lg)", fontSize: 20 * s, fontWeight: 700, color: warn ? AMBER : GREEN, background: warn ? tint(AMBER, 10) : tint(GREEN, 12) }}>
-                {warn ? "Nothing listed, but the sync is not healthy: see the cloud at the top right." : openCount === 0 && strip.length === 0 ? "Everything is checked." : "Nothing else waiting."}
+              <div style={{ gridColumn: "1 / -1", padding: `${22 * s}px ${20 * s}px`, border: "1px solid var(--border)", borderRadius: "var(--radius-lg)", fontSize: 20 * s, fontWeight: 700, color: warn ? AMBER : GREEN, background: warn ? tint(AMBER, 10) : tint(GREEN, 12) }}>
+                {warn ? "Nothing listed, but the sync is not healthy: see the cloud at the top right." : openCount === 0 ? "Everything is checked." : "Nothing else waiting."}
               </div>
             )}
             {openRows.map((card, i) => (
               <Fragment key={card.thread_id}>
                 {/* Sunk, not hidden (Ben, 2026-10-05): the label says why these sit lower. */}
                 {card.quiet && !openRows[i - 1]?.quiet && <Section s={s} label={`Nothing new for ${QUIET_MS / 86_400_000}+ days`} n={openRows.filter((x) => x.quiet).length} />}
-                <Row card={card} now={now} s={s} phase={phaseOf(card)} onTick={tick} />
+                <JobTile card={card} now={now} s={s} phase={phaseOf(card)} onTick={tick} />
               </Fragment>
             ))}
             <Section s={s} label="Done" n={doneRows.length} color={GREEN} />
-            {doneRows.map((card) => <Row key={card.thread_id} card={card} now={now} s={s} phase="steady" onTick={tick} />)}
+            {doneRows.map((card) => <JobTile key={card.thread_id} card={card} now={now} s={s} phase="steady" onTick={tick} />)}
             {c && c.older > 0 && (
-              <div style={{ padding: `${14 * s}px ${20 * s}px`, fontSize: 15 * s, fontWeight: 500, color: "var(--text-muted)" }}>
+              <div style={{ gridColumn: "1 / -1", padding: `${14 * s}px ${4 * s}px`, fontSize: 15 * s, fontWeight: 500, color: "var(--text-muted)" }}>
                 {c.older} older undated {c.older === 1 ? "enquiry" : "enquiries"} with no word from the client for two weeks, not shown.
               </div>
             )}
           </>
         )}
       </div>
-
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 16 * s, flexShrink: 0 }}>
-        {/* Hidden with the cursor on the TV, so nothing but the feed is on screen. */}
-        <div className="seg" role="tablist" aria-label="Layout" style={{ opacity: idle ? 0 : 1, transition: "opacity 200ms", pointerEvents: idle ? "none" : "auto", transform: `scale(${s * 1.15})`, transformOrigin: "right center" }}>
-          <button className="seg__btn" aria-selected={layout === "a"} onClick={() => pickLayout("a")}>List</button>
-          <button className="seg__btn" aria-selected={layout === "b"} onClick={() => pickLayout("b")}>Strip</button>
+      {below > 0 && (
+        <div aria-live="polite" style={{ position: "absolute", left: 0, right: 0, bottom: 0, height: 120 * s, pointerEvents: "none", display: "flex", alignItems: "flex-end", justifyContent: "center", paddingBottom: 14 * s, background: "linear-gradient(to bottom, transparent, var(--bg) 78%)" }}>
+          <span className="tnum" style={{ fontSize: 19 * s, fontWeight: 700, color: "var(--text-primary)", background: "var(--surface-2)", border: "1px solid var(--border-strong)", borderRadius: 999, padding: `${8 * s}px ${20 * s}px` }}>
+            {below} more waiting below
+          </span>
         </div>
+      )}
       </div>
 
       {undo && undo.until > now && (
