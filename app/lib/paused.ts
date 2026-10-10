@@ -22,6 +22,16 @@ export function v2Engine(flag: string | undefined = process.env.SPARTAN_ENGINE):
   return (flag || "").trim().toLowerCase() === "v2";
 }
 
+/**
+ * SPARTAN_WRITES=live (under SPARTAN_ENGINE=v2): the bot carries out the rebuild's decisions
+ * in OnSinch, for any client. Unset, it decides and records only (shadow) and the bot writes
+ * on TEST 515 alone. It turns writes off without stopping intake; SPARTAN_PAUSED=1 still
+ * stops everything.
+ */
+export function v2Writes(flag: string | undefined = process.env.SPARTAN_WRITES, engine: string | undefined = process.env.SPARTAN_ENGINE): boolean {
+  return v2Engine(engine) && (flag || "").trim().toLowerCase() === "live";
+}
+
 export function automationPaused(pathname: string, flag: string | undefined = process.env.SPARTAN_PAUSED, engine: string | undefined = process.env.SPARTAN_ENGINE): boolean {
   const shut = (flag || "").trim() === "1" ? AUTOMATION_ROUTES : v2Engine(engine) ? OLD_ENGINE_ROUTES : [];
   return shut.some((p) => pathname === p || pathname.startsWith(p + "/"));

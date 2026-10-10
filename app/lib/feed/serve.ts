@@ -28,6 +28,8 @@ export interface FeedDeps {
   remember?: (marks: Array<Omit<FeedMark, "at">>) => Promise<void>;
   /** The rebuild's decisions that need a person or made a change (v2_decisions). */
   v2?: () => Promise<V2Row[]>;
+  /** Items whose email or write is older than this (ms) are not shown (FEED_FROM in production). */
+  from?: number;
 }
 
 export async function serveFeed(deps: FeedDeps, now: number): Promise<{ status: number; body: Record<string, unknown> }> {
@@ -42,7 +44,7 @@ export async function serveFeed(deps: FeedDeps, now: number): Promise<{ status: 
   }
 
   const v2 = v2Sources(v2rows, now);
-  let p = project(states, inbound.byThread, marks, replies, now, inbound.outByThread, v2);
+  let p = project(states, inbound.byThread, marks, replies, now, inbound.outByThread, v2, deps.from);
   let reread = false;
 
   // Like verification, memory is extra: a failed write leaves a resolved need off the list
@@ -66,7 +68,7 @@ export async function serveFeed(deps: FeedDeps, now: number): Promise<{ status: 
       verify = { ran: true, wrote: 0, note: `verify failed: ${String((err as Error)?.message ?? err).slice(0, 160)}` };
     }
   }
-  if (reread) p = project(states, inbound.byThread, await deps.marks(), replies, now, inbound.outByThread, v2);
+  if (reread) p = project(states, inbound.byThread, await deps.marks(), replies, now, inbound.outByThread, v2, deps.from);
   const status = deps.verifyStatus ? await deps.verifyStatus().catch(() => null) : null;
 
   const intake = intakeHealth({ lastReceivedAt: inbound.latest, now });

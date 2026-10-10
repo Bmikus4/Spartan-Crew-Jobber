@@ -65,9 +65,12 @@ export function v2Source(row: V2Row, now: number): FeedSource {
   const r_numbers = [...new Set(rNumbersIn(`${row.subject ?? ""}\n${said.join("\n")}`))];
 
   const creates = ops.some((o) => o.kind === "create_order");
-  const orderOp = ops.find((o): o is Extract<Op, { order_id: number }> => "order_id" in o);
-  const order_id = orderOp ? orderOp.order_id : null;
   const written = !!row.executed?.length && row.executed.length === ops.length && row.executed.every((r) => r.status === "verified");
+  const orderOp = ops.find((o): o is Extract<Op, { order_id: number }> => "order_id" in o);
+  // A created order's ids exist only in what the bot read back, and the verifier needs them to watch the check.
+  const made = row.executed?.find((r) => Number(r.detail?.order_id) > 0)?.detail as { order_id?: unknown; number?: unknown } | undefined;
+  const order_id = orderOp ? orderOp.order_id : made ? Number(made.order_id) : null;
+  if (made?.number != null && String(made.number)) r_numbers.push(String(made.number).replace(/^R/i, ""));
   const asksNew = g ? g.intent === "booking" || g.intent === "quote_request" || g.requests.some((r) => r.action === "new_shift") : !r_numbers.length;
 
   let kind: FeedKind;
@@ -112,7 +115,7 @@ export function v2Source(row: V2Row, now: number): FeedSource {
     days,
     item,
     order_id,
-    r_number: r_numbers.length === 1 ? `R${r_numbers[0]}` : null,
+    r_number: made?.number != null && String(made.number) ? `R${String(made.number).replace(/^R/i, "")}` : r_numbers.length === 1 ? `R${r_numbers[0]}` : null,
     j_number: null,
     company_id: row.company_id,
     company: row.company,

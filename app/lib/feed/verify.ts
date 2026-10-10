@@ -27,7 +27,8 @@ import { matchExistingOrder, type OrderRec } from "../engine/resolve";
 import { staffChangeSince } from "../engine/reconcile";
 import { londonDay, type FeedCard, type FeedItem, type FeedMark, type FeedWant } from "./project";
 
-export const VERIFY_EVERY_MS = 5 * 60_000;
+/** Once a minute since the bot writes for real (Ben, 2026-10-10: "synced there more often"). One round reads 1-2 timeline pages. */
+export const VERIFY_EVERY_MS = 60_000;
 export const VERIFY_BUDGET_MS = 8_000;
 /** Pages read back per round. ~90 staff rows an hour, 100 to a page. */
 const MAX_PAGES = 6;

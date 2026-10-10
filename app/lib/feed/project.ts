@@ -67,6 +67,12 @@ export const DONE_DWELL_MS = 24 * 3_600_000;
  * enquiries on the board on 2026-10-04 were all of this kind.
  */
 export const STALE_UNDATED_MS = 14 * 24 * 3_600_000;
+/**
+ * The TV starts from the day the new system went live (Ben, 2026-10-10: "have it work
+ * starting from today"). Anything whose email or write is older belongs to the paused
+ * engine or to shadow mode, and ops have dealt with it in the mailbox.
+ */
+export const FEED_FROM = Date.parse("2026-10-10T00:00:00+01:00");
 export const dismissKey = (thread_id: string) => `dismiss:${thread_id}`;
 
 export interface FeedMark {
@@ -329,6 +335,7 @@ export function project(
   now: number,
   lastOutbound: Map<string, number> = new Map(),
   v2: FeedSource[] = [],
+  from = 0,
 ): Projection {
   const today = londonDay(now);
   const dismissed = new Set(marks.filter((m) => m.mark === "dismissed").map((m) => m.thread_id));
@@ -408,7 +415,7 @@ export function project(
       const kind = was.item_key.split(":")[0] as FeedKind;
       it = { item_key: was.item_key, kind, status: STATUS_TEXT[kind], at: was.at, order_id: s.order_id };
     }
-    if (!it) continue;
+    if (!it || it.at < from) continue;
     const g = green(it);
     if (g && now - g.at > DONE_DWELL_MS) continue;
     if (!g && !days.length && now - it.at > STALE_UNDATED_MS) { counts.older++; continue; }

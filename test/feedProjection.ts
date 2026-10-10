@@ -277,6 +277,12 @@ console.log("\n[15] the rebuild's decisions reach ops on the TV and nowhere else
   const merged = project([state], new Map(), [], null, NOW, new Map(), v2Sources([change], NOW));
   ok(merged.cards.length === 1 && /6 crew/.test(merged.cards[0].note ?? ""), "the rebuild's decision replaces the paused engine's state for the same thread");
   ok(project([state], new Map(), [], null, NOW).cards[0]?.note === null, "the paused engine's own cards carry no note");
+  const create = { source: "m-n#100", op: { kind: "create_order" as const, company_id: "343", company_name: "Impact Collective", client_email: "sam@impact.example", job_name: "Impact @ Roundhouse", shifts: [{ name: "Crew", date: "2026-10-14", start: "04:00", end: "08:00", place_id: "11", place_label: "Roundhouse", positions: [{ size: 3, profession_id: "1" }] }] } };
+  const made = v2Sources([row("n", { kind: "write", decision: { kind: "write", ops: [create], why: ["new order: 1 shift(s) at Roundhouse"] }, executed: [{ op_key: "k", status: "verified", reasons: [], detail: { order_id: 16600, number: 11520 } }] })], NOW)[0];
+  ok(made.item?.kind === "created-check" && made.order_id === 16600 && made.r_number === "R11520", "an order the bot created carries the ids it read back, so the verifier can watch the check");
+  const fresh = project([], new Map(), [], null, NOW, new Map(), v2Sources([quote, change], NOW), NOW - 2 * H);
+  const cut = project([], new Map(), [], null, NOW, new Map(), v2Sources([quote, change], NOW), NOW - 30 * 60_000);
+  ok(fresh.cards.length === 2 && cut.cards.length === 0, "the TV starts from a given moment: older emails are not shown (Ben, 2026-10-10)");
   const past = row("old", { grounded: { intent: "change", requests: [{ action: "change_times", date: "2026-09-30", problems: [] }], problems: [] } });
   ok(project([], new Map(), [], null, NOW, new Map(), v2Sources([past], NOW)).cards.length === 0, "a job that is over leaves the TV");
 }

@@ -2890,5 +2890,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0151",
+  "ts": "2026-10-10T22:28:21+00:00",
+  "kind": "measurement",
+  "headline": "v2 live: the bot writes decisions to OnSinch; the TV starts from 10-10 and syncs each minute",
+  "subject": "The bot now carries out v2 decisions on real clients when SPARTAN_WRITES=live",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 187,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]

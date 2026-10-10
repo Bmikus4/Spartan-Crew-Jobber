@@ -8,7 +8,7 @@
 // Offline.  npx tsx test/automationPaused.ts
 // ============================================================================
 import { readFileSync } from "node:fs";
-import { automationPaused, AUTOMATION_ROUTES, OLD_ENGINE_ROUTES } from "../app/lib/paused";
+import { automationPaused, v2Writes, AUTOMATION_ROUTES, OLD_ENGINE_ROUTES } from "../app/lib/paused";
 
 let fails = 0;
 const ok = (cond: boolean, label: string) => { if (!cond) fails++; console.log(`  ${cond ? "PASS" : "FAIL"}  ${label}`); };
@@ -41,6 +41,11 @@ for (const p of ["/api/n8n-inbound", "/api/dedupe"]) ok(!automationPaused(p, "",
 ok(OLD_ENGINE_ROUTES.length === AUTOMATION_ROUTES.length - 2, `exactly two routes open under v2 (${OLD_ENGINE_ROUTES.length} shut)`);
 ok(automationPaused("/api/n8n-inbound", "1", "v2"), "SPARTAN_PAUSED=1 still stops intake under v2");
 ok(!automationPaused("/api/mail-poll", "", ""), "control: no switch, nothing shut");
+
+console.log("\n[v2 writes] the bot writes to real clients only when told, and only under v2");
+ok(v2Writes("live", "v2") && v2Writes(" LIVE ", "v2"), "SPARTAN_WRITES=live under v2: live");
+ok(!v2Writes("", "v2") && !v2Writes("1", "v2") && !v2Writes(undefined, "v2"), "unset or any other value: shadow");
+ok(!v2Writes("live", ""), "never under the old engine");
 
 console.log(fails ? `\n${fails} FAILED\n` : "\nALL PASS\n");
 process.exitCode = fails ? 1 : 0;

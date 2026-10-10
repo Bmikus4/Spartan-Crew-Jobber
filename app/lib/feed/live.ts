@@ -5,7 +5,7 @@ import { verify } from "./verify";
 import { httpTransport } from "../engine/onsinch";
 import { followupsEnabled } from "../followup/enabled";
 import type { FeedDeps } from "./serve";
-import type { ReplyNeed } from "./project";
+import { FEED_FROM, type ReplyNeed } from "./project";
 import type { V2Row } from "./v2";
 import type { ConversationState } from "../engine/types";
 
@@ -74,7 +74,7 @@ async function v2(): Promise<V2Row[]> {
 
 export function liveFeedDeps(): FeedDeps {
   return {
-    states, inbound, marks: allMarks, v2,
+    states, inbound, marks: allMarks, v2, from: FEED_FROM,
     replies: followupsEnabled() ? replies : null,
     // verify() wraps this transport in readOnly() before its first call.
     verify: (cards, now, marks, wants) => verify(cards, now, {

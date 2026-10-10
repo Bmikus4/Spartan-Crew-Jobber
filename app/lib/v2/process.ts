@@ -4,7 +4,8 @@
 // Every email ends in a recorded decision (v2_decisions): written, left for a person with
 // the reasons, or no action with the reason. A silent drop has no row shape. Nothing is
 // sent to ops: the office TV reads this table (feed/v2.ts) and that is how they hear of it.
-// Writes run only when the caller asks and only through runOp, TEST-only until cutover.
+// Writes run only when the caller asks and only through runOp, on real clients only under
+// SPARTAN_WRITES=live (paused.ts).
 //
 // The frozen engine's tables are read, never written: thread_messages for the email,
 // conversation_state for the thread's order (the thread itself naming its booking).
@@ -17,6 +18,7 @@ import { ground, type Interpretation } from "./interpret/interpret";
 import { latestText } from "./interpret/ground";
 import { plan, type Decision, type World } from "./interpret/plan";
 import { runOp, type RunResult } from "./bot/run";
+import { v2Writes } from "../paused";
 
 let _sql: NeonQueryFunction<false, false> | null = null;
 let _ready = false;
@@ -127,9 +129,22 @@ export async function decideDelivery(newIds: string[]): Promise<Processed[]> {
   }
   if (newest) {
     const seen = (await sql`SELECT kind FROM v2_decisions WHERE message_id = ${newest.message_id}`) as any[];
-    out.push(seen.length ? { message_id: newest.message_id, skipped: `already decided (${seen[0].kind})` } : await processMessage(newest.message_id, { execute: false }));
+    out.push(seen.length ? { message_id: newest.message_id, skipped: `already decided (${seen[0].kind})` } : await processMessage(newest.message_id, { execute: v2Writes() }));
   }
   return out;
+}
+
+/**
+ * The bot runs one operation at a time (bot_lease, 240s), so two emails a minute apart can
+ * meet. "busy" is answered before the ledger or the browser, so nothing was sent and asking
+ * again is safe. Two minutes of waiting fits the intake route's 300s with a write after it.
+ */
+async function runWhenFree(source: string, op: Parameters<typeof runOp>[1]): Promise<RunResult> {
+  for (let waited = 0; ; waited += 10) {
+    const r = await runOp(source, op, { testOnly: !v2Writes() });
+    if (r.status !== "busy" || waited >= 120) return r;
+    await new Promise((done) => setTimeout(done, 10_000));
+  }
 }
 
 export async function processMessage(message_id: string, opts: { execute: boolean; world?: World } = { execute: false }): Promise<Processed> {
@@ -164,7 +179,7 @@ export async function processMessage(message_id: string, opts: { execute: boolea
   if (!opts.execute || decision.kind !== "write") return { message_id, interpretation, decision };
   const executed: RunResult[] = [];
   for (const { source, op } of decision.ops) {
-    const r = await runOp(source, op, { testOnly: true });
+    const r = await runWhenFree(source, op);
     executed.push(r);
     if (r.status !== "verified") break;
   }
