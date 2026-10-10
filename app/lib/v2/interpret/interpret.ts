@@ -80,7 +80,9 @@ export function ground(x: Extraction, newest: string, sentIso: string): Interpre
   let po: string | undefined;
   const notes: string[] = [];
   if (x.po) {
-    if (quoteIn(newest, x.po.quote) && poAfterLabel(x.po.quote, x.po.value)) po = x.po.value;
+    // The label is looked for in the whole newest message: a model quotes "UKPO26-13426"
+    // alone when the client wrote "Will be the PO number" on the next line.
+    if (quoteIn(newest, x.po.quote) && quoteIn(x.po.quote, x.po.value) && poAfterLabel(newest, x.po.value)) po = x.po.value;
     else notes.push(`PO "${x.po.value}" left off: not a single reference after a PO label`);
   }
   return { intent: x.intent, po, requests, problems: problems.filter((p) => !requests.some((r) => r.problems.includes(p))), notes };

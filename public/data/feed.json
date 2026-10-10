@@ -2862,5 +2862,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0149",
+  "ts": "2026-10-10T07:03:04+00:00",
+  "kind": "measurement",
+  "headline": "shadow day 1 scored: 3/3 writes match ops, 0 wrong; 4 refused-by-parser misses fixed",
+  "subject": "Four of ops' hand edits on 10-09 are now planned the same way by the shadow engine",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 187,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]

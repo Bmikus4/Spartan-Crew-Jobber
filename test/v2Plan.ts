@@ -15,7 +15,8 @@ const ok = (cond: boolean, label: string, extra = "") => {
 const slot = (id: number, day: string, start: string, end: string, size: number, chief = false, loc = 900) =>
   ({ id, beginning: `${day}T${start}:00+01:00`, end: `${day}T${end}:00+01:00`, size, profession_id: chief ? 36 : 1, role: chief ? 1 : 0, slotlocation_id: loc });
 // Event Concept (137): R11352 has Steve's 4 on Fri 9 Oct (CC1 + Crew3); R11199 has two shifts on 6 Oct.
-const R11352 = { id: 16388, number: "11352", company_id: 137, intern_name: "", Job: [{ SlotTeam: [{ id: 1, name: "Crew", Slot: [slot(11, "2026-10-09", "09:00", "17:00", 1, true), slot(12, "2026-10-09", "09:00", "17:00", 3)] }] }] };
+const atBDC = <T,>(s: T) => ({ ...s, SlotLocation: { place_id: 29 } });
+const R11352 = { id: 16388, number: "11352", company_id: 137, intern_name: "", Job: [{ SlotTeam: [{ id: 1, name: "Crew", Slot: [atBDC(slot(11, "2026-10-09", "09:00", "17:00", 1, true)), atBDC(slot(12, "2026-10-09", "09:00", "17:00", 3))] }] }] };
 const R11199 = { id: 16220, number: "11199", company_id: 137, intern_name: "", Job: [{ SlotTeam: [
   { id: 2, name: "Install", Slot: [slot(21, "2026-10-06", "08:00", "14:00", 4)] },
   { id: 3, name: "Derig", Slot: [slot(31, "2026-10-06", "22:00", "23:30", 2)] },
@@ -133,6 +134,12 @@ ok(positionsFor(12) === null, "12 crew: not decided here");
   {
     const d = await plan(msg("crew@eventconcept.com", "4 crew Friday 9th 09:00-17:00 at Business Design Centre"), I([r({ date: "2026-10-09", start: "09:00", end: "17:00", crew: 4, venue: "Business Design Centre" })], { intent: "booking" }), world);
     ok(d.kind === "none" && /R11352/.test((d as any).reason), "a shift ops already built is not booked again", JSON.stringify(d));
+  }
+  {
+    // EMS 10-09: the Mandarin Oriental install had the Roundhouse derig's day and hours.
+    const venues: World = { ...world, placesNamed: async (n) => (/business design centre/i.test(n) ? [{ id: 29, name: "Business Design Centre" }] : /olympia/i.test(n) ? [{ id: 31, name: "Olympia" }] : []) };
+    const d = await plan(msg("crew@eventconcept.com", "4 crew Friday 9th 09:00-17:00 at Olympia"), I([r({ date: "2026-10-09", start: "09:00", end: "17:00", crew: 4, venue: "Olympia" })], { intent: "booking" }), venues);
+    ok(d.kind === "write" && (d.ops[0].op as any).shifts[0].place_id === "31", "the same hours at another venue are not that booking", JSON.stringify(d).slice(0, 200));
   }
   {
     const d = await plan(msg("crew@eventconcept.com", "4 crew at Business Design Centre, 32 Upper St, London on 14/10 18:45-20:45"), I([r({ date: "2026-10-14", start: "18:45", end: "20:45", crew: 4, venue: "Business Design Centre, 32 Upper St, London" })], { intent: "booking" }), world);

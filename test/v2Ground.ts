@@ -93,6 +93,29 @@ ok(poAfterLabel("PO number: PO-2026-114", "PO-2026-114"), "a reference that star
 ok(!poAfterLabel("please find attached PO for Legal Geek - Truman Brewery 12/10/26", "Legal Geek - Truman Brewery 12/10/26"), "an event name after 'PO for' is not a PO");
 ok(!poAfterLabel("Re: Price quote - R11221 We Are Family", "R11221"), "Spartan's own order number with no PO label is not a PO");
 ok(!poAfterLabel("PO 489631", "48963"), "a prefix of the written reference is not it");
+ok(poAfterLabel("Confirmed, PO number is EAV6274.", "EAV6274"), "PO number is EAV6274 (Essential AV, set by ops 10-09)");
+ok(poAfterLabel("UKPO26-13426\n\nWill be the PO number, just waiting on a PDF", "UKPO26-13426"), "a label after the reference (Creative Technology)");
+ok(poAfterLabel("Please find attached PO-UK000018983 in relation to your Quote R11351", "PO-UK000018983"), "a reference that carries its own PO prefix (Solotech)");
+ok(!poAfterLabel("J46250 - 13/10/26 @ The Carter Building", "J46250"), "EMS's job number is still not a PO (ops wrote 6987)");
+ok(!poAfterLabel("Please find attached PO-UK0000189831", "PO-UK000018983"), "a self-labelled reference must be written whole");
+
+console.log("shapes measured in the first shadow day (10-09)");
+eq(parseTime("@ 18:30"), "18:30", "@ 18:30 (Harbour Scenic)");
+eq(parseTime("0800 AM"), "08:00", "0800 AM (Wall to Wall)");
+eq(parseTime("starting midday"), "12:00", "starting midday");
+eq(parseTime("from 9am"), "09:00", "from 9am");
+eq(parseCount("Crew Size: 2"), 2, "Crew Size: 2");
+eq(parseCount("6x2hr"), 6, "6x2hr is six crew (Event Concept)");
+eq(parseCount("4x2hr at 07:00"), 4, "4x2hr at 07:00");
+eq(parseDuration("6x2hr"), 120, "and two hours");
+const fri = "2026-10-09T11:42:00Z";
+eq(parseDate("Monday", fri), "2026-10-12", "Monday, sent on a Friday (Concept Furniture)");
+eq(parseDate("the Tuesday shift", fri), "2026-10-13", "the Tuesday shift (Carrier)");
+eq(parseDate("Sunday", fri), "2026-10-11", "Sunday");
+eq(parseDate("Friday", fri), null, "the sent day's own weekday: today or a week today");
+eq(parseDate("next Friday", fri), null, "next Friday: this coming one or the one after");
+eq(parseDate("Monsoon at Christie's", fri), null, "Monsoon is not a Monday");
+eq(parseDate("dismantle of Monsoon, Tue 13th October", fri), "2026-10-13", "nor does it contradict a written date");
 
 if (fails) { console.log(`\n${fails} FAILED`); process.exit(1); }
 console.log("\nall passed");

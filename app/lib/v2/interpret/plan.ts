@@ -177,10 +177,20 @@ export async function plan(msg: Message, i: Interpretation, world: World, thread
     // Already booked: a client's order holding a live shift over exactly the asked window on
     // that day. Measured 10-07: every engine order in To Confirm duplicated one ops had built
     // by hand. Some booked and some not is for a person to untangle.
+    // The venue counts when the email names one OnSinch knows: EMS's Mandarin Oriental install
+    // (10-09) has the same day, hours and crew as its Roundhouse derig, and was not booked.
     const orders = await world.companyOrders(companyId);
+    const placeIds = new Map<Request, Set<number> | null>();
+    for (const r of news) {
+      const venue = r.venue ?? news.find((x) => x.venue)?.venue;
+      const places = venue ? await placesFor(world, venue) : [];
+      placeIds.set(r, places.length === 1 ? new Set(places.map((p) => Number(p.id))) : null);
+    }
     const bookedIn = (r: Request) => {
       const w = shiftWindow(r.date!, r.start!, r.end!);
-      return orders.find((o) => teams(o).some((t) => t.slots.some((s) => Date.parse(s.beginning) === Date.parse(w.beginning) && Date.parse(s.end) === Date.parse(w.end))));
+      const at = placeIds.get(r);
+      return orders.find((o) => teams(o).some((t) => t.slots.some((s) => Date.parse(s.beginning) === Date.parse(w.beginning) && Date.parse(s.end) === Date.parse(w.end)
+        && (!at || at.has(Number(s.SlotLocation?.place_id))))));
     };
     const booked = news.map(bookedIn);
     if (booked.every(Boolean)) return { kind: "none", reason: `already booked: ${[...new Set(booked.map((o) => `R${o.number}`))].join(", ")}` };

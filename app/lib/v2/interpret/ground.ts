@@ -41,10 +41,12 @@ export function quoteIn(text: string, quote: string | null | undefined): boolean
  * "1800", "18:30hrs", "7pm", "0830" -> "HH:MM". Null for anything else ("TBC", "evening").
  */
 export function parseTime(raw: string): string | null {
-  const q = norm(raw).replace(/\s+/g, "");
+  // "@ 18:30", "starting midday", "from 9am": the lead-in word carries no time (measured 10-09).
+  const q = norm(raw).replace(/\s+/g, "").replace(/^(@|at|from|starting(at|from)?|start(ing)?(at)?)(?=\d|mid|noon)/, "");
   if (/^(midday|noon|12noon)$/.test(q)) return "12:00";
   if (q === "midnight") return "00:00";
-  let m = /^(\d{1,2})(?:[:.](\d{2}))?(am|pm)$/.exec(q);
+  // "0800 AM" (Wall to Wall, 10-09) as well as "9.30am".
+  let m = /^(\d{1,2})(?:[:.]?(\d{2}))?(am|pm)$/.exec(q);
   if (m) {
     let h = Number(m[1]);
     const mi = Number(m[2] ?? 0);
@@ -83,12 +85,13 @@ export function addMinutes(hhmm: string, mins: number): string {
 
 const WORDS: Record<string, number> = { one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10, eleven: 11, twelve: 12 };
 
-/** "3 x Crew", "x3", "X2 Crew", "2 crew", "4 x 2hr crew", "four crew" -> 3/3/2/2/4/4. */
+/** "3 x Crew", "x3", "X2 Crew", "2 crew", "4 x 2hr crew", "6x2hr", "four crew" -> 3/3/2/2/4/6/4. */
 export function parseCount(raw: string): number | null {
   const q = norm(raw);
-  // "No. of crew: 3", "Crew required: 4": a booking form's labelled field (EMS, measured 10-09).
-  let m = /^x\s*(\d{1,3})\b/.exec(q) ?? /\b(\d{1,3})\s*x\b/.exec(q) ?? /^(\d{1,3})\b/.exec(q)
-    ?? /^(?:no\.?\s*of|number\s+of)?\s*(?:crew|staff|hands)\s*(?:required|needed)?\s*[:\-]\s*(\d{1,3})\b/.exec(q);
+  // "No. of crew: 3", "Crew required: 4", "Crew Size: 2": a booking form's labelled field
+  // (EMS and Wall to Wall, measured 10-09). "6x2hr" is six crew for two hours (Event Concept).
+  let m = /^x\s*(\d{1,3})\b/.exec(q) ?? /\b(\d{1,3})\s*x(?:\b|(?=\s*\d+(?:\.\d+)?\s*(?:hours?|hrs?|h)\b))/.exec(q) ?? /^(\d{1,3})\b/.exec(q)
+    ?? /^(?:no\.?\s*of|number\s+of)?\s*(?:crew|staff|hands)\s*(?:required|needed|size)?\s*[:\-]\s*(\d{1,3})\b/.exec(q);
   if (m) { const n = Number(m[1]); return n > 0 && n <= 200 ? n : null; }
   m = /^(one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)\b/.exec(q);
   return m ? WORDS[m[1]] : null;
@@ -118,7 +121,30 @@ export function londonDay(sentIso: string): string {
 export function poAfterLabel(text: string, value: string): boolean {
   if (!/^[a-z0-9][a-z0-9\-\/_.]*$/i.test(value) || !/\d/.test(value)) return false;
   const esc = value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  return new RegExp(`\\b(p\\.?o\\.?|purchase order|job (code|no\\.?|number|ref)|ref(erence)?)\\s*(number|no\\.?)?\\s*[:#\\-]?\\s*${esc}(?![a-z0-9])`, "i").test(text);
+  const label = "(p\\.?o\\.?|purchase order|job (code|no\\.?|number|ref)|ref(erence)?)";
+  // Measured 10-09, each set by ops by hand: "PO number is EAV6274", "UKPO26-13426 Will be the
+  // PO number", "attached PO-UK000018983" (the reference carries its own label).
+  return new RegExp(`\\b${label}\\s*(number|no\\.?)?\\s*(is|will be|=)?\\s*[:#\\-]?\\s*${esc}(?![a-z0-9])`, "i").test(text)
+    || new RegExp(`(?<![a-z0-9])${esc}\\s*(is|will be)\\s+(the|our)\\s+${label}\\b`, "i").test(text)
+    || (/^p\.?o[-#]?\d|^p\.?o-[a-z]/i.test(value) && new RegExp(`(?<![a-z0-9])${esc}(?![a-z0-9])`, "i").test(text));
+}
+
+const WEEKDAYS = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"];
+
+/** A weekday's first three letters, from a whole weekday word only: "Monsoon at Christie's" is not a Monday. */
+const weekdayIn = (q: string): string | null =>
+  /\b(mon(day)?|tue(s(day)?)?|wed(nesday)?|thu(r(s(day)?)?)?|fri(day)?|sat(urday)?|sun(day)?)\b/.exec(q)?.[1].slice(0, 3) ?? null;
+
+/**
+ * A weekday with no date, "Monday" or "the Tuesday shift": the first such day after the sent
+ * day. Measured 10-09: four bookable changes in one day were written this way and ops made
+ * each one. Refused when it could be either of two days: the sent day's own weekday (today, or
+ * a week today), and "next Friday" (this coming one, or the one after, in British use).
+ */
+function weekdayAlone(q: string, weekday: string, sent: Date): string | null {
+  if (/\d/.test(q) || /\b(next|last|following|previous)\b/.test(q)) return null;
+  const gap = (WEEKDAYS.indexOf(weekday) - sent.getUTCDay() + 7) % 7;
+  return gap === 0 ? null : new Date(sent.getTime() + gap * 864e5).toISOString().slice(0, 10);
 }
 
 export function parseDate(raw: string, sentIso: string): string | null {
@@ -131,7 +157,7 @@ export function parseDate(raw: string, sentIso: string): string | null {
     const day = new Date(Date.parse(sentDay + "T12:00:00Z") + (rel[1] === "tomorrow" ? 864e5 : 0));
     const iso = day.toISOString().slice(0, 10);
     const rest = q.replace(rel[0], " ");
-    const wd = /\b(mon|tue|wed|thu|fri|sat|sun)[a-z]*\b/.exec(rest)?.[1];
+    const wd = weekdayIn(rest);
     if (wd && ["sun", "mon", "tue", "wed", "thu", "fri", "sat"][day.getUTCDay()] !== wd) return null;
     if (/\d/.test(rest.replace(/\b\d{1,2}([:.]\d{2})?\s*(am|pm)\b|\b\d{1,2}:\d{2}\b/g, ""))) {
       const other = parseDate(rest, sentIso);
@@ -140,7 +166,7 @@ export function parseDate(raw: string, sentIso: string): string | null {
     return iso;
   }
   const sent = new Date(sentDay + "T12:00:00Z");
-  const weekday = /\b(mon|tue|wed|thu|fri|sat|sun)[a-z]*\b/.exec(q)?.[1] ?? null;
+  const weekday = weekdayIn(q);
   let d: number, mo: number | null = null, y: number | null = null;
   let m = /\b(\d{1,2})[/.](\d{1,2})(?:[/.](\d{2}|\d{4}))?\b/.exec(q);
   if (m) {
@@ -158,7 +184,7 @@ export function parseDate(raw: string, sentIso: string): string | null {
       d = Number(mf[2]); mo = mfi; if (mf[3]) y = Number(mf[3]);
     } else {
       m = /\b(\d{1,2})(?:st|nd|rd|th)\b/.exec(q);
-      if (!m) return null;
+      if (!m) return weekday ? weekdayAlone(q, weekday, sent) : null;
       d = Number(m[1]);
     }
   }

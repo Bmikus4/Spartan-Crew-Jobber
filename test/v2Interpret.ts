@@ -103,6 +103,13 @@ console.log("changes");
   ok(t("2027-12-04").requests[0].target?.date === undefined && t("2027-12-04").requests[0].problems.length > 0, "and refused when those words say another day");
 }
 {
+  // Creative Technology 10-09: the model quotes the reference alone; its label is on the next line.
+  const i = ground(ex([], { intent: "info_only", po: g("UKPO26-13426", "UKPO26-13426") }), "UKPO26-13426\n\nWill be the PO number, just waiting on a PDF version", sent);
+  ok(i.po === "UKPO26-13426", "a PO's label is found anywhere in the newest message", JSON.stringify(i.notes));
+  const j = ground(ex([], { intent: "info_only", po: g("13426", "PO UKPO26-13426") }), "PO UKPO26-13426", sent);
+  ok(j.po === undefined, "a value its own quote does not contain is refused");
+}
+{
   const i = ground(ex([req({ action: "change_times", date: { value: "2026-10-16" } as any, start: g("09:00", "09:00") })], { intent: "change" }), "move it to 09:00", sent);
   ok(i.requests[0].problems.some((p) => p.includes("no words quoted")), "a value the model gave without its words is refused by name", JSON.stringify(i.requests[0].problems));
 }
