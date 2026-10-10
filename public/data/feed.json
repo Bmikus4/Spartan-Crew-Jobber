@@ -2918,5 +2918,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0153",
+  "ts": "2026-10-10T23:53:53+00:00",
+  "kind": "measurement",
+  "headline": "TV: single list of tiles restored, reply clock removed, app-wide grain",
+  "subject": "The office TV is one up-and-down list of job tiles again, matte and grained, with no timers",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 187,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]
