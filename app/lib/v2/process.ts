@@ -1,16 +1,17 @@
 // ============================================================================
 // One captured client email, end to end: read -> ground -> plan -> record -> (maybe) write.
 // ----------------------------------------------------------------------------
-// Every email ends in a recorded decision (v2_decisions): written, handed to ops with the
-// reasons, or no action with the reason. A silent drop has no row shape. Writes run only
-// when the caller asks and only through runOp, which is TEST-only until cutover.
+// Every email ends in a recorded decision (v2_decisions): written, left for a person with
+// the reasons, or no action with the reason. A silent drop has no row shape. Nothing is
+// sent to ops: the office TV reads this table (feed/v2.ts) and that is how they hear of it.
+// Writes run only when the caller asks and only through runOp, TEST-only until cutover.
 //
 // The frozen engine's tables are read, never written: thread_messages for the email,
 // conversation_state for the thread's order (the thread itself naming its booking).
 // ============================================================================
 import { neon, type NeonQueryFunction } from "@neondatabase/serverless";
 import { httpTransport, OnsinchClient } from "../engine/onsinch";
-import { normName } from "../engine/resolve";
+import { matchCompanyByDomain, normName } from "../engine/resolve";
 import { extract } from "./interpret/extract";
 import { ground, type Interpretation } from "./interpret/interpret";
 import { latestText } from "./interpret/ground";
@@ -39,6 +40,8 @@ async function db(): Promise<NeonQueryFunction<false, false>> {
         code_version   TEXT,
         created_at     TIMESTAMPTZ NOT NULL DEFAULT now()
       )`;
+    // The client as the TV names it; resolved here because the TV must not read OnSinch per refresh.
+    await _sql`ALTER TABLE v2_decisions ADD COLUMN IF NOT EXISTS company_id INTEGER, ADD COLUMN IF NOT EXISTS company TEXT`;
     _ready = true;
   }
   return _sql;
@@ -83,14 +86,26 @@ const NOT_CLIENT = /spartancrew\.co\.uk|no-?reply|mailer-daemon|postmaster|onsin
 
 const addr = (from: unknown) => String(from ?? "").replace(/.*</, "").replace(/>.*/, "").trim().toLowerCase();
 
+/** The sender's OnSinch company, the planner's rule (one company by the address's domain), or nulls. */
+async function clientOf(from: string, world: World): Promise<{ id: number | null; name: string | null }> {
+  try {
+    const companies = await world.companies();
+    const id = matchCompanyByDomain(from, companies);
+    const name = id ? String(companies.find((c) => Number(c.id) === id)?.name ?? "").trim() : "";
+    return { id: id || null, name: name || null };
+  } catch {
+    return { id: null, name: null };
+  }
+}
+
 /**
  * Intake's entry, in shadow. n8n posts the whole thread whenever anything in it is new,
  * Spartan's own replies included, so what to decide on is what this delivery stored for the
  * first time. Measured 10-09: deciding on n8n's message id read each thread's FIRST message
  * (it is the Gmail thread id), and planned a 14 August PO email onto #13709 as new.
  *
- * Of several new client messages only the newest is read; the older ones go to ops. Read
- * apart, "4 crew" then "make it 5" would be acted on twice. Each message is decided once:
+ * Of several new client messages only the newest is read; the older ones are left for a
+ * person, on the TV. Read apart, "4 crew" then "make it 5" would be acted on twice. Each message is decided once:
  * a re-post buys no second model call.
  */
 export async function decideDelivery(newIds: string[]): Promise<Processed[]> {
@@ -100,11 +115,13 @@ export async function decideDelivery(newIds: string[]): Promise<Processed[]> {
   const client = rows.filter((r) => !r.is_from_spartan && !NOT_CLIENT.test(addr(r.from_address)));
   const newest = client[client.length - 1];
   const out: Processed[] = [];
+  const world = client.length > 1 ? onsinchWorld() : null;
   for (const r of client.slice(0, -1)) {
-    const decision: Decision = { kind: "handoff", reasons: [`arrived with a later client message (${newest.message_id}) in one delivery; read them together`] };
+    const decision: Decision = { kind: "handoff", reasons: [`sent with a later email (${newest.message_id}); the system read only the later one`] };
+    const c = await clientOf(addr(r.from_address), world!);
     await sql`
-      INSERT INTO v2_decisions (message_id, thread_id, from_address, sent_at, kind, decision, code_version)
-      VALUES (${r.message_id}, ${r.thread_id}, ${addr(r.from_address)}, ${r.date_iso}, 'handoff', ${JSON.stringify(decision)}::jsonb, ${process.env.VERCEL_GIT_COMMIT_SHA ?? "local"})
+      INSERT INTO v2_decisions (message_id, thread_id, from_address, sent_at, kind, decision, code_version, company_id, company)
+      VALUES (${r.message_id}, ${r.thread_id}, ${addr(r.from_address)}, ${r.date_iso}, 'handoff', ${JSON.stringify(decision)}::jsonb, ${process.env.VERCEL_GIT_COMMIT_SHA ?? "local"}, ${c.id}, ${c.name})
       ON CONFLICT (message_id) DO NOTHING`;
     out.push({ message_id: r.message_id, decision });
   }
@@ -121,24 +138,28 @@ export async function processMessage(message_id: string, opts: { execute: boolea
   const m = rows[0];
   if (!m) return { message_id, skipped: "message not captured" };
   const from = addr(m.from_address);
+  const world = opts.world ?? onsinchWorld();
+  let client: { id: number | null; name: string | null } = { id: null, name: null };
   const record = async (kind: string, interpretation: unknown, decision: unknown, executed: unknown = null) => {
     await sql`
-      INSERT INTO v2_decisions (message_id, thread_id, from_address, sent_at, kind, interpretation, decision, executed, code_version)
-      VALUES (${message_id}, ${m.thread_id}, ${from}, ${m.date_iso}, ${kind}, ${JSON.stringify(interpretation)}::jsonb, ${JSON.stringify(decision)}::jsonb, ${JSON.stringify(executed)}::jsonb, ${process.env.VERCEL_GIT_COMMIT_SHA ?? "local"})
+      INSERT INTO v2_decisions (message_id, thread_id, from_address, sent_at, kind, interpretation, decision, executed, code_version, company_id, company)
+      VALUES (${message_id}, ${m.thread_id}, ${from}, ${m.date_iso}, ${kind}, ${JSON.stringify(interpretation)}::jsonb, ${JSON.stringify(decision)}::jsonb, ${JSON.stringify(executed)}::jsonb, ${process.env.VERCEL_GIT_COMMIT_SHA ?? "local"}, ${client.id}, ${client.name})
       ON CONFLICT (message_id) DO UPDATE SET kind = EXCLUDED.kind, interpretation = EXCLUDED.interpretation, decision = EXCLUDED.decision,
-        executed = coalesce(EXCLUDED.executed, v2_decisions.executed), code_version = EXCLUDED.code_version`;
+        executed = coalesce(EXCLUDED.executed, v2_decisions.executed), code_version = EXCLUDED.code_version,
+        company_id = EXCLUDED.company_id, company = EXCLUDED.company`;
   };
   if (m.is_from_spartan || NOT_CLIENT.test(from)) {
     const decision: Decision = { kind: "none", reason: "not a client's email" };
     await record("none", null, decision);
     return { message_id, skipped: decision.reason, decision };
   }
+  client = await clientOf(from, world);
   const newest = latestText(String(m.body ?? ""));
   const x = await extract(m.date_iso, from, String(m.subject ?? ""), newest);
   const interpretation = ground(x, `${m.subject ?? ""}\n${newest}`, m.date_iso);
   const bound = (await sql`SELECT onsinch_order_id FROM conversation_state WHERE thread_id = ${m.thread_id}`) as any[];
   const threadOrderId = bound[0]?.onsinch_order_id ? Number(bound[0].onsinch_order_id) : null;
-  const decision = await plan({ message_id, from, subject: String(m.subject ?? ""), sentIso: m.date_iso, text: newest }, interpretation, opts.world ?? onsinchWorld(), threadOrderId);
+  const decision = await plan({ message_id, from, subject: String(m.subject ?? ""), sentIso: m.date_iso, text: newest }, interpretation, world, threadOrderId);
   await record(decision.kind, { extraction: x, grounded: interpretation }, decision);
   if (!opts.execute || decision.kind !== "write") return { message_id, interpretation, decision };
   const executed: RunResult[] = [];

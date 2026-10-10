@@ -112,6 +112,8 @@ export interface FeedCard {
   subject: string;
   /** Open, with nothing done on it by anyone for QUIET_MS: listed below the fresh ones. */
   quiet: boolean;
+  /** What the system says about this item: why it needs a person, or what it did. Null for the paused engine's. */
+  note: string | null;
 }
 
 /** One follow-up alert, already narrowed to the fields the TV may show. */
@@ -226,6 +228,61 @@ const firstName = (v: unknown) => str(v)?.split(/\s+/)[0] ?? null;
 const epochMs = (n: unknown) => { const v = Number(n); return !Number.isFinite(v) || v <= 0 ? 0 : v < 1e12 ? v * 1000 : v; };
 
 /**
+ * One thread as the TV draws it, from either engine: the paused engine's state
+ * (stateSource) or the rebuild's newest decision (v2.ts). The card, the green rules, the
+ * memory and the verifier's wants are the same for both, so the TV reads one way.
+ */
+export interface FeedSource {
+  thread_id: string;
+  days: string[];
+  item: (Omit<FeedItem, "green"> & { order_id: number | null }) | null;
+  /** The thread's bound order, for a need remembered after the thread stopped yielding it. */
+  order_id: number | null;
+  r_number: string | null;
+  j_number: string | null;
+  company_id: number | null;
+  company: string | null;
+  contact: string | null;
+  venue: string | null;
+  subject: string;
+  crew: number | null;
+  starts_at: number | null;
+  /** The newest write made on the thread (ms), 0 for none. */
+  last_write: number;
+  want: FeedWant;
+  note: string | null;
+  resolvedText: string;
+}
+
+function stateSource(s: ConversationState, lastInbound: Map<string, number>, now: number): FeedSource {
+  return {
+    thread_id: s.thread_id,
+    days: jobDays(s),
+    /**
+     * `not-a-job` yields nothing EXCEPT where the engine's own predicate still holds: a client
+     * calling a booked job off reads to the model as not-a-job, and cannotBeBooked keeps
+     * that thread as a need on purpose (pipeline.ts, verified 2026-10-01). Dropping it here
+     * would hide the most dangerous update there is.
+     */
+    item: s.classification === "not-a-job" && !cannotBeBooked(s) ? null : orderItem(s, lastInbound.get(s.thread_id)),
+    order_id: Number(s.onsinch_order_id) > 0 ? Number(s.onsinch_order_id) : null,
+    r_number: str(s.onsinch_order_number) ? `R${String(s.onsinch_order_number).replace(/^R/i, "")}` : null,
+    j_number: Number(s.onsinch_job_id) > 0 ? `J${s.onsinch_job_id}` : null,
+    company_id: Number(s.company_id) > 0 ? Number(s.company_id) : null,
+    company: str(s.facts?.company_name),
+    contact: firstName(s.facts?.contact_name),
+    venue: str(s.facts?.location_text),
+    subject: s.subject ?? "",
+    crew: crewOf(s),
+    starts_at: nextStart(s, now),
+    last_write: Math.max(0, ...(s.order_action_log ?? []).filter((a) => a.ok).map((a) => epochMs(a.ts))),
+    want: wantOf(s),
+    note: null,
+    resolvedText: resolvedText(s),
+  };
+}
+
+/**
  * A thread's one order item, or null: a need while the engine's own predicate says a
  * person is required, otherwise the latest write it made, to be checked.
  *
@@ -271,6 +328,7 @@ export function project(
   replies: ReplyNeed[] | null,
   now: number,
   lastOutbound: Map<string, number> = new Map(),
+  v2: FeedSource[] = [],
 ): Projection {
   const today = londonDay(now);
   const dismissed = new Set(marks.filter((m) => m.mark === "dismissed").map((m) => m.thread_id));
@@ -323,18 +381,18 @@ export function project(
     if (m.at >= (lastOpen.get(m.thread_id)?.at ?? -Infinity)) lastOpen.set(m.thread_id, m);
   }
 
-  for (const s of states) {
-    if (!s?.thread_id || dismissed.has(s.thread_id)) continue;
-    const days = jobDays(s);
+  // The rebuild's decision on a thread replaces the paused engine's state for it: the state
+  // stopped moving when the engine was paused, and the decision is about a newer email.
+  const sources = new Map<string, FeedSource>();
+  for (const s of states) if (s?.thread_id) sources.set(s.thread_id, stateSource(s, lastInbound, now));
+  for (const v of v2) sources.set(v.thread_id, v);
+
+  for (const s of sources.values()) {
+    if (dismissed.has(s.thread_id)) continue;
+    const days = s.days;
     if (days.length && days[days.length - 1] < today) continue; // the job is over
 
-    /**
-     * `not-a-job` yields nothing EXCEPT where the engine's own predicate still holds: a client
-     * calling a booked job off reads to the model as not-a-job, and cannotBeBooked keeps
-     * that thread as a need on purpose (pipeline.ts, verified 2026-10-01). Dropping it here
-     * would hide the most dangerous update there is.
-     */
-    let it = s.classification === "not-a-job" && !cannotBeBooked(s) ? null : orderItem(s, lastInbound.get(s.thread_id));
+    let it = s.item;
     /**
      * A need the TV showed, which the thread no longer yields, resolved without an engine
      * write. So does one whose thread now yields only a write OLDER than the need: that is
@@ -344,11 +402,11 @@ export function project(
     if (was && (!it || ((it.kind === "created-check" || it.kind === "updated-check") && it.at < was.at))) {
       if (!byKey.has(was.item_key)) {
         // Shown once stored: serveFeed writes this and projects again, so its time is the first sighting.
-        remember.push({ item_key: was.item_key, thread_id: s.thread_id, mark: "resolved", by: null, evidence: { text: resolvedText(s) } });
+        remember.push({ item_key: was.item_key, thread_id: s.thread_id, mark: "resolved", by: null, evidence: { text: s.resolvedText } });
         continue;
       }
       const kind = was.item_key.split(":")[0] as FeedKind;
-      it = { item_key: was.item_key, kind, status: STATUS_TEXT[kind], at: was.at, order_id: Number(s.onsinch_order_id) > 0 ? Number(s.onsinch_order_id) : null };
+      it = { item_key: was.item_key, kind, status: STATUS_TEXT[kind], at: was.at, order_id: s.order_id };
     }
     if (!it) continue;
     const g = green(it);
@@ -361,8 +419,8 @@ export function project(
     else counts.to_check++;
 
     const { order_id, ...item } = it;
-    const r_number = str(s.onsinch_order_number) ? `R${String(s.onsinch_order_number).replace(/^R/i, "")}` : foundNo.get(it.item_key)?.r ?? null;
-    const j_number = Number(s.onsinch_job_id) > 0 ? `J${s.onsinch_job_id}` : order_id ? null : foundNo.get(it.item_key)?.j ?? null;
+    const r_number = s.r_number ?? foundNo.get(it.item_key)?.r ?? null;
+    const j_number = s.j_number ?? (order_id ? null : foundNo.get(it.item_key)?.j ?? null);
     /**
      * A JOB HAS NO TIMER (Ben, 2026-10-06). Once an order exists in OnSinch the reply clock is
      * gone, and with it the clock's pull to the top of the list; it counts only for an enquiry
@@ -374,8 +432,7 @@ export function project(
      * or a person's tick or edit. Measured from the client alone, a job the engine updated
      * yesterday sank under "quiet" because the client had last written a week ago.
      */
-    const lastWrite = Math.max(0, ...(s.order_action_log ?? []).filter((a) => a.ok).map((a) => epochMs(a.ts)));
-    const lastActivity = Math.max(lastInbound.get(s.thread_id) ?? 0, lastOutbound.get(s.thread_id) ?? 0, lastWrite, actedAt.get(s.thread_id) ?? 0) || it.at;
+    const lastActivity = Math.max(lastInbound.get(s.thread_id) ?? 0, lastOutbound.get(s.thread_id) ?? 0, s.last_write, actedAt.get(s.thread_id) ?? 0) || it.at;
     cards.set(s.thread_id, {
       thread_id: s.thread_id,
       // The legend's colour is the NEED, not whether an order is bound (Ben, 2026-10-04): an
@@ -386,20 +443,21 @@ export function project(
       green: !!g,
       at: it.at,
       order_id,
-      company_id: Number(s.company_id) > 0 ? Number(s.company_id) : null,
-      company: str(s.facts?.company_name),
-      contact: firstName(s.facts?.contact_name),
+      company_id: s.company_id,
+      company: s.company,
+      contact: s.contact,
       dates: days,
-      starts_at: nextStart(s, now),
+      starts_at: s.starts_at,
       awaiting_reply_since: isJob ? null : awaiting(s.thread_id),
-      crew: crewOf(s),
-      venue: str(s.facts?.location_text),
+      crew: s.crew,
+      venue: s.venue,
       r_number,
       j_number,
-      subject: s.subject ?? "",
+      subject: s.subject,
       quiet: !g && now - lastActivity > QUIET_MS,
+      note: s.note,
     });
-    if (!g) wants.set(s.thread_id, wantOf(s));
+    if (!g) wants.set(s.thread_id, s.want);
     // Needs only: a check's key is its write, and a remembered check would read as resolved
     // on the next refresh, the write being older than the moment it was first seen.
     if (!g && (it.kind === "needs-created" || it.kind === "needs-updated") && !openKeys.has(it.item_key)) {
@@ -425,7 +483,7 @@ export function project(
     cards.set(r.thread_id, {
       thread_id: r.thread_id, colour: "neutral", lane: "reply", items: [item], green: false, at: item.at,
       order_id: null, company_id: null, company: r.company, contact: firstName(r.contact),
-      dates: [], starts_at: null, awaiting_reply_since: item.at, crew: null, venue: null, r_number: null, j_number: null, subject: r.subject, quiet: false,
+      dates: [], starts_at: null, awaiting_reply_since: item.at, crew: null, venue: null, r_number: null, j_number: null, subject: r.subject, quiet: false, note: null,
     });
   }
 

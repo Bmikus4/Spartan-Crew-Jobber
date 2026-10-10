@@ -9,6 +9,7 @@
 // ============================================================================
 import { project, STATUS_TEXT, DONE_DWELL_MS, STALE_UNDATED_MS, QUIET_MS, dismissKey, londonInstant, type FeedMark } from "../app/lib/feed/project";
 import type { ConversationState } from "../app/lib/engine/types";
+import { v2Sources, type V2Row } from "../app/lib/feed/v2";
 
 let fails = 0;
 const ok = (cond: boolean, label: string, extra = "") => {
@@ -248,5 +249,37 @@ console.log("\n[14] a need that resolves without an engine write turns green ins
   ok(p.remember.length === 0 && p.cards[0]?.items[0].green?.mark === "checked", "a need ticked before it resolved stays in done as ticked");
 }
 
-console.log(fails ? `\n${fails} FAILED` : "\nALL PASS");
+console.log("\n[15] the rebuild's decisions reach ops on the TV and nowhere else (Ben, 2026-10-10)");
+{
+  const row = (thread: string, over: Partial<V2Row>): V2Row => ({
+    thread_id: thread, message_id: `m-${thread}`, sent_at: new Date(NOW - H).toISOString(), kind: "handoff",
+    grounded: { intent: "change", requests: [], problems: [] }, decision: { kind: "handoff", reasons: ["the request is unclear"] },
+    executed: null, company_id: 343, company: "Impact Collective", from_address: "sam@impact.example", subject: "Re: R11475 Monday", ...over,
+  });
+  const quote = row("q", { grounded: { intent: "quote_request", requests: [], problems: [] }, decision: { kind: "handoff", reasons: ["the client asked for a quote"] }, subject: "Crew prices" });
+  const change = row("c", { grounded: { intent: "change", requests: [{ action: "change_crew", date: "2026-10-12", crew: 6, problems: [] }], problems: [] }, decision: { kind: "handoff", reasons: ["R11475 shift 7: the email says 6 crew, the shift has 5"] } });
+  const ops = [{ source: "m-w#0", op: { kind: "set_position_times" as const, order_id: 950, slot_id: 5, date: "2026-10-10", start: "11:00", end: "15:00" } }];
+  const shadow = row("w", { kind: "write", decision: { kind: "write", ops, why: ["R11275 shift 41719: times to 11:00-15:00"] }, subject: "Saturday" });
+  const written = row("x", { kind: "write", decision: { kind: "write", ops, why: ["R11275 shift 41719: times to 11:00-15:00"] }, executed: [{ op_key: "k", status: "verified", reasons: [] }] });
+  const p = project([], new Map(), [], null, NOW, new Map(), v2Sources([quote, change, shadow, written], NOW));
+  const by = new Map(p.cards.map((c) => [c.thread_id, c]));
+  ok(by.get("q")?.items[0].kind === "needs-created" && by.get("q")?.note === "The client asked for a quote" && by.get("q")?.company === "Impact Collective", "a quote is a new job for a person, with the system's reason on the card");
+  ok(by.get("c")?.items[0].kind === "needs-updated" && by.get("c")?.r_number === "R11475" && by.get("c")?.dates[0] === "2026-10-12" && by.get("c")?.crew === 6, "a change it could not make reads needs updated, on the order the reason names");
+  ok(p.wants.get("c")?.r_numbers[0] === "11475", "and the verifier looks for that order, so a staff edit there closes it");
+  ok(by.get("w")?.items[0].kind === "needs-updated" && by.get("w")?.order_id === 950 && /^Not written yet \(shadow\): R11275/.test(by.get("w")?.note ?? ""), "a planned write not yet made is still a person's job, saying what the system would do");
+  ok(by.get("x")?.items[0].kind === "updated-check" && !by.get("x")?.green && p.counts.to_check === 1, "a write the system made is a check, never an automatic green");
+  ok(p.counts.needs_created === 1 && p.counts.needs_updated === 2, "counted with the rest");
+
+  const later = row("c", { message_id: "m-c2", sent_at: new Date(NOW - 30 * 60_000).toISOString(), decision: { kind: "handoff", reasons: ["no venue in the email"] }, grounded: { intent: "booking", requests: [], problems: [] }, subject: "Another" });
+  const both = v2Sources([change, later], NOW);
+  ok(both.length === 1 && both[0].note === "No venue in the email", "a thread shows its newest decision that needs a person");
+  const state = needsUpdated("c");
+  const merged = project([state], new Map(), [], null, NOW, new Map(), v2Sources([change], NOW));
+  ok(merged.cards.length === 1 && /6 crew/.test(merged.cards[0].note ?? ""), "the rebuild's decision replaces the paused engine's state for the same thread");
+  ok(project([state], new Map(), [], null, NOW).cards[0]?.note === null, "the paused engine's own cards carry no note");
+  const past = row("old", { grounded: { intent: "change", requests: [{ action: "change_times", date: "2026-09-30", problems: [] }], problems: [] } });
+  ok(project([], new Map(), [], null, NOW, new Map(), v2Sources([past], NOW)).cards.length === 0, "a job that is over leaves the TV");
+}
+
+console.log(fails ?`\n${fails} FAILED` : "\nALL PASS");
 process.exitCode = fails ? 1 : 0;

@@ -273,7 +273,8 @@ function Row({ card, now, s, phase, onTick }: { card: FeedCard; now: number; s: 
   const sameYear = t != null && fmt(t, { year: "numeric" }) === fmt(now, { year: "numeric" });
   const evidence = it ? evidenceLine(it) : null;
   const numbers = numbersOf(card);
-  const detail = [card.contact, card.crew ? `${card.crew} crew` : null, card.venue].filter(Boolean).join(" · ");
+  // The system's own line leads: it is what tells ops why this card needs them.
+  const detail = [done ? null : card.note, card.contact, card.crew ? `${card.crew} crew` : null, card.venue].filter(Boolean).join(" · ");
 
   return (
     <div style={{

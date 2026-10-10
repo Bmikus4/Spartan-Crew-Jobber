@@ -25,7 +25,7 @@ export type Request = {
 /** problems block the email (no write); notes are kept with the decision and block nothing. */
 export type Interpretation = { intent: Extraction["intent"]; po?: string; requests: Request[]; problems: string[]; notes?: string[] };
 
-/** Trades the bot has been benched on, by the words clients use. Anything else goes to ops. */
+/** Trades the bot has been benched on, by the words clients use. Anything else is left for a person. */
 const BENCHED_TRADES = /^(general )?(crew|crew members?|labou?rers?|hands?|stagehands?|local crew|crewing)$/i;
 
 export function ground(x: Extraction, newest: string, sentIso: string): Interpretation {

@@ -1,9 +1,9 @@
 // ============================================================================
-// The planner: grounded requests + what OnSinch holds now -> bot operations, or a hand-off
-// to ops with the reason, or no action with the reason. Nothing here writes.
+// The planner: grounded requests + what OnSinch holds now -> bot operations, or the reason a
+// person must do it (shown on the office TV), or no action with the reason. Nothing here writes.
 // ----------------------------------------------------------------------------
 // All-or-nothing per email: if any request in it cannot be planned, the whole email goes
-// to ops. Half an email automated and half by hand is how a change gets done twice.
+// to a person. Half an email automated and half by hand is how a change gets done twice.
 //
 // "Never infer from history unless explicitly requested and the job can be found" (Ben,
 // 10-06). An existing booking is touched only when the email names it: an R number, the

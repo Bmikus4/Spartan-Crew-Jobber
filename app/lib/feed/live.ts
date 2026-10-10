@@ -6,6 +6,7 @@ import { httpTransport } from "../engine/onsinch";
 import { followupsEnabled } from "../followup/enabled";
 import type { FeedDeps } from "./serve";
 import type { ReplyNeed } from "./project";
+import type { V2Row } from "./v2";
 import type { ConversationState } from "../engine/types";
 
 let _sql: NeonQueryFunction<false, false> | null = null;
@@ -53,9 +54,27 @@ async function replies(): Promise<ReplyNeed[]> {
     .map((a) => ({ thread_id: a.thread_id, since_iso: a.waiting_since_iso, company: a.company_name, contact: a.contact_name, subject: a.subject }));
 }
 
+/**
+ * The rebuild's first build (685838f, 10-09 10:07-10:20Z) decided on each thread's OLDEST
+ * email, so its rows are about mail that was dealt with weeks ago. Decisions made on a
+ * workstation ("local": replays, the TEST bench) are not the intake's.
+ */
+const V2_FROM = "2026-10-09T10:20:00Z";
+
+async function v2(): Promise<V2Row[]> {
+  const [t] = (await db()`SELECT to_regclass('public.v2_decisions') AS t`) as { t: string | null }[];
+  if (!t?.t) return [];
+  const rows = (await db()`
+    SELECT d.thread_id, d.message_id, d.sent_at, d.kind, d.interpretation->'grounded' AS grounded, d.decision, d.executed,
+           d.company_id, d.company, d.from_address, m.subject
+    FROM v2_decisions d LEFT JOIN thread_messages m ON m.message_id = d.message_id
+    WHERE d.kind IN ('write', 'handoff') AND coalesce(d.code_version, '') <> 'local' AND d.created_at >= ${V2_FROM}`) as any[];
+  return rows.map((r) => ({ ...r, company_id: r.company_id == null ? null : Number(r.company_id) }));
+}
+
 export function liveFeedDeps(): FeedDeps {
   return {
-    states, inbound, marks: allMarks,
+    states, inbound, marks: allMarks, v2,
     replies: followupsEnabled() ? replies : null,
     // verify() wraps this transport in readOnly() before its first call.
     verify: (cards, now, marks, wants) => verify(cards, now, {

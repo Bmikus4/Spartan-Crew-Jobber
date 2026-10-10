@@ -10,6 +10,7 @@
 // A verifier that throws is reported in `health.verify` and the feed is served anyway.
 // ============================================================================
 import { project, type FeedCard, type FeedMark, type FeedWant, type ReplyNeed } from "./project";
+import { v2Sources, type V2Row } from "./v2";
 import { intakeHealth } from "../intakeHealth";
 import type { ConversationState } from "../engine/types";
 
@@ -25,20 +26,23 @@ export interface FeedDeps {
   verifyStatus?: () => Promise<{ last_verify_at: string | null; note: string | null }>;
   /** Stores the projection's `open` and `resolved` marks; insert-once, so two screens agree. */
   remember?: (marks: Array<Omit<FeedMark, "at">>) => Promise<void>;
+  /** The rebuild's decisions that need a person or made a change (v2_decisions). */
+  v2?: () => Promise<V2Row[]>;
 }
 
 export async function serveFeed(deps: FeedDeps, now: number): Promise<{ status: number; body: Record<string, unknown> }> {
-  let states: ConversationState[], inbound: Awaited<ReturnType<FeedDeps["inbound"]>>, marks: FeedMark[], replies: ReplyNeed[] | null;
+  let states: ConversationState[], inbound: Awaited<ReturnType<FeedDeps["inbound"]>>, marks: FeedMark[], replies: ReplyNeed[] | null, v2rows: V2Row[];
   try {
-    [states, inbound, marks, replies] = await Promise.all([
-      deps.states(), deps.inbound(), deps.marks(), deps.replies ? deps.replies() : Promise.resolve(null),
+    [states, inbound, marks, replies, v2rows] = await Promise.all([
+      deps.states(), deps.inbound(), deps.marks(), deps.replies ? deps.replies() : Promise.resolve(null), deps.v2 ? deps.v2() : Promise.resolve([]),
     ]);
   } catch (err) {
     console.error("[feed] read failed", err);
     return { status: 500, body: { ok: false, error: "could not read the feed" } };
   }
 
-  let p = project(states, inbound.byThread, marks, replies, now, inbound.outByThread);
+  const v2 = v2Sources(v2rows, now);
+  let p = project(states, inbound.byThread, marks, replies, now, inbound.outByThread, v2);
   let reread = false;
 
   // Like verification, memory is extra: a failed write leaves a resolved need off the list
@@ -62,7 +66,7 @@ export async function serveFeed(deps: FeedDeps, now: number): Promise<{ status: 
       verify = { ran: true, wrote: 0, note: `verify failed: ${String((err as Error)?.message ?? err).slice(0, 160)}` };
     }
   }
-  if (reread) p = project(states, inbound.byThread, await deps.marks(), replies, now, inbound.outByThread);
+  if (reread) p = project(states, inbound.byThread, await deps.marks(), replies, now, inbound.outByThread, v2);
   const status = deps.verifyStatus ? await deps.verifyStatus().catch(() => null) : null;
 
   const intake = intakeHealth({ lastReceivedAt: inbound.latest, now });

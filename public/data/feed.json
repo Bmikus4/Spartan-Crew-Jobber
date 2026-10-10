@@ -2876,5 +2876,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0150",
+  "ts": "2026-10-10T21:19:21+00:00",
+  "kind": "measurement",
+  "headline": "v2 hand-offs reach ops on the TV: 44 open needs, each with the system's reason",
+  "subject": "A v2 decision that needs a person now shows on the office TV with its reason",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 187,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]
