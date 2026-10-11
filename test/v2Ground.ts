@@ -5,6 +5,7 @@
 // Offline.  npx tsx test/v2Ground.ts
 // ============================================================================
 import { latestText, quoteIn, parseTime, parseDuration, parseCount, parseDate, addMinutes, poAfterLabel } from "../app/lib/v2/interpret/ground";
+import { ground } from "../app/lib/v2/interpret/interpret";
 
 let fails = 0;
 const ok = (cond: boolean, label: string, extra = "") => {
@@ -127,6 +128,15 @@ eq(parseDate("Friday the 16th", "2026-10-23T13:01:00Z"), "2026-10-16", "Friday t
 eq(parseDate("Sunday the 16th", "2026-10-23T13:01:00Z"), null, "no 16th in reach is a Sunday: no date");
 ok(poAfterLabel("The PO for R40012 is 37463.", "37463"), "The PO for R40012 is 37463");
 ok(!poAfterLabel("The PO for R40012 is 374631.", "37463"), "and only the whole reference");
+
+console.log("a decrease must say it is one (crew_remove, 10-11)");
+{
+  const sent = "2026-10-12T09:00:00Z";
+  const email = "Hi, for Friday please can you stand down 2 crew, we only need 3 crew now.";
+  const req = (crew_remove: { value: number; quote: string }) => ({ intent: "change" as const, po: null, note: "", requests: [{ action: "change_crew" as const, date: { value: "2026-10-16", quote: "Friday" }, start: null, end: null, duration_minutes: null, crew: null, crew_add: null, crew_remove, venue: null, crew_chief: null, trade: null, target: null }] });
+  eq(ground(req({ value: 2, quote: "stand down 2 crew" }), email, sent).requests[0]?.crew_remove, 2, "stand down 2 crew is a decrease of 2");
+  eq(ground(req({ value: 3, quote: "3 crew" }), email, sent).requests[0]?.crew_remove, undefined, "a bare 3 crew is a total, never a decrease");
+}
 
 if (fails) { console.log(`\n${fails} FAILED`); process.exit(1); }
 console.log("\nall passed");

@@ -3044,5 +3044,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0162",
+  "ts": "2026-10-11T14:10:37+00:00",
+  "kind": "measurement",
+  "headline": "Prompt reads crew decreases and day moves (extract@2c02e41f900b)",
+  "subject": "Clients can ask for fewer crew or move a shift to another day, and the model reads both",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 188,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]

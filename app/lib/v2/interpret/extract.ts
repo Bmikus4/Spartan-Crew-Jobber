@@ -17,7 +17,7 @@ export type RawRequest = {
   crew: Grounded<number>;
   /** "add 2 crew", "2 more": an increase on what is booked, never a total. */
   crew_add: Grounded<number>;
-  /** "stand down 2", "2 fewer": a decrease on what is booked. Not yet in the prompt (needs a paid validation run). */
+  /** "stand down 2", "2 fewer": a decrease on what is booked, never a total. */
   crew_remove?: Grounded<number>;
   venue: Grounded<string>;
   crew_chief: Grounded<boolean>;
@@ -47,6 +47,7 @@ Return ONLY a JSON object:
    "duration_minutes": {"value": <number>, "quote": "<e.g. 3hr call>"} | null,
    "crew": {"value": <number>, "quote": "<e.g. 3 x Crew>"} | null,   (the TOTAL asked for on that shift)
    "crew_add": {"value": <number>, "quote": "<e.g. add 2 crew>"} | null,   (only when they ask for MORE on top of what is booked)
+   "crew_remove": {"value": <number>, "quote": "<e.g. stand down 2 crew>"} | null,   (only when they ask for FEWER than is booked)
    "venue": {"value": "<venue name as written>", "quote": "<exact words>"} | null,
    "crew_chief": {"value": true, "quote": "<exact words>"} | null,
    "trade": {"value": "<e.g. crew, carpenter, AV technician>", "quote": "<exact words>"} | null,
@@ -61,7 +62,8 @@ Rules:
 - "value" is your reading of the quote. Resolve dates against the email's sent date given below; write 24-hour times.
 - A request for prices or a quote is intent "quote_request" (still list the shifts asked about).
 - Confirmations, thanks, contacts, meeting points, invoices and PO-only messages are "info_only" with no requests (but report a PO if one is given).
-- One request per shift per day. A time change names the shift it changes in "target".`;
+- One request per shift per day. A time change names the shift it changes in "target".
+- A move to another day puts the NEW day in "date" and the shift's current day in "target".`;
 
 export function userPrompt(sentIso: string, from: string, subject: string, newest: string): string {
   return `Sent: ${sentIso}\nFrom: ${from}\nSubject: ${subject}\n\nNEWEST MESSAGE:\n${newest.slice(0, 6000)}`;

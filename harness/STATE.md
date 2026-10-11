@@ -64,10 +64,11 @@ Read this first at the start of every work block and after any compaction.
 - **Bench 10-11:** a day move through runOp on TEST R11465 (#16516) went from 6 Dec to 7 Dec, same times, verified by read-back and audit; moved back, verified.
 
 ## 10-11 later
-- **Dropped by Ben 10-11: everything that uses OpenRouter.** That covers the paid run on the three sets, the `crew_remove` and day-move prompt lines (extract@2c02e41f900b), and their 168 recordings.
-  - The run had stopped on **402** anyway: the account was down to about $5 of credit.
-  - The patch is parked in `.tmp-v2/dropped-openrouter-prompt.patch`, which is gitignored. Do not re-apply it or rerun a record-mode set unless Ben asks.
-  - Production still reads every email through OpenRouter. With the account empty, each email becomes a "could not read this email" card on the TV.
+- **The decrease and day-move lines are built and live:** extract@2c02e41f900b. They were checked with no model call, because Ben said not to use OpenRouter:
+  - all 1500 perfect-reader cases pass, and test/v2Ground.ts pins how a decrease is grounded;
+  - the 158 answers the new prompt recorded before the 402, scored by `.tmp-v2/ab-prompt.mts`, have 0 wrong writes. On the 148 simple emails answered under both prompts the scores are identical; create 4/4, update 6/6.
+  - Most complex cases have no recorded answer under the new prompt. Do not record them through OpenRouter unless Ben asks.
+  - Production still reads through OpenRouter. While the account has no credit, every email becomes a "could not read this email" card on the TV.
 - **Model-down fix (1bdb46a, deployed):** a failed model call is now a handoff card ("the system could not read this email"), not a silent drop.
 - **Dashboard (1bdb46a, deployed):** it counts the rebuild's work from 10-09 (`app/lib/v2/metrics.ts`); its "now" tiles are the TV's own counts.
 - **Ben's rule 3:** an ambiguous change (e.g. a new start with no word on the end) gets a DRAFT question to the client, and the order is raised as Needs Follow Up. Not built yet; coordinate with the TV session, which owns Needs Follow Up and followup_drafting.
