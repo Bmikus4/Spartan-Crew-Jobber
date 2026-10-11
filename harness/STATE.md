@@ -58,10 +58,26 @@ Read this first at the start of every work block and after any compaction.
   - replay of the 500 recorded opus-4.8 answers: 500/500.
 - **Not yet run with the real model:** the complex sets. About $11 for 1000 calls; waiting on Ben.
 
+## Shipped
+- 3699642 (S-0155): the harness itself, plus decideMessage, the trace layer and filtered-mail rows. Deployed.
+- 92f7256 (S-0157): the complex-order fixes (including the live wrong write on day moves). Deployed 10-11 ~01:25Z; the canary is ok and the next intake run succeeded.
+- **Bench 10-11:** a day move through runOp on TEST R11465 (#16516) went from 6 Dec to 7 Dec, same times, verified by read-back and audit; moved back, verified.
+
+## 10-11 later
+- **Dropped by Ben 10-11: everything that uses OpenRouter.** That covers the paid run on the three sets, the `crew_remove` and day-move prompt lines (extract@2c02e41f900b), and their 168 recordings.
+  - The run had stopped on **402** anyway: the account was down to about $5 of credit.
+  - The patch is parked in `.tmp-v2/dropped-openrouter-prompt.patch`, which is gitignored. Do not re-apply it or rerun a record-mode set unless Ben asks.
+  - Production still reads every email through OpenRouter. With the account empty, each email becomes a "could not read this email" card on the TV.
+- **Model-down fix (1bdb46a, deployed):** a failed model call is now a handoff card ("the system could not read this email"), not a silent drop.
+- **Dashboard (1bdb46a, deployed):** it counts the rebuild's work from 10-09 (`app/lib/v2/metrics.ts`); its "now" tiles are the TV's own counts.
+- **Ben's rule 3:** an ambiguous change (e.g. a new start with no word on the end) gets a DRAFT question to the client, and the order is raised as Needs Follow Up. Not built yet; coordinate with the TV session, which owns Needs Follow Up and followup_drafting.
+- **Prediction** (`.tmp-v2/clarify-rate.mts`, 102 real emails re-planned as of their send time):
+  - 18 need a question back = **88 per 500** (95% CI 57-131): a missing detail 7, unclear 7, which booking 3, a new start with no end 1 (5 per 500, CI 1-27);
+  - the old engine's thread-level "needs-info" was 31 of 950 threads (a floor, system-labelled).
+
 ## Open
-- Read the record-run report; write findings.
-- Gate and commit, if Ben asks. The production refactor needs the gate before it can deploy.
-- Phase 4: review of `runs/record-review.md`, then fixes on approval.
+- **Ben's rule 3:** draft a question and raise the order as Needs Follow Up; the work is split with the TV session (see above).
+- **Phase 4:** a review of `reports/02-review.md`, then fixes on approval.
 
 ## Temporary artifacts
 - `.tmp-v2/*.mts`, `.tmp-v2/peek.ts`: discovery and inspection scripts (gitignored).

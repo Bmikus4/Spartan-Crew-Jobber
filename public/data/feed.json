@@ -3016,5 +3016,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0160",
+  "ts": "2026-10-11T13:57:04+00:00",
+  "kind": "measurement",
+  "headline": "OpenRouter-dependent harness work dropped",
+  "subject": "Harness state no longer waits on a paid OpenRouter run; that work is dropped",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 188,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]
