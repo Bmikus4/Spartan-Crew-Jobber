@@ -13,7 +13,7 @@
 import { neon, type NeonQueryFunction } from "@neondatabase/serverless";
 import { httpTransport, OnsinchClient } from "../engine/onsinch";
 import { matchCompanyByDomain, normName } from "../engine/resolve";
-import { extractWithMeta, type Extraction } from "./interpret/extract";
+import { extractWithMeta, type Extraction, type ExtractMeta } from "./interpret/extract";
 import { ground, type Interpretation, type Request } from "./interpret/interpret";
 import { latestText } from "./interpret/ground";
 import { plan, type Decision, type World } from "./interpret/plan";
@@ -174,7 +174,7 @@ async function runWhenFree(source: string, op: Parameters<typeof runOp>[1]): Pro
 
 export type MessageIn = { message_id: string; thread_id: string; from_address: string; date_iso: string; subject: string | null; body: string | null; is_from_spartan: boolean };
 export type Client = { id: number | null; name: string | null };
-export type Recorded = { kind: Decision["kind"]; interpretation: { extraction: Extraction; grounded: Interpretation } | null; decision: Decision; executed: RunResult[] | null; client: Client };
+export type Recorded = { kind: Decision["kind"]; interpretation: { extraction: Extraction; grounded: Interpretation; meta?: ExtractMeta } | null; decision: Decision; executed: RunResult[] | null; client: Client };
 
 /**
  * Everything one message's handling needs from outside, so the office and the harness run
@@ -220,6 +220,8 @@ export async function decideMessage(m: MessageIn, deps: DecideDeps): Promise<Rec
     deps.trace("final", { kind: out.kind });
     return out;
   }
+  // The model, prompt, tokens and cost of the reading are kept with the decision: until 10-11
+  // they were traced and dropped, so no decision could say which model made it or what it cost.
   const { x, meta } = got;
   deps.trace("extract", { ...meta, intent: x.intent, requests: x.requests?.length ?? 0 }, meta.ms);
   const t1 = Date.now();
@@ -228,7 +230,7 @@ export async function decideMessage(m: MessageIn, deps: DecideDeps): Promise<Rec
   const t2 = Date.now();
   const decision = await plan({ message_id: m.message_id, from, subject: String(m.subject ?? ""), sentIso: m.date_iso, text: newest }, interpretation, deps.world, await deps.threadOrderId());
   deps.trace("plan", { kind: decision.kind, ops: decision.kind === "write" ? decision.ops.map((o) => o.op.kind) : [], said: decision.kind === "write" ? decision.why : decision.kind === "handoff" ? decision.reasons : [decision.reason] }, Date.now() - t2);
-  const out: Recorded = { kind: decision.kind, interpretation: { extraction: x, grounded: interpretation }, decision, executed: null, client };
+  const out: Recorded = { kind: decision.kind, interpretation: { extraction: x, grounded: interpretation, meta }, decision, executed: null, client };
   await deps.record(out);
   if (!deps.run || decision.kind !== "write") { deps.trace("final", { kind: out.kind }); return out; }
   // RECORDED AFTER EVERY OPERATION, not once at the end: a function that times out between

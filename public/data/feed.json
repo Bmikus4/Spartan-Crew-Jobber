@@ -3103,5 +3103,19 @@
     "repeat": "no-op both"
    }
   }
+ },
+ {
+  "id": "S-0164",
+  "ts": "2026-10-11T21:08:05+00:00",
+  "kind": "measurement",
+  "headline": "B79 fixed: an open need survives a later unrelated write; each decision keeps its model, tokens and cost",
+  "subject": "A newer write about another day no longer clears an older need off the TV",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 190,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]

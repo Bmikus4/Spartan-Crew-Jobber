@@ -131,10 +131,39 @@ export function v2Source(row: V2Row, now: number): FeedSource {
 
 /** Each thread's newest decision that needs a person or made a change. */
 export function v2Sources(rows: V2Row[], now: number): FeedSource[] {
-  const newest = new Map<string, V2Row>();
-  for (const r of rows) {
-    const was = newest.get(r.thread_id);
-    if (!was || Date.parse(r.sent_at) >= Date.parse(was.sent_at)) newest.set(r.thread_id, r);
+  const byThread = new Map<string, V2Row[]>();
+  for (const r of rows) byThread.set(r.thread_id, [...(byThread.get(r.thread_id) ?? []), r]);
+  const out: FeedSource[] = [];
+  for (const list of byThread.values()) {
+    list.sort((a, b) => Date.parse(a.sent_at) - Date.parse(b.sent_at));
+    const newest = list[list.length - 1];
+    out.push(v2Source(openNeedUnder(list) ?? newest, now));
   }
-  return [...newest.values()].map((r) => v2Source(r, now));
+  return out;
+}
+
+/**
+ * A NEWER WRITE DOES NOT ANSWER AN OLDER NEED ABOUT SOMETHING ELSE (B79, 10-11). The thread's
+ * card was its newest row, so a need ("no venue for the 14th") followed by a write about the
+ * 20th became the write's check, and ticking that check lost the need for good: measured on
+ * thread 1a11c3919fdd9ee7. The need stays the card unless the write is about one of its days
+ * or the order it names; a need with no day known stays too, as the safe side.
+ */
+function openNeedUnder(list: V2Row[]): V2Row | null {
+  const newest = list[list.length - 1];
+  if (newest.decision.kind !== "write") return null;
+  let need: V2Row | null = null;
+  for (let i = list.length - 2; i >= 0; i--) {
+    const r = list[i];
+    if (r.decision.kind === "write") break; // an earlier write: anything before it was its business
+    if (r.decision.kind === "handoff") { need = r; break; }
+  }
+  // A need answered by writing back (Needs Reply) is closed by our email, not by a write.
+  if (!need || need.decision.kind !== "handoff" || (need.decision.reply ?? need.decision.reasons.every((x) => REPLY_REASON.test(x)))) return null;
+  const wroteDays = new Set(newest.decision.ops.flatMap((o) => opDays(o.op)).map((d) => d.date));
+  const needDays = (need.grounded?.requests ?? []).map((q) => q.target?.date ?? q.date).filter((d): d is string => !!d);
+  const needOrders = rNumbersIn(`${need.subject ?? ""}\n${need.decision.reasons.join("\n")}`);
+  const sameOrder = needOrders.length > 0 && rNumbersIn(newest.decision.why.join("\n")).some((n) => needOrders.includes(n));
+  const sameDay = needDays.some((d) => wroteDays.has(d));
+  return sameDay || sameOrder ? null : need;
 }

@@ -274,6 +274,13 @@ console.log("\n[15] the rebuild's decisions reach ops on the TV and nowhere else
   const later = row("c", { message_id: "m-c2", sent_at: new Date(NOW - 30 * 60_000).toISOString(), decision: { kind: "handoff", reasons: ["no venue in the email"] }, grounded: { intent: "booking", requests: [], problems: [] }, subject: "Another" });
   const both = v2Sources([change, later], NOW);
   ok(both.length === 1 && both[0].note === "New booking · No venue given", "a thread shows its newest decision that needs a person");
+  // B79 (10-11): a newer write about another day does not answer an older need.
+  const need14 = row("b79", { message_id: "m-n", sent_at: new Date(NOW - 3 * 3600_000).toISOString(), decision: { kind: "handoff", reasons: ["R11475: 2 shifts on 2026-10-14 could be the one meant"] }, grounded: { intent: "change", requests: [{ action: "change_times", date: "2026-10-14", start: "10:00", problems: [] }], problems: [] }, subject: "Re: R11475" });
+  const po20 = row("b79", { message_id: "m-w", sent_at: new Date(NOW - 3600_000).toISOString(), kind: "write", decision: { kind: "write", ops: [{ source: "s", op: { kind: "set_position_times", order_id: 950, slot_id: 1, date: "2026-10-20", start: "09:00", end: "17:00" } }], why: ["R11999 shift 1: times to 09:00-17:00"] }, executed: [{ op_key: "k", status: "verified", reasons: [] }] });
+  const kept = v2Sources([need14, po20], NOW);
+  ok(kept.length === 1 && kept[0].item?.kind === "needs-updated", "a newer write on another day leaves the older need on the card (B79)", kept[0].item?.kind ?? "");
+  const po14 = row("b79", { ...po20, decision: { kind: "write", ops: [{ source: "s", op: { kind: "set_position_times", order_id: 950, slot_id: 1, date: "2026-10-14", start: "10:00", end: "16:00" } }], why: ["R11475 shift 1: times to 10:00-16:00"] } });
+  ok(v2Sources([need14, po14], NOW)[0].item?.kind === "updated-check", "a newer write on the need's own day is its answer: a check");
   const state = needsUpdated("c");
   const merged = project([state], new Map(), [], null, NOW, new Map(), v2Sources([change], NOW));
   ok(merged.cards.length === 1 && /6 crew/.test(merged.cards[0].note ?? ""), "the rebuild's decision replaces the paused engine's state for the same thread");
