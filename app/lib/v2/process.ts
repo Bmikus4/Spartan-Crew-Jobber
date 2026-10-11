@@ -21,6 +21,7 @@ import { runOp, type RunResult } from "./bot/run";
 import type { Op } from "./bot/ops";
 import { noTrace, type Tracer } from "./trace";
 import { v2Writes } from "../paused";
+import { linkedOrderId } from "./threadOrder";
 
 let _sql: NeonQueryFunction<false, false> | null = null;
 let _ready = false;
@@ -225,10 +226,8 @@ export async function processMessage(message_id: string, opts: { execute: boolea
   const r = await decideMessage(m, {
     extract: extractWithMeta,
     world: opts.world ?? onsinchWorld(),
-    threadOrderId: async () => {
-      const bound = (await sql`SELECT onsinch_order_id FROM conversation_state WHERE thread_id = ${m.thread_id}`) as any[];
-      return bound[0]?.onsinch_order_id ? Number(bound[0].onsinch_order_id) : null;
-    },
+    // Every recorded link, not only the paused engine's binding (threadOrder.ts says why).
+    threadOrderId: () => linkedOrderId(sql, m.thread_id),
     run: opts.execute ? runWhenFree : null,
     record: async (d) => {
       await sql`

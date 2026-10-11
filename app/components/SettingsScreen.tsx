@@ -14,9 +14,9 @@ import InstallButton from "./InstallButton";
 
 type ReplyDelivery = "draft" | "send";
 type ReplyScope = "all" | "enquiries";
-interface Settings { replies_enabled: boolean; reply_delivery: ReplyDelivery; reply_scope: ReplyScope; default_rate_card: number }
+interface Settings { replies_enabled: boolean; followup_drafting?: boolean; reply_delivery: ReplyDelivery; reply_scope: ReplyScope; default_rate_card: number }
 
-const SETTINGS_FALLBACK: Settings = { replies_enabled: false, reply_delivery: "draft", reply_scope: "all", default_rate_card: 315 };
+const SETTINGS_FALLBACK: Settings = { replies_enabled: false, followup_drafting: false, reply_delivery: "draft", reply_scope: "all", default_rate_card: 315 };
 
 const INK = "var(--text-primary)";
 const SUB = "var(--text-secondary)";
@@ -214,6 +214,17 @@ export default function SettingsScreen({ signedInAs }: { signedInAs?: string }) 
             before, including the rule that an order priced from it is never written
             hands-free. Nothing about pricing behaviour changed; the knob is not on the
             wall any more. */}
+
+        <Panel
+          title="Follow-up drafting"
+          blurb={<>A job with nothing on it from anyone for 24 hours shows <b style={{ color: SUB }}>Needs Follow Up</b> on the office TV, whichever side is waiting. When this is on, the system is to draft a follow-up in that job&apos;s Gmail thread for a person to send. <b style={{ color: SUB }}>Off by default.</b></>}
+        >
+          <Segmented label="Follow-up drafting" value={!!s.followup_drafting} onChange={(v) => save({ ...s, followup_drafting: v })}
+            options={[{ id: false, label: "Off" }, { id: true, label: "On" }]} />
+          {/* Said on the screen, not left to be discovered: a switch that changed nothing
+              while looking like it worked is how the replies toggle failed before (settingsDb). */}
+          {s.followup_drafting && <Warn>Saved. Drafts are not written yet: the TV raises the follow-up, and the drafting itself is still to be built.</Warn>}
+        </Panel>
 
         <Panel title="Install app" blurb="Add Spartan Crew to a phone or desktop home screen for full-screen, one-tap access.">
           <InstallButton />

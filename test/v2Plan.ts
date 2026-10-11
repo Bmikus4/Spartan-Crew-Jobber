@@ -146,6 +146,20 @@ ok(positionsFor(12) === null, "12 crew: not decided here");
     ok(d.kind === "write" && (d.ops[0].op as any).shifts[0].place_id === "29", "a venue written with its address matches on the name before the comma", JSON.stringify(d).slice(0, 200));
   }
 
+  console.log("a thread already linked to an order never books a second one");
+  {
+    const booking = I([r({ date: "2026-10-14", start: "18:45", end: "20:45", crew: 4, venue: "Business Design Centre" })], { intent: "booking" });
+    // Linked to an order the read window cannot see (an old order, or the verifier's find).
+    const unseen = await plan(msg("crew@eventconcept.com", "4 crew at Business Design Centre on 14/10 18:45-20:45"), booking, world, 99999);
+    ok(unseen.kind === "handoff" && /linked to order 99999/.test(unseen.reasons[0]), "linked order not readable: left for a person, no create_order", JSON.stringify(unseen));
+    // Linked to a readable order: the new shift goes onto it.
+    const seen = await plan(msg("crew@eventconcept.com", "4 crew at Business Design Centre on 14/10 18:45-20:45"), booking, world, 16388);
+    ok(seen.kind === "write" && seen.ops.every((o) => o.op.kind === "add_shift" && (o.op as any).order_id === 16388), "linked order readable: add_shift onto it", JSON.stringify(seen).slice(0, 200));
+    // Not linked: a fresh order, as before.
+    const fresh = await plan(msg("crew@eventconcept.com", "4 crew at Business Design Centre on 14/10 18:45-20:45"), booking, world, null);
+    ok(fresh.kind === "write" && fresh.ops[0].op.kind === "create_order", "no link: create_order", JSON.stringify(fresh).slice(0, 160));
+  }
+
   if (fails) { console.log(`\n${fails} FAILED`); process.exit(1); }
   console.log("\nall passed");
 })();

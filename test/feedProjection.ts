@@ -287,5 +287,25 @@ console.log("\n[15] the rebuild's decisions reach ops on the TV and nowhere else
   ok(project([], new Map(), [], null, NOW, new Map(), v2Sources([past], NOW)).cards.length === 0, "a job that is over leaves the TV");
 }
 
+console.log("\n[F] needs follow up: a day with nothing on the job, either side (Ben, 2026-10-10)");
+{
+  // a: the client wrote 30h ago, nobody since. b: we wrote 30h ago, the client has not answered.
+  // c: client wrote 2h ago. d: silent 30h on its own thread, but the same order (902) had an
+  // email 1h ago on another thread. e: done, never raised.
+  const p = project(
+    [needsCreated("a"), needsCreated("b"), needsCreated("c"), updated("d", NOW - 40 * H), updated("d2", NOW - 40 * H), created("e", NOW - 40 * H)],
+    new Map([["a", NOW - 30 * H], ["c", NOW - 2 * H], ["d", NOW - 30 * H], ["d2", NOW - H]]),
+    [mark("created-check:901:" + (NOW - 40 * H), "e", NOW - 2 * H)], null, NOW,
+    new Map([["b", NOW - 30 * H]]),
+  );
+  const by = new Map(p.cards.map((c) => [c.thread_id, c]));
+  ok(by.get("a")?.follow_up === true, "client waiting on us for a day: follow up");
+  ok(by.get("b")?.follow_up === true, "us waiting on the client for a day: follow up");
+  ok(by.get("c")?.follow_up === false, "a client who wrote two hours ago: no follow up");
+  ok(by.get("d")?.follow_up === false, "an email on another thread about the same order resets it");
+  ok(by.get("e")?.follow_up === false, "a done job is never raised");
+  ok(p.counts.needs_follow_up === 2, "counted", String(p.counts.needs_follow_up));
+}
+
 console.log(fails ?`\n${fails} FAILED` : "\nALL PASS");
 process.exitCode = fails ? 1 : 0;

@@ -17,6 +17,14 @@ export const REPLY_RED_MS = 24 * 3_600_000;
  */
 export const QUIET_MS = 7 * 86_400_000;
 
+/**
+ * NEEDS FOLLOW UP (Ben, 2026-10-10): an open job on which nothing has happened for a day,
+ * whichever side is waiting. Nothing means no email either way on its thread or on another
+ * thread about the same order, no write by the system, and no Confirm or staff edit seen in
+ * OnSinch. Raised on the TV as its own label; the wait itself is not drawn ("no timers").
+ */
+export const FOLLOW_UP_MS = 24 * 3_600_000;
+
 /** Today in London as YYYY-MM-DD. en-CA formats as ISO. */
 export function londonDay(ms: number): string {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/London", year: "numeric", month: "2-digit", day: "2-digit" }).format(ms);

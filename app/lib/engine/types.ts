@@ -476,6 +476,13 @@ export interface ConversationState {
 /** Client-tunable settings (surfaced in the Vercel settings menu). */
 export interface Settings {
   /**
+   * Follow-up drafting (Ben, 2026-10-10): whether a job the TV raises as "Needs Follow Up"
+   * should get a drafted chase in its Gmail thread. OFF by default. Stored only: nothing
+   * drafts from it yet (the chase composer has no caller), and the Settings screen says so.
+   * Optional so a stored row written before it existed still reads as off.
+   */
+  followup_drafting?: boolean;
+  /**
    * Tool 1 — the verbatim Spartan reply generator. OFF by default: the engine
    * still classifies + does order work, but drafts NO reply until this is on.
    */
@@ -533,6 +540,7 @@ export interface Settings {
 
 export const DEFAULT_SETTINGS: Settings = {
   replies_enabled: false,
+  followup_drafting: false,
   reply_delivery: "draft",
   reply_scope: "all",
   default_rate_card: 315,

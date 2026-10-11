@@ -2960,5 +2960,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0156",
+  "ts": "2026-10-11T00:59:14+00:00",
+  "kind": "measurement",
+  "headline": "TV: 4 labels, no colour key, R/J/date columns, follow-up after 24h; planner reads every thread-order link (7 -> 24 of 43)",
+  "subject": "TV tiles carry one of four title-case labels and Needs Follow Up; a linked thread never books a second order",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 188,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]

@@ -173,6 +173,11 @@ export async function plan(msg: Message, i: Interpretation, world: World, thread
       ops.push({ source: src(50 + n), op: { kind: "add_shift", order_id: Number(named.id), location_id, name: "Crew", date: r.date!, start: r.start!, end: r.end!, positions } });
       why.push(`R${named.number}: add a shift on ${r.date} ${r.start}-${r.end}, ${r.crew} crew`);
     }
+  } else if (news.length && threadOrderId) {
+    // THE THREAD IS ALREADY LINKED TO AN ORDER (bound, made by the bot, or found by the TV's
+    // verifier) that could not be read back here (older than the read window, or another
+    // client's). Booking afresh would put a second order on a job that has one.
+    return handoff(`this thread is linked to order ${threadOrderId}, which the system could not read: ${typeof named === "string" ? named : "not found"}`);
   } else if (news.length) {
     // Already booked: a client's order holding a live shift over exactly the asked window on
     // that day. Measured 10-07: every engine order in To Confirm duplicated one ops had built

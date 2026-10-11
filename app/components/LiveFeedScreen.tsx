@@ -41,10 +41,13 @@ const FADE_MS = 600;
 
 // Signal colours only, from the theme. Everything else is the tool's neutral tokens.
 const RED = "var(--danger)";
-const BLUE = "var(--viz-blue)";
 const GREEN = "var(--up)";
 const AMBER = "var(--warn)";
 const GREY = "var(--text-muted)";
+/** Every tile wears the same red edge: there is no colour coding and no key (Ben, 2026-10-10). */
+const EDGE = RED;
+/** Dark tan hairlines between the R number, the J number and the date (globals.css). */
+const TAN = "var(--tan-line)";
 /** The red/blue edge on each tile, in px before scaling. */
 const STRIPE = 4;
 const tint = (c: string, pct: number) => `color-mix(in srgb, ${c} ${pct}%, transparent)`;
@@ -133,7 +136,34 @@ function chime(ctx: AudioContext) {
 const orderItem = (c: FeedCard) => c.items.find((i) => i.kind !== "needs-reply") ?? null;
 const hasReply = (c: FeedCard) => c.items.some((i) => i.kind === "needs-reply");
 const isOpen = (c: FeedCard) => c.lane !== "done";
-const signal = (c: FeedCard) => (c.colour === "red" ? RED : c.colour === "blue" ? BLUE : GREY);
+
+/**
+ * THE FOUR LABELS (Ben, 2026-10-10), in title case, beside the job's name. A need is orange
+ * with a warning sign; once the order exists or the change is made the same tile reads
+ * Order Created / Order Updated in green with a check. A write the system made reads green
+ * at once (it is made) and still carries Confirm, because a person still checks it.
+ */
+function labelOf(card: FeedCard, it: FeedItem | null): { text: string; ok: boolean } {
+  const kind = (it ?? card.items[0]).kind;
+  if (kind === "needs-reply") return { text: "Needs Reply", ok: false };
+  const created = kind === "needs-created" || kind === "created-check";
+  if (card.green || kind === "created-check" || kind === "updated-check") return { text: created ? "Order Created" : "Order Updated", ok: true };
+  return { text: created ? "Order Needs Created" : "Order Needs Updated", ok: false };
+}
+
+function Badge({ s, text, ok }: { s: number; text: string; ok: boolean }) {
+  const color = ok ? GREEN : AMBER;
+  return (
+    <span style={{ display: "inline-flex", alignItems: "center", gap: 7 * s, fontSize: 17 * s, fontWeight: 700, color, background: tint(color, 12), border: `1px solid ${tint(color, 32)}`, borderRadius: 8 * s, padding: `${4 * s}px ${11 * s}px ${4 * s}px ${8 * s}px`, whiteSpace: "nowrap", flexShrink: 0 }}>
+      <svg width={18 * s} height={18 * s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+        {ok
+          ? <polyline points="4.5 12.5 10 18 19.5 6.5" />
+          : <><path d="M12 3.6 2.6 19.8h18.8L12 3.6Z" /><line x1="12" y1="10" x2="12" y2="14.2" /><circle cx="12" cy="17.1" r="0.6" fill="currentColor" /></>}
+      </svg>
+      {text}
+    </span>
+  );
+}
 
 /** Starts within 48 hours and is still open. */
 function urgent(c: FeedCard, now: number): boolean {
@@ -167,12 +197,12 @@ function When({ card, it, lead, now, s }: { card: FeedCard; it: FeedItem | null;
   const sameYear = t != null && fmt(t, { year: "numeric" }) === fmt(now, { year: "numeric" });
   const more = day ? card.dates.filter((d) => d > day).length : 0;
   const hot = urgent(card, now);
-  const label = !it ? "Waiting since" : !day || t == null ? "Date" : day === today ? "Today" : day === tomorrow ? "Tomorrow" : fmt(t, { weekday: "long" });
+  const label = !it ? "Waiting Since" : !day || t == null ? "Date" : day === today ? "Today" : day === tomorrow ? "Tomorrow" : fmt(t, { weekday: "long" });
   const value = !it ? fmt(lead.at, { day: "numeric", month: "short" }) : t != null ? fmt(t, sameYear ? { day: "numeric", month: "short" } : { day: "numeric", month: "short", year: "numeric" }) : "TBC";
   return (
-    <div style={{ minWidth: 0 }}>
-      <div style={{ fontSize: 13 * s, fontWeight: 600, letterSpacing: "0.12em", textTransform: "uppercase", color: hot ? AMBER : "var(--text-muted)", whiteSpace: "nowrap" }}>
-        {label}{more > 0 && <span style={{ color: "var(--text-faint)" }}> · +{more} {more === 1 ? "day" : "days"}</span>}
+    <div style={{ minWidth: 0, textAlign: "right" }}>
+      <div style={{ fontSize: 14 * s, fontWeight: 600, color: hot ? AMBER : "var(--text-muted)", whiteSpace: "nowrap" }}>
+        {label}{more > 0 && <span style={{ color: "var(--text-faint)" }}> · +{more} {more === 1 ? "Day" : "Days"}</span>}
       </div>
       <div className="tnum" style={{ fontSize: 28 * s, fontWeight: 700, lineHeight: 1.15, marginTop: 3 * s, whiteSpace: "nowrap", color: hot ? AMBER : t != null || !it ? "var(--text-primary)" : "var(--text-muted)" }}>{value}</div>
     </div>
@@ -218,11 +248,15 @@ function Tick({ card, it, s, height, onTick }: { card: FeedCard; it: FeedItem; s
  */
 function Sync({ s, state, why }: { s: number; state: "ok" | "offline" | "error"; why: string }) {
   const color = state === "ok" ? GREEN : state === "error" ? RED : GREY;
-  const text = state === "ok" ? "Synced with Gmail and OnSinch" : state === "error" ? `Sync error: ${why || "Gmail or OnSinch"}` : "Offline: not syncing";
+  const title = state === "ok" ? "Synced" : state === "error" ? "Sync Error" : "Offline";
+  const full = state === "ok" ? "Synced with Gmail and OnSinch" : state === "error" ? `Sync error: ${why || "Gmail or OnSinch"}` : "Offline: not syncing";
   return (
-    <div role="status" aria-label={text} style={{ display: "flex", alignItems: "center", gap: 10 * s, fontSize: 16 * s, fontWeight: 600, whiteSpace: "nowrap", color: state === "ok" ? "var(--text-secondary)" : color }}>
-      <span style={{ width: 10 * s, height: 10 * s, borderRadius: 99, background: color, boxShadow: `0 0 0 ${4 * s}px ${tint(color, 22)}`, flexShrink: 0 }} />
-      {text}
+    <div role="status" aria-label={full} title={full} style={{ display: "flex", alignItems: "center", gap: 8 * s, whiteSpace: "nowrap" }}>
+      <svg width={44 * s} height={44 * s} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden style={{ flexShrink: 0, transition: "stroke 300ms" }}>
+        <path d="M20.5 12a8.5 8.5 0 0 0-14.8-5.7L3.5 8.5" /><path d="M3.5 3.5v5h5" />
+        <path d="M3.5 12a8.5 8.5 0 0 0 14.8 5.7l2.2-2.2" /><path d="M15.5 15.5h5v5" />
+      </svg>
+      <span style={{ fontSize: 14 * s, fontWeight: 600, color: state === "ok" ? "var(--text-muted)" : color, maxWidth: 260 * s, overflow: "hidden", textOverflow: "ellipsis" }}>{state === "error" && why ? `${title}: ${why}` : title}</span>
     </div>
   );
 }
@@ -232,40 +266,42 @@ type Phase = "steady" | "hold" | "fade";
 const clamp = (lines: number): React.CSSProperties => ({ display: "-webkit-box", WebkitLineClamp: lines, WebkitBoxOrient: "vertical", overflow: "hidden", overflowWrap: "anywhere" });
 
 /**
- * One job, one tile, one line of the list. Left to right: the client and what to do, then
- * the numbers that find it in OnSinch, then when, then Confirm. Fixed right-hand columns
- * keep every date and every Confirm on one vertical line down the screen.
+ * One job, one tile, one line of the list. Left to right: the client and its labels, then
+ * the R number, the J number and the date, each right-aligned in its own column between
+ * dark tan lines, then Confirm. Fixed columns keep every line and every Confirm on one
+ * vertical down the screen.
  */
 function JobTile({ card, now, s, phase, onTick }: { card: FeedCard; now: number; s: number; phase: Phase; onTick: (c: FeedCard, it: FeedItem, checked: boolean) => void }) {
   const it = orderItem(card);
   const lead = it ?? card.items[0];
   const done = card.green;
   const evidence = it ? evidenceLine(it) : null;
-  const numbers = numbersOf(card);
+  const shown = card.colour !== "neutral";
   const note = !done && card.note ? cleanNote(card.note) : null;
   const detail = [note, card.contact, card.crew ? `${card.crew} crew` : null, card.venue].filter(Boolean).join(" · ");
-  const sig = signal(card);
+  const label = labelOf(card, it);
+  const cell = (line: boolean): React.CSSProperties => ({ alignSelf: "stretch", display: "flex", alignItems: "center", justifyContent: "flex-end", padding: `0 ${22 * s}px`, borderLeft: line ? `${2 * s}px solid ${TAN}` : undefined, minWidth: 0 });
+  const num = (v: string | null) => <span className="mono" style={{ fontSize: 24 * s, fontWeight: 600, color: "var(--text-primary)", whiteSpace: "nowrap" }}>{shown ? v : null}</span>;
   return (
     <article className="feed-tile" data-open={isOpen(card) ? "" : undefined} style={{
-      display: "grid", gridTemplateColumns: `minmax(0, 1fr) ${300 * s}px ${190 * s}px ${200 * s}px`, alignItems: "center", columnGap: 28 * s,
+      display: "grid", gridTemplateColumns: `minmax(0, 1fr) ${165 * s}px ${165 * s}px ${200 * s}px ${200 * s}px`, alignItems: "center",
       minHeight: 104 * s, padding: `${16 * s}px ${24 * s}px ${16 * s}px ${(24 + STRIPE) * s}px`,
       background: done ? `color-mix(in srgb, ${GREEN} 9%, var(--surface))` : "var(--surface)",
       border: "1px solid var(--border)", borderRadius: 14 * s,
-      // The legend's colour as an inset left edge, kept when the tile goes green so it still reads.
-      boxShadow: `inset ${STRIPE * s}px 0 0 0 ${sig}`,
+      boxShadow: `inset ${STRIPE * s}px 0 0 0 ${EDGE}`,
       opacity: phase === "fade" ? 0 : 1,
       transition: `background-color 200ms ease, opacity ${FADE_MS}ms ease`,
       animation: phase === "steady" ? "feedTileIn 400ms ease" : undefined,
     }}>
-      <div style={{ minWidth: 0, display: "flex", flexDirection: "column", gap: 6 * s }}>
-        <div style={{ display: "flex", alignItems: "baseline", gap: 16 * s, minWidth: 0 }}>
+      <div style={{ minWidth: 0, display: "flex", flexDirection: "column", gap: 8 * s, paddingRight: 20 * s }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 14 * s, minWidth: 0 }}>
           {/* No client matched: the subject line, quoted and dimmer, so it never reads as a client's name. */}
           <span style={{ fontSize: 30 * s, fontWeight: 700, letterSpacing: "-0.015em", color: card.company ? "var(--text-primary)" : "var(--text-secondary)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", minWidth: 0 }}>
             {card.company || (card.subject ? `“${card.subject}”` : "Unknown client")}
           </span>
-          <span style={{ fontSize: 17 * s, fontWeight: 600, color: done ? GREEN : sig, whiteSpace: "nowrap", flexShrink: 0 }}>
-            {lead.status}{hasReply(card) && it && <span style={{ color: GREY }}> · Needs reply</span>}
-          </span>
+          <Badge s={s} text={label.text} ok={label.ok} />
+          {hasReply(card) && it && <Badge s={s} text="Needs Reply" ok={false} />}
+          {card.follow_up && <Badge s={s} text="Needs Follow Up" ok={false} />}
         </div>
         <div style={{ fontSize: 17 * s, fontWeight: 500, color: "var(--text-secondary)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
           {evidence
@@ -275,11 +311,11 @@ function JobTile({ card, now, s, phase, onTick }: { card: FeedCard; now: number;
       </div>
 
       {/* The numbers find the job in OnSinch. */}
-      <div className="mono" style={{ fontSize: 26 * s, fontWeight: 600, color: "var(--text-primary)", whiteSpace: "pre", overflow: "hidden" }}>{numbers}</div>
+      <div style={cell(false)}>{num(card.r_number)}</div>
+      <div style={cell(true)}>{num(card.j_number)}</div>
+      <div style={cell(true)}><When card={card} it={it} lead={lead} now={now} s={s} /></div>
 
-      <When card={card} it={it} lead={lead} now={now} s={s} />
-
-      <div style={{ display: "flex", justifyContent: "flex-end" }}>
+      <div style={{ display: "flex", justifyContent: "flex-end", paddingLeft: 24 * s }}>
         {it && <Tick card={card} it={it} s={s} height={52} onTick={onTick} />}
       </div>
     </article>
@@ -288,7 +324,7 @@ function JobTile({ card, now, s, phase, onTick }: { card: FeedCard; now: number;
 
 function Section({ s, label, n, color }: { s: number; label: string; n: number; color?: string }) {
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: 14 * s, padding: `${14 * s}px ${4 * s}px ${4 * s}px`, fontSize: 14 * s, fontWeight: 600, letterSpacing: "0.12em", textTransform: "uppercase", color: color ?? "var(--text-muted)", flexShrink: 0 }}>
+    <div style={{ display: "flex", alignItems: "center", gap: 14 * s, padding: `${14 * s}px ${4 * s}px ${4 * s}px`, fontSize: 16 * s, fontWeight: 600, color: color ?? "var(--text-muted)", flexShrink: 0 }}>
       <span style={{ whiteSpace: "nowrap" }}>{label} <span className="tnum" style={{ color: "var(--text-faint)" }}>{n}</span></span>
       <span style={{ flex: 1, height: 1, background: "var(--border)" }} />
     </div>
@@ -494,12 +530,13 @@ export default function LiveFeedScreen({ isActive, tv = false }: { isActive: boo
   const pad = 28 * s;
 
   const kpis: Array<{ label: string; n: number; color: string; loud?: boolean }> = c ? [
-    { label: "Need created", n: c.needs_created, color: RED },
-    { label: "Need updated", n: c.needs_updated, color: BLUE },
-    { label: "To check", n: c.to_check, color: "var(--text-primary)" },
-    ...(data?.health.replies_enabled ? [{ label: "Need reply", n: c.needs_reply, color: GREY }] : []),
+    { label: "Needs Created", n: c.needs_created, color: "var(--text-primary)" },
+    { label: "Needs Updated", n: c.needs_updated, color: "var(--text-primary)" },
+    { label: "To Check", n: c.to_check, color: "var(--text-primary)" },
+    ...(data?.health.replies_enabled ? [{ label: "Needs Reply", n: c.needs_reply, color: "var(--text-primary)" }] : []),
+    { label: "Needs Follow Up", n: c.needs_follow_up ?? 0, color: AMBER },
     // The one count that is about time running out, so it is set heavier than the rest (Ben, 2026-10-10).
-    { label: "Within 48 hours", n: urgentCount, color: AMBER, loud: true },
+    { label: "Within 48 Hours", n: urgentCount, color: AMBER, loud: true },
   ] : [];
 
   return (
@@ -512,24 +549,18 @@ export default function LiveFeedScreen({ isActive, tv = false }: { isActive: boo
           <BrandMark height={38 * s} />
         </div>
 
-        {/* The legend: permanent, not interactive, exactly two entries. It is the key to every tile's edge. */}
-        <div aria-label="Legend" style={{ display: "flex", alignItems: "center", gap: 26 * s, fontSize: 22 * s, fontWeight: 600, color: "var(--text-primary)", whiteSpace: "nowrap" }}>
-          <span style={{ display: "inline-flex", alignItems: "center", gap: 11 * s }}><span style={{ width: 7 * s, height: 26 * s, borderRadius: 4 * s, background: RED }} />Red = New job</span>
-          <span style={{ display: "inline-flex", alignItems: "center", gap: 11 * s }}><span style={{ width: 7 * s, height: 26 * s, borderRadius: 4 * s, background: BLUE }} />Blue = Update</span>
-        </div>
-
         <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 32 * s, flexWrap: "wrap" }}>
           {kpis.map((k) => (
             <div key={k.label} style={{ display: "flex", flexDirection: "column", alignItems: "flex-end" }}>
               <span className="tnum" style={{ fontSize: (k.loud ? 48 : 40) * s, fontWeight: k.loud ? 900 : 700, lineHeight: 1, letterSpacing: "-0.02em", color: k.n ? k.color : "var(--text-faint)" }}>{k.n}</span>
-              <span style={{ fontSize: (k.loud ? 15 : 13) * s, fontWeight: k.loud ? 800 : 600, letterSpacing: "0.1em", textTransform: "uppercase", color: k.loud && k.n ? AMBER : "var(--text-muted)", marginTop: 6 * s, whiteSpace: "nowrap" }}>{k.label}</span>
+              <span style={{ fontSize: (k.loud ? 15 : 13) * s, fontWeight: k.loud ? 800 : 600, color: k.loud && k.n ? AMBER : "var(--text-muted)", marginTop: 6 * s, whiteSpace: "nowrap" }}>{k.label}</span>
             </div>
           ))}
           <span style={{ width: 1, alignSelf: "stretch", background: "var(--border)" }} />
           <Sync s={s} state={sync} why={failKind === "error" ? "the feed returned an error" : emailStale ? "no new email for 90+ min" : onsinchUnread ? "OnSinch could not be read" : ""} />
           <button onClick={() => void goFull()} aria-label={full ? "Exit fullscreen" : "Fullscreen"} title={full ? "Exit fullscreen" : "Fullscreen"}
-            style={{ width: 44 * s, height: 44 * s, borderRadius: 10 * s, border: "1px solid var(--border-strong)", background: "transparent", color: "var(--text-secondary)", cursor: "pointer", display: "grid", placeItems: "center", padding: 0, flexShrink: 0, opacity: idle ? 0 : 1, transition: "opacity 200ms" }}>
-            <svg width={22 * s} height={22 * s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            style={{ width: 56 * s, height: 56 * s, border: "none", background: "transparent", color: "var(--text-secondary)", cursor: "pointer", display: "grid", placeItems: "center", padding: 0, flexShrink: 0, opacity: idle ? 0 : 1, transition: "opacity 200ms" }}>
+            <svg width={44 * s} height={44 * s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d={full
                 ? "M8 3v3a2 2 0 0 1-2 2H3M21 8h-3a2 2 0 0 1-2-2V3M3 16h3a2 2 0 0 1 2 2v3M16 21v-3a2 2 0 0 1 2-2h3"
                 : "M8 3H5a2 2 0 0 0-2 2v3M21 8V5a2 2 0 0 0-2-2h-3M3 16v3a2 2 0 0 0 2 2h3M16 21h3a2 2 0 0 0 2-2v-3"} />
@@ -552,7 +583,7 @@ export default function LiveFeedScreen({ isActive, tv = false }: { isActive: boo
               {openRows.map((card, i) => (
                 <Fragment key={card.thread_id}>
                   {/* Sunk, not hidden (Ben, 2026-10-05): the label says why these sit lower. */}
-                  {card.quiet && !openRows[i - 1]?.quiet && <Section s={s} label={`Nothing new for ${QUIET_MS / 86_400_000}+ days`} n={openRows.filter((x) => x.quiet).length} />}
+                  {card.quiet && !openRows[i - 1]?.quiet && <Section s={s} label={`Nothing New For ${QUIET_MS / 86_400_000}+ Days`} n={openRows.filter((x) => x.quiet).length} />}
                   <JobTile card={card} now={now} s={s} phase={phaseOf(card)} onTick={tick} />
                 </Fragment>
               ))}

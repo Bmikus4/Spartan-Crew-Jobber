@@ -18,7 +18,7 @@ import { cannotBeBooked, needsLabelFor, CHANGED_A_STANDING_ORDER } from "../engi
 import type { ConversationState, DesiredSlotTeam } from "../engine/types";
 import { rNumbersIn } from "../engine/resolve";
 import { PLACEHOLDER_PLACE_IDS } from "../engine/resolver";
-import { londonDay, orderCards, QUIET_MS } from "./order";
+import { FOLLOW_UP_MS, londonDay, orderCards, QUIET_MS } from "./order";
 
 export type FeedKind = "needs-created" | "needs-updated" | "created-check" | "updated-check" | "needs-reply";
 export type FeedColour = "red" | "blue" | "neutral";
@@ -118,6 +118,8 @@ export interface FeedCard {
   subject: string;
   /** Open, with nothing done on it by anyone for QUIET_MS: listed below the fresh ones. */
   quiet: boolean;
+  /** Open, and nothing on the job from anyone for FOLLOW_UP_MS: the TV raises "Needs Follow Up". */
+  follow_up: boolean;
   /** What the system says about this item: why it needs a person, or what it did. Null for the paused engine's. */
   note: string | null;
 }
@@ -139,6 +141,8 @@ export interface FeedCounts {
   to_check: number;
   /** Ticked, or verified in OnSinch, within the last day. */
   done: number;
+  /** Open jobs with nothing from anyone for FOLLOW_UP_MS. */
+  needs_follow_up: number;
   /** Undated needs nobody has written about for a fortnight. */
   older: number;
 }
@@ -361,7 +365,7 @@ export function project(
     return { mark: shown.mark, by: shown.by, evidence: shown.evidence, at: first.at };
   };
 
-  const counts: FeedCounts = { needs_created: 0, needs_updated: 0, needs_reply: 0, to_check: 0, done: 0, older: 0 };
+  const counts: FeedCounts = { needs_created: 0, needs_updated: 0, needs_reply: 0, to_check: 0, needs_follow_up: 0, done: 0, older: 0 };
   const awaiting = (thread: string): number | null => {
     const inAt = lastInbound.get(thread);
     if (!inAt) return null;
@@ -393,6 +397,19 @@ export function project(
   const sources = new Map<string, FeedSource>();
   for (const s of states) if (s?.thread_id) sources.set(s.thread_id, stateSource(s, lastInbound, now));
   for (const v of v2) sources.set(v.thread_id, v);
+
+  /**
+   * Activity on the same job counts wherever it happened: a client who replies on a new
+   * thread about the same order has answered, and the old thread must not raise a follow-up.
+   * The job is its order, by id or by R number.
+   */
+  const activityOf = (s: FeedSource) => Math.max(lastInbound.get(s.thread_id) ?? 0, lastOutbound.get(s.thread_id) ?? 0, s.last_write, actedAt.get(s.thread_id) ?? 0);
+  const jobKey = (s: FeedSource) => (s.order_id ? `o${s.order_id}` : s.r_number ? `r${s.r_number}` : null);
+  const jobActivity = new Map<string, number>();
+  for (const s of sources.values()) {
+    const k = jobKey(s);
+    if (k) jobActivity.set(k, Math.max(jobActivity.get(k) ?? 0, activityOf(s)));
+  }
 
   for (const s of sources.values()) {
     if (dismissed.has(s.thread_id)) continue;
@@ -439,7 +456,10 @@ export function project(
      * or a person's tick or edit. Measured from the client alone, a job the engine updated
      * yesterday sank under "quiet" because the client had last written a week ago.
      */
-    const lastActivity = Math.max(lastInbound.get(s.thread_id) ?? 0, lastOutbound.get(s.thread_id) ?? 0, s.last_write, actedAt.get(s.thread_id) ?? 0) || it.at;
+    const k = jobKey(s);
+    const lastActivity = Math.max(activityOf(s), k ? jobActivity.get(k) ?? 0 : 0) || it.at;
+    const followUp = !g && now - lastActivity > FOLLOW_UP_MS;
+    if (followUp) counts.needs_follow_up++;
     cards.set(s.thread_id, {
       thread_id: s.thread_id,
       // The legend's colour is the NEED, not whether an order is bound (Ben, 2026-10-04): an
@@ -462,6 +482,7 @@ export function project(
       j_number,
       subject: s.subject,
       quiet: !g && now - lastActivity > QUIET_MS,
+      follow_up: followUp,
       note: s.note,
     });
     if (!g) wants.set(s.thread_id, s.want);
@@ -490,7 +511,7 @@ export function project(
     cards.set(r.thread_id, {
       thread_id: r.thread_id, colour: "neutral", lane: "reply", items: [item], green: false, at: item.at,
       order_id: null, company_id: null, company: r.company, contact: firstName(r.contact),
-      dates: [], starts_at: null, awaiting_reply_since: item.at, crew: null, venue: null, r_number: null, j_number: null, subject: r.subject, quiet: false, note: null,
+      dates: [], starts_at: null, awaiting_reply_since: item.at, crew: null, venue: null, r_number: null, j_number: null, subject: r.subject, quiet: false, follow_up: false, note: null,
     });
   }
 

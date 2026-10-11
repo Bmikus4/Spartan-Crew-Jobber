@@ -37,6 +37,7 @@ export function coerceSettings(body: unknown): Partial<Settings> {
   const b = (body ?? {}) as Record<string, unknown>;
   const next: Partial<Settings> = {};
   if (typeof b.replies_enabled === "boolean") next.replies_enabled = b.replies_enabled;
+  if (typeof b.followup_drafting === "boolean") next.followup_drafting = b.followup_drafting;
   if (b.reply_delivery === "draft" || b.reply_delivery === "send") next.reply_delivery = b.reply_delivery;
   if (b.reply_scope === "all" || b.reply_scope === "enquiries") next.reply_scope = b.reply_scope;
   // 0 is a real value here - it means "no fallback, hold the thread" - so this
