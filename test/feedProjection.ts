@@ -263,16 +263,17 @@ console.log("\n[15] the rebuild's decisions reach ops on the TV and nowhere else
   const written = row("x", { kind: "write", decision: { kind: "write", ops, why: ["R11275 shift 41719: times to 11:00-15:00"] }, executed: [{ op_key: "k", status: "verified", reasons: [] }] });
   const p = project([], new Map(), [], null, NOW, new Map(), v2Sources([quote, change, shadow, written], NOW));
   const by = new Map(p.cards.map((c) => [c.thread_id, c]));
-  ok(by.get("q")?.items[0].kind === "needs-created" && by.get("q")?.note === "The client asked for a quote" && by.get("q")?.company === "Impact Collective", "a quote is a new job for a person, with the system's reason on the card");
+  // A quote is answered by a reply, not an order (Ben, 10-11), and the line is cardNote's.
+  ok(by.get("q")?.items[0].kind === "needs-reply" && /Price it and send the quote$/.test(by.get("q")?.note ?? "") && by.get("q")?.company === "Impact Collective", "a quote is a reply for a person, with what to do on the card", by.get("q")?.note ?? "");
   ok(by.get("c")?.items[0].kind === "needs-updated" && by.get("c")?.r_number === "R11475" && by.get("c")?.dates[0] === "2026-10-12" && by.get("c")?.crew === 6, "a change it could not make reads needs updated, on the order the reason names");
   ok(p.wants.get("c")?.r_numbers[0] === "11475", "and the verifier looks for that order, so a staff edit there closes it");
-  ok(by.get("w")?.items[0].kind === "needs-updated" && by.get("w")?.order_id === 950 && /^Not written yet \(shadow\): R11275/.test(by.get("w")?.note ?? ""), "a planned write not yet made is still a person's job, saying what the system would do");
+  ok(by.get("w")?.items[0].kind === "needs-updated" && by.get("w")?.order_id === 950 && by.get("w")?.note === "Times now 11:00-15:00 · Not written, do it by hand", "a planned write not yet made is still a person's job, saying what the system would do");
   ok(by.get("x")?.items[0].kind === "updated-check" && !by.get("x")?.green && p.counts.to_check === 1, "a write the system made is a check, never an automatic green");
-  ok(p.counts.needs_created === 1 && p.counts.needs_updated === 2, "counted with the rest");
+  ok(p.counts.needs_reply === 1 && p.counts.needs_created === 0 && p.counts.needs_updated === 2, "counted with the rest", JSON.stringify(p.counts));
 
   const later = row("c", { message_id: "m-c2", sent_at: new Date(NOW - 30 * 60_000).toISOString(), decision: { kind: "handoff", reasons: ["no venue in the email"] }, grounded: { intent: "booking", requests: [], problems: [] }, subject: "Another" });
   const both = v2Sources([change, later], NOW);
-  ok(both.length === 1 && both[0].note === "No venue in the email", "a thread shows its newest decision that needs a person");
+  ok(both.length === 1 && both[0].note === "New booking · No venue given", "a thread shows its newest decision that needs a person");
   const state = needsUpdated("c");
   const merged = project([state], new Map(), [], null, NOW, new Map(), v2Sources([change], NOW));
   ok(merged.cards.length === 1 && /6 crew/.test(merged.cards[0].note ?? ""), "the rebuild's decision replaces the paused engine's state for the same thread");

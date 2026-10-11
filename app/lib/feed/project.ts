@@ -433,6 +433,10 @@ export function project(
       it = { item_key: was.item_key, kind, status: STATUS_TEXT[kind], at: was.at, order_id: s.order_id };
     }
     if (!it || it.at < from) continue;
+    // A question, a quote or a missing detail is answered by writing back: once an email of
+    // ours is on the thread after it, it is done (a draft is not an email: only sent mail is
+    // in lastOutbound).
+    if (it.kind === "needs-reply" && (lastOutbound.get(s.thread_id) ?? 0) >= it.at) continue;
     const g = green(it);
     if (g && now - g.at > DONE_DWELL_MS) continue;
     if (!g && !days.length && now - it.at > STALE_UNDATED_MS) { counts.older++; continue; }
@@ -440,6 +444,7 @@ export function project(
     if (g) counts.done++;
     else if (it.kind === "needs-created") counts.needs_created++;
     else if (it.kind === "needs-updated") counts.needs_updated++;
+    else if (it.kind === "needs-reply") counts.needs_reply++;
     else counts.to_check++;
 
     const { order_id, ...item } = it;
@@ -464,8 +469,8 @@ export function project(
       thread_id: s.thread_id,
       // The legend's colour is the NEED, not whether an order is bound (Ben, 2026-10-04): an
       // update the engine never bound read "Order needs updated" in red, against the key.
-      colour: item.kind === "needs-created" || item.kind === "created-check" ? "red" : "blue",
-      lane: g ? "done" : "need",
+      colour: item.kind === "needs-reply" ? "neutral" : item.kind === "needs-created" || item.kind === "created-check" ? "red" : "blue",
+      lane: g ? "done" : item.kind === "needs-reply" ? "reply" : "need",
       items: [{ ...item, green: g }],
       green: !!g,
       at: it.at,
@@ -499,9 +504,10 @@ export function project(
    */
   for (const r of replies ?? []) {
     if (dismissed.has(r.thread_id)) continue;
+    const card = cards.get(r.thread_id);
+    if (card?.items.some((i) => i.kind === "needs-reply")) continue; // the rebuild already asks for this reply
     counts.needs_reply++;
     const item: FeedItem = { item_key: `reply:${r.thread_id}:${r.since_iso}`, kind: "needs-reply", status: STATUS_TEXT["needs-reply"], at: Date.parse(r.since_iso) || now, green: null };
-    const card = cards.get(r.thread_id);
     if (card) {
       card.items.push(item);
       card.lane = "reply";

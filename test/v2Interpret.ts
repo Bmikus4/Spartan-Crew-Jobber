@@ -49,7 +49,9 @@ console.log("values the email does not support");
 }
 {
   const i = ground(ex([req({ date: g("2026-09-17", "17th September"), start: g("09:30", "9.30am"), duration_minutes: g(180, "3hr call"), crew: g(3, "3 x Crew"), trade: g("AV technician", "17th September") })]), newest, sent);
-  ok(i.requests[0].problems.some((p) => p.includes("trade")), "an unbenched trade goes to ops");
+  // Ben, 10-11: "Orders must still be created reguardless of profession". The trade is kept for
+  // the planner, which books it as its OnSinch profession (professions.ts); grounding never refuses it.
+  ok(!i.requests[0].problems.some((p) => p.includes("trade")) && i.requests[0].trade === "AV technician", "a named trade is kept, never refused");
 }
 
 console.log("crew increases");

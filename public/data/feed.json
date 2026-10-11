@@ -3058,5 +3058,50 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0163",
+  "ts": "2026-10-11T21:00:24+00:00",
+  "kind": "measurement",
+  "headline": "Real emails 9-11 Oct: 14 written (all match ops) vs 7; 24 Needs Reply; 8 orders left for a person vs 44; card lines with internal text 0 of 70 (was 20)",
+  "subject": "Named trades are booked as OnSinch professions and TV card lines never show the system's reasoning",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 190,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  },
+  "measured": {
+   "real_email_replay": {
+    "dataset": "every client email the rebuild decided 2026-10-09 10:20 to 2026-10-11 18:00 UTC with a stored model reading (115 emails), re-grounded and re-planned by this commit against OnSinch as of each email (orders created later hidden); no model call",
+    "instrument": "scripts/real-email-scoreboard.mts + scripts/real-email-check-writes.mts (each planned write next to the order ops built)",
+    "needing_action": 46,
+    "written": 14,
+    "reply_needed": 24,
+    "order_left_for_a_person": 8,
+    "written_before": 7,
+    "left_for_a_person_before": 44,
+    "writes_matching_ops": 14,
+    "writes_checked": 14,
+    "order_failure_pct": 36.4,
+    "not_replayable": "21 older messages of multi-message deliveries, handed off unread before; read together from this commit, which needs a model reading to score"
+   },
+   "tv_card_lines": {
+    "dataset": "test/fixtures/v2-cards.json: all 70 production v2 card decisions 2026-10-09..11",
+    "instrument": "test/v2CardNote.ts",
+    "lines_with_internal_text_before": 20,
+    "lines_with_internal_text_after": 0,
+    "over_80_chars_before": 12,
+    "over_80_chars_after": 0
+   },
+   "profession_bench": {
+    "dataset": "TEST company 515",
+    "instrument": "scripts/bench-professions.mts (TEST 515 only)",
+    "create_with_carpenter_and_av_tech": "verified R11513",
+    "add_carpenter_position": "verified on R11466",
+    "repeat": "no-op both"
+   }
+  }
  }
 ]

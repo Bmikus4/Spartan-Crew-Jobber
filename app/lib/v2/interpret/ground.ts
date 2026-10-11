@@ -85,9 +85,35 @@ export function addMinutes(hhmm: string, mins: number): string {
 
 const WORDS: Record<string, number> = { one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10, eleven: 11, twelve: 12 };
 
+/**
+ * One person written as a word: "a carpenter", "someone to assist". Measured 10-11: Wall to
+ * Wall's "add a carpenter" and ILEC's "I require someone" were both refused for having no
+ * digit. "a crew" is a team of unknown size and "a couple" or "a few" are not numbers, so
+ * "a"/"an" count only before a word for ONE person. "him"/"her" never count: "add him as a
+ * third person if he's available" (We Are Family, 10-09) names one person, on a condition,
+ * and read as +1 it wrote 4 crew and a chief over the 3 ops booked.
+ */
+const PERSON = "(?:person|man|guy|lad|chap|carpenter|chippie|joiner|driver|tech|technician|operator|labourer|rigger|hand|crew ?member|crew ?chief|chief|steward|electrician|engineer)";
+export function oneIn(raw: string): boolean {
+  const q = norm(raw);
+  return new RegExp(`(?:^|\\b(?:add|need|require|book|get|want|and|plus|also)\\s+)(?:someone|somebody|(?:a|an|one|1)\\s+(?:extra\\s+|more\\s+|additional\\s+|other\\s+)?${PERSON}s?\\b)`).test(q) && !/\b(couple|few)\b/.test(q);
+}
+
+/** The number in an increase or decrease ("add 2", "another 3", "add a carpenter", "stand down one"). */
+export function amountIn(raw: string): number | null {
+  const q = norm(raw);
+  const d = /(\d{1,3})/.exec(q);
+  if (d) return Number(d[1]) || null;
+  const w = /\b(one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)\b/.exec(q);
+  if (w) return WORDS[w[1]];
+  return oneIn(q) || /\b(add|stand down|release|remove|drop)\s+(?:someone|somebody)\b/.test(q) ? 1 : null;
+}
+
 /** "3 x Crew", "x3", "X2 Crew", "2 crew", "4 x 2hr crew", "6x2hr", "four crew" -> 3/3/2/2/4/6/4. */
 export function parseCount(raw: string): number | null {
-  const q = norm(raw);
+  // "another 3 crew" on a new shift is that shift's 3 (Bearded Kitten, 10-09).
+  const q = norm(raw).replace(/^(?:another|an extra|extra|additional)\s+(?=\d|one|two|three|four|five|six|seven|eight|nine|ten)/, "");
+  if (oneIn(q) && !/\d/.test(q)) return 1;
   // "No. of crew: 3", "Crew required: 4", "Crew Size: 2": a booking form's labelled field
   // (EMS and Wall to Wall, measured 10-09). "6x2hr" is six crew for two hours (Event Concept).
   let m = /^x\s*(\d{1,3})\b/.exec(q) ?? /\b(\d{1,3})\s*x(?:\b|(?=\s*\d+(?:\.\d+)?\s*(?:hours?|hrs?|h)\b))/.exec(q) ?? /^(\d{1,3})\b/.exec(q)
@@ -152,6 +178,35 @@ function weekdayAlone(q: string, weekday: string, sent: Date): string | null {
   if (/\d/.test(q) || /\b(next|last|following|previous)\b/.test(q)) return null;
   const gap = (WEEKDAYS.indexOf(weekday) - sent.getUTCDay() + 7) % 7;
   return gap === 0 ? null : new Date(sent.getTime() + gap * 864e5).toISOString().slice(0, 10);
+}
+
+/**
+ * The day a request is FOR. "shift the Wednesday 14th de-rig shift to Tuesday 13th" names two
+ * days; the one after "to" is the new day and the other is the shift's (its target). Measured
+ * 10-11 (The Events House): read as the first day, it was refused as 14th, not 13th. Only a
+ * moving verb splits the quote: "12th to 14th" alone is a range and stays unread.
+ */
+export function parseNewDate(raw: string, sentIso: string): string | null {
+  const q = norm(raw);
+  const m = /\b(?:move|moving|moved|shift|shifting|change|changing|bring|bringing|push|pushing|swap|swapping|pull|pulling)\b[\s\S]*\bto\s+([\s\S]+)$/.exec(q);
+  if (m) { const to = parseDate(m[1], sentIso); if (to) return to; }
+  return parseDate(raw, sentIso);
+}
+
+/**
+ * The one date a SUBJECT carries ("Crew availability 13/10", "J46464 - 14/10/26 @ Roundhouse"),
+ * or null when it has none or several. A reply that names no day is about its subject's day:
+ * Encore's "2 x crew also for 2 hours at 21:30" and "change the evening call" (10-09, 10-11)
+ * were both refused for "no day", under the subject "Crew availability 13/10".
+ */
+export function subjectDate(subject: string, sentIso: string): string | null {
+  const s = norm(subject).replace(/^((re|fw|fwd)\s*:\s*)+/g, "");
+  // "today"/"tomorrow" in a subject count from the day the SUBJECT was first written, which a
+  // reply's sent date does not give, so a subject carrying one has no date here.
+  if (/\b(today|tonight|tomorrow)\b/.test(s)) return null;
+  const tokens = s.match(/\b\d{1,2}[/.]\d{1,2}(?:[/.]\d{2,4})?\b|\b\d{1,2}(?:st|nd|rd|th)\b(?:\s+(?:of\s+)?[a-z]{3,9})?/g) ?? [];
+  if (tokens.length !== 1) return null;
+  return parseDate(tokens[0], sentIso);
 }
 
 export function parseDate(raw: string, sentIso: string): string | null {

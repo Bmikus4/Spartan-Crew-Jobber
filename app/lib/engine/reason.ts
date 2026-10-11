@@ -143,8 +143,11 @@ export interface ReplyContext {
    *  updating-existing  an order already exists and this changes it
    *  blocked            no order exists and cannot be built yet
    *  not-a-job          nothing to book
+   *  assumed-done       the rebuild's drafts (Ben, 10-11): written as though the team has
+   *                     already made the booking or change the client asked for, so a
+   *                     person makes it and sends the draft unedited
    */
-  order_state: "staged" | "updating-existing" | "blocked" | "not-a-job";
+  order_state: "staged" | "updating-existing" | "blocked" | "not-a-job" | "assumed-done";
   /**
    * Things ONLY THE CLIENT can supply, without which no order can be built —
    * crew size, dates, times, venue. Never company or rate: an unknown company is
@@ -152,6 +155,12 @@ export interface ReplyContext {
    * put to a client. Empty unless order_state is "blocked".
    */
   ask_for: string[];
+  /**
+   * assumed-done only: the client asked for a quote, and the colleague attaches it. Said
+   * only then: told "a quote they asked for is attached" on every draft, the model attached
+   * a quote to 4 of 8 plain bookings (simulation, 10-11).
+   */
+  quote_attached?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -440,9 +449,13 @@ ${renderConversation(latest, history).text}`,
             ? "A booking for this job ALREADY EXISTS and the change in this email is being applied to it."
             : state === "blocked"
               ? "NO booking has been made and none can be until the client sends more information."
-              : "There is nothing to book in this thread.";
+              : state === "assumed-done"
+                ? context?.quote_attached
+                  ? "The client asked for a quote, and the quote for exactly what they wrote IS ATTACHED to this email. A colleague attaches it before sending this draft."
+                  : "What the client asked for in this email HAS BEEN DONE: the booking is made, or the change is made, exactly as they wrote it. A colleague does it before sending this draft, so write it as done. Nothing is attached to this email."
+                : "There is nothing to book in this thread.";
       const asks = (context?.ask_for ?? []).length
-        ? `\nTO BOOK THIS, THE CLIENT STILL NEEDS TO TELL US:\n- ${context!.ask_for.join("\n- ")}`
+        ? `\n${state === "assumed-done" ? "THE CLIENT DID NOT TELL US, SO ASK FOR IT" : "TO BOOK THIS, THE CLIENT STILL NEEDS TO TELL US"}:\n- ${context!.ask_for.join("\n- ")}`
         : "";
       return call(
         REPLY_SYSTEM,

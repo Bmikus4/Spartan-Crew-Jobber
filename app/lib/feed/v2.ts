@@ -18,6 +18,7 @@ import type { RunResult } from "../v2/bot/run";
 import type { Op } from "../v2/bot/ops";
 import { londonToUtc, shiftWindow } from "../v2/bot/ops";
 import { rNumbersIn } from "../engine/resolve";
+import { cardNote } from "./cardNote";
 
 /** One v2_decisions row of kind write or handoff, with its message's subject. */
 export interface V2Row {
@@ -35,7 +36,9 @@ export interface V2Row {
 }
 
 const REF = /\b[A-Z]{2,5}-?\d{3,6}\b/g;
-const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+
+/** A decision recorded before plan.ts flagged replies (10-11) is one when every reason is a quote, a question or a detail the client must give. */
+const REPLY_REASON = /asked for a quote|the request is unclear|: no (day|start time|end time or duration|crew count|new time or length) the client wrote$|^no venue in the email$/;
 
 function opDays(op: Op): Array<{ date: string; start: string; end: string; place_id?: number; venue?: string }> {
   if (op.kind === "create_order") return op.shifts.map((s) => ({ date: s.date, start: s.start, end: s.end, place_id: Number(s.place_id), venue: s.place_label }));
@@ -71,23 +74,18 @@ export function v2Source(row: V2Row, now: number): FeedSource {
   const made = row.executed?.find((r) => Number(r.detail?.order_id) > 0)?.detail as { order_id?: unknown; number?: unknown } | undefined;
   const order_id = orderOp ? orderOp.order_id : made ? Number(made.order_id) : null;
   if (made?.number != null && String(made.number)) r_numbers.push(String(made.number).replace(/^R/i, ""));
-  const asksNew = g ? g.intent === "booking" || g.intent === "quote_request" || g.requests.some((r) => r.action === "new_shift") : !r_numbers.length;
+  // A thread that names an order, or a request aimed at an existing shift, is an update even
+  // when it also adds a shift: "move the de-rig to Tuesday, and 6 more on Wednesday" (The
+  // Events House, 10-11) read as Needs Created because one of its requests was a new shift.
+  const aimsAtOrder = !!r_numbers.length || !!order_id || !!g?.requests.some((r) => r.action !== "new_shift" || r.target);
+  const asksNew = g ? !aimsAtOrder && (g.intent === "booking" || g.intent === "quote_request" || g.requests.some((r) => r.action === "new_shift")) : !r_numbers.length;
 
   let kind: FeedKind;
-  let note: string;
-  if (d.kind === "write" && written) {
-    kind = creates ? "created-check" : "updated-check";
-    note = `Done by the system: ${said.join("; ")}`;
-  } else if (d.kind === "write") {
-    kind = creates ? "needs-created" : "needs-updated";
-    const stopped = row.executed?.find((r) => r.status !== "verified");
-    note = stopped
-      ? `The system stopped: ${stopped.reasons.join("; ") || stopped.status}`
-      : `Not written yet (shadow): ${said.join("; ")}`;
-  } else {
-    kind = asksNew ? "needs-created" : "needs-updated";
-    note = cap(said.join("; "));
-  }
+  if (d.kind === "write" && written) kind = creates ? "created-check" : "updated-check";
+  else if (d.kind === "write") kind = creates ? "needs-created" : "needs-updated";
+  else if (d.kind === "handoff" && (d.reply ?? d.reasons.every((x) => REPLY_REASON.test(x)))) kind = "needs-reply";
+  else kind = asksNew ? "needs-created" : "needs-updated";
+  const note = cardNote({ decision: d, grounded: g, executed: row.executed, written });
   const at = Date.parse(row.sent_at) || now;
   const item: Omit<FeedItem, "green"> & { order_id: number | null } = {
     item_key: `${kind}:${row.thread_id}:${order_id ?? 0}:${row.message_id}`,

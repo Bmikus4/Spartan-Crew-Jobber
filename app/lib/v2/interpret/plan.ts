@@ -14,12 +14,15 @@
 import type { Op, PositionSpec, ShiftSpec } from "../bot/ops";
 import { shiftWindow, utcToLondon } from "../bot/ops";
 import type { Interpretation, Request } from "./interpret";
-import { addMinutes } from "./ground";
+import { addMinutes, subjectDate } from "./ground";
+import { tradeOf, pickProfession, PROFESSION_NAME } from "./professions";
 import { matchCompanyByDomain, rNumbersIn, normName } from "../../engine/resolve";
 
 export type World = {
   companies(): Promise<any[]>;
   placesNamed(name: string): Promise<{ id: number; name: string }[]>;
+  /** Every OnSinch place, for names written with an address or a district after them. */
+  allPlaces?(): Promise<{ id: number; name: string; address?: string }[]>;
   companyOrders(companyId: number): Promise<any[]>;
   orderByNumber(rNumber: string): Promise<any | null>;
 };
@@ -28,10 +31,18 @@ export type Message = { message_id: string; from: string; subject: string; sentI
 
 export type Decision =
   | { kind: "write"; ops: { source: string; op: Op }[]; why: string[] }
-  | { kind: "handoff"; reasons: string[] }
+  /**
+   * reply: what a person must do is WRITE BACK, not touch an order: a quote, a question, or a
+   * booking missing a detail only the client can give. The TV shows it as Needs Reply, never
+   * as an order that failed (Ben, 10-11: 1 failed order in 100 is the bar; a question is not one).
+   */
+  | { kind: "handoff"; reasons: string[]; reply?: boolean }
   | { kind: "none"; reason: string };
 
 const handoff = (...reasons: string[]): Decision => ({ kind: "handoff", reasons });
+const ask = (...reasons: string[]): Decision => ({ kind: "handoff", reasons, reply: true });
+/** A detail the client did not write: the client is asked, nobody can book it without them. */
+const MISSING = /: no (day|start time|end time or duration|crew count|new time or length) the client wrote$|^no venue in the email$/;
 
 /**
  * Ops' practice, measured 10-08 on 725 staff-built shifts: 4-9 crew always carry exactly one
@@ -62,19 +73,72 @@ export function targetShift(order: any, r: Request): { id: number; slots: any[] 
     const words = SHIFT_WORDS.filter((w) => r.target!.quote.toLowerCase().includes(w));
     if (words.length) cands = cands.filter((t) => words.some((w) => t.name.toLowerCase().replace(/-/g, "").includes(w.replace(/-/g, ""))));
   }
+  // "the evening call" (Encore, 10-11): two shifts that day, one starting after 17:00.
+  if (cands.length > 1 && r.target?.quote) {
+    const q = r.target.quote.toLowerCase();
+    const hour = (t: { slots: any[] }) => Number(utcToLondon(t.slots[0].beginning).time.slice(0, 2));
+    const band = /\b(evening|night|late)\b/.test(q) ? (h: number) => h >= 17 : /\bmorning\b/.test(q) ? (h: number) => h < 12 : /\bafternoon\b/.test(q) ? (h: number) => h >= 12 && h < 17 : null;
+    if (band) cands = cands.filter((t) => band(hour(t)));
+  }
   if (cands.length !== 1) return `${cands.length} shifts on ${day} could be the one meant`;
   return cands[0];
 }
 
 /**
- * The OnSinch places a venue name means. Exact names only, never a resemblance. Clients
- * often write the address after the name ("The Peninsula, 1 Grosvenor Place, ..."), so the
- * name before the first comma is tried too.
+ * A venue as clients write it, reduced to its name: "The Peninsula, 1 Grosvenor Place, ...",
+ * "Labs House 15-19 Bloomsbury Way", "BDC in Angel", "Christies". Measured 10-09..10-11: 4 of
+ * 44 hand-offs were venues OnSinch holds as "The Peninsula London", "LABS House", "BDC" and
+ * "Christie's London". The address, a district after "in", "the", "London" and apostrophes
+ * carry no name; what is left must equal a place's name reduced the same way.
  */
-async function placesFor(world: World, venue: string): Promise<{ id: number; name: string }[]> {
-  const exact = (await world.placesNamed(venue)).filter((p) => normName(p.name) === normName(venue));
-  const head = venue.split(",")[0].trim();
-  return exact.length || head === venue ? exact : (await world.placesNamed(head)).filter((p) => normName(p.name) === normName(head));
+export function venueKey(name: string): string {
+  return normName(name.split(",")[0].replace(/[‘’']/g, "").replace(/\s+\d[\s\S]*$/, "").replace(/\s+in\s+[a-z ]+$/i, ""))
+    .replace(/\b(the|london|venue|uk)\b/g, " ").replace(/\s+/g, " ").trim();
+}
+
+/**
+ * The OnSinch places a venue name means: its exact name, else its name with the address
+ * dropped (venueKey). Never a resemblance: a key must equal a key. Several places with one
+ * name (146 addresses hold 2 or more) are narrowed to the ones this client has booked before.
+ */
+async function placesFor(world: World, venue: string, clientOrders: any[] = []): Promise<{ id: number; name: string }[]> {
+  let hits: { id: number; name: string; address?: string }[] = (await world.placesNamed(venue)).filter((p) => normName(p.name) === normName(venue));
+  if (!hits.length) {
+    const head = venue.split(",")[0].trim();
+    if (head !== venue) hits = (await world.placesNamed(head)).filter((p) => normName(p.name) === normName(head));
+  }
+  if (!hits.length && world.allPlaces) {
+    const key = venueKey(venue);
+    // Only a place with an address: "BDC" (6615) has none and no booking in 2,995 orders, while
+    // ops book the Business Design Centre as place 29 (Konnect, 10-09).
+    if (key.length >= 3) hits = (await world.allPlaces()).filter((p) => p.address && venueKey(p.name) === key);
+    // "BDC in Angel" (Konnect, 10-09): a short name in capitals is the initials of exactly one
+    // place's name. Ops booked it at the Business Design Centre (29).
+    const caps = venue.split(",")[0].trim().split(/\s+/)[0];
+    if (!hits.length && /^[A-Z]{3,5}$/.test(caps)) {
+      const initials = (n: string) => venueKey(n).split(" ").filter(Boolean).map((w) => w[0]).join("");
+      const acr = (await world.allPlaces()).filter((p) => p.address && initials(p.name) === caps.toLowerCase());
+      if (acr.length === 1) hits = acr;
+    }
+  }
+  // ONE BUILDING, SEVERAL PLACES: 146 addresses hold 2 or more. "Mandarin Oriental" (230) and
+  // "Mandarin Oriental Hyde Park, London" (468) are both 66 Knightsbridge, and EMS moved from
+  // 230 to 468 in May 2026; booked by name the order went to 230 (10-09). The building's
+  // places are narrowed to the one this client booked most recently, when it booked any.
+  if (hits.length && clientOrders.length && world.allPlaces) {
+    const all = await world.allPlaces();
+    const addr = (p: { address?: string }) => normName(p.address ?? "");
+    const full = hits.map((h) => all.find((p) => Number(p.id) === Number(h.id)) ?? h);
+    const sameBuilding = all.filter((p) => p.address && full.some((h) => h.address && addr(h) === addr(p)));
+    if (sameBuilding.length > 1 || hits.length > 1) {
+      const pool = new Map([...full, ...sameBuilding].map((p) => [Number(p.id), p]));
+      const latest = [...clientOrders].sort((a, b) => (Date.parse(b.created) || 0) - (Date.parse(a.created) || 0))
+        .flatMap((o) => teams(o).flatMap((t) => t.slots.map((x) => Number(x.SlotLocation?.place_id))))
+        .find((id) => pool.has(id));
+      if (latest) return [pool.get(latest)!];
+    }
+  }
+  return hits;
 }
 
 async function findOrder(msg: Message, companyId: number, world: World, threadOrderId: number | null, day?: string, venue?: string): Promise<any | string> {
@@ -103,15 +167,68 @@ async function findOrder(msg: Message, companyId: number, world: World, threadOr
   return onDay.length ? `${onDay.length} of the client's orders have a shift on ${day}` : `no booking for this client on ${day}`;
 }
 
+type ShiftGroup = { date: string; start: string; end: string; venue?: string; positions: PositionSpec[]; label: string; notes: string[] };
+
+/**
+ * New shifts, one per day and window, each with its positions. "10 crew and 1 carpenter" on
+ * one call is ONE shift with two positions (RG Jones, 10-09: read as two requests). The crew
+ * chief rule counts everyone on the shift: across 402 staff-built shifts with a named trade, a
+ * total of 4-9 carried a chief 128 times in 132, and counting crew alone fitted 71% against
+ * 78%. The chief comes out of the plain crew, so it needs two or more of them.
+ */
+function shiftGroups(news: Request[], clientOrders: any[]): ShiftGroup[] | string {
+  const byWindow = new Map<string, Request[]>();
+  for (const r of news) {
+    const k = `${r.date}|${r.start}|${r.end}`;
+    byWindow.set(k, [...(byWindow.get(k) ?? []), r]);
+  }
+  const out: ShiftGroup[] = [];
+  for (const rs of byWindow.values()) {
+    const venues = [...new Set(rs.map((r) => r.venue).filter(Boolean))];
+    if (venues.length > 1) return `one call at ${venues.length} venues`;
+    let crew = 0;
+    const profs = new Map<string, number>();
+    const notes: string[] = [];
+    const labels: string[] = [];
+    for (const r of rs) {
+      const trade = tradeOf(r.trade);
+      if (!trade) { crew += r.crew!; continue; }
+      if (trade.asCrew) { crew += r.crew!; notes.push(`asked for ${trade.label}: no live OnSinch profession, booked as Crew`); continue; }
+      const p = pickProfession(trade, clientOrders);
+      profs.set(p.id, (profs.get(p.id) ?? 0) + r.crew!);
+      labels.push(`${r.crew} ${trade.label}`);
+      if (trade.candidates.length > 1) notes.push(`${trade.label} booked as ${PROFESSION_NAME[p.id] ?? p.id}${p.fromHistory ? ", the one this client last had" : ", ops' most used (no history for this client)"}`);
+    }
+    const total = crew + [...profs.values()].reduce((a, b) => a + b, 0);
+    if (!crew) return `a shift of ${labels.join(", ")} with no plain crew: the bot builds a shift on a crew position first`;
+    if (total > 9) return `${total} on one shift is not a shape the system builds`;
+    const chief = total >= 4 && crew >= 2;
+    if (rs.some((r) => r.crew_chief) && !chief) return "a crew chief was asked for on a crew of 3 or fewer";
+    const positions: PositionSpec[] = chief ? [{ size: 1, profession_id: "36", role: "crew_chief" }, { size: crew - 1, profession_id: "1" }] : [{ size: crew, profession_id: "1" }];
+    for (const [id, size] of profs) positions.push({ size, profession_id: id });
+    const r0 = rs[0];
+    out.push({ date: r0.date!, start: r0.start!, end: r0.end!, venue: venues[0], positions, label: [`${crew} crew`, ...labels].join(", "), notes });
+  }
+  return out;
+}
+
 export async function plan(msg: Message, i: Interpretation, world: World, threadOrderId: number | null = null): Promise<Decision> {
   const problems = [...i.problems, ...i.requests.flatMap((r) => r.problems)];
-  if (problems.length) return handoff(...problems);
-  if (i.intent === "quote_request") return handoff("the client asked for a quote");
-  if (i.intent === "unclear") return handoff("the request is unclear");
+  // A quote, a question or an availability check whose shift is not bookable as written is
+  // answered by a reply: "If you can check availability for Sunday" (Vivid), "send me a quote
+  // for Friday 16th" (Blackout) were order cards before.
+  const asking = i.intent === "quote_request" || i.intent === "unclear" || i.intent === "info_only";
+  if (problems.length) return problems.every((p) => MISSING.test(p) || (asking && /not an operation the system performs$/.test(p))) ? ask(...problems) : handoff(...problems);
+  if (i.intent === "quote_request") return ask("the client asked for a quote");
+  if (i.intent === "unclear") return ask("the request is unclear");
   if (i.intent === "info_only" && !i.po) return { kind: "none", reason: ["no change asked for", ...(i.notes ?? [])].join("; ") };
 
   const companyId = matchCompanyByDomain(msg.from, await world.companies());
+  // A sender OnSinch has no company for has nothing booked: a cancellation or a PO from them
+  // changes nothing (AT Comms, 10-11: "the PM has this covered now" after their first email).
+  if (!companyId && (i.intent === "cancellation" || i.intent === "info_only")) return { kind: "none", reason: `${msg.from} is not a client in OnSinch, so nothing of theirs is booked` };
   if (!companyId) return handoff(`no single client company for ${msg.from}`);
+  const clientOrders = await world.companyOrders(companyId);
   const ops: { source: string; op: Op }[] = [];
   const why: string[] = [];
   const src = (n: number) => `${msg.message_id}#${n}`;
@@ -143,6 +260,16 @@ export async function plan(msg: Message, i: Interpretation, world: World, thread
     } else if (r.action === "cancel_shift") {
       for (const s of shift.slots) ops.push({ source: `${src(n)}:${s.id}`, op: { kind: "cancel_position", order_id: Number(order.id), slot_id: Number(s.id) } });
       why.push(`R${order.number} shift ${shift.id}: cancelled`);
+    } else if (r.action === "change_crew" && tradeOf(r.trade)) {
+      // "add a carpenter to the team tomorrow" (Wall to Wall, 10-11): a position of that
+      // profession on the shift, beside the crew. Only an addition: a total or a reduction of
+      // a profession is for a person to square with what is booked.
+      const trade = tradeOf(r.trade)!;
+      if (!r.crew_add || r.crew || r.crew_remove) return handoff(`R${order.number}: a change to the ${trade.label} count other than adding`);
+      const prof = pickProfession(trade, clientOrders);
+      const londonStart = utcToLondon(first.beginning).time, londonEnd = utcToLondon(first.end).time;
+      ops.push({ source: `${src(n)}:prof`, op: { kind: "add_position", order_id: Number(order.id), shift_id: shift.id, date, start: londonStart, end: londonEnd, position: { size: r.crew_add, profession_id: prof.id } } });
+      why.push(`R${order.number}: add ${r.crew_add} ${trade.asCrew ? `crew (asked for ${trade.label})` : trade.label} on ${date}`);
     } else if (r.action === "change_crew") {
       const chief = shift.slots.filter((s) => Number(s.role) === 1);
       const crew = shift.slots.filter((s) => Number(s.role) !== 1 && Number(s.profession_id) === 1);
@@ -183,18 +310,18 @@ export async function plan(msg: Message, i: Interpretation, world: World, thread
     const atPlace = new Map<number, number>();
     for (const t of teams(named)) for (const s of t.slots) if (Number(s.slotlocation_id)) atPlace.set(Number(s.SlotLocation?.place_id), Number(s.slotlocation_id));
     const locations = new Set(atPlace.values());
-    for (const [n, r] of news.entries()) {
+    const groups = shiftGroups(news, clientOrders);
+    if (typeof groups === "string") return handoff(groups);
+    for (const [n, g] of groups.entries()) {
       let location_id = locations.size === 1 ? [...locations][0] : 0;
       // An order at several venues: the venue the client names picks the location, or nothing does.
-      if (!location_id && r.venue) {
-        const hits = (await placesFor(world, r.venue)).map((p) => atPlace.get(p.id)).filter((x): x is number => !!x);
+      if (!location_id && g.venue) {
+        const hits = (await placesFor(world, g.venue, clientOrders)).map((p) => atPlace.get(p.id)).filter((x): x is number => !!x);
         if (hits.length === 1) location_id = hits[0];
       }
       if (!location_id) return handoff(`R${named.number} has ${locations.size} locations; which one the new shift belongs to is not written`);
-      const positions = positionsFor(r.crew!);
-      if (!positions) return handoff(`${r.crew} crew is not a shape the system builds`);
-      ops.push({ source: src(50 + n), op: { kind: "add_shift", order_id: Number(named.id), location_id, name: "Crew", date: r.date!, start: r.start!, end: r.end!, positions } });
-      why.push(`R${named.number}: add a shift on ${r.date} ${r.start}-${r.end}, ${r.crew} crew`);
+      ops.push({ source: src(50 + n), op: { kind: "add_shift", order_id: Number(named.id), location_id, name: "Crew", date: g.date, start: g.start, end: g.end, positions: g.positions } });
+      why.push(`R${named.number}: add a shift on ${g.date} ${g.start}-${g.end}, ${g.label}`, ...g.notes);
     }
   } else if (news.length && threadOrderId) {
     // THE THREAD IS ALREADY LINKED TO AN ORDER (bound, made by the bot, or found by the TV's
@@ -207,11 +334,11 @@ export async function plan(msg: Message, i: Interpretation, world: World, thread
     // by hand. Some booked and some not is for a person to untangle.
     // The venue counts when the email names one OnSinch knows: EMS's Mandarin Oriental install
     // (10-09) has the same day, hours and crew as its Roundhouse derig, and was not booked.
-    const orders = await world.companyOrders(companyId);
+    const orders = clientOrders;
     const placeIds = new Map<Request, Set<number> | null>();
     for (const r of news) {
       const venue = r.venue ?? news.find((x) => x.venue)?.venue;
-      const places = venue ? await placesFor(world, venue) : [];
+      const places = venue ? await placesFor(world, venue, clientOrders) : [];
       placeIds.set(r, places.length === 1 ? new Set(places.map((p) => Number(p.id))) : null);
     }
     const bookedIn = (r: Request) => {
@@ -222,28 +349,54 @@ export async function plan(msg: Message, i: Interpretation, world: World, thread
     };
     const booked = news.map(bookedIn);
     if (booked.every(Boolean)) return { kind: "none", reason: `already booked: ${[...new Set(booked.map((o) => `R${o.number}`))].join(", ")}` };
-    if (booked.some(Boolean)) return handoff(`part of this is already booked (${booked.filter(Boolean).map((o) => `R${o.number}`).join(", ")})`);
+    // Some of it already booked, all in ONE order: the email re-lists that booking and adds to
+    // it ("Yes please, 2 x crew also for 2 hours at 21:30", Encore 10-09, which ops added to
+    // R11498). The rest is added to that order at its one location; anything else is a person's.
+    if (booked.some(Boolean)) {
+      const hit = [...new Set(booked.filter(Boolean).map((o) => Number(o.id)))];
+      const o = booked.find(Boolean);
+      const locs = new Set(teams(o).flatMap((t) => t.slots.map((x) => Number(x.slotlocation_id)).filter(Boolean)));
+      const rest = news.filter((_, k) => !booked[k]);
+      const groups = hit.length === 1 && locs.size === 1 ? shiftGroups(rest, clientOrders) : null;
+      if (!groups || typeof groups === "string") return handoff(`part of this is already booked (${booked.filter(Boolean).map((x) => `R${x.number}`).join(", ")})`);
+      for (const [n, g] of groups.entries()) {
+        ops.push({ source: src(50 + n), op: { kind: "add_shift", order_id: Number(o.id), location_id: [...locs][0], name: "Crew", date: g.date, start: g.start, end: g.end, positions: g.positions } });
+        why.push(`R${o.number}: add a shift on ${g.date} ${g.start}-${g.end}, ${g.label} (the rest of the email is already booked there)`, ...g.notes);
+      }
+      const notes = i.notes ?? [];
+      return { kind: "write", ops, why: [...why, ...notes] };
+    }
     const shifts: ShiftSpec[] = [];
-    for (const r of news) {
-      const positions = positionsFor(r.crew!);
-      if (!positions) return handoff(`${r.crew} crew is not a shape the system builds`);
-      if (r.crew_chief && positions.length === 1) return handoff("a crew chief was asked for on a crew of 3 or fewer");
-      const venue = r.venue ?? news.find((x) => x.venue)?.venue;
-      if (!venue) return handoff("no venue in the email");
-      const places = await placesFor(world, venue);
+    const groups = shiftGroups(news, clientOrders);
+    if (typeof groups === "string") return handoff(groups);
+    const extra: string[] = [];
+    for (const g of groups) {
+      const venue = g.venue ?? news.find((x) => x.venue)?.venue;
+      if (!venue) return ask("no venue in the email");
+      const places = await placesFor(world, venue, clientOrders);
       if (places.length !== 1) return handoff(`${places.length} OnSinch venues are named "${venue}"`);
-      shiftWindow(r.date!, r.start!, r.end!);
-      shifts.push({ name: "Crew", date: r.date!, start: r.start!, end: r.end!, place_id: String(places[0].id), place_label: places[0].name, positions });
+      shiftWindow(g.date, g.start, g.end);
+      shifts.push({ name: "Crew", date: g.date, start: g.start, end: g.end, place_id: String(places[0].id), place_label: places[0].name, positions: g.positions });
+      extra.push(...g.notes);
     }
     const companies = await world.companies();
     const company = companies.find((c) => Number(c.id) === companyId);
     const venueName = shifts[0].place_label;
     ops.push({ source: src(100), op: { kind: "create_order", company_id: String(companyId), company_name: String(company?.name ?? "").trim(), client_email: msg.from, job_name: `${String(company?.name ?? "").trim()} @ ${venueName}`, po: i.po, shifts } });
-    why.push(`new order: ${shifts.length} shift(s) at ${venueName}`);
+    why.push(`new order: ${shifts.length} shift(s) at ${venueName}`, ...extra);
   } else if (i.po) {
-    const order = await findOrder(msg, companyId, world, threadOrderId);
-    if (typeof order === "string") return handoff(`PO ${i.po}: ${order}`);
-    if ((order.intern_name ?? "") !== i.po) ops.push({ source: src(200), op: { kind: "set_po", order_id: Number(order.id), po: i.po } });
+    // The order a PO is for: the email's R number or the thread's order, else the client's
+    // one order on the subject's day ("13/10 British museum ref:2871"). A PO is cosmetic (Ben:
+    // 1 in 50), so one no order can be found for is left off with the reason, not a card.
+    let order = await findOrder(msg, companyId, world, threadOrderId);
+    const day = typeof order === "string" ? subjectDate(msg.subject, msg.sentIso) : null;
+    if (typeof order === "string" && day) order = await findOrder(msg, companyId, world, null, day);
+    if (typeof order === "string") return { kind: "none", reason: `PO ${i.po} left off: ${order}` };
+    // A PO already on the order is never replaced by the system: the client correcting one is
+    // rare, and a reference misread as a PO would overwrite the real one.
+    const had = String(order.intern_name ?? "").trim();
+    if (had && had !== i.po) return handoff(`R${order.number} already has PO ${had}; the email gives ${i.po}`);
+    if (had !== i.po) ops.push({ source: src(200), op: { kind: "set_po", order_id: Number(order.id), po: i.po } });
     why.push(`R${order.number}: PO ${i.po}`);
   }
   const notes = i.notes ?? [];
