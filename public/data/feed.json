@@ -2932,5 +2932,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0154",
+  "ts": "2026-10-11T00:23:49+00:00",
+  "kind": "measurement",
+  "headline": "TV: 48-hour count bolder",
+  "subject": "The TV's within-48-hours count is set heavier than the other counts, its label amber",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 187,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]

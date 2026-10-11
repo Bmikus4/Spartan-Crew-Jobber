@@ -493,12 +493,13 @@ export default function LiveFeedScreen({ isActive, tv = false }: { isActive: boo
   const openCount = cards.filter(isOpen).length;
   const pad = 28 * s;
 
-  const kpis: Array<{ label: string; n: number; color: string }> = c ? [
+  const kpis: Array<{ label: string; n: number; color: string; loud?: boolean }> = c ? [
     { label: "Need created", n: c.needs_created, color: RED },
     { label: "Need updated", n: c.needs_updated, color: BLUE },
     { label: "To check", n: c.to_check, color: "var(--text-primary)" },
     ...(data?.health.replies_enabled ? [{ label: "Need reply", n: c.needs_reply, color: GREY }] : []),
-    { label: "Within 48 hours", n: urgentCount, color: AMBER },
+    // The one count that is about time running out, so it is set heavier than the rest (Ben, 2026-10-10).
+    { label: "Within 48 hours", n: urgentCount, color: AMBER, loud: true },
   ] : [];
 
   return (
@@ -520,8 +521,8 @@ export default function LiveFeedScreen({ isActive, tv = false }: { isActive: boo
         <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 32 * s, flexWrap: "wrap" }}>
           {kpis.map((k) => (
             <div key={k.label} style={{ display: "flex", flexDirection: "column", alignItems: "flex-end" }}>
-              <span className="tnum" style={{ fontSize: 40 * s, fontWeight: 700, lineHeight: 1, letterSpacing: "-0.02em", color: k.n ? k.color : "var(--text-faint)" }}>{k.n}</span>
-              <span style={{ fontSize: 13 * s, fontWeight: 600, letterSpacing: "0.1em", textTransform: "uppercase", color: "var(--text-muted)", marginTop: 6 * s, whiteSpace: "nowrap" }}>{k.label}</span>
+              <span className="tnum" style={{ fontSize: (k.loud ? 48 : 40) * s, fontWeight: k.loud ? 900 : 700, lineHeight: 1, letterSpacing: "-0.02em", color: k.n ? k.color : "var(--text-faint)" }}>{k.n}</span>
+              <span style={{ fontSize: (k.loud ? 15 : 13) * s, fontWeight: k.loud ? 800 : 600, letterSpacing: "0.1em", textTransform: "uppercase", color: k.loud && k.n ? AMBER : "var(--text-muted)", marginTop: 6 * s, whiteSpace: "nowrap" }}>{k.label}</span>
             </div>
           ))}
           <span style={{ width: 1, alignSelf: "stretch", background: "var(--border)" }} />
