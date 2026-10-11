@@ -2946,5 +2946,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0155",
+  "ts": "2026-10-11T00:47:04+00:00",
+  "kind": "measurement",
+  "headline": "harness: 500 simulated orders, 0 wrong writes, 494/500 end to end; filtered mail recorded",
+  "subject": "Every email's path can now be replayed and scored in one harness",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 188,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]

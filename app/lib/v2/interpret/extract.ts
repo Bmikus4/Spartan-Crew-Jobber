@@ -4,6 +4,7 @@
 // interpret.ts throws away any value whose words are not in the email or do not parse to
 // that value, and the planner decides what (if anything) to write.
 // ============================================================================
+import { createHash } from "node:crypto";
 
 export type Grounded<T> = { value: T; quote: string } | null;
 
@@ -64,16 +65,23 @@ export function userPrompt(sentIso: string, from: string, subject: string, newes
   return `Sent: ${sentIso}\nFrom: ${from}\nSubject: ${subject}\n\nNEWEST MESSAGE:\n${newest.slice(0, 6000)}`;
 }
 
+export const interpretModel = () => process.env.SPARTAN_INTERPRET_MODEL || process.env.SPARTAN_MODEL || "anthropic/claude-opus-4.6";
+/** Which prompt produced an extraction: a reading is only comparable to one made by the same prompt. */
+export const PROMPT_ID = `extract@${createHash("sha256").update(SYSTEM).digest("hex").slice(0, 12)}`;
+
+export type ExtractMeta = { model: string; prompt_id: string; input_tokens: number | null; output_tokens: number | null; cost_usd: number | null; ms: number };
+
 /** One OpenRouter call (the key the engine already uses). Costs money: callers budget it. */
-export async function extract(sentIso: string, from: string, subject: string, newest: string): Promise<Extraction> {
+export async function extractWithMeta(sentIso: string, from: string, subject: string, newest: string): Promise<{ x: Extraction; meta: ExtractMeta }> {
   const apiKey = process.env.OPENROUTER_API_KEY;
   if (!apiKey) throw new Error("OPENROUTER_API_KEY not set");
-  const model = process.env.SPARTAN_INTERPRET_MODEL || process.env.SPARTAN_MODEL || "anthropic/claude-opus-4.6";
+  const model = interpretModel();
+  const t0 = Date.now();
   const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
     method: "POST",
     headers: { authorization: `Bearer ${apiKey}`, "content-type": "application/json" },
     body: JSON.stringify({
-      model, temperature: 0, response_format: { type: "json_object" },
+      model, temperature: 0, response_format: { type: "json_object" }, usage: { include: true },
       messages: [{ role: "system", content: SYSTEM }, { role: "user", content: userPrompt(sentIso, from, subject, newest) }],
     }),
     signal: AbortSignal.timeout(60000),
@@ -84,5 +92,14 @@ export async function extract(sentIso: string, from: string, subject: string, ne
   const text = String(j?.choices?.[0]?.message?.content ?? "");
   const first = text.indexOf("{"), last = text.lastIndexOf("}");
   if (first < 0 || last <= first) throw new Error("extract: no JSON object in the answer");
-  return JSON.parse(text.slice(first, last + 1)) as Extraction;
+  const u = j?.usage ?? {};
+  const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : null);
+  return {
+    x: JSON.parse(text.slice(first, last + 1)) as Extraction,
+    meta: { model: String(j?.model ?? model), prompt_id: PROMPT_ID, input_tokens: num(u.prompt_tokens), output_tokens: num(u.completion_tokens), cost_usd: num(u.cost), ms: Date.now() - t0 },
+  };
+}
+
+export async function extract(sentIso: string, from: string, subject: string, newest: string): Promise<Extraction> {
+  return (await extractWithMeta(sentIso, from, subject, newest)).x;
 }

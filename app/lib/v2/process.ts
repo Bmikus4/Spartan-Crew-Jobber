@@ -13,11 +13,13 @@
 import { neon, type NeonQueryFunction } from "@neondatabase/serverless";
 import { httpTransport, OnsinchClient } from "../engine/onsinch";
 import { matchCompanyByDomain, normName } from "../engine/resolve";
-import { extract } from "./interpret/extract";
+import { extractWithMeta, type Extraction } from "./interpret/extract";
 import { ground, type Interpretation } from "./interpret/interpret";
 import { latestText } from "./interpret/ground";
 import { plan, type Decision, type World } from "./interpret/plan";
 import { runOp, type RunResult } from "./bot/run";
+import type { Op } from "./bot/ops";
+import { noTrace, type Tracer } from "./trace";
 import { v2Writes } from "../paused";
 
 let _sql: NeonQueryFunction<false, false> | null = null;
@@ -114,9 +116,19 @@ export async function decideDelivery(newIds: string[]): Promise<Processed[]> {
   if (!newIds.length) return [];
   const sql = await db();
   const rows = (await sql`SELECT message_id, thread_id, from_address, date_iso, is_from_spartan FROM thread_messages WHERE message_id = ANY(${newIds}) ORDER BY date_iso, first_seen_at`) as any[];
-  const client = rows.filter((r) => !r.is_from_spartan && !NOT_CLIENT.test(addr(r.from_address)));
-  const newest = client[client.length - 1];
   const out: Processed[] = [];
+  const client = rows.filter((r) => !r.is_from_spartan && !NOT_CLIENT.test(addr(r.from_address)));
+  // Every inbound message ends in a recorded state, filtered mail too: bounces and system
+  // mail had no row (10 on 10-09/10), so "was this email handled?" had no answer for them.
+  for (const r of rows.filter((r) => !r.is_from_spartan && NOT_CLIENT.test(addr(r.from_address)))) {
+    const decision: Decision = { kind: "none", reason: "not a client's email" };
+    await sql`
+      INSERT INTO v2_decisions (message_id, thread_id, from_address, sent_at, kind, decision, code_version)
+      VALUES (${r.message_id}, ${r.thread_id}, ${addr(r.from_address)}, ${r.date_iso}, 'none', ${JSON.stringify(decision)}::jsonb, ${process.env.VERCEL_GIT_COMMIT_SHA ?? "local"})
+      ON CONFLICT (message_id) DO NOTHING`;
+    out.push({ message_id: r.message_id, decision });
+  }
+  const newest = client[client.length - 1];
   const world = client.length > 1 ? onsinchWorld() : null;
   for (const r of client.slice(0, -1)) {
     const decision: Decision = { kind: "handoff", reasons: [`sent with a later email (${newest.message_id}); the system read only the later one`] };
@@ -147,42 +159,87 @@ async function runWhenFree(source: string, op: Parameters<typeof runOp>[1]): Pro
   }
 }
 
-export async function processMessage(message_id: string, opts: { execute: boolean; world?: World } = { execute: false }): Promise<Processed> {
-  const sql = await db();
-  const rows = (await sql`SELECT message_id, thread_id, from_address, date_iso, subject, body, is_from_spartan FROM thread_messages WHERE message_id = ${message_id}`) as any[];
-  const m = rows[0];
-  if (!m) return { message_id, skipped: "message not captured" };
+export type MessageIn = { message_id: string; thread_id: string; from_address: string; date_iso: string; subject: string | null; body: string | null; is_from_spartan: boolean };
+export type Client = { id: number | null; name: string | null };
+export type Recorded = { kind: Decision["kind"]; interpretation: { extraction: Extraction; grounded: Interpretation } | null; decision: Decision; executed: RunResult[] | null; client: Client };
+
+/**
+ * Everything one message's handling needs from outside, so the office and the harness run
+ * the SAME decision code: production passes the database, OnSinch and the bot; the harness
+ * passes recordings, a fake OnSinch and a recording runner. There is no test branch here.
+ */
+export type DecideDeps = {
+  extract: typeof extractWithMeta;
+  world: World;
+  /** The order the thread itself is bound to, if any. */
+  threadOrderId: () => Promise<number | null>;
+  /** Null: decide and record only (shadow). */
+  run: ((source: string, op: Op) => Promise<RunResult>) | null;
+  record: (r: Recorded) => Promise<void>;
+  trace: Tracer;
+};
+
+export async function decideMessage(m: MessageIn, deps: DecideDeps): Promise<Recorded> {
   const from = addr(m.from_address);
-  const world = opts.world ?? onsinchWorld();
-  let client: { id: number | null; name: string | null } = { id: null, name: null };
-  const record = async (kind: string, interpretation: unknown, decision: unknown, executed: unknown = null) => {
-    await sql`
-      INSERT INTO v2_decisions (message_id, thread_id, from_address, sent_at, kind, interpretation, decision, executed, code_version, company_id, company)
-      VALUES (${message_id}, ${m.thread_id}, ${from}, ${m.date_iso}, ${kind}, ${JSON.stringify(interpretation)}::jsonb, ${JSON.stringify(decision)}::jsonb, ${JSON.stringify(executed)}::jsonb, ${process.env.VERCEL_GIT_COMMIT_SHA ?? "local"}, ${client.id}, ${client.name})
-      ON CONFLICT (message_id) DO UPDATE SET kind = EXCLUDED.kind, interpretation = EXCLUDED.interpretation, decision = EXCLUDED.decision,
-        executed = coalesce(EXCLUDED.executed, v2_decisions.executed), code_version = EXCLUDED.code_version,
-        company_id = EXCLUDED.company_id, company = EXCLUDED.company`;
-  };
   if (m.is_from_spartan || NOT_CLIENT.test(from)) {
-    const decision: Decision = { kind: "none", reason: "not a client's email" };
-    await record("none", null, decision);
-    return { message_id, skipped: decision.reason, decision };
+    const r: Recorded = { kind: "none", interpretation: null, decision: { kind: "none", reason: "not a client's email" }, executed: null, client: { id: null, name: null } };
+    deps.trace("filter", { client: false });
+    await deps.record(r);
+    deps.trace("final", { kind: r.kind });
+    return r;
   }
-  client = await clientOf(from, world);
+  deps.trace("filter", { client: true });
+  const client = await clientOf(from, deps.world);
   const newest = latestText(String(m.body ?? ""));
-  const x = await extract(m.date_iso, from, String(m.subject ?? ""), newest);
+  const { x, meta } = await deps.extract(m.date_iso, from, String(m.subject ?? ""), newest);
+  deps.trace("extract", { ...meta, intent: x.intent, requests: x.requests?.length ?? 0 }, meta.ms);
+  const t1 = Date.now();
   const interpretation = ground(x, `${m.subject ?? ""}\n${newest}`, m.date_iso);
-  const bound = (await sql`SELECT onsinch_order_id FROM conversation_state WHERE thread_id = ${m.thread_id}`) as any[];
-  const threadOrderId = bound[0]?.onsinch_order_id ? Number(bound[0].onsinch_order_id) : null;
-  const decision = await plan({ message_id, from, subject: String(m.subject ?? ""), sentIso: m.date_iso, text: newest }, interpretation, world, threadOrderId);
-  await record(decision.kind, { extraction: x, grounded: interpretation }, decision);
-  if (!opts.execute || decision.kind !== "write") return { message_id, interpretation, decision };
+  deps.trace("ground", { problems: interpretation.problems.length + interpretation.requests.reduce((a, q) => a + q.problems.length, 0), notes: interpretation.notes ?? [] }, Date.now() - t1);
+  const t2 = Date.now();
+  const decision = await plan({ message_id: m.message_id, from, subject: String(m.subject ?? ""), sentIso: m.date_iso, text: newest }, interpretation, deps.world, await deps.threadOrderId());
+  deps.trace("plan", { kind: decision.kind, ops: decision.kind === "write" ? decision.ops.map((o) => o.op.kind) : [], said: decision.kind === "write" ? decision.why : decision.kind === "handoff" ? decision.reasons : [decision.reason] }, Date.now() - t2);
+  const out: Recorded = { kind: decision.kind, interpretation: { extraction: x, grounded: interpretation }, decision, executed: null, client };
+  await deps.record(out);
+  if (!deps.run || decision.kind !== "write") { deps.trace("final", { kind: out.kind }); return out; }
   const executed: RunResult[] = [];
   for (const { source, op } of decision.ops) {
-    const r = await runWhenFree(source, op);
+    const t3 = Date.now();
+    const r = await deps.run(source, op);
+    deps.trace("run", { op: op.kind, status: r.status, reasons: r.reasons }, Date.now() - t3);
     executed.push(r);
     if (r.status !== "verified") break;
   }
-  await record(decision.kind, { extraction: x, grounded: interpretation }, decision, executed);
-  return { message_id, interpretation, decision, executed };
+  out.executed = executed;
+  await deps.record(out);
+  deps.trace("final", { kind: out.kind, executed: executed.map((e) => e.status) });
+  return out;
+}
+
+export async function processMessage(message_id: string, opts: { execute: boolean; world?: World } = { execute: false }): Promise<Processed> {
+  const sql = await db();
+  const rows = (await sql`SELECT message_id, thread_id, from_address, date_iso, subject, body, is_from_spartan FROM thread_messages WHERE message_id = ${message_id}`) as any[];
+  const m = rows[0] as MessageIn | undefined;
+  if (!m) return { message_id, skipped: "message not captured" };
+  const from = addr(m.from_address);
+  const r = await decideMessage(m, {
+    extract: extractWithMeta,
+    world: opts.world ?? onsinchWorld(),
+    threadOrderId: async () => {
+      const bound = (await sql`SELECT onsinch_order_id FROM conversation_state WHERE thread_id = ${m.thread_id}`) as any[];
+      return bound[0]?.onsinch_order_id ? Number(bound[0].onsinch_order_id) : null;
+    },
+    run: opts.execute ? runWhenFree : null,
+    record: async (d) => {
+      await sql`
+        INSERT INTO v2_decisions (message_id, thread_id, from_address, sent_at, kind, interpretation, decision, executed, code_version, company_id, company)
+        VALUES (${message_id}, ${m.thread_id}, ${from}, ${m.date_iso}, ${d.kind}, ${JSON.stringify(d.interpretation)}::jsonb, ${JSON.stringify(d.decision)}::jsonb, ${JSON.stringify(d.executed)}::jsonb, ${process.env.VERCEL_GIT_COMMIT_SHA ?? "local"}, ${d.client.id}, ${d.client.name})
+        ON CONFLICT (message_id) DO UPDATE SET kind = EXCLUDED.kind, interpretation = EXCLUDED.interpretation, decision = EXCLUDED.decision,
+          executed = coalesce(EXCLUDED.executed, v2_decisions.executed), code_version = EXCLUDED.code_version,
+          company_id = EXCLUDED.company_id, company = EXCLUDED.company`;
+    },
+    trace: noTrace,
+  });
+  if (!r.interpretation) return { message_id, skipped: "not a client's email", decision: r.decision };
+  return { message_id, interpretation: r.interpretation.grounded, decision: r.decision, ...(r.executed ? { executed: r.executed } : {}) };
 }
