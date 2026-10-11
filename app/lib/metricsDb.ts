@@ -8,6 +8,7 @@ import { neon, type NeonQueryFunction } from "@neondatabase/serverless";
 import type { MetricEvent, MetricSink, MetricType } from "./engine/metrics";
 import { aggregate, type DashboardStats } from "./engine/metrics";
 import { ticketStateCounts, type TicketStateCounts } from "./ticketsDb";
+import { v2Engine } from "./paused";
 
 let _sql: NeonQueryFunction<false, false> | null = null;
 let _ready = false;
@@ -128,15 +129,23 @@ export async function metricsSummary(days = 90): Promise<MetricsSummary> {
       FROM metric_events
       WHERE ts >= now() - (${days} || ' days')::interval
       ORDER BY ts`) as { kind: string; thread_id: string; ts: number; meta: Record<string, unknown> }[];
-    const events: MetricEvent[] = rows.map((r) => ({ type: r.kind as MetricType, thread_id: r.thread_id, ts: Number(r.ts), meta: r.meta }));
+    let events: MetricEvent[] = rows.map((r) => ({ type: r.kind as MetricType, thread_id: r.thread_id, ts: Number(r.ts), meta: r.meta }));
+    // Under the rebuild, metric_events stopped at the cutover (only the paused engine writes
+    // it). From then the same events are derived from the rebuild's own records (v2/metrics.ts).
+    const v2 = v2Engine() ? await import("./v2/metrics") : null;
+    if (v2) {
+      const cut = Date.parse(v2.V2_CUTOVER);
+      events = [...events.filter((e) => e.ts < cut), ...(await v2.v2MetricEvents(sql, Date.now() - days * 864e5))].sort((a, b) => a.ts - b.ts);
+    }
 
     const stats = aggregate(events);
     const bounds = (await sql`SELECT min(ts) AS first, max(ts) AS last FROM metric_events`) as { first: string | null; last: string | null }[];
+    if (v2 && events.length) bounds[0] = { first: bounds[0]?.first ?? new Date(events[0].ts).toISOString(), last: new Date(Math.max(Date.parse(String(bounds[0]?.last ?? 0)) || 0, events[events.length - 1].ts)).toISOString() };
     // Current state, from the tickets table. Deliberately NOT fatal: a failure here
     // leaves `now` null and the screen says the queue is unknown, which is true —
     // far better than falling back to the event tally that reads plausible and is
     // three times the real number.
-    const now = await ticketStateCounts().catch(() => null);
+    const now = await (v2 ? v2.queueNow(sql) : ticketStateCounts()).catch(() => null);
 
     // zero-filled daily series for the funnel kinds
     const byDay = new Map<string, Record<string, number>>();

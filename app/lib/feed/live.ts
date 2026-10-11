@@ -59,7 +59,7 @@ async function replies(): Promise<ReplyNeed[]> {
  * email, so its rows are about mail that was dealt with weeks ago. Decisions made on a
  * workstation ("local": replays, the TEST bench) are not the intake's.
  */
-const V2_FROM = "2026-10-09T10:20:00Z";
+export const V2_FROM = "2026-10-09T10:20:00Z";
 
 async function v2(): Promise<V2Row[]> {
   const [t] = (await db()`SELECT to_regclass('public.v2_decisions') AS t`) as { t: string | null }[];

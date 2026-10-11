@@ -95,10 +95,11 @@ function Card({ title, caption, info, className, children, style }: {
 function QueueStrip({ now, onOpenBoard }: { now: StateCounts | null | undefined; onOpenBoard?: () => void }) {
   const cells: { label: string; value: string; sub: string; tone: string }[] = now
     ? [
-        { label: "Awaiting confirm", value: fmtInt(now.awaiting_confirm), sub: "staged, needs a click", tone: now.awaiting_confirm > 0 ? A : MUT },
-        { label: "Needs a human", value: fmtInt(now.needs_human), sub: "missing something only a person has", tone: now.needs_human > 0 ? "var(--warn)" : MUT },
-        { label: "With an order", value: fmtInt(now.with_order), sub: `of ${fmtInt(now.live)} live threads`, tone: "var(--up)" },
-        { label: "Failed", value: fmtInt(now.failed), sub: "an OnSinch write threw", tone: now.failed > 0 ? "var(--down)" : MUT },
+        // The same counts as the office TV (v2/metrics.ts queueNow), named as the TV names them.
+        { label: "To check", value: fmtInt(now.awaiting_confirm), sub: "written by the system, check to verify", tone: now.awaiting_confirm > 0 ? A : MUT },
+        { label: "Needs a person", value: fmtInt(now.needs_human), sub: "on the TV with the reason", tone: now.needs_human > 0 ? "var(--warn)" : MUT },
+        { label: "With an order", value: fmtInt(now.with_order), sub: `of ${fmtInt(now.live)} open on the TV`, tone: "var(--up)" },
+        { label: "Failed", value: fmtInt(now.failed), sub: "a write the bot could not verify, last 7 days", tone: now.failed > 0 ? "var(--down)" : MUT },
       ]
     : [];
 

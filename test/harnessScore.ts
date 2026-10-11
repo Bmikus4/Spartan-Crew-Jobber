@@ -42,6 +42,14 @@ console.log("each invariant fails when it is broken");
 }
 
 (async () => {
+console.log("a model that cannot be reached");
+{
+  const down = async () => { throw new Error("extract: OpenRouter 402"); };
+  const { result, out } = await runCase(change, down as any);
+  ok(out.recorded?.kind === "handoff" && /could not read this email/.test(JSON.stringify(out.recorded?.decision)), "the email becomes a card for a person, not a silent drop", JSON.stringify(out.recorded?.decision).slice(0, 120));
+  ok(result.observations.find((o) => o.node === "inv.terminal_state")?.ok === 1 && out.written.length === 0, "it reaches a recorded final state and writes nothing");
+}
+
 console.log("the perfect reader and the day-late control, through production's decideMessage");
 {
   const sets: [string, SpartanCase[]][] = [["simple", cases], ["complex create", generateCreate(500)], ["complex update", generateUpdate(500)]];

@@ -192,7 +192,21 @@ export async function decideMessage(m: MessageIn, deps: DecideDeps): Promise<Rec
   deps.trace("filter", { client: true });
   const client = await clientOf(from, deps.world);
   const newest = latestText(String(m.body ?? ""));
-  const { x, meta } = await deps.extract(m.date_iso, from, String(m.subject ?? ""), newest);
+  // A READ THAT FAILS IS A CARD FOR A PERSON, NEVER A SILENT DROP. n8n passes each message
+  // once, so an email whose model call threw (OpenRouter 402 when the account ran dry, 10-11;
+  // a timeout) had no decision and nothing would ever look at it again.
+  let got: Awaited<ReturnType<DecideDeps["extract"]>>;
+  try {
+    got = await deps.extract(m.date_iso, from, String(m.subject ?? ""), newest);
+  } catch (e) {
+    const reason = `the system could not read this email (${String((e as Error)?.message ?? e).slice(0, 120)})`;
+    const out: Recorded = { kind: "handoff", interpretation: null, decision: { kind: "handoff", reasons: [reason] }, executed: null, client };
+    deps.trace("extract", { error: reason });
+    await deps.record(out);
+    deps.trace("final", { kind: out.kind });
+    return out;
+  }
+  const { x, meta } = got;
   deps.trace("extract", { ...meta, intent: x.intent, requests: x.requests?.length ?? 0 }, meta.ms);
   const t1 = Date.now();
   const interpretation = ground(x, `${m.subject ?? ""}\n${newest}`, m.date_iso);

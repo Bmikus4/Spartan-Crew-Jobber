@@ -2988,5 +2988,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0158",
+  "ts": "2026-10-11T03:11:50+00:00",
+  "kind": "measurement",
+  "headline": "dashboard wired to v2 (10-09 onward); a model call that fails is a handoff, never a silent drop",
+  "subject": "The analytics dashboard counts the rebuild's work, and a failed model call becomes a card",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 188,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]
