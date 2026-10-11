@@ -3030,5 +3030,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0161",
+  "ts": "2026-10-11T14:04:00+00:00",
+  "kind": "measurement",
+  "headline": "TV header drops the three label counts",
+  "subject": "The TV header no longer counts Needs Created, Needs Updated or To Check",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 188,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]

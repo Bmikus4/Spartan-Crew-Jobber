@@ -544,10 +544,8 @@ export default function LiveFeedScreen({ isActive, tv = false }: { isActive: boo
   const openCount = cards.filter(isOpen).length;
   const pad = 28 * s;
 
+  // No Needs Created, Needs Updated or To Check counts (Ben, 2026-10-11): each tile already carries its label.
   const kpis: Array<{ label: string; n: number; color: string; loud?: boolean }> = c ? [
-    { label: "Needs Created", n: c.needs_created, color: "var(--text-primary)" },
-    { label: "Needs Updated", n: c.needs_updated, color: "var(--text-primary)" },
-    { label: "To Check", n: c.to_check, color: "var(--text-primary)" },
     ...(data?.health.replies_enabled ? [{ label: "Needs Reply", n: c.needs_reply, color: "var(--text-primary)" }] : []),
     { label: "Needs Follow Up", n: c.needs_follow_up ?? 0, color: AMBER },
     // The one count that is about time running out, so it is set heavier than the rest (Ben, 2026-10-10).
