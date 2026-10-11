@@ -9,6 +9,8 @@
 // Verification is the opposite: it is extra evidence, and the feed is right without it.
 // A verifier that throws is reported in `health.verify` and the feed is served anyway.
 // ============================================================================
+import type { Job } from "../jobsDb";
+import { portedCards } from "./ported";
 import { project, type FeedCard, type FeedMark, type FeedWant, type ReplyNeed } from "./project";
 import { v2Sources, type V2Row } from "./v2";
 import { intakeHealth } from "../intakeHealth";
@@ -30,6 +32,8 @@ export interface FeedDeps {
   v2?: () => Promise<V2Row[]>;
   /** Items whose email or write is older than this (ms) are not shown (FEED_FROM in production). */
   from?: number;
+  /** The jobs board's tickets, carried onto the TV as completed (ported.ts). */
+  jobs?: () => Promise<Job[]>;
 }
 
 export async function serveFeed(deps: FeedDeps, now: number): Promise<{ status: number; body: Record<string, unknown> }> {
@@ -71,6 +75,10 @@ export async function serveFeed(deps: FeedDeps, now: number): Promise<{ status: 
   if (reread) p = project(states, inbound.byThread, await deps.marks(), replies, now, inbound.outByThread, v2, deps.from);
   const status = deps.verifyStatus ? await deps.verifyStatus().catch(() => null) : null;
 
+  // The board's history is extra: if it cannot be read the live list is still the live list.
+  const jobs = deps.jobs ? await deps.jobs().catch((err) => { console.error("[feed] jobs board read failed", err); return [] as Job[]; }) : [];
+  const ported = portedCards(jobs, states, new Set(p.cards.map((c) => c.thread_id)));
+
   const intake = intakeHealth({ lastReceivedAt: inbound.latest, now });
   return {
     status: 200,
@@ -87,7 +95,7 @@ export async function serveFeed(deps: FeedDeps, now: number): Promise<{ status: 
         verify: { last_at: status?.last_verify_at ?? null, note: verify?.note ?? status?.note ?? null },
       },
       counts: p.counts,
-      items: p.cards,
+      items: [...p.cards, ...ported],
     },
   };
 }

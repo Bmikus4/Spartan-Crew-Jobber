@@ -38,6 +38,8 @@ export function coerceSettings(body: unknown): Partial<Settings> {
   const next: Partial<Settings> = {};
   if (typeof b.replies_enabled === "boolean") next.replies_enabled = b.replies_enabled;
   if (typeof b.followup_drafting === "boolean") next.followup_drafting = b.followup_drafting;
+  if (typeof b.jobs_board_enabled === "boolean") next.jobs_board_enabled = b.jobs_board_enabled;
+  if (typeof b.analytics_tab_enabled === "boolean") next.analytics_tab_enabled = b.analytics_tab_enabled;
   if (b.reply_delivery === "draft" || b.reply_delivery === "send") next.reply_delivery = b.reply_delivery;
   if (b.reply_scope === "all" || b.reply_scope === "enquiries") next.reply_scope = b.reply_scope;
   // 0 is a real value here - it means "no fallback, hold the thread" - so this

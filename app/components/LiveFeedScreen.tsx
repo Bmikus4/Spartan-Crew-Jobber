@@ -15,10 +15,12 @@
 // hours on 2026-10-01..03, so an empty list turns amber when the sync is not healthy, and a
 // failed refresh keeps the last good tiles rather than clearing them.
 
-import { Fragment, useCallback, useEffect, useRef, useState } from "react";
+import { Fragment, memo, useCallback, useEffect, useRef, useState } from "react";
 import type { FeedCard, FeedCounts, FeedItem } from "../lib/feed/project";
 import { deadline, londonDay, nextDay, QUIET_MS } from "../lib/feed/order";
 import { BrandMark, BrandWordmark } from "./BrandLogo";
+import FolderTab from "./FolderTab";
+import AnalyticsPopup from "./AnalyticsPopup";
 
 interface FeedResponse {
   ok: boolean;
@@ -80,6 +82,7 @@ function evidenceLine(it: FeedItem): string | null {
   if (!g) return null;
   const e = (g.evidence ?? {}) as { text?: string; at?: string; r_number?: string | null; held?: boolean; name?: string };
   const when = hhmm(Date.parse(e.at ?? "") || g.at);
+  if ((g.evidence as { ported?: boolean } | null)?.ported) return "Completed, carried over from the jobs board";
   if (g.mark === "checked") { const who = personName(g.by, e.name); return `Confirmed${who ? ` by ${who}` : ""} ${when}`; }
   if (e.held) return "Already in OnSinch: every shift asked for";
   if (g.mark === "staff-edit") return `Changed in OnSinch by staff: ${e.text ?? "edited"}, ${when}`;
@@ -271,7 +274,7 @@ const clamp = (lines: number): React.CSSProperties => ({ display: "-webkit-box",
  * dark tan lines, then Confirm. Fixed columns keep every line and every Confirm on one
  * vertical down the screen.
  */
-function JobTile({ card, now, s, phase, onTick }: { card: FeedCard; now: number; s: number; phase: Phase; onTick: (c: FeedCard, it: FeedItem, checked: boolean) => void }) {
+const JobTile = memo(function JobTile({ card, now, s, phase, onTick }: { card: FeedCard; now: number; s: number; phase: Phase; onTick: (c: FeedCard, it: FeedItem, checked: boolean) => void }) {
   const it = orderItem(card);
   const lead = it ?? card.items[0];
   const done = card.green;
@@ -320,7 +323,7 @@ function JobTile({ card, now, s, phase, onTick }: { card: FeedCard; now: number;
       </div>
     </article>
   );
-}
+});
 
 function Section({ s, label, n, color }: { s: number; label: string; n: number; color?: string }) {
   return (
@@ -347,6 +350,18 @@ export default function LiveFeedScreen({ isActive, tv = false }: { isActive: boo
   /** Tiles that have just gone green: where they stood, and when. */
   const [settling, setSettling] = useState<Map<string, { index: number; since: number }>>(new Map());
   const [below, setBelow] = useState(0);
+  /** The Analytics folder tab shows on the TV only when Settings turns it on (Ben, 2026-10-11). */
+  const [analyticsTab, setAnalyticsTab] = useState(false);
+  const [analyticsOpen, setAnalyticsOpen] = useState(false);
+  useEffect(() => {
+    const read = async () => {
+      try { const r = await fetch("/api/settings", { cache: "no-store" }); if (r.ok) setAnalyticsTab(!!(await r.json()).analytics_tab_enabled); } catch { /* keep what it was */ }
+    };
+    void read();
+    const id = window.setInterval(read, 60_000);
+    window.addEventListener("spartan:settings", read);
+    return () => { window.clearInterval(id); window.removeEventListener("spartan:settings", read); };
+  }, []);
   const audio = useRef<AudioContext | null>(null);
   const seen = useRef<Set<string> | null>(null);
   const lastChime = useRef(0);
@@ -569,6 +584,8 @@ export default function LiveFeedScreen({ isActive, tv = false }: { isActive: boo
         </div>
       </header>
 
+      {analyticsTab && <FolderTab label="Analytics" s={s} onOpen={() => { unlockAudio(); setAnalyticsOpen(true); }} />}
+
       <div style={{ position: "relative", flex: 1, minHeight: 0, display: "flex" }}>
         <div ref={listRef} className="feed-list" onScroll={() => { lastScrollAt.current = Date.now(); }} style={{ flex: 1, minHeight: 0, overflowY: "auto", display: "flex", flexDirection: "column", gap: 12 * s, paddingBottom: 8 * s }}>
           {data == null ? (
@@ -588,7 +605,8 @@ export default function LiveFeedScreen({ isActive, tv = false }: { isActive: boo
                 </Fragment>
               ))}
               <Section s={s} label="Done" n={doneRows.length} color={GREEN} />
-              {doneRows.map((card) => <JobTile key={card.thread_id} card={card} now={now} s={s} phase="steady" onTick={tick} />)}
+              {/* Done tiles redraw once a minute, not every second: with the jobs board carried over there are hundreds. */}
+              {doneRows.map((card) => <JobTile key={card.thread_id} card={card} now={Math.floor(now / 60_000) * 60_000} s={s} phase="steady" onTick={tick} />)}
               {c && c.older > 0 && (
                 <div style={{ padding: `${10 * s}px ${4 * s}px`, fontSize: 15 * s, color: "var(--text-muted)", flexShrink: 0 }}>
                   {c.older} older undated {c.older === 1 ? "enquiry" : "enquiries"} with no word from the client for two weeks, not shown.
@@ -605,6 +623,8 @@ export default function LiveFeedScreen({ isActive, tv = false }: { isActive: boo
           </div>
         )}
       </div>
+
+      {analyticsOpen && <AnalyticsPopup onClose={() => setAnalyticsOpen(false)} />}
 
       {undo && undo.until > now && (
         <div role="status" style={{ position: "absolute", left: "50%", bottom: 32 * s, transform: "translateX(-50%)", background: "var(--surface-2)", color: "var(--text-primary)", border: "1px solid var(--border-strong)", borderRadius: 12 * s, padding: `${12 * s}px ${16 * s}px ${12 * s}px ${20 * s}px`, fontSize: 18 * s, fontWeight: 600, display: "flex", gap: 16 * s, alignItems: "center" }}>

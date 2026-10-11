@@ -476,6 +476,13 @@ export interface ConversationState {
 /** Client-tunable settings (surfaced in the Vercel settings menu). */
 export interface Settings {
   /**
+   * The old Jobs Board in the rail (Ben, 2026-10-11): OFF by default. The TV is the ops list
+   * and carries the board's jobs as completed (feed/ported.ts); this brings the board back.
+   */
+  jobs_board_enabled?: boolean;
+  /** The Analytics folder tab on the TV board (Ben, 2026-10-11). Settings always has it. */
+  analytics_tab_enabled?: boolean;
+  /**
    * Follow-up drafting (Ben, 2026-10-10): whether a job the TV raises as "Needs Follow Up"
    * should get a drafted chase in its Gmail thread. OFF by default. Stored only: nothing
    * drafts from it yet (the chase composer has no caller), and the Settings screen says so.
@@ -541,6 +548,8 @@ export interface Settings {
 export const DEFAULT_SETTINGS: Settings = {
   replies_enabled: false,
   followup_drafting: false,
+  jobs_board_enabled: false,
+  analytics_tab_enabled: false,
   reply_delivery: "draft",
   reply_scope: "all",
   default_rate_card: 315,

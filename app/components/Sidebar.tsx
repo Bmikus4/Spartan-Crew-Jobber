@@ -32,6 +32,8 @@ interface NavItemConfig {
 
 interface SidebarProps {
   activeTool: string;
+  /** The Jobs Board row shows only when Settings turns it on. */
+  jobsBoard?: boolean;
   onSelectTool: (toolId: string) => void;
   onSettings: () => void;
 }
@@ -78,7 +80,6 @@ function IconJobs() {
 // pinned footer bay with its own divider — the same call the quote tool made (Ben, 2026-08-09).
 const NAV_ITEMS: NavItemConfig[] = [
   { id: "live", label: "Live Feed", icon: <IconLive /> },
-  { id: "dashboard", label: "Dashboard", icon: <IconDashboard /> },
   { id: "jobs", label: "Jobs Board", icon: <IconJobs /> },
   { id: "settings", label: "Settings", icon: <IconSettings /> },
 ];
@@ -139,7 +140,7 @@ function MobileBottomBar({ activeTool, onSelectTool, onSettings, items }: Sideba
   );
 }
 
-export default function Sidebar({ activeTool, onSelectTool, onSettings }: SidebarProps) {
+export default function Sidebar({ activeTool, jobsBoard = false, onSelectTool, onSettings }: SidebarProps) {
   const [expanded, setExpanded] = useState(false);
   const [hoveredItem, setHoveredItem] = useState<string | null>(null);
   const [isMobile, setIsMobile] = useState(false);
@@ -151,7 +152,7 @@ export default function Sidebar({ activeTool, onSelectTool, onSettings }: Sideba
   const [armed, setArmed] = useState<string | null>(null);
   const [dragId, setDragId] = useState<string | null>(null);
   const [over, setOver] = useState<string | null>(null);
-  const navItems = applyOrder(NAV_ITEMS, order);
+  const navItems = applyOrder(NAV_ITEMS.filter((i) => i.id !== "jobs" || jobsBoard), order);
 
   function dropOn(targetId: string) {
     if (!dragId) return;

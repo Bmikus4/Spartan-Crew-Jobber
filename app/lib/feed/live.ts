@@ -7,6 +7,7 @@ import { followupsEnabled } from "../followup/enabled";
 import type { FeedDeps } from "./serve";
 import { FEED_FROM, type ReplyNeed } from "./project";
 import type { V2Row } from "./v2";
+import { listTickets } from "../ticketsDb";
 import type { ConversationState } from "../engine/types";
 
 let _sql: NeonQueryFunction<false, false> | null = null;
@@ -75,6 +76,8 @@ async function v2(): Promise<V2Row[]> {
 export function liveFeedDeps(): FeedDeps {
   return {
     states, inbound, marks: allMarks, v2, from: FEED_FROM,
+    // Every job the board ever held (948 tickets, 457 client jobs on 2026-10-11), not its first 300.
+    jobs: () => listTickets(5000),
     replies: followupsEnabled() ? replies : null,
     // verify() wraps this transport in readOnly() before its first call.
     verify: (cards, now, marks, wants) => verify(cards, now, {

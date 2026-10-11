@@ -9,12 +9,14 @@
 // rather than the same "Changes save automatically." line repeated in three cards —
 // which said it three times and still never said WHICH change had saved.
 
+import FolderTab from "./FolderTab";
+import AnalyticsPopup from "./AnalyticsPopup";
 import { useCallback, useEffect, useState } from "react";
 import InstallButton from "./InstallButton";
 
 type ReplyDelivery = "draft" | "send";
 type ReplyScope = "all" | "enquiries";
-interface Settings { replies_enabled: boolean; followup_drafting?: boolean; reply_delivery: ReplyDelivery; reply_scope: ReplyScope; default_rate_card: number }
+interface Settings { replies_enabled: boolean; followup_drafting?: boolean; jobs_board_enabled?: boolean; analytics_tab_enabled?: boolean; reply_delivery: ReplyDelivery; reply_scope: ReplyScope; default_rate_card: number }
 
 const SETTINGS_FALLBACK: Settings = { replies_enabled: false, followup_drafting: false, reply_delivery: "draft", reply_scope: "all", default_rate_card: 315 };
 
@@ -114,6 +116,7 @@ export default function SettingsScreen({ signedInAs }: { signedInAs?: string }) 
     })();
   }, []);
 
+  const [analyticsOpen, setAnalyticsOpen] = useState(false);
   const save = useCallback(async (next: Settings) => {
     setSettings(next); setSaving(true); setFailed(false);
     try {
@@ -123,6 +126,8 @@ export default function SettingsScreen({ signedInAs }: { signedInAs?: string }) 
       // as saved that the server had refused.
       if (!r.ok) throw new Error(String(r.status));
       setSavedAt(Date.now());
+      // The rail and the TV read these switches too; they refetch on this.
+      window.dispatchEvent(new Event("spartan:settings"));
     } catch { setFailed(true); }
     finally { setSaving(false); }
   }, []);
@@ -158,6 +163,8 @@ export default function SettingsScreen({ signedInAs }: { signedInAs?: string }) 
   return shell(
     <div style={wrap}>
       <div style={{ maxWidth: 720, margin: "0 auto", display: "flex", flexDirection: "column", gap: 16 }}>
+        <FolderTab label="Analytics" onOpen={() => setAnalyticsOpen(true)} />
+        {analyticsOpen && <AnalyticsPopup onClose={() => setAnalyticsOpen(false)} />}
         <header style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
           <div>
             <h1 style={{ fontSize: 22, fontWeight: 700, color: INK, margin: "0 0 2px" }}>Engine controls</h1>
@@ -224,6 +231,26 @@ export default function SettingsScreen({ signedInAs }: { signedInAs?: string }) 
           {/* Said on the screen, not left to be discovered: a switch that changed nothing
               while looking like it worked is how the replies toggle failed before (settingsDb). */}
           {s.followup_drafting && <Warn>Saved. Drafts are not written yet: the TV raises the follow-up, and the drafting itself is still to be built.</Warn>}
+        </Panel>
+
+        <Panel
+          title="Screens"
+          blurb={<>The Live Feed is the ops list: it carries every job from the old Jobs Board as completed. The board can come back to the menu here. Analytics opens from its folder tab, which is always at the top of this screen and on the TV board when switched on.</>}
+        >
+          <div style={{ display: "flex", flexDirection: "column", gap: 13 }}>
+            <div>
+              <h3 style={{ fontSize: 13, fontWeight: 700, color: INK, margin: 0 }}>Jobs Board in the menu</h3>
+              <p style={{ fontSize: 12.5, color: MUT, margin: "5px 0 0", lineHeight: 1.55 }}>Off by default.</p>
+            </div>
+            <Segmented label="Jobs Board in the menu" value={!!s.jobs_board_enabled} onChange={(v) => save({ ...s, jobs_board_enabled: v })}
+              options={[{ id: false, label: "Off" }, { id: true, label: "On" }]} />
+            <div style={{ borderTop: `1px solid ${BORDER}`, paddingTop: 14 }}>
+              <h3 style={{ fontSize: 13, fontWeight: 700, color: INK, margin: 0 }}>Analytics tab on the TV board</h3>
+              <p style={{ fontSize: 12.5, color: MUT, margin: "5px 0 0", lineHeight: 1.55 }}>Off by default.</p>
+            </div>
+            <Segmented label="Analytics tab on the TV board" value={!!s.analytics_tab_enabled} onChange={(v) => save({ ...s, analytics_tab_enabled: v })}
+              options={[{ id: false, label: "Off" }, { id: true, label: "On" }]} />
+          </div>
         </Panel>
 
         <Panel title="Install app" blurb="Add Spartan Crew to a phone or desktop home screen for full-screen, one-tap access.">

@@ -3002,5 +3002,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0159",
+  "ts": "2026-10-11T03:26:41+00:00",
+  "kind": "measurement",
+  "headline": "Nav: Live Feed + Settings; 457 board jobs on the TV as Done; Jobs Board and Analytics tab behind settings; analytics popup",
+  "subject": "The rail has two screens; the TV carries every jobs-board job as completed and opens analytics from a folder tab",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 188,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]
