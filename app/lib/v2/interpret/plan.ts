@@ -125,7 +125,10 @@ export async function plan(msg: Message, i: Interpretation, world: World, thread
     const shift = targetShift(order, r);
     if (typeof shift === "string") return handoff(`R${order.number}: ${shift}`);
     const first = shift.slots[0];
-    const date = dayOf(first.beginning);
+    // A change names its shift by the day it is on (target) and may give a NEW day (date).
+    // Until 10-11 the new day was ignored, so "move Tuesday's shift to Wednesday, 9-5" wrote
+    // 9-5 on Tuesday: measured by the harness, 40 of 40 such emails were wrong writes.
+    const date = r.target?.date && r.date && r.date !== r.target.date ? r.date : dayOf(first.beginning);
     if (r.action === "change_times") {
       // "Tuesday 13th 2 x Crew 8 hours": a count written beside a time change says which shift
       // the client means, so it must be that shift's size or this is another shift.
@@ -150,12 +153,24 @@ export async function plan(msg: Message, i: Interpretation, world: World, thread
       // as it stands. If they disagree the client and OnSinch see different shifts.
       if (r.crew && r.crew_add && r.crew !== current + r.crew_add)
         return handoff(`R${order.number} shift ${shift.id}: ${r.crew_add} more on ${current} makes ${current + r.crew_add}, not the ${r.crew} written`);
-      const total = r.crew ?? current + (r.crew_add ?? 0);
+      if (r.crew && r.crew_remove && r.crew !== current - r.crew_remove)
+        return handoff(`R${order.number} shift ${shift.id}: ${r.crew_remove} fewer on ${current} makes ${current - r.crew_remove}, not the ${r.crew} written`);
+      const total = r.crew ?? current + (r.crew_add ?? 0) - (r.crew_remove ?? 0);
       const shape = positionsFor(total);
       if (!shape) return handoff(`R${order.number}: ${total} crew is not a shape the system builds`);
-      if ((shape.length === 2) !== (chiefSize === 1)) return handoff(`R${order.number}: ${total} crew changes whether the shift needs a crew chief`);
-      ops.push({ source: src(n), op: { kind: "set_position_size", order_id: Number(order.id), slot_id: Number(crew[0].id), size: total - chiefSize } });
-      why.push(`R${order.number} shift ${shift.id}: ${total} crew in all`);
+      if (chief.length > 1 || chiefSize > 1) return handoff(`R${order.number} shift ${shift.id}: ${chiefSize} crew chiefs`);
+      // Crossing the 3/4 line keeps ops' shape (positionsFor): 4-9 carry exactly one Crew Chief
+      // inside the total, 1-3 none. Up adds the chief's position, down cancels it; the crew
+      // position takes the rest. A signed-on chief is the bot's to refuse (run.ts preflight).
+      const wantsChief = shape.length === 2;
+      const londonStart = utcToLondon(first.beginning).time, londonEnd = utcToLondon(first.end).time;
+      if (wantsChief && chiefSize === 0) {
+        ops.push({ source: `${src(n)}:chief`, op: { kind: "add_position", order_id: Number(order.id), shift_id: shift.id, date, start: londonStart, end: londonEnd, position: shape[0] } });
+      } else if (!wantsChief && chiefSize === 1) {
+        ops.push({ source: `${src(n)}:chief`, op: { kind: "cancel_position", order_id: Number(order.id), slot_id: Number(chief[0].id) } });
+      }
+      ops.push({ source: src(n), op: { kind: "set_position_size", order_id: Number(order.id), slot_id: Number(crew[0].id), size: wantsChief ? total - 1 : total } });
+      why.push(`R${order.number} shift ${shift.id}: ${total} crew in all${wantsChief !== (chiefSize === 1) ? (wantsChief ? ", a crew chief added" : ", the crew chief removed") : ""}`);
     }
   }
 
@@ -164,10 +179,18 @@ export async function plan(msg: Message, i: Interpretation, world: World, thread
   // order. Only an explicit reference counts; a resemblance never does.
   const named = news.length ? await findOrder(msg, companyId, world, threadOrderId) : null;
   if (named && typeof named !== "string") {
-    const locations = new Set(teams(named).flatMap((t) => t.slots.map((s: any) => Number(s.slotlocation_id))).filter(Boolean));
-    if (locations.size !== 1) return handoff(`R${named.number} has ${locations.size} locations; which one the new shift belongs to is not written`);
-    const location_id = [...locations][0];
+    // Each of the order's locations, by the OnSinch place it stands at.
+    const atPlace = new Map<number, number>();
+    for (const t of teams(named)) for (const s of t.slots) if (Number(s.slotlocation_id)) atPlace.set(Number(s.SlotLocation?.place_id), Number(s.slotlocation_id));
+    const locations = new Set(atPlace.values());
     for (const [n, r] of news.entries()) {
+      let location_id = locations.size === 1 ? [...locations][0] : 0;
+      // An order at several venues: the venue the client names picks the location, or nothing does.
+      if (!location_id && r.venue) {
+        const hits = (await placesFor(world, r.venue)).map((p) => atPlace.get(p.id)).filter((x): x is number => !!x);
+        if (hits.length === 1) location_id = hits[0];
+      }
+      if (!location_id) return handoff(`R${named.number} has ${locations.size} locations; which one the new shift belongs to is not written`);
       const positions = positionsFor(r.crew!);
       if (!positions) return handoff(`${r.crew} crew is not a shape the system builds`);
       ops.push({ source: src(50 + n), op: { kind: "add_shift", order_id: Number(named.id), location_id, name: "Crew", date: r.date!, start: r.start!, end: r.end!, positions } });

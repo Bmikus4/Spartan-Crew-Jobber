@@ -17,6 +17,8 @@ export type RawRequest = {
   crew: Grounded<number>;
   /** "add 2 crew", "2 more": an increase on what is booked, never a total. */
   crew_add: Grounded<number>;
+  /** "stand down 2", "2 fewer": a decrease on what is booked. Not yet in the prompt (needs a paid validation run). */
+  crew_remove?: Grounded<number>;
   venue: Grounded<string>;
   crew_chief: Grounded<boolean>;
   trade: Grounded<string>;

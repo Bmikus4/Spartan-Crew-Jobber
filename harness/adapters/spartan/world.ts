@@ -36,7 +36,8 @@ export const PLACES: Place[] = [
 ];
 export const UNIQUE_PLACES = PLACES.filter((p) => p.name !== "Kings Place");
 
-export type ShiftSpec = { date: string; start: string; end: string; crew: number; place: Place; name?: string; attending?: number };
+/** `extra`: a second trade on the shift (a carpenter, say), which a crew-size change must leave alone. */
+export type ShiftSpec = { date: string; start: string; end: string; crew: number; place: Place; name?: string; attending?: number; extra?: { profession_id: number; size: number } };
 export type OrderSpec = { id: number; number: number; company_id: number; po?: string; shifts: ShiftSpec[] };
 
 /** The crew shape ops build (plan.positionsFor): 4-9 carry one Crew Chief inside the total. */
@@ -44,8 +45,9 @@ function slotsFor(order: OrderSpec, s: ShiftSpec, n: number) {
   const w = shiftWindow(s.date, s.start, s.end);
   const base = { beginning: w.beginning, end: w.end, cancelled: false, slotlocation_id: 70000 + s.place.id, SlotLocation: { place_id: s.place.id } };
   const id = (k: number) => order.id * 100 + n * 10 + k;
-  if (s.crew <= 3) return [{ ...base, id: id(1), size: s.crew, role: 0, profession_id: 1 }];
-  return [{ ...base, id: id(1), size: 1, role: 1, profession_id: 36 }, { ...base, id: id(2), size: s.crew - 1, role: 0, profession_id: 1 }];
+  const extra = s.extra ? [{ ...base, id: id(3), size: s.extra.size, role: 0, profession_id: s.extra.profession_id }] : [];
+  if (s.crew <= 3) return [{ ...base, id: id(1), size: s.crew, role: 0, profession_id: 1 }, ...extra];
+  return [{ ...base, id: id(1), size: 1, role: 1, profession_id: 36 }, { ...base, id: id(2), size: s.crew - 1, role: 0, profession_id: 1 }, ...extra];
 }
 
 /** An order in the API's nested read shape (Job > SlotTeam > Slot > SlotLocation). */

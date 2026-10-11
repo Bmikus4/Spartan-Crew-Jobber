@@ -5,7 +5,7 @@
 //   npx tsx harness/run.ts --mode replay            rescore from recordings ($0)
 //   npx tsx harness/run.ts --mode mutant            control: every date read a day late must write nothing wrong ($0)
 //   npx tsx harness/run.ts --preflight-selftest     prove the preflight aborts on a production credential
-// Options: --n 500 (cases), --seed, --concurrency 6, --model <OpenRouter slug>.
+// Options: --set simple|create|update, --n 500 (cases), --seed, --concurrency 6, --model <OpenRouter slug>.
 // Run it WITHOUT --env-file: the preflight refuses a process holding production credentials.
 // Only the model key is read from .env.local, and only in record mode.
 // ============================================================================
@@ -15,6 +15,7 @@ import { Recorder } from "./core/recorder";
 import { renderReport } from "./core/report";
 import type { CaseResult } from "./core/types";
 import { generate, type SpartanCase } from "./adapters/spartan/generate";
+import { generateCreate, generateUpdate } from "./adapters/spartan/generate-complex";
 import { runCase, oracleExtract, mutantExtract, recordedExtract } from "./adapters/spartan/adapter";
 import { FakeWorld } from "./adapters/spartan/world";
 import { interpretModel, PROMPT_ID } from "../app/lib/v2/interpret/extract";
@@ -23,6 +24,7 @@ import { renderReview } from "./adapters/spartan/review";
 const arg = (name: string, dflt?: string) => { const i = process.argv.indexOf(`--${name}`); return i > 0 ? process.argv[i + 1] : dflt; };
 const mode = arg("mode", "oracle") as "oracle" | "mutant" | "record" | "replay";
 const N = Number(arg("n", "500")), SEED = Number(arg("seed", "20261010")), CAP = Number(arg("cap", "0")), CONC = Number(arg("concurrency", "6"));
+const SET = arg("set", "simple") as "simple" | "create" | "update";
 const OUT = "harness/runs";
 
 /** One line of .env.local, by name. The file holds production secrets; nothing else is read. */
@@ -49,7 +51,7 @@ async function main() {
     process.env.OPENROUTER_API_KEY = envLine("OPENROUTER_API_KEY");
     if (!(CAP > 0)) throw new Error("record mode needs --cap <USD>: no spend without a ceiling");
   }
-  const cases = generate(N, SEED);
+  const cases = SET === "create" ? generateCreate(N, Number(arg("seed", "20261011"))) : SET === "update" ? generateUpdate(N, Number(arg("seed", "20261012"))) : generate(N, SEED);
   const pf = preflight({
     env: process.env, allowHosts,
     adapterChecks: [
@@ -80,16 +82,16 @@ async function main() {
   results.sort((a, b) => a.case_id.localeCompare(b.case_id));
 
   const meta = {
-    title: `Spartan simulation, ${N} orders (${mode})`, mode, model: mode === "oracle" ? "oracle (the ground-truth reading)" : mode === "mutant" ? "mutant (oracle with every date one day late)" : interpretModel(), prompt_id: PROMPT_ID,
+    title: `Spartan simulation, ${N} ${SET === "simple" ? "" : `complex ${SET} `}orders (${mode})`, mode, model: mode === "oracle" ? "oracle (the ground-truth reading)" : mode === "mutant" ? "mutant (oracle with every date one day late)" : interpretModel(), prompt_id: PROMPT_ID,
     cases: N, spent_usd: rec.spent, calls: rec.calls, replayed: rec.replayed, preflight: pf.checks.map((c) => `${c.name}: ok`), started, finished: new Date().toISOString(), target: 0.99,
   };
   mkdirSync(OUT, { recursive: true });
-  writeFileSync(`${OUT}/${mode}-results.jsonl`, results.map(({ _case, _out, ...r }) => JSON.stringify(r)).join("\n") + "\n");
-  writeFileSync(`${OUT}/${mode}-traces.jsonl`, traces.map((t) => JSON.stringify(t)).join("\n") + "\n");
-  writeFileSync(`${OUT}/${mode}-report.md`, renderReport(results, meta));
-  writeFileSync(`${OUT}/${mode}-review.md`, renderReview(results.map((r) => ({ c: r._case, out: r._out, observations: r.observations }))));
+  writeFileSync(`${OUT}/${SET}-${mode}-results.jsonl`, results.map(({ _case, _out, ...r }) => JSON.stringify(r)).join("\n") + "\n");
+  writeFileSync(`${OUT}/${SET}-${mode}-traces.jsonl`, traces.map((t) => JSON.stringify(t)).join("\n") + "\n");
+  writeFileSync(`${OUT}/${SET}-${mode}-report.md`, renderReport(results, meta));
+  writeFileSync(`${OUT}/${SET}-${mode}-review.md`, renderReview(results.map((r) => ({ c: r._case, out: r._out, observations: r.observations }))));
   const e2e = results.flatMap((r) => r.observations).filter((o) => o.node === "e2e");
-  console.log(`done: e2e ${e2e.filter((o) => o.ok).length}/${e2e.length}, spent $${rec.spent.toFixed(2)}, report ${OUT}/${mode}-report.md`);
+  console.log(`done: e2e ${e2e.filter((o) => o.ok).length}/${e2e.length}, spent $${rec.spent.toFixed(2)}, report ${OUT}/${SET}-${mode}-report.md`);
 }
 
 main().catch((e) => { console.error(e); process.exit(1); });

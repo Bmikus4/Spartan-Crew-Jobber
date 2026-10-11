@@ -2974,5 +2974,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0157",
+  "ts": "2026-10-11T01:19:07+00:00",
+  "kind": "measurement",
+  "headline": "complex orders: 500/500 creates, 500/500 updates, 0 wrong writes; a live day-move wrong write fixed",
+  "subject": "A shift moved to another day is written on the new day, and complex updates are planned",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 188,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]

@@ -16,7 +16,7 @@ function live intake calls. Fakes stand in at every boundary.
 | `npx tsx harness/run.ts --preflight-selftest` | Proves the preflight aborts on a planted production credential | $0 |
 | `npx tsx test/harnessScore.ts` | Each invariant fails when broken; the oracle run is pinned (part of the gate suite) | $0 |
 
-Options: `--n 500`, `--seed 20261010`, `--concurrency 6`, `--model <OpenRouter slug>`.
+Options: `--set simple|create|update` (the simple set, or 500 complex creates or updates), `--n 500`, `--seed`, `--concurrency 6`, `--model <OpenRouter slug>`. Outputs go to `runs/<set>-<mode>-*`.
 - **Without `--env-file`:** never run it with one. The preflight refuses any process holding a
   production credential. Only `OPENROUTER_API_KEY` is read from `.env.local`, and only in record mode.
 

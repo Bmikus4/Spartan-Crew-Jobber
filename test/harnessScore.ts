@@ -1,13 +1,15 @@
 // ============================================================================
 // The harness's scorer can say 0. A gate nobody has watched fail is a gate nobody has reason
 // to believe, so each invariant is fed a planted violation here, and the oracle run (the
-// perfect reader) is pinned at its known result.
+// perfect reader) is pinned at its known result on all three sets, simple and complex.
 //
 // Offline, no model call.  npx tsx test/harnessScore.ts
 // ============================================================================
 import { generate } from "../harness/adapters/spartan/generate";
 import { score } from "../harness/adapters/spartan/score";
-import { runCase, oracleExtract } from "../harness/adapters/spartan/adapter";
+import { runCase, oracleExtract, mutantExtract } from "../harness/adapters/spartan/adapter";
+import { generateCreate, generateUpdate } from "../harness/adapters/spartan/generate-complex";
+import type { SpartanCase } from "../harness/adapters/spartan/generate";
 import type { Op } from "../app/lib/v2/bot/ops";
 
 let fails = 0;
@@ -40,21 +42,29 @@ console.log("each invariant fails when it is broken");
 }
 
 (async () => {
-console.log("the perfect reader, through production's decideMessage");
+console.log("the perfect reader and the day-late control, through production's decideMessage");
 {
-  let e2e = 0, inv = 0, invN = 0;
-  const missed: string[] = [];
-  for (const c of cases) {
-    const { result } = await runCase(c, oracleExtract(c));
-    for (const o of result.observations) {
-      if (o.node === "e2e") { e2e += o.ok; if (!o.ok) missed.push(`${c.id} ${c.template}`); }
-      if (o.node.startsWith("inv.")) { inv += o.ok; invN++; }
+  const sets: [string, SpartanCase[]][] = [["simple", cases], ["complex create", generateCreate(500)], ["complex update", generateUpdate(500)]];
+  for (const [name, set] of sets) {
+    for (const [label, reader] of [["perfect reader", oracleExtract], ["dates a day late", mutantExtract]] as const) {
+      let e2e = 0, wrong = 0, inv = 0, invN = 0;
+      const missed: string[] = [];
+      for (const c of set) {
+        const { result } = await runCase(c, reader(c));
+        for (const o of result.observations) {
+          if (o.node === "e2e") { e2e += o.ok; if (!o.ok) missed.push(`${c.id} ${c.template}`); }
+          if (o.node === "inv.no_wrong_write" && !o.ok) wrong++;
+          if (o.node.startsWith("inv.")) { inv += o.ok; invN++; }
+        }
+      }
+      if (label === "perfect reader") {
+        ok(inv === invN && e2e === set.length, `${name}, ${label}: ${set.length} of ${set.length} end to end, every invariant held`, `${e2e}/${set.length}, invariants ${inv}/${invN} ${missed.slice(0, 3).join(", ")}`);
+      } else {
+        // A model that misreads every date must be refused by grounding, never written.
+        ok(wrong === 0, `${name}, ${label}: no wrong write`, `${wrong} wrong writes`);
+      }
     }
   }
-  ok(inv === invN, "every invariant holds on all 500", `${inv}/${invN}`);
-  // Known gap, 10-11: "The PO for R40012 is 37463" drops the PO (the label is not straight
-  // before the number). A fix moves this to 500 and this line moves with it, in its ticket.
-  ok(e2e === 494 && missed.every((m) => m.endsWith("PO for a named order")), "494 of 500 end to end; the 6 misses are the 'PO for R... is ...' wording", `${e2e}/500 ${missed.slice(0, 3).join(", ")}`);
 }
 
 if (fails) { console.log(`\n${fails} FAILED`); process.exit(1); }

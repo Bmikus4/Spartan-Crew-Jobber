@@ -91,7 +91,11 @@ export function parseCount(raw: string): number | null {
   // "No. of crew: 3", "Crew required: 4", "Crew Size: 2": a booking form's labelled field
   // (EMS and Wall to Wall, measured 10-09). "6x2hr" is six crew for two hours (Event Concept).
   let m = /^x\s*(\d{1,3})\b/.exec(q) ?? /\b(\d{1,3})\s*x(?:\b|(?=\s*\d+(?:\.\d+)?\s*(?:hours?|hrs?|h)\b))/.exec(q) ?? /^(\d{1,3})\b/.exec(q)
-    ?? /^(?:no\.?\s*of|number\s+of)?\s*(?:crew|staff|hands)\s*(?:required|needed|size)?\s*[:\-]\s*(\d{1,3})\b/.exec(q);
+    ?? /^(?:no\.?\s*of|number\s+of)?\s*(?:crew|staff|hands)\s*(?:required|needed|size)?\s*[:\-]\s*(\d{1,3})\b/.exec(q)
+    // "increase to 5 crew", "make it 6", "take it up to 4": a total after its verb (harness,
+    // 10-11: the model quoted "increase to 5 crew" in 6 of 10 such emails, all refused before).
+    ?? /^(?:increase|increasing|go|going|bump|bumping|up|make|making|take|taking|change|changing|raise|raising)\s+(?:it\s+|us\s+|that\s+)?(?:up\s+)?to\s+(\d{1,3})\b/.exec(q)
+    ?? /^(?:make|making)\s+it\s+(\d{1,3})\b/.exec(q);
   if (m) { const n = Number(m[1]); return n > 0 && n <= 200 ? n : null; }
   m = /^(one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)\b/.exec(q);
   return m ? WORDS[m[1]] : null;
@@ -126,6 +130,9 @@ export function poAfterLabel(text: string, value: string): boolean {
   // PO number", "attached PO-UK000018983" (the reference carries its own label).
   return new RegExp(`\\b${label}\\s*(number|no\\.?)?\\s*(is|will be|=)?\\s*[:#\\-]?\\s*${esc}(?![a-z0-9])`, "i").test(text)
     || new RegExp(`(?<![a-z0-9])${esc}\\s*(is|will be)\\s+(the|our)\\s+${label}\\b`, "i").test(text)
+    // "The PO for R40012 is 37463": the label, the order it is for, then the reference
+    // (harness, 10-11: dropped before, 6 of 15 PO emails).
+    || new RegExp(`\\b${label}\\s*(number|no\\.?)?\\s+for\\s+(job\\s+|order\\s+)?#?[a-z]{0,3}\\d{3,6}\\s*(is|will be|=|:)\\s*${esc}(?![a-z0-9])`, "i").test(text)
     || (/^p\.?o[-#]?\d|^p\.?o-[a-z]/i.test(value) && new RegExp(`(?<![a-z0-9])${esc}(?![a-z0-9])`, "i").test(text));
 }
 
@@ -198,8 +205,12 @@ export function parseDate(raw: string, sentIso: string): string | null {
     }
   }
   const floor = sent.getTime() - 7 * 864e5;
-  const pick = y !== null ? candidates[0] : candidates.filter((c) => c.getTime() >= floor).sort((a, b) => a.getTime() - b.getTime())[0];
+  const dayName = (c: Date) => ["sun", "mon", "tue", "wed", "thu", "fri", "sat"][c.getUTCDay()];
+  const open = y !== null ? candidates.slice(0, 1) : candidates.filter((c) => c.getTime() >= floor).sort((a, b) => a.getTime() - b.getTime());
+  // A weekday written with a bare day picks between the months it could be: "Monday the
+  // 16th" sent on Friday 23 October is 16 November, not the 16 October a week before. With no
+  // candidate on that weekday, the words contradict each other and there is no date.
+  const pick = weekday ? open.find((c) => dayName(c) === weekday) : open[0];
   if (!pick) return null;
-  if (weekday && ["sun", "mon", "tue", "wed", "thu", "fri", "sat"][pick.getUTCDay()] !== weekday) return null;
   return pick.toISOString().slice(0, 10);
 }

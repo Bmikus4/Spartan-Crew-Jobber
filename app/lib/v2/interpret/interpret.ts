@@ -15,6 +15,7 @@ export type Request = {
   duration?: number;
   crew?: number;
   crew_add?: number;
+  crew_remove?: number;
   venue?: string;
   crew_chief?: boolean;
   trade?: string;
@@ -50,6 +51,8 @@ export function ground(x: Extraction, newest: string, sentIso: string): Interpre
     const crew = check(`${tag} crew`, r.crew, parseCount);
     // An increase must SAY it is one ("add 2", "2 more"): a bare "2 crew" is a total.
     const add = check(`${tag} crew increase`, r.crew_add, (q) => (/\b(add|extra|more|another|additional|plus)\b/i.test(q) ? Number(/(\d{1,3})/.exec(q)?.[1]) || null : null));
+    // A decrease must SAY it is one ("stand down 2", "2 fewer"), as an increase must.
+    const less = check(`${tag} crew decrease`, r.crew_remove ?? undefined, (q) => (/\b(stand(ing)? down|fewer|less|release|reduce|drop|remove)\b/i.test(q) ? Number(/(\d{1,3})/.exec(q)?.[1]) || null : null));
     const venue = r.venue && quoteIn(newest, r.venue.quote) && r.venue.quote.toLowerCase().includes(String(r.venue.value).toLowerCase()) ? String(r.venue.value) : undefined;
     const chief = check(`${tag} crew chief`, r.crew_chief, (q) => (/chief|crew ?boss|supervisor/i.test(q) ? true : null));
     const trade = r.trade && quoteIn(newest, r.trade.quote) ? r.trade.value : undefined;
@@ -66,12 +69,13 @@ export function ground(x: Extraction, newest: string, sentIso: string): Interpre
     const need = (cond: boolean, what: string) => { if (!cond) own.push(`${tag}: no ${what} the client wrote`); };
     switch (r.action) {
       case "new_shift": need(!!date, "day"); need(!!start, "start time"); need(!!end, "end time or duration"); need(!!crew, "crew count"); break;
-      case "change_times": need(!!(date || target?.date), "day"); need(!!(start || end || dur), "new time or length"); break;
-      case "change_crew": need(!!(date || target?.date), "day"); need(!!(crew || add), "crew count"); break; // a total AND an increase must agree with the shift: plan.ts checks
+      // A move to another day is a change by itself: "move Tuesday's shift to Wednesday, same times".
+      case "change_times": need(!!(date || target?.date), "day"); need(!!(start || end || dur || (date && target?.date && date !== target.date)), "new time or length"); break;
+      case "change_crew": need(!!(date || target?.date), "day"); need(!!(crew || add || less), "crew count"); break; // a total AND an increase must agree with the shift: plan.ts checks
       case "cancel_shift": need(!!(date || target?.date), "day"); break;
       default: own.push(`${tag}: not an operation the system performs`);
     }
-    return { action: r.action, date, start, end, duration: start || end ? undefined : dur, crew, crew_add: add, venue, crew_chief: chief, trade, target, problems: own };
+    return { action: r.action, date, start, end, duration: start || end ? undefined : dur, crew, crew_add: add, crew_remove: less, venue, crew_chief: chief, trade, target, problems: own };
   });
 
   // A PO is cosmetic (Ben: 1 in 50): one that is not proven is left off with a note, and

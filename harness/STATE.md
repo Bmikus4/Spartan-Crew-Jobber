@@ -40,6 +40,24 @@ Read this first at the start of every work block and after any compaction.
 - **Design question raised for Ben:** a change of start time only keeps the old end (S0141 shrank 10h to 6h). Should the end move with it?
 - **Review file:** `reports/02-review.md` = `runs/record-review.md`.
 
+## Complex orders (Ben, 10-11: "500 on each type ... run 1500 more as long as it doesnt cost anything")
+- **New sets:** `generate-complex.ts` adds 500 complex creates (9 templates) and 500 complex updates (15 templates, including 3 for thread-to-order links from the TV session's threadOrder.ts).
+- **First run, perfect reader:** creates 494/500; updates 260/500, with **40 wrong writes**. "Move Tuesday's shift to Wednesday, 9-5" wrote 9-5 on Tuesday, a LIVE bug.
+- **Fixed in the code:**
+  - a move to another day lands on the new day (a same-times move is allowed);
+  - crew changes across the 3/4 chief line add or cancel the chief;
+  - a new shift on a two-venue order goes to the venue named;
+  - a weekday picks between candidate months ("Monday the 16th");
+  - "The PO for R40012 is 37463" is read;
+  - "increase to 5 crew" is read as a total;
+  - a crew decrease (`crew_remove`) is supported in grounding and planning. **NOT in the prompt yet**: it needs a paid model run to validate, so the model cannot send it today.
+- **Now, all $0:**
+  - perfect reader on simple, create and update: 500/500 each, every invariant held;
+  - the same on fresh seeds (777001-3): 500/500 each;
+  - mutant (dates a day late): 0 wrong writes on all three sets;
+  - replay of the 500 recorded opus-4.8 answers: 500/500.
+- **Not yet run with the real model:** the complex sets. About $11 for 1000 calls; waiting on Ben.
+
 ## Open
 - Read the record-run report; write findings.
 - Gate and commit, if Ben asks. The production refactor needs the gate before it can deploy.

@@ -117,5 +117,16 @@ eq(parseDate("next Friday", fri), null, "next Friday: this coming one or the one
 eq(parseDate("Monsoon at Christie's", fri), null, "Monsoon is not a Monday");
 eq(parseDate("dismantle of Monsoon, Tue 13th October", fri), "2026-10-13", "nor does it contradict a written date");
 
+console.log("shapes the harness found (10-11)");
+eq(parseCount("increase to 5 crew"), 5, "increase to 5 crew is a total of 5");
+eq(parseCount("make it 6 crew"), 6, "make it 6 crew");
+eq(parseCount("take it up to 4"), 4, "take it up to 4");
+eq(parseCount("increase by 2"), null, "increase BY 2 is not a total");
+eq(parseDate("Monday the 16th", "2026-10-23T13:01:00Z"), "2026-11-16", "Monday the 16th sent Friday 23 October: the 16th that is a Monday");
+eq(parseDate("Friday the 16th", "2026-10-23T13:01:00Z"), "2026-10-16", "Friday the 16th: the week-old 16th, which is a Friday");
+eq(parseDate("Sunday the 16th", "2026-10-23T13:01:00Z"), null, "no 16th in reach is a Sunday: no date");
+ok(poAfterLabel("The PO for R40012 is 37463.", "37463"), "The PO for R40012 is 37463");
+ok(!poAfterLabel("The PO for R40012 is 374631.", "37463"), "and only the whole reference");
+
 if (fails) { console.log(`\n${fails} FAILED`); process.exit(1); }
 console.log("\nall passed");

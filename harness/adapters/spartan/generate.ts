@@ -118,7 +118,7 @@ function mail(ctx: Ctx, s: ReturnType<typeof sender>, subject: string, text: str
   };
 }
 
-type Template = { name: string; branch: string; rules: string[]; n: number; build: (ctx: Ctx) => Built };
+export type Template = { name: string; branch: string; rules: string[]; n: number; build: (ctx: Ctx) => Built };
 
 function newBooking(ctx: Ctx, opts: { po?: boolean } = {}): Built {
   const { r } = ctx;
@@ -323,7 +323,12 @@ const TEMPLATES: Template[] = [
         template: "", branch: "", rules: [],
         input: { message: mail(ctx, b.s, "Crew numbers", `Can we increase to ${q} on ${day}?`), orders: [b.o], threadOrderId: null, company_id: b.s.c.id,
           oracle: ex("change", [req({ action: "change_crew", date: g(b.date, day), crew: g(total, q) })]) },
-        expected: person(["change"]),
+        // Since 10-11 the chief line is crossed, not handed off: ops' shape for 4-9 is one Crew
+        // Chief inside the total, so the chief's position is added and the crew takes the rest.
+        expected: write(["change"], [
+          { kind: "add_position", order_id: b.o.id, shift_id: b.o.id * 10, date: b.date, start: b.t.start, end: b.t.end, position: { size: 1, profession_id: "36", role: "crew_chief" } },
+          { kind: "set_position_size", order_id: b.o.id, slot_id: slotsOf(b.o, 0)[0].id, size: total - 1 },
+        ]),
       };
     },
   },
@@ -460,19 +465,28 @@ export const TEMPLATE_COUNT = TEMPLATES.reduce((a, t) => a + t.n, 0);
 
 /** The simulated set: `total` cases spread over the templates in proportion, from one seed. */
 export function generate(total = 500, seed = 20261010): SpartanCase[] {
+  return generateFrom(TEMPLATES, total, seed, "S");
+}
+
+export function generateFrom(templates: Template[], total: number, seed: number, prefix: string): SpartanCase[] {
+  const count = templates.reduce((a, t) => a + t.n, 0);
   const out: SpartanCase[] = [];
   const base = Date.parse("2026-10-12T07:30:00Z");
   let i = 0;
-  for (const t of TEMPLATES) {
-    const n = Math.round((t.n * total) / TEMPLATE_COUNT);
+  for (const t of templates) {
+    const n = Math.round((t.n * total) / count);
     for (let k = 0; k < n; k++, i++) {
       const r = mulberry32(seed + i * 7919);
       // Sent during a working fortnight, 07:30-17:30 London on weekdays and some evenings.
       const sent = new Date(base + Math.floor(i / 40) * 864e5 + ((i * 37) % (10 * 60)) * 60_000).toISOString();
       const ctx: Ctx = { i, r, sent, today: londonDay(sent), idBase: 800000 + i * 4 };
       const b = t.build(ctx);
-      out.push({ ...b, id: `S${String(i).padStart(4, "0")}`, template: t.name, branch: t.branch, rules: t.rules, source: "synthetic-by-construction" });
+      out.push({ ...b, id: `${prefix}${String(i).padStart(4, "0")}`, template: t.name, branch: t.branch, rules: t.rules, source: "synthetic-by-construction" });
     }
   }
   return out;
 }
+
+// Shared with the complex sets (generate-complex.ts).
+export { pick, int, mulberry32, dayWords, timeWords, rangeWords, crewWords, shiftTimes, g, req, ex, sender, order, slotsOf, mail, write, person, none, addDays, londonDay, jobDay };
+export type { Ctx, Built, Rng };
