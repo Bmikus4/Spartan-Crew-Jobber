@@ -90,6 +90,7 @@ export function onsinchWorld(): World {
       return out;
     },
     orderByNumber: async (n) => rowsOf(await t("GET", `/orders?number[eq]=${encodeURIComponent(n)}&with=${NESTED}`))[0] ?? null,
+    professions: async () => rowsOf(await t("GET", "/professions?limit=200")).filter((p: any) => !p.deleted).map((p: any) => ({ id: String(p.id), name: String(p.name ?? "").trim() })),
   };
 }
 

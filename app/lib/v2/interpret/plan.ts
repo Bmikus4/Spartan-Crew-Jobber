@@ -14,8 +14,8 @@
 import type { Op, PositionSpec, ShiftSpec } from "../bot/ops";
 import { shiftWindow, utcToLondon } from "../bot/ops";
 import type { Interpretation, Request } from "./interpret";
-import { addMinutes, subjectDate } from "./ground";
-import { tradeOf, pickProfession, PROFESSION_NAME } from "./professions";
+import { addMinutes } from "./ground";
+import { tradeOf, pickProfession, PROFESSION_NAME, type LiveProfession } from "./professions";
 import { matchCompanyByDomain, rNumbersIn, normName } from "../../engine/resolve";
 
 export type World = {
@@ -25,6 +25,8 @@ export type World = {
   allPlaces?(): Promise<{ id: number; name: string; address?: string }[]>;
   companyOrders(companyId: number): Promise<any[]>;
   orderByNumber(rNumber: string): Promise<any | null>;
+  /** OnSinch's live (not deleted) professions, for a trade found by name (Security). */
+  professions?(): Promise<LiveProfession[]>;
 };
 
 export type Message = { message_id: string; from: string; subject: string; sentIso: string; text: string };
@@ -141,30 +143,28 @@ async function placesFor(world: World, venue: string, clientOrders: any[] = []):
   return hits;
 }
 
-async function findOrder(msg: Message, companyId: number, world: World, threadOrderId: number | null, day?: string, venue?: string): Promise<any | string> {
-  const rs = rNumbersIn(`${msg.subject}\n${msg.text}`);
+/**
+ * THE ORDER A CHANGE IS FOR: one the client names by R number, or the order this thread is
+ * already linked to. Nothing else. A client's only booking on the day it names is NOT enough
+ * (Ben, 10-03: "the engine should not link an enquiry to an existing order for the same client
+ * on the same day, and that be the only reason"). A second job that day would have its crew
+ * and times rewritten; the old engine linked 57 of 90 times on the date alone. A venue match
+ * does not lift it: a venue is support, never proof.
+ */
+async function findOrder(msg: Message, companyId: number, world: World, threadOrderId: number | null): Promise<any | string> {
+  const rs = rNumbersIn(`${msg.subject}
+${msg.text}`);
   if (rs.length > 1) return `the email names ${rs.length} orders`;
   if (rs.length === 1) {
     const o = await world.orderByNumber(rs[0]);
     if (!o) return `R${rs[0]} not found`;
     return Number(o.company_id) === companyId ? o : `R${rs[0]} belongs to another client`;
   }
-  const orders = await world.companyOrders(companyId);
   if (threadOrderId) {
-    const o = orders.find((x) => Number(x.id) === threadOrderId);
+    const o = (await world.companyOrders(companyId)).find((x) => Number(x.id) === threadOrderId);
     if (o) return o;
   }
-  if (!day) return "no order is named";
-  const onDay = orders.filter((o) => teams(o).some((t) => t.slots.some((s) => dayOf(s.beginning) === day)));
-  if (onDay.length === 1) return onDay[0];
-  // Several bookings that day: the venue the client wrote can name one (Blackout 10-09, three
-  // orders on the 13th, "Wonder London - Old Billingsgate"). Its place must be on that day.
-  if (onDay.length > 1 && venue) {
-    const ids = new Set((await placesFor(world, venue)).map((p) => p.id));
-    const atVenue = onDay.filter((o) => teams(o).some((t) => t.slots.some((s) => dayOf(s.beginning) === day && ids.has(Number(s.SlotLocation?.place_id)))));
-    if (atVenue.length === 1) return atVenue[0];
-  }
-  return onDay.length ? `${onDay.length} of the client's orders have a shift on ${day}` : `no booking for this client on ${day}`;
+  return "no order is named";
 }
 
 type ShiftGroup = { date: string; start: string; end: string; venue?: string; positions: PositionSpec[]; label: string; notes: string[] };
@@ -176,7 +176,7 @@ type ShiftGroup = { date: string; start: string; end: string; venue?: string; po
  * total of 4-9 carried a chief 128 times in 132, and counting crew alone fitted 71% against
  * 78%. The chief comes out of the plain crew, so it needs two or more of them.
  */
-function shiftGroups(news: Request[], clientOrders: any[]): ShiftGroup[] | string {
+function shiftGroups(news: Request[], clientOrders: any[], live: LiveProfession[]): ShiftGroup[] | string {
   const byWindow = new Map<string, Request[]>();
   for (const r of news) {
     const k = `${r.date}|${r.start}|${r.end}`;
@@ -194,7 +194,8 @@ function shiftGroups(news: Request[], clientOrders: any[]): ShiftGroup[] | strin
       const trade = tradeOf(r.trade);
       if (!trade) { crew += r.crew!; continue; }
       if (trade.asCrew) { crew += r.crew!; notes.push(`asked for ${trade.label}: no live OnSinch profession, booked as Crew`); continue; }
-      const p = pickProfession(trade, clientOrders);
+      const p = pickProfession(trade, clientOrders, live);
+      if (!p) return `asked for ${trade.label}: OnSinch has no ${trade.label} profession yet`;
       profs.set(p.id, (profs.get(p.id) ?? 0) + r.crew!);
       labels.push(`${r.crew} ${trade.label}`);
       if (trade.candidates.length > 1) notes.push(`${trade.label} booked as ${PROFESSION_NAME[p.id] ?? p.id}${p.fromHistory ? ", the one this client last had" : ", ops' most used (no history for this client)"}`);
@@ -229,6 +230,7 @@ export async function plan(msg: Message, i: Interpretation, world: World, thread
   if (!companyId && (i.intent === "cancellation" || i.intent === "info_only")) return { kind: "none", reason: `${msg.from} is not a client in OnSinch, so nothing of theirs is booked` };
   if (!companyId) return handoff(`no single client company for ${msg.from}`);
   const clientOrders = await world.companyOrders(companyId);
+  const live = i.requests.some((r) => tradeOf(r.trade)?.named) && world.professions ? await world.professions() : [];
   const ops: { source: string; op: Op }[] = [];
   const why: string[] = [];
   const src = (n: number) => `${msg.message_id}#${n}`;
@@ -237,7 +239,7 @@ export async function plan(msg: Message, i: Interpretation, world: World, thread
   const changes = i.requests.filter((r) => r.action !== "new_shift");
 
   for (const [n, r] of changes.entries()) {
-    const order = await findOrder(msg, companyId, world, threadOrderId, r.target?.date ?? r.date, r.venue);
+    const order = await findOrder(msg, companyId, world, threadOrderId);
     if (typeof order === "string") return handoff(order);
     const shift = targetShift(order, r);
     if (typeof shift === "string") return handoff(`R${order.number}: ${shift}`);
@@ -266,7 +268,8 @@ export async function plan(msg: Message, i: Interpretation, world: World, thread
       // a profession is for a person to square with what is booked.
       const trade = tradeOf(r.trade)!;
       if (!r.crew_add || r.crew || r.crew_remove) return handoff(`R${order.number}: a change to the ${trade.label} count other than adding`);
-      const prof = pickProfession(trade, clientOrders);
+      const prof = pickProfession(trade, clientOrders, live);
+      if (!prof) return handoff(`asked for ${trade.label}: OnSinch has no ${trade.label} profession yet`);
       const londonStart = utcToLondon(first.beginning).time, londonEnd = utcToLondon(first.end).time;
       ops.push({ source: `${src(n)}:prof`, op: { kind: "add_position", order_id: Number(order.id), shift_id: shift.id, date, start: londonStart, end: londonEnd, position: { size: r.crew_add, profession_id: prof.id } } });
       why.push(`R${order.number}: add ${r.crew_add} ${trade.asCrew ? `crew (asked for ${trade.label})` : trade.label} on ${date}`);
@@ -310,7 +313,7 @@ export async function plan(msg: Message, i: Interpretation, world: World, thread
     const atPlace = new Map<number, number>();
     for (const t of teams(named)) for (const s of t.slots) if (Number(s.slotlocation_id)) atPlace.set(Number(s.SlotLocation?.place_id), Number(s.slotlocation_id));
     const locations = new Set(atPlace.values());
-    const groups = shiftGroups(news, clientOrders);
+    const groups = shiftGroups(news, clientOrders, live);
     if (typeof groups === "string") return handoff(groups);
     for (const [n, g] of groups.entries()) {
       let location_id = locations.size === 1 ? [...locations][0] : 0;
@@ -357,7 +360,7 @@ export async function plan(msg: Message, i: Interpretation, world: World, thread
       const o = booked.find(Boolean);
       const locs = new Set(teams(o).flatMap((t) => t.slots.map((x) => Number(x.slotlocation_id)).filter(Boolean)));
       const rest = news.filter((_, k) => !booked[k]);
-      const groups = hit.length === 1 && locs.size === 1 ? shiftGroups(rest, clientOrders) : null;
+      const groups = hit.length === 1 && locs.size === 1 ? shiftGroups(rest, clientOrders, live) : null;
       if (!groups || typeof groups === "string") return handoff(`part of this is already booked (${booked.filter(Boolean).map((x) => `R${x.number}`).join(", ")})`);
       for (const [n, g] of groups.entries()) {
         ops.push({ source: src(50 + n), op: { kind: "add_shift", order_id: Number(o.id), location_id: [...locs][0], name: "Crew", date: g.date, start: g.start, end: g.end, positions: g.positions } });
@@ -367,7 +370,7 @@ export async function plan(msg: Message, i: Interpretation, world: World, thread
       return { kind: "write", ops, why: [...why, ...notes] };
     }
     const shifts: ShiftSpec[] = [];
-    const groups = shiftGroups(news, clientOrders);
+    const groups = shiftGroups(news, clientOrders, live);
     if (typeof groups === "string") return handoff(groups);
     const extra: string[] = [];
     for (const g of groups) {
@@ -385,12 +388,10 @@ export async function plan(msg: Message, i: Interpretation, world: World, thread
     ops.push({ source: src(100), op: { kind: "create_order", company_id: String(companyId), company_name: String(company?.name ?? "").trim(), client_email: msg.from, job_name: `${String(company?.name ?? "").trim()} @ ${venueName}`, po: i.po, shifts } });
     why.push(`new order: ${shifts.length} shift(s) at ${venueName}`, ...extra);
   } else if (i.po) {
-    // The order a PO is for: the email's R number or the thread's order, else the client's
-    // one order on the subject's day ("13/10 British museum ref:2871"). A PO is cosmetic (Ben:
-    // 1 in 50), so one no order can be found for is left off with the reason, not a card.
-    let order = await findOrder(msg, companyId, world, threadOrderId);
-    const day = typeof order === "string" ? subjectDate(msg.subject, msg.sentIso) : null;
-    if (typeof order === "string" && day) order = await findOrder(msg, companyId, world, null, day);
+    // The order a PO is for: the email's R number or the thread's order, never a day's only
+    // booking (findOrder). A PO is cosmetic (Ben: 1 in 50), so one with no order named is left
+    // off with the reason, not a card.
+    const order = await findOrder(msg, companyId, world, threadOrderId);
     if (typeof order === "string") return { kind: "none", reason: `PO ${i.po} left off: ${order}` };
     // A PO already on the order is never replaced by the system: the client correcting one is
     // rare, and a reference misread as a PO would overwrite the real one.

@@ -12,11 +12,18 @@
 // to Oct 2026, and the planner takes the one ops last booked for THAT client when there is
 // one: the profession picks the pricelist line, so a client's own history is the evidence.
 // A trade with no live profession (Audio Tech 13, Lighting Tech 14 and Host 35 are deleted;
-// rigger, electrician and security never existed) is booked as Crew and the card says so.
+// rigger and electrician never existed) is booked as Crew and the card says so.
+// SECURITY IS NEVER BOOKED AS CREW (Ben, 10-11: "booked as security, it should be an option"):
+// door and SIA work is licensed, so plain crew on a security call is a wrong booking. It is
+// found by name in OnSinch's live list, because the profession is made in the OnSinch admin
+// with its rates (the API cannot create one) and its id is not known until then. With no
+// Security profession the request goes to a person.
 // A word not listed here is plain crew under the crew-chief rule (Ben, 10-11).
 // ============================================================================
 
-export type Trade = { candidates: string[]; label: string; asCrew?: boolean };
+/** named: the profession is looked up in OnSinch's live list by this name, not fixed by id. */
+export type Trade = { candidates: string[]; label: string; asCrew?: boolean; named?: RegExp };
+export type LiveProfession = { id: string; name: string };
 
 const T = (re: RegExp, candidates: string[], label: string, asCrew = false) => ({ re, t: { candidates, label, asCrew } as Trade });
 
@@ -50,7 +57,7 @@ const TABLE = [
   T(/\b(lighting|lx)\b.*\b(tech|techs|technicians?|engineers?|op|ops)\b/, ["1"], "lighting tech", true),
   T(/rigger|rigging/, ["1"], "rigger", true),
   T(/electrician|sparks/, ["1"], "electrician", true),
-  T(/security/, ["1"], "security", true),
+  { re: /security|\bsia\b|door ?(staff|supervisors?)/, t: { candidates: [], label: "Security", named: /security/i } as Trade },
   T(/\bhost(ess)?s?\b/, ["1"], "host", true),
   T(/cleaner|cleaning/, ["1"], "cleaner", true),
 ];
@@ -71,10 +78,15 @@ export function tradeOf(words: string | undefined): Trade | null {
   return TABLE.find(({ re }) => re.test(q))?.t ?? null;
 }
 
-/** Of a trade's candidates, the one this client's own orders used most recently, else ops' most used. */
-export function pickProfession(trade: Trade, clientOrders: any[]): { id: string; fromHistory: boolean } {
-  if (trade.candidates.length === 1) return { id: trade.candidates[0], fromHistory: false };
-  const want = new Set(trade.candidates);
+/**
+ * Of a trade's candidates, the one this client's own orders used most recently, else ops' most
+ * used. A named trade's candidates are the live professions with its name; with none, null.
+ */
+export function pickProfession(trade: Trade, clientOrders: any[], live: LiveProfession[] = []): { id: string; fromHistory: boolean } | null {
+  const candidates = trade.named ? live.filter((p) => trade.named!.test(p.name)).map((p) => p.id) : trade.candidates;
+  if (!candidates.length) return null;
+  if (candidates.length === 1) return { id: candidates[0], fromHistory: false };
+  const want = new Set(candidates);
   let best: { id: string; at: number } | null = null;
   for (const o of clientOrders) {
     const at = Date.parse(o?.created ?? "") || 0;
@@ -83,5 +95,5 @@ export function pickProfession(trade: Trade, clientOrders: any[]): { id: string;
         for (const s of ([] as any[]).concat(t?.Slot ?? []))
           if (s?.cancelled !== true && want.has(String(s?.profession_id)) && (!best || at > best.at)) best = { id: String(s.profession_id), at };
   }
-  return best ? { id: best.id, fromHistory: true } : { id: trade.candidates[0], fromHistory: false };
+  return best ? { id: best.id, fromHistory: true } : { id: candidates[0], fromHistory: false };
 }

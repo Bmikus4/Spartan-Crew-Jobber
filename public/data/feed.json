@@ -3117,5 +3117,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0165",
+  "ts": "2026-10-12T01:04:17+00:00",
+  "kind": "measurement",
+  "headline": "Date-only order linking removed (Ben 10-03): real emails 9 written (all match ops), 13 orders to a person (was 8); security booked as OnSinch's Security profession, none exists yet so a person books it",
+  "subject": "A change is linked to an order only by an R number or the thread, never by its day; security is never booked as Crew",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 190,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]

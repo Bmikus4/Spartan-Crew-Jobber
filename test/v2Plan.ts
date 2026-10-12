@@ -43,9 +43,19 @@ ok(positionsFor(4)?.length === 2 && positionsFor(4)![0].role === "crew_chief" &&
 ok(positionsFor(12) === null, "12 crew: not decided here");
 
 (async () => {
-  console.log("R11425: 'add 2 crew to Steve's 4 on Friday 9th' is a change to R11352, not a new order");
+  console.log("a change is never linked to an order by its day alone (Ben, 10-03)");
   {
     const d = await plan(msg("crew@eventconcept.com", "add 2 crew to Steve's 4 on Friday 9th"), I([r({ action: "change_crew", date: "2026-10-09", crew_add: 2 })]), world);
+    ok(d.kind === "handoff" && /no order is named/.test(d.reasons.join()), "the client's only booking on the 9th is not enough: a person picks the order", JSON.stringify(d));
+  }
+  {
+    const d = await plan(msg("crew@eventconcept.com", "Thanks, PO is 7781", "13/10 crew"), I([], { intent: "info_only", po: "7781" }), world);
+    ok(d.kind === "none" && /left off: no order is named/.test(d.reason), "nor is a PO put on an order found by the subject's day", JSON.stringify(d));
+  }
+
+  console.log("R11425: 'add 2 crew to Steve's 4 on Friday 9th' is a change to R11352, not a new order");
+  {
+    const d = await plan(msg("crew@eventconcept.com", "add 2 crew to Steve's 4 on Friday 9th"), I([r({ action: "change_crew", date: "2026-10-09", crew_add: 2 })]), world, 16388);
     const op = d.kind === "write" ? d.ops[0].op : null;
     ok(d.kind === "write" && d.ops.length === 1 && op?.kind === "set_position_size" && (op as any).slot_id === 12 && (op as any).size === 5, "crew position 12 goes to 5 (6 in all with the chief)", JSON.stringify(d));
   }
@@ -64,44 +74,44 @@ ok(positionsFor(12) === null, "12 crew: not decided here");
 
   console.log("which shift a change means");
   {
-    const d = await plan(msg("crew@eventconcept.com", "move the derig to 22:30-01:00 on the 6th"), I([r({ action: "change_times", start: "22:30", end: "01:00", target: { quote: "the derig", date: "2026-10-06" } })]), world);
+    const d = await plan(msg("crew@eventconcept.com", "move the derig to 22:30-01:00 on the 6th"), I([r({ action: "change_times", start: "22:30", end: "01:00", target: { quote: "the derig", date: "2026-10-06" } })]), world, 16220);
     const ops = d.kind === "write" ? d.ops.map((o) => o.op as any) : [];
     ok(ops.length === 1 && ops[0].slot_id === 31 && ops[0].start === "22:30" && ops[0].end === "01:00", "the derig, not the install, on a two-shift day", JSON.stringify(d));
   }
   {
-    const d = await plan(msg("crew@eventconcept.com", "change the shift on the 6th to 09:00"), I([r({ action: "change_times", start: "09:00", target: { quote: "the shift", date: "2026-10-06" } })]), world);
+    const d = await plan(msg("crew@eventconcept.com", "change the shift on the 6th to 09:00"), I([r({ action: "change_times", start: "09:00", target: { quote: "the shift", date: "2026-10-06" } })]), world, 16220);
     ok(d.kind === "handoff", "two shifts that day and nothing saying which: ops", JSON.stringify(d));
   }
   {
-    const d = await plan(msg("crew@eventconcept.com", "crew to arrive 08:30 on Friday 9th"), I([r({ action: "change_times", start: "08:30", date: "2026-10-09" })]), world);
+    const d = await plan(msg("crew@eventconcept.com", "crew to arrive 08:30 on Friday 9th"), I([r({ action: "change_times", start: "08:30", date: "2026-10-09" })]), world, 16388);
     const ops = d.kind === "write" ? d.ops.map((o) => o.op as any) : [];
     ok(ops.length === 2 && ops.every((o) => o.start === "08:30" && o.end === "17:00"), "a new start moves every position on the shift and leaves the end as booked", JSON.stringify(ops));
   }
 
   console.log("a new length (Wonder London 10-09: 'increase hours to 8 (currently 6)')");
   {
-    const d = await plan(msg("crew@eventconcept.com", "increase the hours to 10 on Friday 9th"), I([r({ action: "change_times", date: "2026-10-09", duration: 600 })]), world);
+    const d = await plan(msg("crew@eventconcept.com", "increase the hours to 10 on Friday 9th"), I([r({ action: "change_times", date: "2026-10-09", duration: 600 })]), world, 16388);
     const ops = d.kind === "write" ? d.ops.map((o) => o.op as any) : [];
     ok(ops.length === 2 && ops.every((o) => o.start === "09:00" && o.end === "19:00"), "the start stays and the end moves to start + length", JSON.stringify(ops));
   }
   {
-    const d = await plan(msg("crew@eventconcept.com", "make the derig on the 6th 3 hours"), I([r({ action: "change_times", duration: 180, target: { quote: "the derig", date: "2026-10-06" } })]), world);
+    const d = await plan(msg("crew@eventconcept.com", "make the derig on the 6th 3 hours"), I([r({ action: "change_times", duration: 180, target: { quote: "the derig", date: "2026-10-06" } })]), world, 16220);
     const ops = d.kind === "write" ? d.ops.map((o) => o.op as any) : [];
     ok(ops.length === 1 && ops[0].start === "22:00" && ops[0].end === "01:00", "a length past midnight ends the next morning", JSON.stringify(ops));
   }
   {
-    const d = await plan(msg("crew@eventconcept.com", "the 3 crew on the derig on the 6th, 3 hours"), I([r({ action: "change_times", crew: 3, duration: 180, target: { quote: "the derig", date: "2026-10-06" } })]), world);
+    const d = await plan(msg("crew@eventconcept.com", "the 3 crew on the derig on the 6th, 3 hours"), I([r({ action: "change_times", crew: 3, duration: 180, target: { quote: "the derig", date: "2026-10-06" } })]), world, 16220);
     ok(d.kind === "handoff" && /says 3 crew, the shift has 2/.test(JSON.stringify(d)), "a crew count beside a time change that is not the shift's: ops", JSON.stringify(d));
   }
 
   console.log("a total and an increase together (Legal Geek 10-09: 'add 2 more, making it 4')");
   {
-    const d = await plan(msg("crew@eventconcept.com", "add 2 more on Friday 9th, making it 6"), I([r({ action: "change_crew", date: "2026-10-09", crew_add: 2, crew: 6 })]), world);
+    const d = await plan(msg("crew@eventconcept.com", "add 2 more on Friday 9th, making it 6"), I([r({ action: "change_crew", date: "2026-10-09", crew_add: 2, crew: 6 })]), world, 16388);
     const op = d.kind === "write" ? (d.ops[0].op as any) : null;
     ok(op?.kind === "set_position_size" && op.size === 5, "they agree with the shift (4 + 2 = 6): crew position to 5 with the chief", JSON.stringify(d));
   }
   {
-    const d = await plan(msg("crew@eventconcept.com", "add 2 more on Friday 9th, making it 5"), I([r({ action: "change_crew", date: "2026-10-09", crew_add: 2, crew: 5 })]), world);
+    const d = await plan(msg("crew@eventconcept.com", "add 2 more on Friday 9th, making it 5"), I([r({ action: "change_crew", date: "2026-10-09", crew_add: 2, crew: 5 })]), world, 16388);
     ok(d.kind === "handoff" && /makes 6, not the 5 written/.test(JSON.stringify(d)), "they disagree with the shift: ops", JSON.stringify(d));
   }
 
