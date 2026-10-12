@@ -193,9 +193,8 @@ function shiftGroups(news: Request[], clientOrders: any[], live: LiveProfession[
     for (const r of rs) {
       const trade = tradeOf(r.trade);
       if (!trade) { crew += r.crew!; continue; }
-      if (trade.asCrew) { crew += r.crew!; notes.push(`asked for ${trade.label}: no live OnSinch profession, booked as Crew`); continue; }
-      const p = pickProfession(trade, clientOrders, live);
-      if (!p) return `asked for ${trade.label}: OnSinch has no ${trade.label} profession yet`;
+      const p = trade.asCrew ? null : pickProfession(trade, clientOrders, live);
+      if (!p) { crew += r.crew!; notes.push(`asked for ${trade.label}: no live OnSinch profession, booked as Crew`); continue; }
       profs.set(p.id, (profs.get(p.id) ?? 0) + r.crew!);
       labels.push(`${r.crew} ${trade.label}`);
       if (trade.candidates.length > 1) notes.push(`${trade.label} booked as ${PROFESSION_NAME[p.id] ?? p.id}${p.fromHistory ? ", the one this client last had" : ", ops' most used (no history for this client)"}`);
@@ -231,6 +230,11 @@ export async function plan(msg: Message, i: Interpretation, world: World, thread
   if (!companyId) return handoff(`no single client company for ${msg.from}`);
   const clientOrders = await world.companyOrders(companyId);
   const live = i.requests.some((r) => tradeOf(r.trade)?.named) && world.professions ? await world.professions() : [];
+  const professionOf = (r: Request) => {
+    const trade = tradeOf(r.trade);
+    const prof = trade && !trade.asCrew ? pickProfession(trade, clientOrders, live) : null;
+    return trade && prof ? { trade, prof } : null;
+  };
   const ops: { source: string; op: Op }[] = [];
   const why: string[] = [];
   const src = (n: number) => `${msg.message_id}#${n}`;
@@ -262,18 +266,18 @@ export async function plan(msg: Message, i: Interpretation, world: World, thread
     } else if (r.action === "cancel_shift") {
       for (const s of shift.slots) ops.push({ source: `${src(n)}:${s.id}`, op: { kind: "cancel_position", order_id: Number(order.id), slot_id: Number(s.id) } });
       why.push(`R${order.number} shift ${shift.id}: cancelled`);
-    } else if (r.action === "change_crew" && tradeOf(r.trade)) {
+    } else if (r.action === "change_crew" && professionOf(r)) {
       // "add a carpenter to the team tomorrow" (Wall to Wall, 10-11): a position of that
       // profession on the shift, beside the crew. Only an addition: a total or a reduction of
       // a profession is for a person to square with what is booked.
-      const trade = tradeOf(r.trade)!;
+      const { trade, prof } = professionOf(r)!;
       if (!r.crew_add || r.crew || r.crew_remove) return handoff(`R${order.number}: a change to the ${trade.label} count other than adding`);
-      const prof = pickProfession(trade, clientOrders, live);
-      if (!prof) return handoff(`asked for ${trade.label}: OnSinch has no ${trade.label} profession yet`);
       const londonStart = utcToLondon(first.beginning).time, londonEnd = utcToLondon(first.end).time;
       ops.push({ source: `${src(n)}:prof`, op: { kind: "add_position", order_id: Number(order.id), shift_id: shift.id, date, start: londonStart, end: londonEnd, position: { size: r.crew_add, profession_id: prof.id } } });
-      why.push(`R${order.number}: add ${r.crew_add} ${trade.asCrew ? `crew (asked for ${trade.label})` : trade.label} on ${date}`);
+      why.push(`R${order.number}: add ${r.crew_add} ${trade.label} on ${date}`);
     } else if (r.action === "change_crew") {
+      const unverified = tradeOf(r.trade);
+      if (unverified) why.push(`asked for ${unverified.label}: no live OnSinch profession, booked as Crew`);
       const chief = shift.slots.filter((s) => Number(s.role) === 1);
       const crew = shift.slots.filter((s) => Number(s.role) !== 1 && Number(s.profession_id) === 1);
       if (crew.length !== 1) return handoff(`R${order.number} shift ${shift.id}: ${crew.length} crew positions`);

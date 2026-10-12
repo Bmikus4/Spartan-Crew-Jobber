@@ -3131,5 +3131,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0166",
+  "ts": "2026-10-12T02:06:30+00:00",
+  "kind": "measurement",
+  "headline": "Unverified trades (security while OnSinch has no Security profession, rigger, audio, etc.) book as standard crew on new and existing shifts; real-email replay unchanged at 9 written",
+  "subject": "A crew type the system cannot verify, security included, is booked as standard crew",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 190,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]

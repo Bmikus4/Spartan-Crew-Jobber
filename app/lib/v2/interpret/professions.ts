@@ -11,13 +11,13 @@
 // or per hour 11) the candidates are in ops' own order of use across 2,995 orders, Dec 2023
 // to Oct 2026, and the planner takes the one ops last booked for THAT client when there is
 // one: the profession picks the pricelist line, so a client's own history is the evidence.
-// A trade with no live profession (Audio Tech 13, Lighting Tech 14 and Host 35 are deleted;
-// rigger and electrician never existed) is booked as Crew and the card says so.
-// SECURITY IS NEVER BOOKED AS CREW (Ben, 10-11: "booked as security, it should be an option"):
-// door and SIA work is licensed, so plain crew on a security call is a wrong booking. It is
-// found by name in OnSinch's live list, because the profession is made in the OnSinch admin
-// with its rates (the API cannot create one) and its id is not known until then. With no
-// Security profession the request goes to a person.
+// A TRADE THE SYSTEM CANNOT VERIFY IS BOOKED AS STANDARD CREW, never sent to a person (Ben,
+// 10-11: "if you ever cant verify the crew type always book as standard crew"). That covers a
+// trade with no live profession (Audio Tech 13, Lighting Tech 14 and Host 35 are deleted;
+// rigger and electrician never existed), a trade word the email does not hold, and Security
+// while OnSinch has none. The card says "booked as Crew" each time.
+// Security is looked up by name in OnSinch's live list rather than fixed: a Security
+// profession made in the OnSinch admin (the API cannot create one) is booked from then on.
 // A word not listed here is plain crew under the crew-chief rule (Ben, 10-11).
 // ============================================================================
 

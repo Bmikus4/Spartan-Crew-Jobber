@@ -62,9 +62,7 @@ const CHECKS: Array<[RegExp, (m: RegExpExecArray) => string | null]> = [
   [/locations; which one/, () => "Order has several venues, pick one"],
   [/linked to order/, () => "Linked order unreadable, check OnSinch"],
   [/one call at \d+ venues/, () => "One call at two venues, check"],
-  [/count other than adding/, () => "Profession change, do by hand"],
-  [/OnSinch has no (.+) profession yet/, (m) => `No ${clip(m[1], 24)} profession in OnSinch yet`],
-  [/could not read this email/, () => "System couldn't read this email"],
+  [/count other than adding/, () => "Profession change, do by hand"],  [/could not read this email/, () => "System couldn't read this email"],
   [/sent with a later email|later client message/, () => null],
 ];
 

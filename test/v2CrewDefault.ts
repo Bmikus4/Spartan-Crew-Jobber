@@ -51,7 +51,7 @@ ok(as("van driver")?.candidates.join() === "46" && as("driver")?.candidates.join
 ok(as("telehandler over 9m")?.candidates.join() === "24,7" && as("telehandler")?.candidates.join() === "23,4", "a telehandler over 9m is J3, otherwise J2");
 ok(as("IPAF 1b operator")?.candidates.join() === "53" && as("IPAF operator")?.candidates.join() === "5", "IPAF 1b is 53, IPAF otherwise 3a/3b (5)");
 ok(!!as("rigger")?.asCrew && !!as("audio tech")?.asCrew, "a trade with no live profession is booked as Crew, and says so");
-ok(!as("security")?.asCrew && !!as("security")?.named && !!as("SIA door staff")?.named, "security is never Crew: it is found by name in OnSinch's live list (Ben, 10-11)");
+ok(!!as("security")?.named && !!as("SIA door staff")?.named, "security is found by name in OnSinch's live list");
 ok(pickProfession(as("security")!, [], []) === null && pickProfession(as("security")!, [], [{ id: "70", name: "Security (SIA)" }])?.id === "70", "with no Security profession there is none to book; with one, it is booked");
 ok(as("crew") === null && as("build crew") === null && as("stagehands") === null, "crew words are plain crew");
 const history = [{ created: "2026-09-01", Job: [{ SlotTeam: [{ Slot: [{ profession_id: 11 }] }] }] }];
@@ -75,7 +75,10 @@ ok(d2.kind === "handoff" && /no plain crew/.test(d2.reasons.join()), "carpenters
 const d3 = await plan(msg, { intent: "booking", requests: [R(3, "riggers")], problems: [] }, world);
 ok(d3.kind === "write" && d3.why.some((w) => /booked as Crew/.test(w)), "riggers are booked as Crew and the card says so", JSON.stringify(d3.kind === "write" ? d3.why : d3));
 const d4 = await plan(msg, { intent: "booking", requests: [R(4), R(2, "security")], problems: [] }, world);
-ok(d4.kind === "handoff" && /no Security profession/.test(d4.reasons.join()), "security with no Security profession in OnSinch goes to a person, never booked as Crew", JSON.stringify(d4));
+const pos4 = d4.kind === "write" && d4.ops[0].op.kind === "create_order" ? d4.ops[0].op.shifts.map((s) => s.positions.map((p) => `${p.size}x${p.profession_id}${p.role ? "c" : ""}`).join(" ")) : [];
+ok(pos4[0] === "1x36c 5x1" && d4.kind === "write" && d4.why.some((w) => /Security: no live OnSinch profession, booked as Crew/.test(w)), "security with no Security profession is standard crew, and the card says so (Ben, 10-11: 'if you cant verify the crew type always book as standard crew')", JSON.stringify(d4));
+const d6 = await plan(msg, { intent: "booking", requests: [R(2, "security")], problems: [] }, world);
+ok(d6.kind === "write", "security alone is a crew shift, not a hand-off", JSON.stringify(d6));
 const d5 = await plan(msg, { intent: "booking", requests: [R(4), R(2, "security")], problems: [] }, { ...world, professions: async () => [{ id: "1", name: "Crew" }, { id: "70", name: "Security" }] });
 const pos5 = d5.kind === "write" && d5.ops[0].op.kind === "create_order" ? d5.ops[0].op.shifts.map((s) => s.positions.map((p) => `${p.size}x${p.profession_id}${p.role ? "c" : ""}`).join(" ")) : [];
 ok(pos5[0] === "1x36c 3x1 2x70", "with a Security profession in OnSinch, 2 security are booked as it beside the crew", JSON.stringify(d5));

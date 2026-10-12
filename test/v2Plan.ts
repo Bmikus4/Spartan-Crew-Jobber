@@ -60,6 +60,12 @@ ok(positionsFor(12) === null, "12 crew: not decided here");
     ok(d.kind === "write" && d.ops.length === 1 && op?.kind === "set_position_size" && (op as any).slot_id === 12 && (op as any).size === 5, "crew position 12 goes to 5 (6 in all with the chief)", JSON.stringify(d));
   }
 
+  {
+    const d = await plan(msg("crew@eventconcept.com", "add 2 riggers to Steve's 4 on Friday 9th"), I([r({ action: "change_crew", date: "2026-10-09", crew_add: 2, trade: "riggers" })]), world, 16388);
+    const op = d.kind === "write" ? (d.ops[0].op as any) : null;
+    ok(d.kind === "write" && d.ops.length === 1 && op?.kind === "set_position_size" && op.slot_id === 12 && op.size === 5 && d.why.some((w) => /booked as Crew/.test(w)), "a trade with no verified profession is added as standard crew (Ben, 10-11)", JSON.stringify(d));
+  }
+
   console.log("Legal Geek #13709: adding a derig on the 13th never moves the install");
   {
     const d = await plan(msg("ops@legalgeek.co", "please add a derig on the 13th, 2 crew 18:00-22:00", "RE: R9001"), I([r({ date: "2026-10-13", start: "18:00", end: "22:00", crew: 2 })], { intent: "booking" }), world);
