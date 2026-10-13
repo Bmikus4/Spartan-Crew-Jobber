@@ -31,7 +31,7 @@ export type Request = {
 };
 
 /** problems block the email (no write); notes are kept with the decision and block nothing. */
-export type Interpretation = { intent: Extraction["intent"]; po?: string; requests: Request[]; problems: string[]; notes?: string[]; order_id?: number };
+export type Interpretation = { intent: Extraction["intent"]; po?: string; requests: Request[]; problems: string[]; notes?: string[]; order_id?: number; company_name?: string };
 
 /**
  * What the thread itself already says. A reply that refers back ("Please may this be booked",
@@ -255,5 +255,6 @@ export function ground(x: Extraction, newest: string, sentIso: string, ctx: Grou
   }
   // The booking a PO or a request-less message is about, only from those the reader was shown.
   const whole = x.order ? (ctx.read?.bookings ?? []).find((k) => k.order === String(x.order).replace(/^r?/i, "R")) : undefined;
-  return { intent, po, requests: reqs, problems: problems.filter((p) => !requests.some((r) => r.problems.includes(p))), notes, ...(whole ? { order_id: whole.order_id } : {}) };
+  const company_name = x.company && typeof x.company === "object" && quoteIn(all, x.company.quote) && String(x.company.value ?? "").trim() ? String(x.company.value).trim().slice(0, 80) : undefined;
+  return { intent, po, requests: reqs, problems: problems.filter((p) => !requests.some((r) => r.problems.includes(p))), notes, ...(whole ? { order_id: whole.order_id } : {}), ...(company_name ? { company_name } : {}) };
 }

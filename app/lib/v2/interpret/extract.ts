@@ -36,6 +36,8 @@ export type Extraction = {
   po: Grounded<string>;
   /** The booking a PO (or a message with no requests) is about, from the bookings shown. */
   order?: string | null;
+  /** The client's company as written (signature, sign-off), for a client OnSinch does not hold. */
+  company?: Grounded<string>;
   requests: RawRequest[];
   note: string;
 };
@@ -49,6 +51,7 @@ Return ONLY a JSON object:
  "intent": "booking" | "change" | "cancellation" | "quote_request" | "info_only" | "unclear",
  "po": {"value": "<PO/reference>", "quote": "<exact words>"} | null,
  "order": "<R number of the booking a PO or the whole message is about>" | null,
+ "company": {"value": "<the client's company name>", "quote": "<exact words, e.g. from the signature>"} | null,
  "requests": [ {
    "action": "new_shift" | "change_times" | "change_crew" | "cancel_shift" | "other",
    "order": "<R number from THE CLIENT'S CURRENT BOOKINGS that this request is about>" | null,

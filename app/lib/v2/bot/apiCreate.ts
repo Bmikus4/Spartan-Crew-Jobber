@@ -71,10 +71,21 @@ export function createBody(op: CreateOp, d: { user_id: string; card: number }): 
   }];
 }
 
+/** Ben's own account: the stand-in contact on an order whose client has none yet (09-29: intentional). */
+const PLACEHOLDER_CONTACT = "2257";
+
 export async function apiCreateOrder(op: CreateOp): Promise<ApiCreated> {
   const { client, t } = api();
+  // A new client ("new:<name>"): found again first (a second email may have made it), else made.
+  if (op.company_id.startsWith("new:")) {
+    const name = op.company_id.slice(4).trim();
+    const domain = op.client_email.split("@")[1]?.toLowerCase() ?? "";
+    const existing = (await client.allCompanies().catch(() => [] as any[])).find((c: any) =>
+      String(c.name ?? "").trim().toLowerCase() === name.toLowerCase() || ([] as any[]).concat(c.Client ?? []).some((u: any) => String(u.email ?? "").toLowerCase().endsWith("@" + domain) && domain && !/gmail|hotmail|outlook|yahoo|icloud|live\./.test(domain)));
+    op.company_id = String(existing ? existing.id : (await client.createCompany({ name, email_invoice: op.client_email })).id);
+  }
   const d = await clientDefaults(Number(op.company_id), op.client_email);
-  if (!d.user_id) throw new Error(`company ${op.company_id} has no contact to name on the order`);
+  if (!d.user_id) { d.user_id = PLACEHOLDER_CONTACT; d.contact_from = "Ben (stand-in: the client has no contact in OnSinch yet)"; }
   // A venue OnSinch does not hold ("new:<the words as written>") is added first, named as
   // written and with those words as its address, as ops add one.
   const made_places = new Map<string, string>();

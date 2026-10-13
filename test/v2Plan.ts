@@ -128,7 +128,10 @@ ok(positionsFor(12) === null, "12 crew: not decided here");
   }
   {
     const d = await plan(msg("someone@unknown.example", "4 crew on the 9th"), I([r({ date: "2026-10-09", start: "09:00", end: "17:00", crew: 4, venue: "Business Design Centre" })], { intent: "booking" }), world);
-    ok(d.kind === "handoff", "an unknown sender's company: ops");
+    ok(d.kind === "handoff", "an unknown sender with no company name written: ops");
+    const n = await plan(msg("jo@atcomms.example", "4 crew on the 9th"), I([r({ date: "2026-10-09", start: "09:00", end: "17:00", crew: 4, venue: "Business Design Centre" })], { intent: "booking", company_name: "AT Comms" }), world);
+    const op = n.kind === "write" ? (n.ops[0].op as any) : null;
+    ok(op?.kind === "create_order" && op.company_id === "new:AT Comms" && /^AT Comms @ /.test(op.job_name), "a new client's first booking creates the client from its written name, then the order", JSON.stringify(n));
   }
   {
     const d = await plan(msg("crew@eventconcept.com", "quote for 4 crew"), I([r({ date: "2026-10-14", start: "18:45", end: "20:45", crew: 4 })], { intent: "quote_request" }), world);

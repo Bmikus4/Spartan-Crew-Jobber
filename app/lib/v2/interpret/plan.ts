@@ -243,12 +243,17 @@ export async function plan(msg: Message, i: Interpretation, world: World, thread
   // The client: the sender's domain, else the company of the order this thread is already
   // linked to. "Re: SN ExCeL" from amy@mvstaging.com (10-13), a contact OnSinch does not hold,
   // is about an order that has a company.
-  let companyId = matchCompanyByDomain(msg.from, await world.companies());
+  let companyId: number = matchCompanyByDomain(msg.from, await world.companies()) || 0;
   if (!companyId && threadOrderId && world.orderById) { const o = await world.orderById(threadOrderId).catch(() => null); if (o && Number(o.company_id) > 0) companyId = Number(o.company_id); }
   // A sender OnSinch has no company for has nothing booked: a cancellation or a PO from them
   // changes nothing (AT Comms, 10-11: "the PM has this covered now" after their first email).
   if (!companyId && (i.intent === "cancellation" || i.intent === "info_only")) return { kind: "none", reason: `${msg.from} is not a client in OnSinch, so nothing of theirs is booked` };
-  if (!companyId) return handoff(`no single client company for ${msg.from}`);
+  // A CLIENT ONSINCH DOES NOT HOLD IS CREATED from its name, as ops do and as Ben ruled for the
+  // engine ("creating a client is never gated on information beyond a name", onsinch.ts): a
+  // first booking from AT Comms (10-11) went to a person for want of a company record. Only a
+  // booking or quote with its shifts does this; anything else from a stranger is for the inbox.
+  const newClient = !companyId && i.company_name && (i.intent === "booking" || i.intent === "quote_request") && i.requests.length && i.requests.every((r) => r.action === "new_shift") ? i.company_name : null;
+  if (!companyId && !newClient) return handoff(`no single client company for ${msg.from}`);
   const clientOrders = await world.companyOrders(companyId);
   const live = i.requests.some((r) => tradeOf(r.trade)?.named) && world.professions ? await world.professions() : [];
   const professionOf = (r: Request) => {
@@ -472,7 +477,8 @@ export async function plan(msg: Message, i: Interpretation, world: World, thread
     // between the company and the venue when there is one.
     const job_name = `${who}${i.po ? ` - ${i.po}` : ""} @ ${venueName}`.slice(0, 80);
     const specification = [`From ${msg.from}: "${msg.subject}"`, ...groups.map((g) => `${g.date} ${g.start}-${g.end}: ${g.label}`)].join("\n").slice(0, 1000);
-    ops.push({ source: src(100), op: { kind: "create_order", company_id: String(companyId), company_name: who, client_email: msg.from, job_name, po: i.po, specification, shifts } });
+    ops.push({ source: src(100), op: { kind: "create_order", company_id: companyId ? String(companyId) : `new:${newClient}`, company_name: who || newClient || "", client_email: msg.from, job_name: newClient && !who ? job_name.replace(/^ ?@/, `${newClient} @`).replace(/^ - /, `${newClient} - `) : job_name, po: i.po, specification, shifts } });
+    if (newClient) why.push(`new client "${newClient}" added to OnSinch`);
     why.push(`new order: ${shifts.length} shift(s) at ${venueName}`, ...extra);
   } else if (i.po) {
     // The order a PO is for: the email's R number or the thread's order, never a day's only
