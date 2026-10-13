@@ -136,7 +136,8 @@ ok(positionsFor(12) === null, "12 crew: not decided here");
   }
   {
     const d = await plan(msg("crew@eventconcept.com", "4 crew at the Old Vic on the 14th 18:45-20:45"), I([r({ date: "2026-10-14", start: "18:45", end: "20:45", crew: 4, venue: "the Old Vic" })], { intent: "booking" }), world);
-    ok(d.kind === "handoff", "a venue OnSinch does not hold: ops");
+    const s0 = d.kind === "write" && d.ops[0].op.kind === "create_order" ? d.ops[0].op.shifts[0] : null;
+    ok(!!s0 && s0.place_id === "new:the Old Vic" && d.kind === "write" && d.why.some((w) => /new to OnSinch/.test(w)), "a venue OnSinch does not hold is added as written, as ops add one", JSON.stringify(d));
   }
 
   console.log("a new booking");

@@ -26,7 +26,7 @@ export function latestText(body: string): string {
   return out.join("\n").trim();
 }
 
-const norm = (s: string) => s.toLowerCase().replace(/[‘’]/g, "'").replace(/[–—]/g, "-").replace(/\s+/g, " ").trim();
+export const norm = (s: string) => s.toLowerCase().replace(/[‘’]/g, "'").replace(/[–—]/g, "-").replace(/\s+/g, " ").trim();
 
 /** Does the quote appear in the text, ignoring case, spacing and dash/quote styles? */
 export function quoteIn(text: string, quote: string | null | undefined): boolean {
@@ -212,6 +212,15 @@ export function subjectDate(subject: string, sentIso: string): string | null {
 export function parseDate(raw: string, sentIso: string): string | null {
   const q = norm(raw).replace(/,/g, " ");
   const sentDay = londonDay(sentIso);
+  // "next Friday": that weekday in the week after the one the email was sent in (Mon-Sun).
+  // Bearded Kitten wrote it on Fri 9 Oct for Fri 16 Oct, which ops booked (R11507).
+  const nx = /^(?:on\s+)?next\s+(monday|tuesday|wednesday|thursday|friday|saturday|sunday)$/.exec(q.trim());
+  if (nx) {
+    const sent = new Date(sentDay + "T12:00:00Z");
+    const monday = Date.parse(sentDay + "T12:00:00Z") - ((sent.getUTCDay() + 6) % 7) * 864e5;
+    const want = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"].indexOf(nx[1]);
+    return new Date(monday + (7 + want) * 864e5).toISOString().slice(0, 10);
+  }
   // "today" / "tomorrow" are the client's own words counted from the day they sent them.
   // Anything else in the same quote must agree, or the date does not exist.
   const rel = /\b(today|tonight|tomorrow)\b/.exec(q);
@@ -268,4 +277,76 @@ export function parseDate(raw: string, sentIso: string): string | null {
   const pick = weekday ? open.find((c) => dayName(c) === weekday) : open[0];
   if (!pick) return null;
   return pick.toISOString().slice(0, 10);
+}
+
+// --- every value a quote can give --------------------------------------------------
+// A quote is often wider than one token: "4 - 6pm", "10-2", "Now 4x 4hr 11:00", "2x2hr at
+// 16:30". Requiring the whole quote to parse to the one value refused all of them though the
+// model read each right (9-13 Oct, measured against what ops then booked). A value is grounded
+// when THIS code finds it among the values the quoted words hold; it is never taken on trust.
+
+const hm = (h: number, m: number) => `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+
+/** Every time the words hold, a range's two ends included ("4 - 6pm" -> 16:00, 18:00; "10-2" -> 10:00, 14:00). */
+export function timesIn(raw: string): Set<string> {
+  const q = norm(raw);
+  const out = new Set<string>();
+  const one = parseTime(raw);
+  if (one) out.add(one);
+  const range = /\b(\d{1,2})(?:[:.](\d{2}))?\s*(am|pm)?\s*(?:-|to|till|until)\s*(\d{1,2})(?:[:.](\d{2}))?\s*(am|pm)?\b/g;
+  for (const m of q.matchAll(range)) {
+    let a = Number(m[1]), b = Number(m[4]);
+    const am = Number(m[2] ?? 0), bm = Number(m[5] ?? 0);
+    if (a > 23 || b > 23 || am > 59 || bm > 59) continue;
+    const sa = m[3], sb = m[6];
+    if (sb === "pm" && b < 12) b += 12;
+    if (sa === "pm" && a < 12) a += 12;
+    // "4 - 6pm": the suffix covers both ends when the first is earlier on the same clock.
+    if (!sa && sb === "pm" && a < 12 && a + 12 < b + (b < 12 ? 12 : 0) + 1) a += 12;
+    // "10-2" with no suffix: a day shift crossing noon.
+    if (!sa && !sb && b < a && b < 12 && a <= 12) b += 12;
+    if (a <= 23 && b <= 23) { out.add(hm(a, am)); out.add(hm(b, bm)); }
+  }
+  for (const tok of q.split(/[\s,;()/]+|(?<=\d)-(?=\d)/)) { const t = parseTime(tok); if (t) out.add(t); }
+  return out;
+}
+
+const WORD_N = "one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve";
+/** Every crew count the words hold ("Now 4x 4hr 11:00" -> 4; "at least two bodies" -> 2). */
+export function countsIn(raw: string): Set<number> {
+  const q = norm(raw);
+  const out = new Set<number>();
+  const one = parseCount(raw);
+  if (one) out.add(one);
+  if (oneIn(q)) out.add(1);
+  for (const m of q.matchAll(/\b(\d{1,3})\s*x\b|\bx\s*(\d{1,3})\b|\b(\d{1,3})\s*x(?=\s*\d)/g)) out.add(Number(m[1] ?? m[2] ?? m[3]));
+  const who = "(?:crew|staff|people|persons?|bodies|hands|guys|men|lads|helpers|labourers|stagehands|riggers|carpenters?|drivers?|techs?|technicians?|stewards?|workers?)";
+  for (const m of q.matchAll(new RegExp(String.raw`\b(\d{1,3}|${WORD_N})\s+(?:x\s+)?(?:more\s+|extra\s+|additional\s+)?(?:local\s+|general\s+)?${who}\b`, "g"))) out.add(/\d/.test(m[1]) ? Number(m[1]) : WORDS[m[1]]);
+  for (const m of q.matchAll(new RegExp(String.raw`\bat least\s+(\d{1,3}|${WORD_N})\b`, "g"))) out.add(/\d/.test(m[1]) ? Number(m[1]) : WORDS[m[1]]);
+  if (/\b(?:man|driver) and (?:a )?van\b|\bvan and (?:a )?(?:driver|man)\b/.test(q)) out.add(1);
+  out.delete(0);
+  return out;
+}
+
+/** Every length the words hold, in minutes ("2x2hr" -> 120; a bare "6" in an hours field -> 360). */
+export function durationsIn(raw: string): Set<number> {
+  const q = norm(raw);
+  const out = new Set<number>();
+  const one = parseDuration(raw);
+  if (one) out.add(one);
+  for (const m of q.matchAll(/(\d+(?:\.\d+)?)\s*-?\s*(?:hours?|hrs?|h)\b/g)) { const n = Math.round(Number(m[1]) * 60); if (n > 0 && n <= 1440) out.add(n); }
+  const bare = /^(\d{1,2}(?:\.\d)?)$/.exec(q);
+  if (bare) { const n = Math.round(Number(bare[1]) * 60); if (n > 0 && n <= 1440) out.add(n); }
+  return out;
+}
+
+/** Every day the words name: a date token or a weekday ("the Monday shift 08:00-12:00" -> that Monday). */
+export function datesIn(raw: string, sentIso: string): Set<string> {
+  const out = new Set<string>();
+  const one = parseDate(raw, sentIso);
+  if (one) out.add(one);
+  const q = norm(raw);
+  for (const m of q.matchAll(/\b(mon|tues?|wed(?:nes)?|thur?s?|fri|sat(?:ur)?|sun)(?:day)?\b(?:\s+(?:the\s+)?\d{1,2}(?:st|nd|rd|th)?(?:\s+[a-z]{3,9})?)?/g)) { const d = parseDate(m[0], sentIso); if (d) out.add(d); }
+  for (const m of q.matchAll(/\b\d{1,2}(?:st|nd|rd|th)?(?:[/.]\d{1,2}(?:[/.]\d{2,4})?|\s+(?:of\s+)?[a-z]{3,9}(?:\s+\d{2,4})?)\b/g)) { const d = parseDate(m[0].replace(/\bof\s+/, ""), sentIso); if (d) out.add(d); }
+  return out;
 }

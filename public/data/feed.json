@@ -3159,5 +3159,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0168",
+  "ts": "2026-10-13T13:41:48+00:00",
+  "kind": "measurement",
+  "headline": "Against what ops did on 9-13 Oct: 36 of 58 bookings and changes right (was 8 of 63); reader picks booking+shift from OnSinch, code checks it; quotes booked; new venues added",
+  "subject": "The reader sees the thread and the client's bookings and picks the booking; code verifies every pick",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 192,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]

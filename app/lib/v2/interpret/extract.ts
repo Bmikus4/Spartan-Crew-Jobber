@@ -24,49 +24,70 @@ export type RawRequest = {
   trade: Grounded<string>;
   /** For a change: the existing shift it is about, in the client's words ("the derig shift"). */
   target: { quote: string; date: Grounded<string>; start: Grounded<string> } | null;
+  /** The booking it is about, from the bookings the reader was shown ("R11224"), and its shift. */
+  order?: string | null;
+  shift_id?: number | null;
+  /** A venue from the client's own venues ("our warehouse"), by id, with the words naming it. */
+  venue_id?: Grounded<number>;
 };
 
 export type Extraction = {
   intent: "booking" | "change" | "cancellation" | "quote_request" | "info_only" | "unclear";
   po: Grounded<string>;
+  /** The booking a PO (or a message with no requests) is about, from the bookings shown. */
+  order?: string | null;
   requests: RawRequest[];
   note: string;
 };
 
-export const SYSTEM = `You read emails sent to Spartan Crew, a London crew-hire agency, and report what the client is asking for. You never invent anything.
+export const SYSTEM = `You read emails sent to Spartan Crew, a London crew-hire agency, and report what the client is asking for, so that the booking can be made or changed in OnSinch. You never invent anything.
+
+You are given the email's NEWEST MESSAGE, the EARLIER MESSAGES on the thread (the client's and Spartan's), THE CLIENT'S CURRENT BOOKINGS (each an R number with its shifts and shift_ids) and the VENUES THIS CLIENT USES (with venue_ids).
 
 Return ONLY a JSON object:
 {
  "intent": "booking" | "change" | "cancellation" | "quote_request" | "info_only" | "unclear",
  "po": {"value": "<PO/reference>", "quote": "<exact words>"} | null,
+ "order": "<R number of the booking a PO or the whole message is about>" | null,
  "requests": [ {
    "action": "new_shift" | "change_times" | "change_crew" | "cancel_shift" | "other",
+   "order": "<R number from THE CLIENT'S CURRENT BOOKINGS that this request is about>" | null,
+   "shift_id": <shift_id from that booking that this request changes or cancels> | null,
    "date": {"value": "YYYY-MM-DD", "quote": "<exact words naming the day>"} | null,
-   "start": {"value": "HH:MM", "quote": "<the time token exactly as written>"} | null,
-   "end": {"value": "HH:MM", "quote": "<the time token exactly as written>"} | null,
+   "start": {"value": "HH:MM", "quote": "<exact words>"} | null,
+   "end": {"value": "HH:MM", "quote": "<exact words>"} | null,
    "duration_minutes": {"value": <number>, "quote": "<e.g. 3hr call>"} | null,
-   "crew": {"value": <number>, "quote": "<e.g. 3 x Crew>"} | null,   (the TOTAL asked for on that shift)
+   "crew": {"value": <number>, "quote": "<e.g. 3 x Crew>"} | null,   (the TOTAL wanted on that shift)
    "crew_add": {"value": <number>, "quote": "<e.g. add 2 crew>"} | null,   (only when they ask for MORE on top of what is booked)
    "crew_remove": {"value": <number>, "quote": "<e.g. stand down 2 crew>"} | null,   (only when they ask for FEWER than is booked)
    "venue": {"value": "<venue name as written>", "quote": "<exact words>"} | null,
+   "venue_id": {"value": <venue_id from VENUES THIS CLIENT USES>, "quote": "<exact words naming that venue>"} | null,
    "crew_chief": {"value": true, "quote": "<exact words>"} | null,
-   "trade": {"value": "<e.g. crew, carpenter, AV technician>", "quote": "<exact words>"} | null,
+   "trade": {"value": "<e.g. crew, carpenter, AV technician, van driver>", "quote": "<exact words>"} | null,
    "target": {"quote": "<words naming the existing shift, e.g. the derig shift>", "date": <as date or null>, "start": <the OLD start time or null>} | null
  } ],
  "note": "<one short sentence on anything unclear>"
 }
 
 Rules:
-- Every "quote" is copied character for character from the SUBJECT or the NEWEST message (never from quoted history). If you cannot quote it, the field is null.
-- Read only what is written. "a couple", "a few more", "the usual", "same as last time" are not numbers or times: leave them null.
-- "value" is your reading of the quote. Resolve dates against the email's sent date given below; write 24-hour times.
-- A request for prices or a quote is intent "quote_request" (still list the shifts asked about).
-- Confirmations, thanks, contacts, meeting points, invoices and PO-only messages are "info_only" with no requests (but report a PO if one is given).
-- One request per shift per day. A time change names the shift it changes in "target".
+- Every "quote" is copied character for character from the SUBJECT, the NEWEST MESSAGE or an EARLIER MESSAGE. Prefer the newest message; take a detail from an earlier message only when the newest message relies on it (e.g. "please book this", "same times", "add one more to Tuesday"). If you cannot quote it, the field is null.
+- Read only what is written. "a couple", "a few more", "the usual", "same as last time" are not numbers or times unless an earlier message on the thread states them.
+- "value" is your reading of the quote. Resolve dates against the email's sent date; write 24-hour times. "4 - 6pm" is 16:00 to 18:00; "10-2" for a day shift is 10:00 to 14:00. "at least two bodies" is 2 crew. "a man and van" is 1 crew with trade "van driver".
+- A change, a cancellation or an extra shift on an existing job names its booking in "order" and, for a change or cancellation, the exact shift in "shift_id". Choose ONLY from THE CLIENT'S CURRENT BOOKINGS, by what the messages say (day, times, venue, job name, reference, what Spartan said it booked). Leave both null when no booking clearly fits; never pick one only because it is on the same day.
+- A request for prices or a quote is intent "quote_request": list the shifts asked about exactly as for a booking.
+- "venue_id" when the venue as written is one of VENUES THIS CLIENT USES ("our warehouse", "Beckenham" when their Beckenham warehouse is listed, "the usual venue").
+- Confirmations, thanks, contacts, names, meeting points, invoices and PO-only messages are "info_only" with no requests (but report a PO if one is given).
+- A client saying a booking is no longer needed ("we can cancel that order", "this has been filled elsewhere", "we've sorted this internally", "no longer required") is intent "cancellation": one "cancel_shift" request per shift of that booking, each with "order" and "shift_id".
+- A client accepting a quote or proposal Spartan sent ("sounds good", "let's go ahead", "please book this") books what that earlier message proposed: list its shifts, quoting that message.
+- Extra calls on an existing job ("please add 2x2hr at 16:30 to our booking at Guildhall") are "new_shift" requests with "order" set; "crew_add" is only more people on a shift that is already booked.
+- A request for a day or venue none of the bookings has is a NEW booking ("new_shift", "order" null), never a change to another day's booking, unless the client asks to move that booking.
+- Adding a person of a trade to a booked shift ("add a carpenter to the team tomorrow") is "change_crew" with "crew_add", "trade", "order" and "shift_id".
+- Times written against the booking ("an hour earlier", "forward by 30 mins", "the same timings") are given as the resulting HH:MM, quoting those words.
+- One request per shift per day. A time change names the shift it changes in "target" and "shift_id".
 - A move to another day puts the NEW day in "date" and the shift's current day in "target".`;
 
-export function userPrompt(sentIso: string, from: string, subject: string, newest: string): string {
-  return `Sent: ${sentIso}\nFrom: ${from}\nSubject: ${subject}\n\nNEWEST MESSAGE:\n${newest.slice(0, 6000)}`;
+export function userPrompt(sentIso: string, from: string, subject: string, newest: string, context = ""): string {
+  return `Sent: ${sentIso}\nFrom: ${from}\nSubject: ${subject}\n\nNEWEST MESSAGE:\n${newest.slice(0, 6000)}${context ? `\n\n${context}` : ""}`;
 }
 
 export const interpretModel = () => process.env.SPARTAN_INTERPRET_MODEL || process.env.SPARTAN_MODEL || "anthropic/claude-opus-4.6";
@@ -76,7 +97,7 @@ export const PROMPT_ID = `extract@${createHash("sha256").update(SYSTEM).digest("
 export type ExtractMeta = { model: string; prompt_id: string; input_tokens: number | null; output_tokens: number | null; cost_usd: number | null; ms: number };
 
 /** One OpenRouter call (the key the engine already uses). Costs money: callers budget it. */
-export async function extractWithMeta(sentIso: string, from: string, subject: string, newest: string): Promise<{ x: Extraction; meta: ExtractMeta }> {
+export async function extractWithMeta(sentIso: string, from: string, subject: string, newest: string, context = ""): Promise<{ x: Extraction; meta: ExtractMeta }> {
   const apiKey = process.env.OPENROUTER_API_KEY;
   if (!apiKey) throw new Error("OPENROUTER_API_KEY not set");
   const model = interpretModel();
@@ -86,7 +107,7 @@ export async function extractWithMeta(sentIso: string, from: string, subject: st
     headers: { authorization: `Bearer ${apiKey}`, "content-type": "application/json" },
     body: JSON.stringify({
       model, temperature: 0, response_format: { type: "json_object" }, usage: { include: true },
-      messages: [{ role: "system", content: SYSTEM }, { role: "user", content: userPrompt(sentIso, from, subject, newest) }],
+      messages: [{ role: "system", content: SYSTEM }, { role: "user", content: userPrompt(sentIso, from, subject, newest, context) }],
     }),
     signal: AbortSignal.timeout(60000),
   });

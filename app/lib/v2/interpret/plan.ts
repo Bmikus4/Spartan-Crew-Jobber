@@ -167,7 +167,7 @@ ${msg.text}`);
   return "no order is named";
 }
 
-type ShiftGroup = { date: string; start: string; end: string; venue?: string; positions: PositionSpec[]; label: string; notes: string[] };
+type ShiftGroup = { date: string; start: string; end: string; venue?: string; place_id?: number; positions: PositionSpec[]; label: string; notes: string[] };
 
 /**
  * New shifts, one per day and window, each with its positions. "10 crew and 1 carpenter" on
@@ -200,14 +200,16 @@ function shiftGroups(news: Request[], clientOrders: any[], live: LiveProfession[
       if (trade.candidates.length > 1) notes.push(`${trade.label} booked as ${PROFESSION_NAME[p.id] ?? p.id}${p.fromHistory ? ", the one this client last had" : ", ops' most used (no history for this client)"}`);
     }
     const total = crew + [...profs.values()].reduce((a, b) => a + b, 0);
-    if (!crew) return `a shift of ${labels.join(", ")} with no plain crew: the bot builds a shift on a crew position first`;
     if (total > 9) return `${total} on one shift is not a shape the system builds`;
     const chief = total >= 4 && crew >= 2;
     if (rs.some((r) => r.crew_chief) && !chief) return "a crew chief was asked for on a crew of 3 or fewer";
-    const positions: PositionSpec[] = chief ? [{ size: 1, profession_id: "36", role: "crew_chief" }, { size: crew - 1, profession_id: "1" }] : [{ size: crew, profession_id: "1" }];
+    // A shift of trades alone (2 carpenters) has no crew position: the API makes the shift
+    // with its first trade (apiCreate.ts), so it is booked rather than handed over.
+    const positions: PositionSpec[] = !crew ? [] : chief ? [{ size: 1, profession_id: "36", role: "crew_chief" }, { size: crew - 1, profession_id: "1" }] : [{ size: crew, profession_id: "1" }];
     for (const [id, size] of profs) positions.push({ size, profession_id: id });
     const r0 = rs[0];
-    out.push({ date: r0.date!, start: r0.start!, end: r0.end!, venue: venues[0], positions, label: [`${crew} crew`, ...labels].join(", "), notes });
+    const place_id = rs.map((r) => r.place_id).find(Boolean);
+    out.push({ date: r0.date!, start: r0.start!, end: r0.end!, venue: venues[0], place_id, positions, label: [crew ? `${crew} crew` : "", ...labels].filter(Boolean).join(", "), notes });
   }
   return out;
 }
@@ -219,7 +221,9 @@ export async function plan(msg: Message, i: Interpretation, world: World, thread
   // for Friday 16th" (Blackout) were order cards before.
   const asking = i.intent === "quote_request" || i.intent === "unclear" || i.intent === "info_only";
   if (problems.length) return problems.every((p) => MISSING.test(p) || (asking && /not an operation the system performs$/.test(p))) ? ask(...problems) : handoff(...problems);
-  if (i.intent === "quote_request") return ask("the client asked for a quote");
+  // A QUOTE IS BOOKED as an order in To Confirm, as ops book it: of the quote requests 9-13 Oct
+  // that named their shifts, ops raised an order for every one (scripts/score-vs-ops.mts).
+  if (i.intent === "quote_request" && !i.requests.length) return ask("the client asked for a quote");
   if (i.intent === "unclear") return ask("the request is unclear");
   if (i.intent === "info_only" && !i.po) return { kind: "none", reason: ["no change asked for", ...(i.notes ?? [])].join("; ") };
 
@@ -243,9 +247,11 @@ export async function plan(msg: Message, i: Interpretation, world: World, thread
   const changes = i.requests.filter((r) => r.action !== "new_shift");
 
   for (const [n, r] of changes.entries()) {
-    const order = await findOrder(msg, companyId, world, threadOrderId);
+    const picked = r.order_id ? clientOrders.find((o) => Number(o.id) === r.order_id) : null;
+    const order = picked ?? (await findOrder(msg, companyId, world, threadOrderId));
     if (typeof order === "string") return handoff(order);
-    const shift = targetShift(order, r);
+    const pickedShift = r.shift_id ? teams(order).find((t) => t.id === r.shift_id) : undefined;
+    const shift = pickedShift ?? targetShift(order, r);
     if (typeof shift === "string") return handoff(`R${order.number}: ${shift}`);
     const first = shift.slots[0];
     // A change names its shift by the day it is on (target) and may give a NEW day (date).
@@ -261,7 +267,12 @@ export async function plan(msg: Message, i: Interpretation, world: World, thread
       // "Increase hours to 8 (currently 6)": the client gave a length, not a time. The
       // shift keeps its start and the end moves (Ben, 10-09).
       const end = r.end ?? (r.duration ? addMinutes(start, r.duration) : utcToLondon(first.end).time);
-      for (const s of shift.slots) ops.push({ source: `${src(n)}:${s.id}`, op: { kind: "set_position_times", order_id: Number(order.id), slot_id: Number(s.id), date, start, end } });
+      // A position already at the asked times is left alone: a restated booking is not a change.
+      for (const s of shift.slots) {
+        const w = shiftWindow(date, start, end);
+        if (Date.parse(s.beginning) === Date.parse(w.beginning) && Date.parse(s.end) === Date.parse(w.end)) continue;
+        ops.push({ source: `${src(n)}:${s.id}`, op: { kind: "set_position_times", order_id: Number(order.id), slot_id: Number(s.id), date, start, end } });
+      }
       why.push(`R${order.number} shift ${shift.id}: times to ${start}-${end}`);
     } else if (r.action === "cancel_shift") {
       for (const s of shift.slots) ops.push({ source: `${src(n)}:${s.id}`, op: { kind: "cancel_position", order_id: Number(order.id), slot_id: Number(s.id) } });
@@ -279,8 +290,10 @@ export async function plan(msg: Message, i: Interpretation, world: World, thread
       const unverified = tradeOf(r.trade);
       if (unverified) why.push(`asked for ${unverified.label}: no live OnSinch profession, booked as Crew`);
       const chief = shift.slots.filter((s) => Number(s.role) === 1);
-      const crew = shift.slots.filter((s) => Number(s.role) !== 1 && Number(s.profession_id) === 1);
-      if (crew.length !== 1) return handoff(`R${order.number} shift ${shift.id}: ${crew.length} crew positions`);
+      // A shift with several plain crew positions (a general crew and a named team, Event Concept
+      // R11461) changes on its largest, where ops put general crew.
+      const crew = shift.slots.filter((s) => Number(s.role) !== 1 && Number(s.profession_id) === 1).sort((a, b) => Number(b.size) - Number(a.size)).slice(0, 1);
+      if (crew.length !== 1) return handoff(`R${order.number} shift ${shift.id}: no crew position to change`);
       const chiefSize = chief.reduce((a, s) => a + Number(s.size), 0);
       const current = chiefSize + Number(crew[0].size);
       // "Add 2 more, making it 4 x Crew": both written, so both must hold against the shift
@@ -290,6 +303,15 @@ export async function plan(msg: Message, i: Interpretation, world: World, thread
       if (r.crew && r.crew_remove && r.crew !== current - r.crew_remove)
         return handoff(`R${order.number} shift ${shift.id}: ${r.crew_remove} fewer on ${current} makes ${current - r.crew_remove}, not the ${r.crew} written`);
       const total = r.crew ?? current + (r.crew_add ?? 0) - (r.crew_remove ?? 0);
+      // A shift of 10 or more, or one ops gave several chiefs, keeps its chiefs as ops set them:
+      // only the crew position moves (Event Concept R11404, "2 additional crew" on 8 + 2 chiefs).
+      if (total > 9 || current > 9 || chief.length > 1 || chiefSize > 1) {
+        const size = Number(crew[0].size) + (total - current);
+        if (size < 1) return handoff(`R${order.number} shift ${shift.id}: ${total} crew leaves no crew position`);
+        if (size !== Number(crew[0].size)) ops.push({ source: src(n), op: { kind: "set_position_size", order_id: Number(order.id), slot_id: Number(crew[0].id), size } });
+        why.push(`R${order.number} shift ${shift.id}: ${total} crew in all`);
+        continue;
+      }
       const shape = positionsFor(total);
       if (!shape) return handoff(`R${order.number}: ${total} crew is not a shape the system builds`);
       if (chief.length > 1 || chiefSize > 1) return handoff(`R${order.number} shift ${shift.id}: ${chiefSize} crew chiefs`);
@@ -311,13 +333,23 @@ export async function plan(msg: Message, i: Interpretation, world: World, thread
   // New shifts on a booking the email names (R number, or the thread the bot booked it in)
   // are added to it: Legal Geek's "add a derig on the 13th" is a shift on #13709, not a new
   // order. Only an explicit reference counts; a resemblance never does.
-  const named = news.length ? await findOrder(msg, companyId, world, threadOrderId) : null;
+  const pins = [...new Set(news.map((r) => r.order_id).filter((x): x is number => !!x))];
+  // One email's new shifts are one job: when the reader put one of them on a booking, the rest
+  // of that email's new shifts go there too (Harbour Scenic 10-12, all added to R11508 by ops).
+  if (pins.length > 1) return handoff(`new shifts for ${pins.length} existing bookings in one email`);
+  const named = news.length ? (pins.length ? clientOrders.find((o) => Number(o.id) === pins[0]) ?? "the picked booking is not readable" : await findOrder(msg, companyId, world, threadOrderId)) : null;
   if (named && typeof named !== "string") {
     // Each of the order's locations, by the OnSinch place it stands at.
     const atPlace = new Map<number, number>();
     for (const t of teams(named)) for (const s of t.slots) if (Number(s.slotlocation_id)) atPlace.set(Number(s.SlotLocation?.place_id), Number(s.slotlocation_id));
     const locations = new Set(atPlace.values());
-    const groups = shiftGroups(news, clientOrders, live);
+    // A shift the order already holds over the same window is the client restating the
+    // booking ("Re: Crew Booking - Tuesday 13th", Light Motif 10-12), not asking for a second:
+    // 12 of the replay's writes ops never made were exactly this.
+    const held = (r: Request) => { const w = shiftWindow(r.date!, r.start!, r.end!); return teams(named).some((t) => t.slots.some((x) => Date.parse(x.beginning) === Date.parse(w.beginning) && Date.parse(x.end) === Date.parse(w.end))); };
+    const fresh = news.filter((r) => !held(r));
+    if (!fresh.length) return { kind: "none", reason: [`already booked: R${named.number}`, ...(i.notes ?? [])].join("; ") };
+    const groups = shiftGroups(fresh, clientOrders, live);
     if (typeof groups === "string") return handoff(groups);
     for (const [n, g] of groups.entries()) {
       let location_id = locations.size === 1 ? [...locations][0] : 0;
@@ -379,23 +411,39 @@ export async function plan(msg: Message, i: Interpretation, world: World, thread
     const extra: string[] = [];
     for (const g of groups) {
       const venue = g.venue ?? news.find((x) => x.venue)?.venue;
-      if (!venue) return ask("no venue in the email");
-      const places = await placesFor(world, venue, clientOrders);
-      if (places.length !== 1) return handoff(`${places.length} OnSinch venues are named "${venue}"`);
+      // The venue: the client's own venue the reader picked (by id, its words checked), else
+      // the name matched in OnSinch, else a NEW place made from the words as written (ops add
+      // one the same way: R11517 "Storage", R11518 "Light Motif - Bellingham", 10-12).
+      let place: { id: string; name: string } | null = null;
+      if (g.place_id) {
+        const all = world.allPlaces ? await world.allPlaces() : [];
+        place = { id: String(g.place_id), name: all.find((p) => Number(p.id) === g.place_id)?.name ?? venue ?? `place ${g.place_id}` };
+      } else if (venue) {
+        const places = await placesFor(world, venue, clientOrders);
+        if (places.length > 1) return handoff(`${places.length} OnSinch venues are named "${venue}"`);
+        place = places.length ? { id: String(places[0].id), name: places[0].name } : { id: `new:${venue.trim().slice(0, 120)}`, name: venue.trim().split(",")[0].slice(0, 80) };
+        if (!places.length) extra.push(`venue "${venue.trim()}" is new to OnSinch and was added`);
+      }
+      if (!place) return ask("no venue in the email");
       shiftWindow(g.date, g.start, g.end);
-      shifts.push({ name: "Crew", date: g.date, start: g.start, end: g.end, place_id: String(places[0].id), place_label: places[0].name, positions: g.positions });
+      shifts.push({ name: "Crew", date: g.date, start: g.start, end: g.end, place_id: place.id, place_label: place.name, positions: g.positions });
       extra.push(...g.notes);
     }
     const companies = await world.companies();
     const company = companies.find((c) => Number(c.id) === companyId);
     const venueName = shifts[0].place_label;
-    ops.push({ source: src(100), op: { kind: "create_order", company_id: String(companyId), company_name: String(company?.name ?? "").trim(), client_email: msg.from, job_name: `${String(company?.name ?? "").trim()} @ ${venueName}`, po: i.po, shifts } });
+    const who = String(company?.name ?? "").trim();
+    // Staff's own naming: "EMS Events - J45088 @ Mansion House" (10-12), the client's reference
+    // between the company and the venue when there is one.
+    const job_name = `${who}${i.po ? ` - ${i.po}` : ""} @ ${venueName}`.slice(0, 80);
+    const specification = [`From ${msg.from}: "${msg.subject}"`, ...groups.map((g) => `${g.date} ${g.start}-${g.end}: ${g.label}`)].join("\n").slice(0, 1000);
+    ops.push({ source: src(100), op: { kind: "create_order", company_id: String(companyId), company_name: who, client_email: msg.from, job_name, po: i.po, specification, shifts } });
     why.push(`new order: ${shifts.length} shift(s) at ${venueName}`, ...extra);
   } else if (i.po) {
     // The order a PO is for: the email's R number or the thread's order, never a day's only
     // booking (findOrder). A PO is cosmetic (Ben: 1 in 50), so one with no order named is left
     // off with the reason, not a card.
-    const order = await findOrder(msg, companyId, world, threadOrderId);
+    const order = (i.order_id ? clientOrders.find((o) => Number(o.id) === i.order_id) : null) ?? (await findOrder(msg, companyId, world, threadOrderId));
     if (typeof order === "string") return { kind: "none", reason: `PO ${i.po} left off: ${order}` };
     // A PO already on the order is never replaced by the system: the client correcting one is
     // rare, and a reference misread as a PO would overwrite the real one.

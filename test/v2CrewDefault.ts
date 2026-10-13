@@ -71,7 +71,8 @@ const d1 = await plan(msg, { intent: "booking", requests: [R(4), R(2, "carpenter
 const pos1 = d1.kind === "write" && d1.ops[0].op.kind === "create_order" ? d1.ops[0].op.shifts.map((s) => s.positions.map((p) => `${p.size}x${p.profession_id}${p.role ? "c" : ""}`).join(" ")) : [];
 ok(pos1.length === 1 && pos1[0] === "1x36c 3x1 2x3", "4 crew and 2 carpenters on one call: one shift, a chief from the crew, then the carpenters", JSON.stringify(pos1));
 const d2 = await plan(msg, { intent: "booking", requests: [R(2, "carpenters")], problems: [] }, world);
-ok(d2.kind === "handoff" && /no plain crew/.test(d2.reasons.join()), "carpenters alone are left for a person: the bot builds a shift on a crew position first", JSON.stringify(d2));
+const pos2 = d2.kind === "write" && d2.ops[0].op.kind === "create_order" ? d2.ops[0].op.shifts.map((s) => s.positions.map((p) => `${p.size}x${p.profession_id}`).join(" ")) : [];
+ok(pos2[0] === "2x3", "carpenters alone are booked: the API makes the shift with its first trade (apiCreate.ts)", JSON.stringify(d2));
 const d3 = await plan(msg, { intent: "booking", requests: [R(3, "riggers")], problems: [] }, world);
 ok(d3.kind === "write" && d3.why.some((w) => /booked as Crew/.test(w)), "riggers are booked as Crew and the card says so", JSON.stringify(d3.kind === "write" ? d3.why : d3));
 const d4 = await plan(msg, { intent: "booking", requests: [R(4), R(2, "security")], problems: [] }, world);

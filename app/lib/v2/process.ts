@@ -22,6 +22,7 @@ import type { Op } from "./bot/ops";
 import { noTrace, type Tracer } from "./trace";
 import { v2Writes } from "../paused";
 import { linkedOrderId } from "./threadOrder";
+import { bookingsOf, contextText, venuesOf, type ReadContext, type ThreadLine } from "./interpret/context";
 
 let _sql: NeonQueryFunction<false, false> | null = null;
 let _ready = false;
@@ -92,6 +93,15 @@ export function onsinchWorld(): World {
     orderByNumber: async (n) => rowsOf(await t("GET", `/orders?number[eq]=${encodeURIComponent(n)}&with=${NESTED}`))[0] ?? null,
     professions: async () => rowsOf(await t("GET", "/professions?limit=200")).filter((p: any) => !p.deleted).map((p: any) => ({ id: String(p.id), name: String(p.name ?? "").trim() })),
   };
+}
+
+/** The reader's context for one email: the thread, and the client's bookings and venues as OnSinch held them. */
+export async function readContext(world: World, companyId: number | null, sentIso: string, thread: ThreadLine[]): Promise<ReadContext> {
+  if (!companyId) return { thread, bookings: [], venues: [] };
+  const orders = await world.companyOrders(companyId);
+  const all = world.allPlaces ? await world.allPlaces() : [];
+  const places = new Map(all.map((p) => [Number(p.id), { name: p.name, address: p.address }]));
+  return { thread, bookings: bookingsOf(orders, sentIso, (id) => places.get(id)?.name ?? `place ${id}`), venues: venuesOf(orders, places) };
 }
 
 export type Processed = { message_id: string; skipped?: string; interpretation?: Interpretation; decision?: Decision; executed?: RunResult[] };
@@ -184,6 +194,8 @@ export type Recorded = { kind: Decision["kind"]; interpretation: { extraction: E
  */
 export type DecideDeps = {
   extract: typeof extractWithMeta;
+  /** The thread's earlier messages, oldest first, each cut to its own newest part. */
+  thread?: () => Promise<ThreadLine[]>;
   world: World;
   /** The order the thread itself is bound to, if any. */
   threadOrderId: () => Promise<number | null>;
@@ -207,12 +219,14 @@ export async function decideMessage(m: MessageIn, deps: DecideDeps): Promise<Rec
   deps.trace("filter", { client: true });
   const client = await clientOf(from, deps.world);
   const newest = latestText(String(m.body ?? ""));
+  // What the reader is shown besides the newest message (context.ts says why).
+  const read = await readContext(deps.world, client.id, m.date_iso, deps.thread ? await deps.thread().catch(() => []) : []).catch(() => undefined);
   // A READ THAT FAILS IS A CARD FOR A PERSON, NEVER A SILENT DROP. n8n passes each message
   // once, so an email whose model call threw (OpenRouter 402 when the account ran dry, 10-11;
   // a timeout) had no decision and nothing would ever look at it again.
   let got: Awaited<ReturnType<DecideDeps["extract"]>>;
   try {
-    got = await deps.extract(m.date_iso, from, String(m.subject ?? ""), newest);
+    got = await deps.extract(m.date_iso, from, String(m.subject ?? ""), newest, read ? contextText(read) : "");
   } catch (e) {
     const reason = `the system could not read this email (${String((e as Error)?.message ?? e).slice(0, 120)})`;
     const out: Recorded = { kind: "handoff", interpretation: null, decision: { kind: "handoff", reasons: [reason] }, executed: null, client };
@@ -226,7 +240,7 @@ export async function decideMessage(m: MessageIn, deps: DecideDeps): Promise<Rec
   const { x, meta } = got;
   deps.trace("extract", { ...meta, intent: x.intent, requests: x.requests?.length ?? 0 }, meta.ms);
   const t1 = Date.now();
-  const interpretation = ground(x, `${m.subject ?? ""}\n${newest}`, m.date_iso, { subject: String(m.subject ?? ""), prior: deps.prior ? await deps.prior().catch(() => []) : [] });
+  const interpretation = ground(x, `${m.subject ?? ""}\n${newest}`, m.date_iso, { subject: String(m.subject ?? ""), prior: deps.prior ? await deps.prior().catch(() => []) : [], read });
   deps.trace("ground", { problems: interpretation.problems.length + interpretation.requests.reduce((a, q) => a + q.problems.length, 0), notes: interpretation.notes ?? [] }, Date.now() - t1);
   const t2 = Date.now();
   const decision = await plan({ message_id: m.message_id, from, subject: String(m.subject ?? ""), sentIso: m.date_iso, text: newest }, interpretation, deps.world, await deps.threadOrderId());
@@ -265,6 +279,9 @@ export async function processMessage(message_id: string, opts: { execute: boolea
     world: opts.world ?? onsinchWorld(),
     // Every recorded link, not only the paused engine's binding (threadOrder.ts says why).
     threadOrderId: () => linkedOrderId(sql, m.thread_id),
+    thread: async () => ((await sql`SELECT is_from_spartan, date_iso, body FROM thread_messages
+      WHERE thread_id = ${m.thread_id} AND date_iso < ${m0.date_iso} AND message_id <> ALL(${[m0.message_id, ...(opts.with ?? [])]}) ORDER BY date_iso`) as any[])
+      .slice(-6).map((r) => ({ who: r.is_from_spartan ? "spartan" as const : "client" as const, at: String(r.date_iso), text: latestText(String(r.body ?? "")) })),
     prior: async () => ((await sql`SELECT interpretation->'grounded'->'requests' AS rs FROM v2_decisions
       WHERE thread_id = ${m.thread_id} AND sent_at < ${m.date_iso} AND interpretation IS NOT NULL ORDER BY sent_at`) as any[]).flatMap((r) => (Array.isArray(r.rs) ? r.rs : [])),
     run: opts.execute ? runWhenFree : null,

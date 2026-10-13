@@ -75,6 +75,18 @@ export async function apiCreateOrder(op: CreateOp): Promise<ApiCreated> {
   const { client, t } = api();
   const d = await clientDefaults(Number(op.company_id), op.client_email);
   if (!d.user_id) throw new Error(`company ${op.company_id} has no contact to name on the order`);
+  // A venue OnSinch does not hold ("new:<the words as written>") is added first, named as
+  // written and with those words as its address, as ops add one.
+  const made_places = new Map<string, string>();
+  for (const s of op.shifts) {
+    if (!s.place_id.startsWith("new:")) continue;
+    if (!made_places.has(s.place_id)) {
+      const words = s.place_id.slice(4);
+      const p = await client.createPlace({ name: s.place_label || words.split(",")[0], address: words } as any);
+      made_places.set(s.place_id, String((p as any).id));
+    }
+    s.place_id = made_places.get(s.place_id)!;
+  }
   const made = await client.createOrder(createBody(op, d));
   const id = Number((made as any).id);
   const number = (made as any).number ?? rowsOf(await t("GET", `/orders?id[eq]=${id}`))[0]?.number;

@@ -114,7 +114,8 @@ eq(parseDate("Monday", fri), "2026-10-12", "Monday, sent on a Friday (Concept Fu
 eq(parseDate("the Tuesday shift", fri), "2026-10-13", "the Tuesday shift (Carrier)");
 eq(parseDate("Sunday", fri), "2026-10-11", "Sunday");
 eq(parseDate("Friday", fri), null, "the sent day's own weekday: today or a week today");
-eq(parseDate("next Friday", fri), null, "next Friday: this coming one or the one after");
+eq(parseDate("next Friday", fri), "2026-10-16", "next Friday is that day in the following week (Bearded Kitten, sent Fri 9 Oct, ops booked the 16th)");
+eq(parseDate("next Tuesday", "2026-10-12T09:00:00Z"), "2026-10-20", "next Tuesday on a Monday is the week after's");
 eq(parseDate("Monsoon at Christie's", fri), null, "Monsoon is not a Monday");
 eq(parseDate("dismantle of Monsoon, Tue 13th October", fri), "2026-10-13", "nor does it contradict a written date");
 
