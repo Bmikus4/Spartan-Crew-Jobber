@@ -19,7 +19,7 @@ import { acquireLease, releaseLease, ledgerGet, ledgerIntent, ledgerSet, type Le
 import { apiRole, builderDate, builderEdit, opKey, positionCreateFields, rowsFor, shiftCreateFields, shiftWindow, utcToLondon, type Op, type PositionSpec } from "./ops";
 import { openBot } from "./session";
 import { cancelNode, createChild, editNode, type EditOutcome } from "./builder";
-import { createOrder } from "./wizard";
+import { apiCreateOrder, firstRow } from "./apiCreate";
 
 export type RunResult = { op_key: string; status: LedgerStatus | "busy" | "seen"; reasons: string[]; detail?: Record<string, unknown> };
 
@@ -215,17 +215,36 @@ export async function runOp(source: string, op: Op, opts: { testOnly: boolean } 
     const refusals = await preflight(op, before, opts.testOnly);
     if (refusals.length) { await ledgerSet(key, "blocked", { reasons: refusals }); return { op_key: key, status: "blocked", reasons: refusals }; }
     if (op.kind === "create_order") {
-      const bot = await openBot();
+      // The API create files the order in Orders To Confirm (apiCreate.ts); from the POST on,
+      // a throw may hide a made order, so it is "unknown", never "blocked".
       phase = "browser";
-      let out;
-      try { out = await createOrder(bot, op); } finally { await bot.close(); }
-      if (out.stage !== "submitted") { await ledgerSet(key, out.stage, { reasons: out.reasons }); return { op_key: key, status: out.stage, reasons: out.reasons }; }
-      await ledgerSet(key, "submitted", { order_id: out.order_id, number: out.number, client_user_id: out.client_user_id, version: out.version });
-      const created = await readOrder(out.order_id);
+      const made = await apiCreateOrder(op);
+      await ledgerSet(key, "submitted", { order_id: made.order_id, number: made.number, client_user_id: made.client_user_id, contact_from: made.contact_from, card: made.card, card_from: made.card_from });
+      // Every position but each shift's plain crew is added inside its shift by the builder.
+      const steps: string[] = [];
+      const extra = op.shifts.map((s) => s.positions.filter((p) => p !== firstRow(s)));
+      if (extra.some((x) => x.length)) {
+        const teams = teamsOf(await readOrder(made.order_id));
+        const bot = await openBot();
+        try {
+          for (const [i, s] of op.shifts.entries()) {
+            const w = shiftWindow(s.date, s.start, s.end);
+            const team = teams.find((t) => t.slots.some((x) => Date.parse(x.beginning) === Date.parse(w.beginning) && Date.parse(x.end) === Date.parse(w.end) && String(x.SlotLocation?.place_id ?? s.place_id) === s.place_id) && !steps.some((st) => st.startsWith(`#${t.id}`)));
+            if (!team) { steps.push(`shift ${i}: not found after create`); break; }
+            for (const p of extra[i]) {
+              const out = await createChild(bot, CONTRACTS["builder.Slot.create"], made.order_id, { model: "SlotTeam", id: team.id }, "Add position", "Slot", "data[Slot][slotteam_id]", positionCreateFields(s.date, s.start, s.end, p));
+              steps.push(`#${team.id} position ${p.profession_id}/${p.role ?? "staff"}: ${out.stage}`);
+              if (out.stage !== "submitted") break;
+            }
+          }
+        } finally { await bot.close(); }
+      }
+      const created = await readOrder(made.order_id);
       const bad = mismatches(op, created);
-      if (created && String(created.user_id) !== out.client_user_id) bad.push(`client reads ${created.user_id}, expected ${out.client_user_id}`);
-      await ledgerSet(key, bad.length ? "mismatch" : "verified", { readback: bad });
-      return { op_key: key, status: bad.length ? "mismatch" : "verified", reasons: bad, detail: { order_id: out.order_id, number: out.number } };
+      if (created && String(created.user_id) !== made.client_user_id) bad.push(`client reads ${created.user_id}, expected ${made.client_user_id}`);
+      if (steps.some((s) => !/: submitted$/.test(s))) bad.unshift(`stopped part-way: ${steps.join(", ")}`);
+      await ledgerSet(key, bad.length ? "mismatch" : "verified", { readback: bad, steps });
+      return { op_key: key, status: bad.length ? "mismatch" : "verified", reasons: bad, detail: { order_id: made.order_id, number: made.number, contact_from: made.contact_from, card_from: made.card_from } };
     }
 
     // Already true in OnSinch: nothing is sent. A save that changes nothing leaves no audit

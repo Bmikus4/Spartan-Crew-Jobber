@@ -25,10 +25,10 @@ export function rowsFor(positions: PositionSpec[]): PositionSpec[] | null {
 
 /** The API's Slot.role for the same, as read back: 1 crew chief, 0 staff member. */
 export const apiRole = (p: PositionSpec) => (p.role === "crew_chief" ? 1 : 0);
-export type ShiftSpec = { name: string; date: string; start: string; end: string; place_id: string; place_label: string; positions: PositionSpec[] };
+export type ShiftSpec = { name: string; date: string; start: string; end: string; place_id: string; place_label: string; positions: PositionSpec[]; description?: string };
 
 export type Op =
-  | { kind: "create_order"; company_id: string; company_name: string; client_email: string; job_name: string; po?: string; shifts: ShiftSpec[] }
+  | { kind: "create_order"; company_id: string; company_name: string; client_email: string; job_name: string; po?: string; specification?: string; shifts: ShiftSpec[] }
   | { kind: "set_position_size"; order_id: number; slot_id: number; size: number }
   | { kind: "set_position_times"; order_id: number; slot_id: number; date: string; start: string; end: string }
   | { kind: "set_po"; order_id: number; po: string }
@@ -112,7 +112,9 @@ export function shiftCreateFields(op: Extract<Op, { kind: "add_shift" }>, first:
 /** The new-position form. Its window must be set: the form defaults to an unrelated day (10-08). */
 export function positionCreateFields(date: string, start: string, end: string, p: PositionSpec): Record<string, string> {
   if (!Number.isInteger(p.size) || p.size < 1) throw new Error(`refusing size ${p.size}`);
-  return { "data[Slot][profession_id]": p.profession_id, "data[Slot][role]": String(apiRole(p)), "data[Slot][size]": String(p.size), ...windowFields("Slot", date, start, end) };
+  // "Not a concept" (0): the builder adds positions as concepts, which reads as a blank draft
+  // beside staff's positions (10-13, R11534). Staff positions are concept 0 and hidden.
+  return { "data[Slot][profession_id]": p.profession_id, "data[Slot][role]": String(apiRole(p)), "data[Slot][size]": String(p.size), ...windowFields("Slot", date, start, end), "data[Slot][concept]": "0" };
 }
 
 /** The builder fields an edit operation sets, by form. Nothing outside the contract's fill list. */

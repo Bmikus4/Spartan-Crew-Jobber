@@ -125,7 +125,10 @@ async function fillAndSave(bot: Bot, sel: string, contract: Contract, orderId: n
   const before = await formPairs(page, sel);
   const form = page.locator(sel);
   for (const [name, value] of Object.entries(set)) {
-    const input = form.locator(`[name="${name}"]`);
+    // A Cake field may carry a hidden twin of the same name (data[Slot][concept] on the new-
+    // position form): the visible control is the one a person sets, and it is posted last.
+    let input = form.locator(`[name="${name}"]`);
+    if ((await input.count()) > 1) input = form.locator(`[name="${name}"]:not([type="hidden"])`);
     if ((await input.count()) !== 1) return { stage: "blocked", reasons: [`${name}: ${await input.count()} inputs`] };
     const kind = await input.evaluate((e) => (e.tagName === "SELECT" ? "select" : e.classList.contains("date-picker") ? "date" : "text"));
     if (kind === "select") {

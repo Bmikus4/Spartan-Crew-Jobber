@@ -125,7 +125,10 @@ export function unexpectedChanges(before: Pairs, sent: Pairs, intended: Record<s
   const b = asMap(sent);
   const allowed = new Set([...Object.keys(intended), ...derived].map(normaliseName));
   const out: string[] = [];
-  for (const [k, v] of Object.entries(intended)) if (b.get(k) !== canonical(k, v)) out.push(`intended ${k}=${v} but sent ${b.get(k) ?? "(absent)"}`);
+  // A name posted twice (a hidden default, then the visible control) is read by OnSinch's last
+  // value, so that is the one the intention must match.
+  const last = (x: string | undefined) => (x === undefined ? x : x.split("\u0001").pop());
+  for (const [k, v] of Object.entries(intended)) if (b.get(k) !== canonical(k, v) && last(b.get(k)) !== canonical(k, v)) out.push(`intended ${k}=${v} but sent ${b.get(k) ?? "(absent)"}`);
   for (const k of new Set([...a.keys(), ...b.keys()])) {
     if (/_Token\]/.test(k)) continue;
     if (a.get(k) === b.get(k)) continue;

@@ -1342,7 +1342,8 @@
    "data[Slot][beginning][date]",
    "data[Slot][beginning][time]",
    "data[Slot][end][date]",
-   "data[Slot][end][time]"
+   "data[Slot][end][time]",
+      "data[Slot][concept]"
   ],
   "derived": [],
   "benched_at": "2026-10-08T03:19:07.859Z"

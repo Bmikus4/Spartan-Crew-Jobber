@@ -3145,5 +3145,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0167",
+  "ts": "2026-10-13T12:41:27+00:00",
+  "kind": "measurement",
+  "headline": "Creates go through the API with request_approval (Orders To Confirm) plus builder positions as Not a concept; contact falls back to the client's last order; benched TEST R11535",
+  "subject": "Bot orders are created in Orders To Confirm, fully shaped, instead of as blank drafts",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 191,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]
