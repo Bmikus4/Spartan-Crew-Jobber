@@ -13,8 +13,10 @@
 // The paused engine's binding outranks the others; within a source the newest wins.
 // ============================================================================
 import type { NeonQueryFunction } from "@neondatabase/serverless";
+import { ensureLinks } from "./links";
 
 export async function linkedOrderId(sql: NeonQueryFunction<false, false>, threadId: string): Promise<number | null> {
+  await ensureLinks(sql);
   const rows = (await sql`
     SELECT o FROM (
       SELECT onsinch_order_id::bigint AS o, 1 AS pri, now() AS at
@@ -31,6 +33,11 @@ export async function linkedOrderId(sql: NeonQueryFunction<false, false>, thread
       SELECT (f.evidence->>'order_id')::bigint, 3, f.at
         FROM feed_marks f
        WHERE f.thread_id = ${threadId} AND f.mark IN ('matched', 'order-found') AND (f.evidence->>'order_id') ~ '^[0-9]+$'
+         -- The verifier's day-only finds never link a thread for the planner (Ben 10-03).
+         AND coalesce(f.evidence->>'by', f.evidence->>'text', '') !~ '(only order on those days|sender''s name)'
+      UNION ALL
+      SELECT order_id::bigint, 0, coalesce(last_checked, first_seen)
+        FROM job_links WHERE thread_id = ${threadId} AND state IN ('linked', 'relinked') AND order_id > 0
     ) links WHERE o > 0 ORDER BY pri, at DESC LIMIT 1`) as Array<{ o: string | number }>;
   return rows.length ? Number(rows[0].o) : null;
 }

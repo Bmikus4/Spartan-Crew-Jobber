@@ -3173,5 +3173,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0169",
+  "ts": "2026-10-13T13:50:48+00:00",
+  "kind": "measurement",
+  "headline": "job_links + /api/bot/sync (n8n every minute): sweep A by J number, sweep B by order/R/rebuild, hold; blocked-before-submit writes retried; day-only TV finds no longer link threads",
+  "subject": "Every order the bot touches is followed by its J number every minute; stopped writes are retried",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 192,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]

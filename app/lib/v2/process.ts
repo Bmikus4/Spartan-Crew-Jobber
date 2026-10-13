@@ -22,6 +22,7 @@ import type { Op } from "./bot/ops";
 import { noTrace, type Tracer } from "./trace";
 import { v2Writes } from "../paused";
 import { linkedOrderId } from "./threadOrder";
+import { recordLink } from "./links";
 import { bookingsOf, contextText, venuesOf, type ReadContext, type ThreadLine } from "./interpret/context";
 
 let _sql: NeonQueryFunction<false, false> | null = null;
@@ -102,6 +103,39 @@ export async function readContext(world: World, companyId: number | null, sentIs
   const all = world.allPlaces ? await world.allPlaces() : [];
   const places = new Map(all.map((p) => [Number(p.id), { name: p.name, address: p.address }]));
   return { thread, bookings: bookingsOf(orders, sentIso, (id) => places.get(id)?.name ?? `place ${id}`), venues: venuesOf(orders, places) };
+}
+
+/**
+ * WRITES THAT STOPPED BEFORE ANYTHING WAS SENT ARE TRIED AGAIN, up to twice, within 6 hours: a
+ * browser timeout before the submit, the bot busy, an unreadable audit log (Lux Technical
+ * 10-12 timed out waiting for the builder and nothing ever tried again). Only "blocked" is
+ * retried: nothing left the browser. "unknown" may have landed and is never re-sent.
+ */
+const TRANSIENT = /bot error before submit|another operation holds the bot|audit log unreadable|Timeout|page raised|order read 5\d\d|net::|ECONNRESET|fetch failed/i;
+export async function retryStopped(): Promise<{ retried: number; results: string[] }> {
+  const sql = await db();
+  const rows = (await sql`SELECT message_id, thread_id, decision, executed FROM v2_decisions
+    WHERE kind = 'write' AND jsonb_typeof(executed) = 'array' AND created_at > now() - interval '6 hours' ORDER BY created_at`) as any[];
+  const results: string[] = [];
+  for (const d of rows) {
+    const ex = d.executed as RunResult[];
+    const last = ex[ex.length - 1];
+    const tries = Number(d.decision?.retries ?? 0);
+    if (!last || last.status !== "blocked" || !TRANSIENT.test(last.reasons.join(" ")) || tries >= 2 || !v2Writes()) continue;
+    const done = ex.slice(0, -1);
+    const todo = (d.decision.ops as { source: string; op: Op }[]).slice(done.length);
+    const out: RunResult[] = [...done];
+    for (const { source, op } of todo) {
+      const r = await runOp(`${source}:retry${tries + 1}`, op, { testOnly: !v2Writes() });
+      out.push(r);
+      if (r.status !== "verified") break;
+      const made = Number((r.detail as any)?.order_id) || ("order_id" in op ? Number(op.order_id) : 0);
+      if (made) await recordLink(sql, { thread_id: d.thread_id, order_id: made, source: "bot write (retry)" }).catch(() => {});
+    }
+    await sql`UPDATE v2_decisions SET executed = ${JSON.stringify(out)}::jsonb, decision = jsonb_set(decision, '{retries}', ${String(tries + 1)}::jsonb) WHERE message_id = ${d.message_id}`;
+    results.push(`${d.message_id}: ${out.map((r) => r.status).join(",")}`);
+  }
+  return { retried: results.length, results };
 }
 
 export type Processed = { message_id: string; skipped?: string; interpretation?: Interpretation; decision?: Decision; executed?: RunResult[] };
@@ -203,6 +237,8 @@ export type DecideDeps = {
   prior?: () => Promise<Request[]>;
   /** Null: decide and record only (shadow). */
   run: ((source: string, op: Op) => Promise<RunResult>) | null;
+  /** The thread is now about this order: kept in job_links and swept every minute (links.ts). */
+  link?: (order_id: number) => Promise<void>;
   record: (r: Recorded) => Promise<void>;
   trace: Tracer;
 };
@@ -260,6 +296,8 @@ export async function decideMessage(m: MessageIn, deps: DecideDeps): Promise<Rec
     out.executed = [...executed];
     await deps.record(out);
     if (r.status !== "verified") break;
+    const made = Number((r.detail as any)?.order_id) || ("order_id" in op ? Number(op.order_id) : 0);
+    if (made && deps.link) await deps.link(made).catch(() => {});
   }
   deps.trace("final", { kind: out.kind, executed: executed.map((e) => e.status) });
   return out;
@@ -285,6 +323,7 @@ export async function processMessage(message_id: string, opts: { execute: boolea
     prior: async () => ((await sql`SELECT interpretation->'grounded'->'requests' AS rs FROM v2_decisions
       WHERE thread_id = ${m.thread_id} AND sent_at < ${m.date_iso} AND interpretation IS NOT NULL ORDER BY sent_at`) as any[]).flatMap((r) => (Array.isArray(r.rs) ? r.rs : [])),
     run: opts.execute ? runWhenFree : null,
+    link: (order_id) => recordLink(sql, { thread_id: m.thread_id, order_id, source: "bot write" }),
     record: async (d) => {
       await sql`
         INSERT INTO v2_decisions (message_id, thread_id, from_address, sent_at, kind, interpretation, decision, executed, code_version, company_id, company)
