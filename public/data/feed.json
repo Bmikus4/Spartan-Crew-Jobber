@@ -3229,5 +3229,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0173",
+  "ts": "2026-10-13T14:41:24+00:00",
+  "kind": "measurement",
+  "headline": "Company from the thread's linked order when the sender is not an OnSinch contact; 'extend by 1hr' read from the shift",
+  "subject": "A reply from an unknown sender on a linked thread is planned for that order's client",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 192,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]

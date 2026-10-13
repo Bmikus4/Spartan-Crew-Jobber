@@ -25,6 +25,8 @@ export type World = {
   allPlaces?(): Promise<{ id: number; name: string; address?: string }[]>;
   companyOrders(companyId: number): Promise<any[]>;
   orderByNumber(rNumber: string): Promise<any | null>;
+  /** One order by its OnSinch id, nested. */
+  orderById?(id: number): Promise<any | null>;
   /** OnSinch's live (not deleted) professions, for a trade found by name (Security). */
   professions?(): Promise<LiveProfession[]>;
 };
@@ -238,7 +240,11 @@ export async function plan(msg: Message, i: Interpretation, world: World, thread
   if (i.intent === "unclear") return ask("the request is unclear");
   if (i.intent === "info_only" && !i.po) return { kind: "none", reason: ["no change asked for", ...(i.notes ?? [])].join("; ") };
 
-  const companyId = matchCompanyByDomain(msg.from, await world.companies());
+  // The client: the sender's domain, else the company of the order this thread is already
+  // linked to. "Re: SN ExCeL" from amy@mvstaging.com (10-13), a contact OnSinch does not hold,
+  // is about an order that has a company.
+  let companyId = matchCompanyByDomain(msg.from, await world.companies());
+  if (!companyId && threadOrderId && world.orderById) { const o = await world.orderById(threadOrderId).catch(() => null); if (o && Number(o.company_id) > 0) companyId = Number(o.company_id); }
   // A sender OnSinch has no company for has nothing booked: a cancellation or a PO from them
   // changes nothing (AT Comms, 10-11: "the PM has this covered now" after their first email).
   if (!companyId && (i.intent === "cancellation" || i.intent === "info_only")) return { kind: "none", reason: `${msg.from} is not a client in OnSinch, so nothing of theirs is booked` };

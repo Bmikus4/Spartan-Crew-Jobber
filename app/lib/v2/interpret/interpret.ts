@@ -153,6 +153,9 @@ export function ground(x: Extraction, newest: string, sentIso: string, ctx: Grou
       const same = b.shifts.length && b.shifts.every((s) => s.start === b.shifts[0].start && s.end === b.shifts[0].end) ? b.shifts[0] : undefined;
       const relative = (q: string, base: string | undefined): string | null => {
         if (!base) return null;
+        // "extend the AM call by 1hr" / "cut it short by 30 mins": the finish moves.
+        const ext = /\b(extend|extended|extending|longer|cut|shorten|shortened|reduce)\b[^.]*?\bby\s+(an?|one|half an?|\d+(?:\.\d+)?)\s*(hours?|hrs?|h|mins?|minutes?)\b/.exec(norm(q));
+        if (ext) { const n = /half/.test(ext[2]) ? 0.5 : /^(an?|one)$/.test(ext[2]) ? 1 : Number(ext[2]); const mm = Math.round(n * (/^h/.test(ext[3]) ? 60 : 1)); return addMinutes(base, /cut|shorten|reduce/.test(ext[1]) ? -mm : mm); }
         const m = /\b(an?|one|half an?|\d+(?:\.\d+)?)\s*(hours?|hrs?|h|mins?|minutes?)\b[^.]*?\b(earlier|later|early|late|forward|back|before|after)\b/.exec(norm(q)) ?? /\b(earlier|later|forward|back)\s+(?:by\s+)?(an?|one|half an?|\d+(?:\.\d+)?)\s*(hours?|hrs?|h|mins?|minutes?)\b/.exec(norm(q));
         if (!m) return null;
         const [amt, unit, dir] = /\d|an?|one|half/.test(m[1]) && !/earlier|later|forward|back/.test(m[1]) ? [m[1], m[2], m[3]] : [m[2], m[3], m[1]];

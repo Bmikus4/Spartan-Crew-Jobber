@@ -93,6 +93,7 @@ export function onsinchWorld(): World {
       return out;
     },
     orderByNumber: async (n) => rowsOf(await t("GET", `/orders?number[eq]=${encodeURIComponent(n)}&with=${NESTED}`))[0] ?? null,
+    orderById: async (id) => rowsOf(await t("GET", `/orders?id[eq]=${id}&with=${NESTED}`))[0] ?? null,
     professions: async () => rowsOf(await t("GET", "/professions?limit=200")).filter((p: any) => !p.deleted).map((p: any) => ({ id: String(p.id), name: String(p.name ?? "").trim() })),
   };
 }
@@ -259,7 +260,17 @@ export async function decideMessage(m: MessageIn, deps: DecideDeps): Promise<Rec
     return r;
   }
   deps.trace("filter", { client: true });
-  const client = await clientOf(from, deps.world);
+  let client = await clientOf(from, deps.world);
+  // A sender OnSinch has no contact for, on a thread already linked to an order: that order's
+  // company is the client (the planner applies the same rule).
+  if (!client.id && deps.world.orderById) {
+    const tid = await deps.threadOrderId().catch(() => null);
+    const o = tid ? await deps.world.orderById(tid).catch(() => null) : null;
+    if (o && Number(o.company_id) > 0) {
+      const c = (await deps.world.companies()).find((x) => Number(x.id) === Number(o.company_id));
+      client = { id: Number(o.company_id), name: c ? String(c.name ?? "").trim() || null : null };
+    }
+  }
   const newest = latestText(String(m.body ?? ""));
   // What the reader is shown besides the newest message (context.ts says why).
   const read = await readContext(deps.world, client.id, m.date_iso, deps.thread ? await deps.thread().catch(() => []) : []).catch(() => undefined);
