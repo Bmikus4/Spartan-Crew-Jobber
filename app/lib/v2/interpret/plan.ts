@@ -277,7 +277,11 @@ export async function plan(msg: Message, i: Interpretation, world: World, thread
   const past = i.requests.find((r) => (r.date && r.date < sentDay) || (r.target?.date && r.target.date < sentDay && r.action !== "new_shift"));
   if (past) return handoff(`a request is for ${past.date ?? past.target?.date}, before the email was sent`);
   const news = i.requests.filter((r) => r.action === "new_shift");
-  const changes = i.requests.filter((r) => r.action !== "new_shift");
+  // A time change that also asks for more or fewer people is two changes on that shift: "start
+  // an hour earlier, so 07:00 - 15:00? And add 2 more crew" (end to end on TEST, 10-13) made
+  // only the time change. Both are planned against the shift as it stands.
+  const changes = i.requests.filter((r) => r.action !== "new_shift").flatMap((r) =>
+    r.action === "change_times" && (r.crew_add || r.crew_remove) ? [{ ...r, crew_add: undefined, crew_remove: undefined }, { ...r, action: "change_crew" as const, start: undefined, end: undefined, duration: undefined, crew: undefined }] : [r]);
 
   for (const [n, r] of changes.entries()) {
     const picked = r.order_id ? clientOrders.find((o) => Number(o.id) === r.order_id) : null;

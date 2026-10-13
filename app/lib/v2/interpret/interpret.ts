@@ -4,7 +4,7 @@
 // is dropped and named in `problems`. A request with problems produces no write.
 // ============================================================================
 import type { Extraction, Grounded, RawRequest } from "./extract";
-import { addMinutes, amountIn, countsIn, datesIn, durationsIn, norm, parseCount, parseDate, parseDuration, parseNewDate, parseTime, poAfterLabel, quoteIn, subjectDate, timesIn } from "./ground";
+import { addMinutes, amountIn, countsIn, datesIn, durationsIn, norm, oneIn, parseCount, parseDate, parseDuration, parseNewDate, parseTime, poAfterLabel, quoteIn, subjectDate, timesIn } from "./ground";
 import { quotable, type ReadContext } from "./context";
 
 export type Request = {
@@ -109,6 +109,12 @@ export function ground(x: Extraction, newest: string, sentIso: string, ctx: Grou
     let venue = r.venue && quoteIn(all, r.venue.quote) && bare(r.venue.quote).includes(bare(String(r.venue.value))) ? String(r.venue.value) : undefined;
     const chief = check(`${tag} crew chief`, r.crew_chief, (q) => (/chief|crew ?boss|supervisor/i.test(q) ? true : null));
     const trade = r.trade && quoteIn(all, r.trade.quote) ? r.trade.value : undefined;
+    // "5 crew and a carpenter" read as two requests: the carpenter's is one person, in its words.
+    if (r.action === "new_shift" && crew === undefined && trade && r.trade && (oneIn(r.trade.quote) || new RegExp(String.raw`\b(?:a|an|one)\s+${String(trade).toLowerCase().replace(/[^a-z ]/g, "").trim()}\b`).test(norm(where)))) {
+      crew = 1;
+      const k = problems.findIndex((p) => p.startsWith(`${tag} crew:`));
+      if (k >= 0) problems.splice(k, 1);
+    }
     // The model sometimes gives the target's day or time as a bare value, its words being the
     // target's own quote ("the derig on Friday 3rd December 2027"). That quote is then what
     // is parsed: still the client's words, read here.

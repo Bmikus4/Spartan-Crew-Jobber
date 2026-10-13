@@ -3271,5 +3271,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0176",
+  "ts": "2026-10-13T15:34:12+00:00",
+  "kind": "measurement",
+  "headline": "End to end on TEST: create in To Confirm (R11538) then a reply's time move + 2 more crew, all verified",
+  "subject": "A reply that moves a shift and adds crew does both; one written carpenter is one",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 192,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]
