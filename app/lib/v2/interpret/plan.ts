@@ -243,6 +243,11 @@ export async function plan(msg: Message, i: Interpretation, world: World, thread
   const why: string[] = [];
   const src = (n: number) => `${msg.message_id}#${n}`;
 
+  // A day before the email was sent is never written: a shift that has happened is not booked
+  // or changed (ec938be planned Lux Technical R11206 on 1 October from a 13 October email).
+  const sentDay = utcToLondon(msg.sentIso).date;
+  const past = i.requests.find((r) => (r.date && r.date < sentDay) || (r.target?.date && r.target.date < sentDay && r.action !== "new_shift"));
+  if (past) return handoff(`a request is for ${past.date ?? past.target?.date}, before the email was sent`);
   const news = i.requests.filter((r) => r.action === "new_shift");
   const changes = i.requests.filter((r) => r.action !== "new_shift");
 

@@ -3187,5 +3187,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0170",
+  "ts": "2026-10-13T14:00:25+00:00",
+  "kind": "measurement",
+  "headline": "Past-day guard in the planner and the retry; the minute sync is re-enabled after it",
+  "subject": "No write is ever made for a day before the email was sent, and retries re-run only this build's plans",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 192,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]

@@ -19,6 +19,7 @@ import { latestText } from "./interpret/ground";
 import { plan, type Decision, type World } from "./interpret/plan";
 import { runOp, type RunResult } from "./bot/run";
 import type { Op } from "./bot/ops";
+import { utcToLondon } from "./bot/ops";
 import { noTrace, type Tracer } from "./trace";
 import { v2Writes } from "../paused";
 import { linkedOrderId } from "./threadOrder";
@@ -114,14 +115,19 @@ export async function readContext(world: World, companyId: number | null, sentIs
 const TRANSIENT = /bot error before submit|another operation holds the bot|audit log unreadable|Timeout|page raised|order read 5\d\d|net::|ECONNRESET|fetch failed/i;
 export async function retryStopped(): Promise<{ retried: number; results: string[] }> {
   const sql = await db();
+  // Only a decision this build made is retried: an older build's plan is not re-run on its
+  // authority (10-13: ec938be had planned a Lux Technical shift on 1 October, already past).
   const rows = (await sql`SELECT message_id, thread_id, decision, executed FROM v2_decisions
-    WHERE kind = 'write' AND jsonb_typeof(executed) = 'array' AND created_at > now() - interval '6 hours' ORDER BY created_at`) as any[];
+    WHERE kind = 'write' AND jsonb_typeof(executed) = 'array' AND created_at > now() - interval '6 hours' AND code_version = ${codeVersion()} ORDER BY created_at`) as any[];
   const results: string[] = [];
+  const today = utcToLondon(new Date().toISOString()).date;
   for (const d of rows) {
     const ex = d.executed as RunResult[];
     const last = ex[ex.length - 1];
     const tries = Number(d.decision?.retries ?? 0);
     if (!last || last.status !== "blocked" || !TRANSIENT.test(last.reasons.join(" ")) || tries >= 2 || !v2Writes()) continue;
+    // Never a day already gone.
+    if ((d.decision.ops as { op: any }[]).some(({ op }) => [op.date, ...(op.shifts ?? []).map((s: any) => s.date)].some((x) => typeof x === "string" && x < today))) continue;
     const done = ex.slice(0, -1);
     const todo = (d.decision.ops as { source: string; op: Op }[]).slice(done.length);
     const out: RunResult[] = [...done];
