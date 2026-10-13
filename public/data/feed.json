@@ -3257,5 +3257,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0175",
+  "ts": "2026-10-13T15:21:14+00:00",
+  "kind": "measurement",
+  "headline": "vs ops: 47 of 53 right (10 labelled not the system's); picks need corroboration; new client only on a clean name; ranges give lengths; NxMhr calls",
+  "subject": "A booking pick needs the client's words or the thread's link behind it; no second company for an existing client",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 192,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]

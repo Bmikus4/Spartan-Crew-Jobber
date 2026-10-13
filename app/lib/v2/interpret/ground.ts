@@ -336,6 +336,9 @@ export function durationsIn(raw: string): Set<number> {
   const one = parseDuration(raw);
   if (one) out.add(one);
   for (const m of q.matchAll(/(\d+(?:\.\d+)?)\s*-?\s*(?:hours?|hrs?|h)\b/g)) { const n = Math.round(Number(m[1]) * 60); if (n > 0 && n <= 1440) out.add(n); }
+  // A range is a length too: "3:30pm - 4:30pm" is an hour, "0600 - 1000" four (10-12/13).
+  const ts = [...timesIn(raw)];
+  if (ts.length === 2) { const [a, b] = ts.map((x) => Number(x.slice(0, 2)) * 60 + Number(x.slice(3))); const d = (b - a + 1440) % 1440; if (d > 0) out.add(d); }
   // "a half shift" / "half day": Spartan's 4-hour call (Bearded Kitten R11507, booked 4 hours).
   if (/\bhalf (?:a )?(?:shift|day)\b/.test(q)) out.add(240);
   const bare = /^(\d{1,2}(?:\.\d)?)$/.exec(q);

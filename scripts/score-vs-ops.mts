@@ -75,9 +75,9 @@ for (const [idx, { r, text }] of prep.entries()) {
   try {
     if (got[idx].error) throw new Error(got[idx].error);
     const { x, read } = got[idx];
-    g = ground(x, `${r.subject}\n${text}`, r.date_iso, { subject: r.subject ?? "", prior: priorBy.get(r.thread_id) ?? [], read });
-    priorBy.set(r.thread_id, [...(priorBy.get(r.thread_id) ?? []), ...g.requests]);
     const [b] = (await sql`SELECT onsinch_order_id FROM conversation_state WHERE thread_id = ${r.thread_id}`) as any[];
+    g = ground(x, `${r.subject}\n${text}`, r.date_iso, { subject: r.subject ?? "", prior: priorBy.get(r.thread_id) ?? [], read, linkedOrderId: b?.onsinch_order_id ? Number(b.onsinch_order_id) : null });
+    priorBy.set(r.thread_id, [...(priorBy.get(r.thread_id) ?? []), ...g.requests]);
     d = await plan({ message_id: r.message_id, from: r.from_address, subject: r.subject, sentIso: r.date_iso, text }, g, worldAt(r.date_iso), b?.onsinch_order_id ? Number(b.onsinch_order_id) : null);
   } catch (e) { d = { kind: "handoff", reasons: [`replay threw: ${String((e as Error).message).slice(0, 100)}`] }; }
   out.push({ id: r.message_id, at: r.date_iso, company_id: Number(r.company_id), company: r.company, subject: r.subject, intent: g.intent, kind: d.kind, reply: !!d.reply, said: d.why ?? d.reasons ?? [d.reason], ops: d.ops?.map((o: any) => o.op) ?? [], staff: [] as any[] });

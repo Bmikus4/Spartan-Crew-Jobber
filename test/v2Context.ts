@@ -48,8 +48,15 @@ console.log("[3] a whole shift is cancelled only on words that cancel it");
 {
   const x: any = { intent: "cancellation", po: null, note: "", requests: [{ ...base, action: "cancel_shift", order: "R11224", shift_id: 41611 }] };
   ok(ground(x, "Please stand down on the 2nd man for Sunday.", SENT, { subject: "Re: crew", read }).requests[0].problems.length > 0, "'stand down the 2nd man' does not cancel the shift");
-  ok(ground(x, "Sorry, we can actually cancel that order.", SENT, { subject: "Re: crew", read }).requests[0].problems.length === 0, "'cancel that order' does");
-  ok(ground(x, "Thanks, this has already been filled elsewhere", SENT, { subject: "Re: crew", read }).requests[0].problems.length === 0, "'filled elsewhere' does");
+  ok(ground(x, "Sorry, we can actually cancel that order.", SENT, { subject: "Re: crew", read, linkedOrderId: 16100 }).requests[0].problems.length === 0, "'cancel that order' on the order's own thread does");
+  ok(ground(x, "Thanks, this has already been filled elsewhere", SENT, { subject: "Re: crew", read, linkedOrderId: 16100 }).requests[0].problems.length === 0, "'filled elsewhere' does");
+}
+
+console.log("[4] a pick nothing bears out is dropped (code and model must agree)");
+{
+  const x: any = { intent: "change", po: null, note: "", requests: [{ ...base, action: "change_times", order: "R11224", shift_id: 41611, start: G("19:00", "19:00"), end: G("23:00", "4x4hr at 19:00"), duration_minutes: G(240, "4x4hr") }] };
+  const g = ground(x, "Morning Guys Please can I extend the below booking to 4x4hr at 19:00 [image]", SENT, { subject: "Changes", read });
+  ok(g.requests[0].order_id === undefined && (g.notes ?? []).some((n) => /bears out/.test(n)), "a booking pasted as an image is not guessed: no day, start, venue or R number of R11224 is in the words", g);
 }
 console.log(fails ? `\n${fails} FAILED` : "\nall passed");
 process.exit(fails ? 1 : 0);

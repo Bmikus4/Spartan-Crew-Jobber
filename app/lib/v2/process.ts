@@ -293,7 +293,7 @@ export async function decideMessage(m: MessageIn, deps: DecideDeps): Promise<Rec
   const { x, meta } = got;
   deps.trace("extract", { ...meta, intent: x.intent, requests: x.requests?.length ?? 0 }, meta.ms);
   const t1 = Date.now();
-  const interpretation = ground(x, `${m.subject ?? ""}\n${newest}`, m.date_iso, { subject: String(m.subject ?? ""), prior: deps.prior ? await deps.prior().catch(() => []) : [], read });
+  const interpretation = ground(x, `${m.subject ?? ""}\n${newest}`, m.date_iso, { subject: String(m.subject ?? ""), prior: deps.prior ? await deps.prior().catch(() => []) : [], read, linkedOrderId: await deps.threadOrderId().catch(() => null) });
   deps.trace("ground", { problems: interpretation.problems.length + interpretation.requests.reduce((a, q) => a + q.problems.length, 0), notes: interpretation.notes ?? [] }, Date.now() - t1);
   const t2 = Date.now();
   const decision = await plan({ message_id: m.message_id, from, subject: String(m.subject ?? ""), sentIso: m.date_iso, text: newest }, interpretation, deps.world, await deps.threadOrderId());

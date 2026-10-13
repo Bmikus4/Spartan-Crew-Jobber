@@ -252,7 +252,13 @@ export async function plan(msg: Message, i: Interpretation, world: World, thread
   // engine ("creating a client is never gated on information beyond a name", onsinch.ts): a
   // first booking from AT Comms (10-11) went to a person for want of a company record. Only a
   // booking or quote with its shifts does this; anything else from a stranger is for the inbox.
-  const newClient = !companyId && i.company_name && (i.intent === "booking" || i.intent === "quote_request") && i.requests.length && i.requests.every((r) => r.action === "new_shift") ? i.company_name : null;
+  // Never a second company for one OnSinch already holds: a written name sharing a word with an
+  // existing client ("White Light / d&b solutions" beside "d&b solutions UK Ltd", 10-09) is for a
+  // person to place. OnSinch's API cannot delete a company, so the bar is high on purpose.
+  const STOP = new Set(["ltd", "limited", "uk", "the", "and", "group", "events", "event", "solutions", "services", "productions", "production", "media", "live", "co", "company", "plc", "llp", "&"]);
+  const words = (t: string) => normName(t).split(" ").filter((w) => w.length > 2 && !STOP.has(w));
+  const nameClash = i.company_name ? (await world.companies()).some((c) => words(String(c.name ?? "")).some((w) => words(i.company_name!).includes(w))) : false;
+  const newClient = !companyId && i.company_name && !nameClash && (i.intent === "booking" || i.intent === "quote_request") && i.requests.length && i.requests.every((r) => r.action === "new_shift") ? i.company_name : null;
   if (!companyId && !newClient) return handoff(`no single client company for ${msg.from}`);
   const clientOrders = await world.companyOrders(companyId);
   const live = i.requests.some((r) => tradeOf(r.trade)?.named) && world.professions ? await world.professions() : [];
@@ -407,13 +413,17 @@ export async function plan(msg: Message, i: Interpretation, world: World, thread
       const places = venue ? await placesFor(world, venue, clientOrders) : [];
       placeIds.set(r, places.length === 1 ? new Set(places.map((p) => Number(p.id))) : null);
     }
-    const bookedIn = (r: Request) => {
+    const crewOf = (t: { slots: any[] }) => t.slots.reduce((a, x) => a + Number(x.size), 0);
+    // The venue counts: EMS's Mandarin install and Roundhouse derig share a day, hours and crew
+    // and are two jobs (10-09). A restated booking on its own thread is caught by the thread's
+    // link instead (the bot links every order it makes, links.ts).
+    const bookedIn = (r: Request, loose = false) => {
       const w = shiftWindow(r.date!, r.start!, r.end!);
       const at = placeIds.get(r);
       return orders.find((o) => teams(o).some((t) => t.slots.some((s) => Date.parse(s.beginning) === Date.parse(w.beginning) && Date.parse(s.end) === Date.parse(w.end)
-        && (!at || at.has(Number(s.SlotLocation?.place_id))))));
+        && (!at || at.has(Number(s.SlotLocation?.place_id)) || (loose && r.crew != null && crewOf(t) === r.crew)))));
     };
-    const booked = news.map(bookedIn);
+    const booked = news.map((r) => bookedIn(r));
     if (booked.every(Boolean)) return { kind: "none", reason: `already booked: ${[...new Set(booked.map((o) => `R${o.number}`))].join(", ")}` };
     // Some of it already booked, all in ONE order: the email re-lists that booking and adds to
     // it ("Yes please, 2 x crew also for 2 hours at 21:30", Encore 10-09, which ops added to

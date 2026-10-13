@@ -41,7 +41,7 @@ export type Interpretation = { intent: Extraction["intent"]; po?: string; reques
  * found, never guessed. Measured on the shadow emails 10-09..10-11: 6 of the 44 hand-offs
  * were replies whose day, venue or whole booking was in the client's previous message.
  */
-export type GroundContext = { subject?: string; prior?: Request[]; read?: ReadContext };
+export type GroundContext = { subject?: string; prior?: Request[]; read?: ReadContext; linkedOrderId?: number | null };
 
 /** A reply that books what was asked before, in the client's words. */
 const CONFIRM = /\b(please (?:may|can|could) (?:this|that|it|these|they) be booked|please (?:book|confirm)(?: (?:this|that|it|these|them|in))?\b|(?:happy|ok|okay|good) to (?:go ahead|proceed|book|confirm)|please go ahead|go ahead (?:and|with)|let'?s (?:confirm|book|go ahead)|(?:can|could) (?:i|we) (?:please )?confirm|we(?:'d| would) like to (?:confirm|book|go ahead)|confirm(?:ing)? (?:the|this|that|our) (?:booking|job|order|quote))\b/i;
@@ -98,7 +98,7 @@ export function ground(x: Extraction, newest: string, sentIso: string, ctx: Grou
     const endQuoted = !!r.end && typeof r.end === "object" && typeof r.end.quote === "string";
     let end = endQuoted || !(start && dur) ? check(`${tag} end`, r.end, parseTime, endAmong, where) : undefined;
     if (!end && start && dur) end = addMinutes(start, dur);
-    const crew = check(`${tag} crew`, r.crew, parseCount, countsIn, where);
+    let crew = check(`${tag} crew`, r.crew, parseCount, countsIn, where);
     // An increase must SAY it is one ("add 2", "2 more"): a bare "2 crew" is a total.
     const add = check(`${tag} crew increase`, r.crew_add, (q) => (/\b(add|extra|more|another|additional|plus)\b/i.test(q) ? amountIn(q) : null), undefined, where);
     // A decrease must SAY it is one ("stand down 2", "2 fewer"), as an increase must.
@@ -133,6 +133,16 @@ export function ground(x: Extraction, newest: string, sentIso: string, ctx: Grou
       // A new day on a picked shift is a move only when the client says so: "We need 2 x Crew
       // for 10hours on 11th October" was read as moving Blackout's 13th (10-09); ops made an order.
       else if (sh && date && date !== sh.date && r.action !== "new_shift" && !/\b(move|moving|moved|bring|push|swap|change (?:it |the date |the day )?to|instead)\b/i.test(mine)) notes.push(`${tag}: ${b.order} shift ${sh.shift_id} is on ${sh.date}, the email asks for ${date} without moving it; the pick is dropped`);
+      // A PICK MUST BE BORNE OUT BY THE CLIENT'S OWN WORDS or by the thread's own link: the
+      // shift's day, its start, its venue or the R number in the email, or the thread already
+      // being about that order. "Please can I extend the below booking to 4x4hr at 18:00" (Event
+      // Concept 10-12) named a booking pasted as an image; the reader guessed R11195 and the
+      // change would have gone on the wrong job. Code and model must agree (Ben, 10-03).
+      else if (!(ctx.linkedOrderId === b.order_id
+        || new RegExp(String.raw`\b${b.order.slice(1)}\b`).test(mine)
+        || (sh && ((day && day === sh.date) || datesIn(mine, sentIso).has(sh.date) || timesIn(mine).has(sh.start) || (sh.venue && bare(mine).includes(bare(sh.venue).slice(0, 12)))))
+        || (!sh && b.shifts.some((s) => datesIn(mine, sentIso).has(s.date) || (s.venue && bare(mine).includes(bare(s.venue).slice(0, 12)))))))
+        notes.push(`${tag}: nothing in the client's words or the thread's link bears out ${b.order}; the pick is dropped`);
       else {
         order_id = b.order_id; order = b.order;
         if (sh) {
@@ -195,8 +205,21 @@ export function ground(x: Extraction, newest: string, sentIso: string, ctx: Grou
     if (!end && start && /\bhalf (?:a )?(?:shift|day)\b/i.test(mine)) { end = addMinutes(start, 240); notes.push(`${tag}: a half shift is 4 hours`); }
     // A change on "tonight"/"today"/"tomorrow" with no day given: that day, counted from sending.
     if (!date && !target?.date && r.action !== "new_shift") { const d = /\b(tonight|today|tomorrow)\b/i.exec(mine); if (d) date = parseDate(d[1], sentIso) ?? undefined; }
+    // "2x2hr at 16:30" added to a booking is a new CALL of 2 crew for 2 hours at 16:30, not two
+    // more people on a booked shift: Event Concept writes every extra call this way (10-09
+    // "Changes", Guildhall), and the reader keeps giving it as an increase.
+    let action = r.action;
+    const call = r.action === "change_crew" && add === undefined && r.crew_add && typeof r.crew_add === "object" && typeof r.crew_add.quote === "string" && quoteIn(mine, r.crew_add.quote)
+      ? /\b(\d{1,3})\s*x\s*(\d+(?:\.\d+)?)\s*(?:hrs?|hours?)\s+(?:at|from|@)\s*(\d{1,2}[:.]?\d{2})\b/i.exec(r.crew_add.quote) : null;
+    const callStart = call ? parseTime(call[3]) : null;
+    if (call && callStart) {
+      action = "new_shift"; crew = Number(call[1]); start = callStart; end = addMinutes(callStart, Math.round(Number(call[2]) * 60));
+      if (!date && target?.date) date = target.date;
+      for (const list of [own, problems]) for (let k = list.length - 1; k >= 0; k--) if (list[k].startsWith(`${tag} crew increase`)) list.splice(k, 1);
+      notes.push(`${tag}: "${call[0]}" is a new call of ${crew} crew, ${start}-${end}`);
+    }
     const need = (cond: boolean, what: string) => { if (!cond) own.push(`${tag}: no ${what} the client wrote`); };
-    switch (r.action) {
+    switch (action) {
       case "new_shift": need(!!date, "day"); need(!!start, "start time"); need(!!end, "end time or duration"); need(!!crew, "crew count"); break;
       // A move to another day is a change by itself: "move Tuesday's shift to Wednesday, same times".
       case "change_times": need(!!(date || target?.date), "day"); need(!!(start || end || dur || (date && target?.date && date !== target.date)), "new time or length"); break;
@@ -208,7 +231,7 @@ export function ground(x: Extraction, newest: string, sentIso: string, ctx: Grou
       // Technology 10-12) is for the inbox; the time change is still made.
       default: if ((x.requests ?? []).some((q) => q.action !== "other")) notes.push(`${tag}: "${r.target?.quote ?? "a request"}" is not a booking change and is left for the inbox`); else own.push(`${tag}: not an operation the system performs`);
     }
-    return { action: r.action, date, start, end, duration: start || end ? undefined : dur, crew, crew_add: add, crew_remove: less, venue, crew_chief: chief, trade, target, order_id, order, shift_id, place_id, problems: own };
+    return { action, date, start, end, duration: start || end ? undefined : dur, crew, crew_add: add, crew_remove: less, venue, crew_chief: chief, trade, target, order_id, order, shift_id, place_id, problems: own };
   });
 
   // "Can I also add 3 people for the load out on Sunday 25th, this would be the same timings"
