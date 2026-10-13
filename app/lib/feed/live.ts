@@ -5,6 +5,7 @@ import { verify } from "./verify";
 import { httpTransport } from "../engine/onsinch";
 import { followupsEnabled } from "../followup/enabled";
 import type { FeedDeps } from "./serve";
+import { HOLD_TV_MINUTES } from "../v2/links";
 import { FEED_FROM, type ReplyNeed } from "./project";
 import type { V2Row } from "./v2";
 import { listTickets } from "../ticketsDb";
@@ -73,9 +74,20 @@ async function v2(): Promise<V2Row[]> {
   return rows.map((r) => ({ ...r, company_id: r.company_id == null ? null : Number(r.company_id) }));
 }
 
+/** Links the minute sweep has held past HOLD_TV_MINUTES (links.ts). */
+async function held() {
+  const [t] = (await db()`SELECT to_regclass('public.job_links') AS t`) as { t: string | null }[];
+  if (!t?.t) return [];
+  return (await db()`
+    SELECT l.thread_id, l.r_number, l.held_since::text AS since, l.note,
+           (SELECT company FROM v2_decisions d WHERE d.thread_id = l.thread_id AND d.company IS NOT NULL ORDER BY d.created_at DESC LIMIT 1) AS company,
+           (SELECT subject FROM thread_messages m WHERE m.thread_id = l.thread_id ORDER BY m.date_iso DESC LIMIT 1) AS subject
+    FROM job_links l WHERE l.state = 'held' AND l.held_since < now() - (${HOLD_TV_MINUTES} || ' minutes')::interval`) as any[];
+}
+
 export function liveFeedDeps(): FeedDeps {
   return {
-    states, inbound, marks: allMarks, v2, from: FEED_FROM,
+    states, inbound, marks: allMarks, v2, from: FEED_FROM, held,
     // Every job the board ever held (948 tickets, 457 client jobs on 2026-10-11), not its first 300.
     jobs: () => listTickets(5000),
     replies: followupsEnabled() ? replies : null,

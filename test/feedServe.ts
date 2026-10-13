@@ -50,7 +50,7 @@ void (async () => {
   {
     const r = await serveFeed(deps(), NOW);
     const items = r.body.items as { thread_id: string }[];
-    ok(r.status === 200 && r.body.ok === true && items.length === 1, "200 with the item");
+    ok(r.status === 200 && r.body.ok === true && items.length === 0 && (r.body.counts as Record<string, number>).done_by_system === 1, "200; an order the system created is counted, not shown (Ben 10-13: the TV shows only what the system could not do)");
     const h = r.body.health as Record<string, unknown>;
     ok(h.minutes_since_email === 10 && h.intake_stale === false, "email age reported, not stale at 10 minutes");
     const quiet = await serveFeed(deps({ inbound: async () => ({ byThread: new Map(), latest: NOW - 3 * H }) }), NOW);
@@ -72,7 +72,7 @@ void (async () => {
   console.log("\n[4] verification is extra evidence: its failure never costs the feed");
   {
     const r = await serveFeed(deps({ verify: boom }), NOW);
-    ok(r.status === 200 && (r.body.items as unknown[]).length === 1, "verifier throws -> feed still served");
+    ok(r.status === 200 && (r.body.counts as Record<string, number>).done_by_system === 1, "verifier throws -> feed still served");
     ok(/verify failed: connection refused/.test(String(((r.body.health as Record<string, unknown>).verify as Record<string, unknown>).note)), "and the failure is reported");
     const marks: FeedMark[] = [];
     const need = { ...created, classification: "update", status: "error", order_action_log: [] } as unknown as ConversationState;

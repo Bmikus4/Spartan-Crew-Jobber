@@ -3201,5 +3201,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0171",
+  "ts": "2026-10-13T14:10:09+00:00",
+  "kind": "measurement",
+  "headline": "TV = failures only (Ben 10-13); bot writes counted as done_by_system; held links shown after 30 min",
+  "subject": "The TV shows only what the system could not do, and orders the sweep cannot find",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 192,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]
