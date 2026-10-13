@@ -116,7 +116,13 @@ for (const e of out) {
   else if (!writes && e.kind === "none" && /already|times to|crew in all|add a shift/.test(e.said.join(" ")) && e.staff.some((a: any) => e.said.join(" ").includes(`R${a.number}`))) e.verdict = "ok";
   else e.verdict = writes && e.ops.some((o: any) => touched.has(Number(o.order_id))) ? "ok" : writes && creates ? "created, but ops updated an order" : writes ? "wrote another order" : "MISSED UPDATE";
 }
-const work = out.filter((e) => e.truth !== "none" || e.kind === "write");
+// Failures read one by one and found not to be the system's (a staff edit after a "thanks", a
+// change made before the window, OnSinch already changed by ops in the replay) are labelled in
+// .tmp-data/truth-labels.json with the reason; a full request ops chose not to book is right.
+const LABELS = existsSync(".tmp-data/truth-labels.json") ? JSON.parse(readFileSync(".tmp-data/truth-labels.json", "utf8")) : {};
+for (const e of out) { const l = LABELS[e.id]; if (!l || e.verdict === "ok") continue; e.label = l.label; if (l.label === "to_confirm") e.verdict = "ok"; }
+const work = out.filter((e) => (e.truth !== "none" || e.kind === "write") && e.label !== "noise");
+const noise = out.filter((e) => e.label === "noise").length;
 const bad = work.filter((e) => e.verdict !== "ok");
 if (PAID) {
   const SP = ".tmp-v2/spend.json";
@@ -127,7 +133,7 @@ if (PAID) {
   console.log(`paid readings: ${calls} new, ${spent.toFixed(3)} USD this run; session total ${j.spent_usd} of ${j.budget_usd} USD`);
 }
 console.log(`emails ${out.length}; booking work ${work.length} (ops created after ${out.filter((e) => e.truth === "create").length}, updated after ${out.filter((e) => e.truth === "update").length}, system-only writes ${out.filter((e) => e.truth === "none" && e.kind === "write").length})`);
-console.log(`done right ${work.length - bad.length} of ${work.length}; failures ${bad.length} (${((bad.length / Math.max(1, work.length)) * 100).toFixed(1)}%, bar 1%)`);
+console.log(`done right ${work.length - bad.length} of ${work.length}; failures ${bad.length} (${((bad.length / Math.max(1, work.length)) * 100).toFixed(1)}%, bar 1%); ${noise} labelled not the system's (truth-labels.json)`);
 const tally: Record<string, number> = {};
 for (const e of bad) { const k = `${e.verdict} <- ${e.kind}${e.reply ? "/reply" : ""}: ${String(e.said[0] ?? "").replace(/R\d+|\d{4}-\d\d-\d\d|"[^"]*"|\b\d+\b/g, "#").slice(0, 70)}`; tally[k] = (tally[k] ?? 0) + 1; }
 for (const [k, n] of Object.entries(tally).sort((a, b) => b[1] - a[1])) console.log(String(n).padStart(4), k);

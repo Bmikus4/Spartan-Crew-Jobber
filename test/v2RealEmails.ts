@@ -21,7 +21,7 @@ const SENT = "2026-10-11T12:00:00Z";
 console.log("[1] one person written as a word");
 eq(amountIn("add a carpenter"), 1, "add a carpenter (Wall to Wall)");
 eq(parseCount("someone"), 1, "I require someone (ILEC)");
-eq(amountIn("add him as a third person on this shift"), null, "add him, if he's available, is not +1 (We Are Family)");
+eq(amountIn("add him as a third person on this shift"), 1, "add him as a third person is one more (We Are Family 10-09: ops added one)");
 eq(parseCount("a crew"), null, "a crew is a team, not one");
 eq(parseCount("a couple"), null, "a couple is still no number");
 eq(oneIn("a few hands"), false, "a few is no number");

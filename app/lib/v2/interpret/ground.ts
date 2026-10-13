@@ -106,7 +106,8 @@ export function amountIn(raw: string): number | null {
   if (d) return Number(d[1]) || null;
   const w = /\b(one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)\b/.exec(q);
   if (w) return WORDS[w[1]];
-  return oneIn(q) || /\b(add|stand down|release|remove|drop)\s+(?:someone|somebody)\b/.test(q) ? 1 : null;
+  // "add him as a third person" (We Are Family 10-09; ops added one) is one more person.
+  return oneIn(q) || /\b(add|stand down|release|remove|drop)\s+(?:someone|somebody|him|her)\b/.test(q) ? 1 : null;
 }
 
 /** "3 x Crew", "x3", "X2 Crew", "2 crew", "4 x 2hr crew", "6x2hr", "four crew" -> 3/3/2/2/4/6/4. */
@@ -212,14 +213,14 @@ export function subjectDate(subject: string, sentIso: string): string | null {
 export function parseDate(raw: string, sentIso: string): string | null {
   const q = norm(raw).replace(/,/g, " ");
   const sentDay = londonDay(sentIso);
-  // "next Friday": that weekday in the week after the one the email was sent in (Mon-Sun).
-  // Bearded Kitten wrote it on Fri 9 Oct for Fri 16 Oct, which ops booked (R11507).
+  // "next Friday": the first such day AFTER the sent day. Bearded Kitten wrote it on Fri 9 Oct
+  // and again on Mon 12 Oct, both for Fri 16 Oct, which ops booked (R11507).
   const nx = /^(?:on\s+)?next\s+(monday|tuesday|wednesday|thursday|friday|saturday|sunday)$/.exec(q.trim());
   if (nx) {
-    const sent = new Date(sentDay + "T12:00:00Z");
-    const monday = Date.parse(sentDay + "T12:00:00Z") - ((sent.getUTCDay() + 6) % 7) * 864e5;
-    const want = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"].indexOf(nx[1]);
-    return new Date(monday + (7 + want) * 864e5).toISOString().slice(0, 10);
+    const sent = new Date(sentDay + "T12:00:00Z").getUTCDay();
+    const want = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"].indexOf(nx[1]);
+    const ahead = ((want - sent + 7) % 7) || 7;
+    return new Date(Date.parse(sentDay + "T12:00:00Z") + ahead * 864e5).toISOString().slice(0, 10);
   }
   // "today" / "tomorrow" are the client's own words counted from the day they sent them.
   // Anything else in the same quote must agree, or the date does not exist.
@@ -335,6 +336,8 @@ export function durationsIn(raw: string): Set<number> {
   const one = parseDuration(raw);
   if (one) out.add(one);
   for (const m of q.matchAll(/(\d+(?:\.\d+)?)\s*-?\s*(?:hours?|hrs?|h)\b/g)) { const n = Math.round(Number(m[1]) * 60); if (n > 0 && n <= 1440) out.add(n); }
+  // "a half shift" / "half day": Spartan's 4-hour call (Bearded Kitten R11507, booked 4 hours).
+  if (/\bhalf (?:a )?(?:shift|day)\b/.test(q)) out.add(240);
   const bare = /^(\d{1,2}(?:\.\d)?)$/.exec(q);
   if (bare) { const n = Math.round(Number(bare[1]) * 60); if (n > 0 && n <= 1440) out.add(n); }
   return out;

@@ -21,6 +21,10 @@ import { normalizeThread } from "../app/lib/engine/normalize";
 import type { HydratedThread } from "../app/lib/engine/types";
 
 loadEnv();
+// A PAID test (5 model calls a run) of the old engine's classifier, which is paused under
+// SPARTAN_ENGINE=v2: the gate's suite must not spend money on every commit, so it runs only
+// when asked for.
+if (process.env.SPARTAN_PAID_TESTS !== "1") { console.log("skipped: paid (set SPARTAN_PAID_TESTS=1 to run)"); process.exit(0); }
 const reasoner = createOpenRouterReasoner({
   apiKey: requireEnv("OPENROUTER_API_KEY"),
   model: process.env.SPARTAN_MODEL || "anthropic/claude-opus-4.6",

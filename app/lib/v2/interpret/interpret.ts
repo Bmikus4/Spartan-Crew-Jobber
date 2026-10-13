@@ -103,7 +103,10 @@ export function ground(x: Extraction, newest: string, sentIso: string, ctx: Grou
     const add = check(`${tag} crew increase`, r.crew_add, (q) => (/\b(add|extra|more|another|additional|plus)\b/i.test(q) ? amountIn(q) : null), undefined, where);
     // A decrease must SAY it is one ("stand down 2", "2 fewer"), as an increase must.
     const less = check(`${tag} crew decrease`, r.crew_remove ?? undefined, (q) => (/\b(stand(ing)? down|fewer|less|release|reduce|drop|remove)\b/i.test(q) ? amountIn(q) : null), undefined, where);
-    let venue = r.venue && quoteIn(all, r.venue.quote) && r.venue.quote.toLowerCase().includes(String(r.venue.value).toLowerCase()) ? String(r.venue.value) : undefined;
+    // Letters and digits only: "London Intercontinental Park Lane\nOne Hamilton Place" quoted
+    // across lines and given back with commas was refused as "no venue" (O Films, 10-09).
+    const bare = (t: string) => t.toLowerCase().replace(/[^a-z0-9]/g, "");
+    let venue = r.venue && quoteIn(all, r.venue.quote) && bare(r.venue.quote).includes(bare(String(r.venue.value))) ? String(r.venue.value) : undefined;
     const chief = check(`${tag} crew chief`, r.crew_chief, (q) => (/chief|crew ?boss|supervisor/i.test(q) ? true : null));
     const trade = r.trade && quoteIn(all, r.trade.quote) ? r.trade.value : undefined;
     // The model sometimes gives the target's day or time as a bare value, its words being the
@@ -127,6 +130,9 @@ export function ground(x: Extraction, newest: string, sentIso: string, ctx: Grou
       const day = target?.date ?? (r.action !== "new_shift" ? date : undefined);
       if (sid && !sh) notes.push(`${tag}: shift ${sid} is not on ${b.order}; the pick is dropped`);
       else if (sh && day && day !== sh.date && !(date && target?.date)) notes.push(`${tag}: ${b.order} shift ${sh.shift_id} is on ${sh.date}, the email says ${day}; the pick is dropped`);
+      // A new day on a picked shift is a move only when the client says so: "We need 2 x Crew
+      // for 10hours on 11th October" was read as moving Blackout's 13th (10-09); ops made an order.
+      else if (sh && date && date !== sh.date && r.action !== "new_shift" && !/\b(move|moving|moved|bring|push|swap|change (?:it |the date |the day )?to|instead)\b/i.test(mine)) notes.push(`${tag}: ${b.order} shift ${sh.shift_id} is on ${sh.date}, the email asks for ${date} without moving it; the pick is dropped`);
       else {
         order_id = b.order_id; order = b.order;
         if (sh) {
@@ -182,6 +188,10 @@ export function ground(x: Extraction, newest: string, sentIso: string, ctx: Grou
       const venues = [...new Set(prior.map((p) => p.venue).filter((v): v is string => !!v))];
       if (venues.length === 1) { venue = venues[0]; notes.push(`${tag}: the venue is from the client's earlier email`); }
     }
+    // "a half shift - starting midday" (Bearded Kitten 10-09, booked 4 hours): Spartan's 4-hour call.
+    if (!end && start && /\bhalf (?:a )?(?:shift|day)\b/i.test(mine)) { end = addMinutes(start, 240); notes.push(`${tag}: a half shift is 4 hours`); }
+    // A change on "tonight"/"today"/"tomorrow" with no day given: that day, counted from sending.
+    if (!date && !target?.date && r.action !== "new_shift") { const d = /\b(tonight|today|tomorrow)\b/i.exec(mine); if (d) date = parseDate(d[1], sentIso) ?? undefined; }
     const need = (cond: boolean, what: string) => { if (!cond) own.push(`${tag}: no ${what} the client wrote`); };
     switch (r.action) {
       case "new_shift": need(!!date, "day"); need(!!start, "start time"); need(!!end, "end time or duration"); need(!!crew, "crew count"); break;
@@ -191,11 +201,30 @@ export function ground(x: Extraction, newest: string, sentIso: string, ctx: Grou
       // A whole shift is cancelled only on words that cancel it: "stand down on the 2nd man for
       // Tuesday" (Carrier, 10-09) is one person fewer, and read as a cancel it lost the shift.
       case "cancel_shift": need(!!(date || target?.date), "day"); if (!CANCELS.test(mine)) own.push(`${tag}: no words cancelling the whole shift`); break;
-      default: own.push(`${tag}: not an operation the system performs`);
+      // "Could you also send over a quote for Mackenzie" beside a time change (Creative
+      // Technology 10-12) is for the inbox; the time change is still made.
+      default: if ((x.requests ?? []).some((q) => q.action !== "other")) notes.push(`${tag}: "${r.target?.quote ?? "a request"}" is not a booking change and is left for the inbox`); else own.push(`${tag}: not an operation the system performs`);
     }
     return { action: r.action, date, start, end, duration: start || end ? undefined : dur, crew, crew_add: add, crew_remove: less, venue, crew_chief: chief, trade, target, order_id, order, shift_id, place_id, problems: own };
   });
 
+  // "Can I also add 3 people for the load out on Sunday 25th, this would be the same timings"
+  // (We Are Family 10-09): a new shift with no times of its own takes the times of the other
+  // shift the same email is about, when there is exactly one.
+  for (const [k, q] of requests.entries()) {
+    if (q.action !== "new_shift" || (q.start && q.end) || !/\bsame (?:times?|timings?|hours?)\b/i.test(mine)) continue;
+    const others = requests.filter((o, j) => j !== k && (o.target?.start || o.start));
+    const sib = others.length === 1 ? others[0] : undefined;
+    const sh = sib?.shift_id ? (ctx.read?.bookings ?? []).flatMap((b) => b.shifts).find((s) => s.shift_id === sib.shift_id) : undefined;
+    const st = sh?.start ?? sib?.start, en = sh?.end ?? sib?.end;
+    if (!st || !en) continue;
+    q.start = st; q.end = en;
+    const gone = q.problems.filter((p) => /no (start time|end time or duration) the client wrote|(start|end): /.test(p));
+    q.problems = q.problems.filter((p) => !gone.includes(p));
+    for (const p of gone) { const i = problems.indexOf(p); if (i >= 0) problems.splice(i, 1); }
+    if (sib?.order_id && !q.order_id) { q.order_id = sib.order_id; q.order = sib.order; }
+    notes.push(`request ${k + 1}: "the same timings" are ${st}-${en}, from the other shift in this email`);
+  }
   // A PO is cosmetic (Ben: 1 in 50): one that is not proven is left off with a note, and
   // never blocks the booking it came with. EMS writes its job number unlabelled ("J46250 -
   // 13/10/26 @ ..."); refusing the booking for that would hand ops a booking the bot can do.

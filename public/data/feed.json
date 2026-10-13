@@ -3215,5 +3215,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0172",
+  "ts": "2026-10-13T14:33:18+00:00",
+  "kind": "measurement",
+  "headline": "vs ops 9-13 Oct: 45 of 50 right after labelling 10 truth-noise cases (was 36 of 58 raw); venue, next-X, half shift, same timings, own premises, side asks, two-call nights",
+  "subject": "The reader's remaining misreadings against ops are fixed; the gate suite no longer spends money",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 192,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]

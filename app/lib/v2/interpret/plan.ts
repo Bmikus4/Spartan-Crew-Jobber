@@ -82,6 +82,17 @@ export function targetShift(order: any, r: Request): { id: number; slots: any[] 
     const band = /\b(evening|night|late)\b/.test(q) ? (h: number) => h >= 17 : /\bmorning\b/.test(q) ? (h: number) => h < 12 : /\bafternoon\b/.test(q) ? (h: number) => h >= 12 && h < 17 : null;
     if (band) cands = cands.filter((t) => band(hour(t)));
   }
+  // A time move keeps the shift's length: "move the call for tonight forward by 30mins?
+  // 20:30 - 00:30?" (Creative Technology 10-12, two calls that night) is the 4-hour 21:00 one.
+  if (cands.length > 1 && r.start && r.end) {
+    const mins = (a: string, b: string) => ((Number(b.slice(0, 2)) * 60 + Number(b.slice(3))) - (Number(a.slice(0, 2)) * 60 + Number(a.slice(3))) + 1440) % 1440;
+    const want = mins(r.start, r.end);
+    const near = cands.filter((t) => {
+      const s0 = utcToLondon(t.slots[0].beginning).time, e0 = utcToLondon(t.slots[0].end).time;
+      return mins(s0, e0) === want && Math.min(mins(s0, r.start!), mins(r.start!, s0)) <= 120;
+    });
+    if (near.length === 1) cands = near;
+  }
   if (cands.length !== 1) return `${cands.length} shifts on ${day} could be the one meant`;
   return cands[0];
 }
@@ -428,6 +439,19 @@ export async function plan(msg: Message, i: Interpretation, world: World, thread
         if (places.length > 1) return handoff(`${places.length} OnSinch venues are named "${venue}"`);
         place = places.length ? { id: String(places[0].id), name: places[0].name } : { id: `new:${venue.trim().slice(0, 120)}`, name: venue.trim().split(",")[0].slice(0, 80) };
         if (!places.length) extra.push(`venue "${venue.trim()}" is new to OnSinch and was added`);
+      }
+      // No venue written: the client's own premises when it has exactly one among the places it
+      // books (a warehouse, HQ, yard or depot): Event Concept's "Crew" for this week went to
+      // "Event Concept @ Warehouse" (R11530, 10-13).
+      if (!place) {
+        const all = world.allPlaces ? await world.allPlaces() : [];
+        const used = new Set(clientOrders.flatMap((o) => teams(o).flatMap((t) => t.slots.map((x) => Number(x.SlotLocation?.place_id)))));
+        const who = normName(String((await world.companies()).find((c) => Number(c.id) === companyId)?.name ?? ""));
+        // The client's own premises: a place named after the company (Event Concept's "Event
+        // Concept", Galleywall Road, booked 264 times), else its one warehouse/HQ/depot.
+        const named = who ? all.filter((p) => used.has(Number(p.id)) && normName(p.name) && (normName(p.name) === who || normName(p.name).startsWith(who + " "))) : [];
+        const own = named.length ? named : all.filter((p) => used.has(Number(p.id)) && /\b(warehouse|hq|head ?office|yard|depot|workshop)\b/i.test(p.name));
+        if (own.length === 1) { place = { id: String(own[0].id), name: own[0].name }; extra.push(`no venue written: the client's own ${own[0].name}`); }
       }
       if (!place) return ask("no venue in the email");
       shiftWindow(g.date, g.start, g.end);
