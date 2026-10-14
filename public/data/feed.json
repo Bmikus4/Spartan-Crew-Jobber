@@ -3285,5 +3285,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0177",
+  "ts": "2026-10-14T04:42:52+00:00",
+  "kind": "measurement",
+  "headline": "week-review: live 10-09..10-14 75/80 not done by system (pre-ebba11e builds)",
+  "subject": "The live bot's week is graded against what staff did after it, without a model call",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 192,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]
