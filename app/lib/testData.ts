@@ -244,11 +244,16 @@ async function log(sql: Sql, res: ClearResult) {
   await sql`INSERT INTO test_data_clears (trigger, result) VALUES (${res.trigger}, ${JSON.stringify(res)})`;
 }
 
-export async function lastClear(sql: Sql): Promise<{ at: string; result: ClearResult } | null> {
+/** The last clear, and the last one that removed anything: an empty sweep every 15 minutes would otherwise hide it. */
+export async function lastClear(sql: Sql): Promise<{ last: ClearResult | null; removed: ClearResult | null }> {
   try {
-    const r = (await sql`SELECT at, result FROM test_data_clears ORDER BY at DESC LIMIT 1`) as any[];
-    return r[0] ? { at: new Date(r[0].at).toISOString(), result: r[0].result } : null;
-  } catch { return null; }
+    const last = (await sql`SELECT result FROM test_data_clears ORDER BY at DESC LIMIT 1`) as any[];
+    const removed = (await sql`SELECT result FROM test_data_clears
+      WHERE jsonb_array_length(result->'orders') > 0 OR jsonb_array_length(result->'companies') > 0
+        OR EXISTS (SELECT 1 FROM jsonb_each_text(result->'rows') r WHERE r.value::int > 0)
+      ORDER BY at DESC LIMIT 1`) as any[];
+    return { last: last[0]?.result ?? null, removed: removed[0]?.result ?? null };
+  } catch { return { last: null, removed: null }; }
 }
 
 export const SWEEP_MINUTES = 15;

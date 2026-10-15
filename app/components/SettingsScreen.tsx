@@ -300,6 +300,7 @@ type Plan = { orders: { number: string; name: string }[]; companies: { name: str
 type Cleared = { at: string; trigger: string; orders: string[]; companies: string[]; rows: Record<string, number>; failed: string[]; refused?: string };
 const total = (rows: Record<string, number>) => Object.values(rows ?? {}).reduce((a, b) => a + b, 0);
 const when = (iso: string) => new Date(iso).toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+const summary = (c: Cleared) => `${c.orders.length} order${c.orders.length === 1 ? "" : "s"}, ${c.companies.length} compan${c.companies.length === 1 ? "y" : "ies"}, ${total(c.rows)} records`;
 const BY: Record<string, string> = { sweep: "the 15-minute sweep", button: "this button", cli: "the script" };
 
 /**
@@ -308,11 +309,12 @@ const BY: Record<string, string> = { sweep: "the 15-minute sweep", button: "this
  */
 function TestDataPanel({ autoclear, onAutoclear }: { autoclear: boolean; onAutoclear: (v: boolean) => void }) {
   const [last, setLast] = useState<Cleared | null>(null);
+  const [removed, setRemoved] = useState<Cleared | null>(null);
   const [plan, setPlan] = useState<Plan | null>(null);
   const [busy, setBusy] = useState<"preview" | "clear" | null>(null);
   const [error, setError] = useState<string | null>(null);
   useEffect(() => {
-    void fetch("/api/test-data").then((r) => r.json()).then((j) => setLast(j?.last?.result ?? null)).catch(() => {});
+    void fetch("/api/test-data").then((r) => r.json()).then((j) => { setLast(j?.last ?? null); setRemoved(j?.removed ?? null); }).catch(() => {});
   }, []);
   async function call(action: "preview" | "clear") {
     setBusy(action); setError(null);
@@ -321,7 +323,10 @@ function TestDataPanel({ autoclear, onAutoclear }: { autoclear: boolean; onAutoc
       const j = await r.json();
       if (!r.ok || !j.ok) throw new Error(j?.error || String(r.status));
       if (action === "preview") setPlan(j.plan);
-      else { setLast(j.result); setPlan(null); }
+      else {
+        setLast(j.result); setPlan(null);
+        if (j.result.orders.length || j.result.companies.length || total(j.result.rows)) setRemoved(j.result);
+      }
     } catch (e: any) { setError(String(e?.message ?? e)); }
     finally { setBusy(null); }
   }
@@ -363,7 +368,8 @@ function TestDataPanel({ autoclear, onAutoclear }: { autoclear: boolean; onAutoc
         {error && <span style={{ fontSize: 12, color: "var(--danger)", fontWeight: 700 }}>Not done: {error}</span>}
         {last && (
           <p style={{ fontSize: 12, color: MUT, margin: 0, lineHeight: 1.5 }}>
-            Last cleared {when(last.at)} by {BY[last.trigger] ?? last.trigger}: {last.refused ? `refused, ${last.refused}` : `${last.orders.length} order${last.orders.length === 1 ? "" : "s"}, ${last.companies.length} compan${last.companies.length === 1 ? "y" : "ies"}, ${total(last.rows)} records`}{last.failed?.length ? `; ${last.failed.length} could not be removed` : ""}.
+            Last checked {when(last.at)} by {BY[last.trigger] ?? last.trigger}: {last.refused ? `refused, ${last.refused}` : removed?.at === last.at ? summary(last) : "nothing found"}{last.failed?.length ? `; ${last.failed.length} could not be removed` : ""}.
+            {removed && removed.at !== last.at && <><br />Last removed {when(removed.at)} by {BY[removed.trigger] ?? removed.trigger}: {summary(removed)}.</>}
           </p>
         )}
       </div>

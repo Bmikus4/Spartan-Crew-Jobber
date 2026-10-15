@@ -13,10 +13,10 @@ const deps = () => ({
   t: httpTransport({ baseUrl: process.env.ONSINCH_BASE_URL || "https://spartancrew.onsinch.com/api/v1", apiKey: process.env.ONSINCH_API_KEY || "" }) as unknown as OnsinchCall,
 });
 
-/** The Settings screen's test-data panel: the last clear. */
+/** The Settings screen's test-data panel: the last check, and the last clear that removed something. */
 export async function GET(request: Request): Promise<Response> {
   if (!(await authorizeAction(request)).ok) return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
-  return NextResponse.json({ ok: true, last: await lastClear(deps().sql) });
+  return NextResponse.json({ ok: true, ...(await lastClear(deps().sql)) });
 }
 
 /**

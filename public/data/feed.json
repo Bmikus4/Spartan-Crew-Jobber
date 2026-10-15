@@ -3313,5 +3313,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0179",
+  "ts": "2026-10-15T03:08:49+00:00",
+  "kind": "measurement",
+  "headline": "test-data panel: last check vs last removal",
+  "subject": "Settings shows the last test-data check and the last clear that removed anything, separately",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 193,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]
