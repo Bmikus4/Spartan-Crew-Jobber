@@ -3381,5 +3381,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0182",
+  "ts": "2026-10-15T04:16:14+00:00",
+  "kind": "measurement",
+  "headline": "browser crash: relaunch per step (2 live creates lost their chief on 10-14); canary self-contained after its bench order was cleared",
+  "subject": "A builder step whose browser died before the save is run again on a fresh browser; the canary makes its own bench order",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 194,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]

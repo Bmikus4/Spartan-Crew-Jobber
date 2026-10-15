@@ -17,7 +17,7 @@ import contracts from "./contracts.json";
 import type { Contract } from "./contract";
 import { acquireLease, releaseLease, ledgerGet, ledgerIntent, ledgerSet, type LedgerStatus } from "./db";
 import { apiRole, builderDate, builderEdit, opKey, positionCreateFields, rowsFor, shiftCreateFields, shiftWindow, utcToLondon, type Op, type PositionSpec } from "./ops";
-import { openBot } from "./session";
+import { openBot, BROWSER_DIED, type Bot } from "./session";
 import { cancelNode, createChild, editNode, type EditOutcome } from "./builder";
 import { apiCreateOrder, firstRow, ORDER_MANAGER_ID } from "./apiCreate";
 import { readPage } from "../read";
@@ -214,6 +214,20 @@ async function finish(key: string, op: Op, out: EditOutcome, orderId: number, mo
   return { op_key: key, status: bad.length ? "mismatch" : "verified", reasons: [...bad, ...out.verdict.reasons] };
 }
 
+/**
+ * One builder step, relaunching the browser once if it died before the save was clicked.
+ * The live browser died mid-order on 10-14 (R11540-ish creates went out without their crew
+ * chief, "position 36/crew_chief: blocked") and the step was simply abandoned. A "blocked"
+ * outcome means nothing was sent, so the step is safe to run again on a fresh browser.
+ */
+async function step(h: { bot: Bot }, fn: (bot: Bot) => Promise<EditOutcome>): Promise<EditOutcome> {
+  const out = await fn(h.bot);
+  if (out.stage !== "blocked" || !out.reasons.some((r) => BROWSER_DIED.test(r))) return out;
+  await h.bot.close().catch(() => {});
+  try { h.bot = await openBot(); } catch { return out; }
+  return fn(h.bot);
+}
+
 export async function runOp(source: string, op: Op, opts: { testOnly: boolean } = { testOnly: true }): Promise<RunResult> {
   const key = opKey(source, op);
   const seen = await ledgerGet(key);
@@ -239,19 +253,19 @@ export async function runOp(source: string, op: Op, opts: { testOnly: boolean } 
       const extra = op.shifts.map((s) => s.positions.filter((p) => p !== firstRow(s)));
       if (extra.some((x) => x.length)) {
         const teams = teamsOf(await readOrder(made.order_id));
-        const bot = await openBot();
+        const h = { bot: await openBot() };
         try {
           for (const [i, s] of op.shifts.entries()) {
             const w = shiftWindow(s.date, s.start, s.end);
             const team = teams.find((t) => t.slots.some((x) => Date.parse(x.beginning) === Date.parse(w.beginning) && Date.parse(x.end) === Date.parse(w.end) && String(x.SlotLocation?.place_id ?? s.place_id) === s.place_id) && !steps.some((st) => st.startsWith(`#${t.id}`)));
             if (!team) { steps.push(`shift ${i}: not found after create`); break; }
             for (const p of extra[i]) {
-              const out = await createChild(bot, CONTRACTS["builder.Slot.create"], made.order_id, { model: "SlotTeam", id: team.id }, "Add position", "Slot", "data[Slot][slotteam_id]", positionCreateFields(s.date, s.start, s.end, p));
+              const out = await step(h, (bot) => createChild(bot, CONTRACTS["builder.Slot.create"], made.order_id, { model: "SlotTeam", id: team.id }, "Add position", "Slot", "data[Slot][slotteam_id]", positionCreateFields(s.date, s.start, s.end, p)));
               steps.push(`#${team.id} position ${p.profession_id}/${p.role ?? "staff"}: ${out.stage}`);
               if (out.stage !== "submitted") break;
             }
           }
-        } finally { await bot.close(); }
+        } finally { await h.bot.close(); }
       }
       const created = await readOrder(made.order_id);
       const bad = [...mismatches(op, created), ...(created ? stateProblems(null, created) : [])];
@@ -271,7 +285,7 @@ export async function runOp(source: string, op: Op, opts: { testOnly: boolean } 
     if (op.kind === "add_shift" || op.kind === "add_position") {
       const rows = op.kind === "add_shift" ? rowsFor(op.positions) : [op.position];
       if (!rows) { await ledgerSet(key, "blocked", { reasons: ["no plain Crew position for the new shift's first row"] }); return { op_key: key, status: "blocked", reasons: ["not benched"] }; }
-      const bot = await openBot();
+      const h = { bot: await openBot() };
       phase = "browser";
       const steps: string[] = [];
       let out: EditOutcome;
@@ -280,7 +294,7 @@ export async function runOp(source: string, op: Op, opts: { testOnly: boolean } 
         let todo = rows;
         if (op.kind === "add_shift") {
           const known = new Set(teamsOf(before).map((t) => t.id));
-          out = await createChild(bot, CONTRACTS["builder.SlotTeam.create"], op.order_id, { model: "SlotLocation", id: op.location_id }, "Add shift", "SlotTeam", "data[SlotTeam][SlotLocation][id]", shiftCreateFields(op, rows[0]));
+          out = await step(h, (bot) => createChild(bot, CONTRACTS["builder.SlotTeam.create"], op.order_id, { model: "SlotLocation", id: op.location_id }, "Add shift", "SlotTeam", "data[SlotTeam][SlotLocation][id]", shiftCreateFields(op, rows[0])));
           steps.push(`shift: ${out.stage}`);
           if (out.stage === "submitted") {
             const fresh = teamsOf(await readOrder(op.order_id)).filter((t) => !known.has(t.id));
@@ -291,10 +305,10 @@ export async function runOp(source: string, op: Op, opts: { testOnly: boolean } 
         } else out = { stage: "submitted", before: {}, response: null, verdict: { tier: "ok", reasons: [] } };
         for (const p of todo) {
           if (out.stage !== "submitted") break;
-          out = await createChild(bot, CONTRACTS["builder.Slot.create"], op.order_id, { model: "SlotTeam", id: shiftId }, "Add position", "Slot", "data[Slot][slotteam_id]", positionCreateFields(op.date, op.start, op.end, p));
+          out = await step(h, (bot) => createChild(bot, CONTRACTS["builder.Slot.create"], op.order_id, { model: "SlotTeam", id: shiftId }, "Add position", "Slot", "data[Slot][slotteam_id]", positionCreateFields(op.date, op.start, op.end, p)));
           steps.push(`position ${p.profession_id}/${p.role ?? "staff"}: ${out.stage}`);
         }
-      } finally { await bot.close(); }
+      } finally { await h.bot.close(); }
       // A shift saved without its crew chief is a half-made change: it is reported as such,
       // never left looking like a refusal.
       const partial = op.kind === "add_shift" && steps[0] === "shift: submitted" && out.stage !== "submitted";
@@ -308,10 +322,10 @@ export async function runOp(source: string, op: Op, opts: { testOnly: boolean } 
     if (op.kind === "cancel_position") {
       const cursor = await auditCursor();
       if (cursor === null) { await ledgerSet(key, "blocked", { reasons: ["audit log unreadable"] }); return { op_key: key, status: "blocked", reasons: ["audit log unreadable"] }; }
-      const bot = await openBot();
+      const h = { bot: await openBot() };
       phase = "browser";
       let out;
-      try { out = await cancelNode(bot, op.order_id, "Slot", op.slot_id); } finally { await bot.close(); }
+      try { out = await step(h, (bot) => cancelNode(bot, op.order_id, "Slot", op.slot_id)); } finally { await h.bot.close(); }
       return finish(key, op, out, op.order_id, "Slot", op.slot_id, cursor);
     }
     const edit = builderEdit(op);
@@ -319,11 +333,11 @@ export async function runOp(source: string, op: Op, opts: { testOnly: boolean } 
     if (!contract) { await ledgerSet(key, "blocked", { reasons: [`no contract for builder.${edit.model}`] }); return { op_key: key, status: "blocked", reasons: ["no contract"] }; }
     const cursor = await auditCursor();
     if (cursor === null) { await ledgerSet(key, "blocked", { reasons: ["audit log unreadable: the write could not be verified"] }); return { op_key: key, status: "blocked", reasons: ["audit log unreadable"] }; }
-    const bot = await openBot();
+    const h = { bot: await openBot() };
     phase = "browser";
     let out;
     const fresh = async () => liveFormValues(edit.model, edit.id, await readOrder(orderId!));
-    try { out = await editNode(bot, contract, orderId!, edit.model, edit.id, edit.set, fresh); } finally { await bot.close(); }
+    try { out = await step(h, (bot) => editNode(bot, contract, orderId!, edit.model, edit.id, edit.set, fresh)); } finally { await h.bot.close(); }
     return finish(key, op, out, orderId!, edit.model, edit.id, cursor);
   } catch (e) {
     const msg = String((e as Error)?.message ?? e).slice(0, 300);

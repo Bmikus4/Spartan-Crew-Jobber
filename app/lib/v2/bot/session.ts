@@ -36,14 +36,18 @@ export class RoleError extends Error {}
 /**
  * Measured on Vercel 10-08: a launch occasionally dies on its first navigation ("Target
  * page, context or browser has been closed"), then the next launch works. Nothing can have
- * been sent at that point, so one relaunch is safe; a second failure is reported.
+ * been sent at that point, so relaunching is safe. One relaunch was not enough: on 10-15 the
+ * live canary still died on 1 run in 4 at /admin, so a launch now gets three tries.
  */
+export const BROWSER_DIED = /has been closed|crash|browser has disconnected|Target closed/i;
+
 export async function openBot(opts: { persist?: boolean } = {}): Promise<Bot> {
-  try {
-    return await openBotOnce(opts);
-  } catch (e) {
-    if (!(e instanceof Error) || !/has been closed|crash/i.test(e.message)) throw e;
-    return openBotOnce(opts);
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return await openBotOnce(opts);
+    } catch (e) {
+      if (attempt >= 3 || !(e instanceof Error) || !BROWSER_DIED.test(e.message)) throw e;
+    }
   }
 }
 
