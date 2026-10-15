@@ -3327,5 +3327,45 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0180",
+  "ts": "2026-10-15T03:27:44+00:00",
+  "kind": "measurement",
+  "headline": "create parity: 7/7 identical through both writers live, 132/132 offline; card 63% vs staff (was oldest card); order manager restored",
+  "subject": "New orders take the client's newest staff card and contact, not the oldest, and carry the Samurai AI order manager",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 194,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  },
+  "measured": {
+   "create_ab_live": {
+    "dataset": "7 old-engine bookings (one per kind) created by both writers on TEST 515, 2026-10-15",
+    "booked_content_identical": 7,
+    "of": 7,
+    "rebuild_verified": 7,
+    "in_to_confirm_both": 7,
+    "order_manager_2257_both": 7,
+    "test_orders_left": 0
+   },
+   "create_parity_offline": {
+    "dataset": "all 132 old-engine creates (order_records api_response)",
+    "booked_identically": 132,
+    "of": 132
+   },
+   "vs_staff_kept": {
+    "dataset": "78 of 132 old-engine bookings whose kept order was found (77 retyped by staff)",
+    "rate_card_rebuild": 49,
+    "rate_card_old_engine": 9,
+    "contact_rebuild": 70,
+    "contact_old_engine": 0,
+    "chief_inside_with_role_on_staff_orders": 77,
+    "chiefs_on_staff_orders": 77,
+    "of": 78
+   }
+  }
  }
 ]

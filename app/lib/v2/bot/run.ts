@@ -19,7 +19,7 @@ import { acquireLease, releaseLease, ledgerGet, ledgerIntent, ledgerSet, type Le
 import { apiRole, builderDate, builderEdit, opKey, positionCreateFields, rowsFor, shiftCreateFields, shiftWindow, utcToLondon, type Op, type PositionSpec } from "./ops";
 import { openBot } from "./session";
 import { cancelNode, createChild, editNode, type EditOutcome } from "./builder";
-import { apiCreateOrder, firstRow } from "./apiCreate";
+import { apiCreateOrder, firstRow, ORDER_MANAGER_ID } from "./apiCreate";
 
 export type RunResult = { op_key: string; status: LedgerStatus | "busy" | "seen"; reasons: string[]; detail?: Record<string, unknown> };
 
@@ -242,6 +242,7 @@ export async function runOp(source: string, op: Op, opts: { testOnly: boolean } 
       const created = await readOrder(made.order_id);
       const bad = mismatches(op, created);
       if (created && String(created.user_id) !== made.client_user_id) bad.push(`client reads ${created.user_id}, expected ${made.client_user_id}`);
+      if (created && Number(created.order_manager_id) !== ORDER_MANAGER_ID) bad.push(`order manager reads ${created.order_manager_id}, expected ${ORDER_MANAGER_ID}`);
       if (steps.some((s) => !/: submitted$/.test(s))) bad.unshift(`stopped part-way: ${steps.join(", ")}`);
       await ledgerSet(key, bad.length ? "mismatch" : "verified", { readback: bad, steps });
       return { op_key: key, status: bad.length ? "mismatch" : "verified", reasons: bad, detail: { order_id: made.order_id, number: made.number, contact_from: made.contact_from, card_from: made.card_from } };

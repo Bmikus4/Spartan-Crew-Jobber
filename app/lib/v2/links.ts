@@ -104,7 +104,8 @@ export async function sweepLinks(sql: Sql, limit = 40): Promise<SweepReport> {
     if (!o && l.company_id) {
       // A rebuilt order: the same client, created after the link was made, holding every shift the link held.
       const was: string[] = Array.isArray(l.shifts) ? l.shifts : [];
-      const cands = rowsOf(await t("GET", `/orders?company_id[eq]=${l.company_id}&with=Job__SlotTeam__Slot&sort=-id&limit=30`))
+      // Newest first is /orders' default; `sort=-id` reverses it and read the client's 30 OLDEST orders, so no rebuild was ever found.
+      const cands = rowsOf(await t("GET", `/orders?company_id[eq]=${l.company_id}&with=Job__SlotTeam__Slot&limit=30`))
         .filter((c) => Date.parse(c.created) >= Date.parse(l.first_seen) - 3600e3 && was.length && was.every((w) => shape(c).shifts.includes(w)));
       if (cands.length === 1) { o = cands[0]; how = `rebuilt by staff as R${o.number}`; }
       else if (cands.length > 1) rep.notes.push(`${l.thread_id}: ${cands.length} orders could be the rebuild of R${l.r_number}`);

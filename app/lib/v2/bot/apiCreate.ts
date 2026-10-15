@@ -14,16 +14,23 @@
 //
 // Filled from what OnSinch already knows, never left blank:
 //   client contact  the sender when they are a contact of the company, else the contact on the
-//                   client's most recent order, else the company's first contact
-//   rate card       the card on the client's most recent order, else 354 (the house card the
-//                   wizard defaults to since 2026-09-10)
+//                   client's most recent staff-made order, else the company's first contact
+//   rate card       the card on the client's most recent staff-made order, else 355: the card
+//                   staff gave 16 of the last 18 brand-new clients (companies 852-872, measured
+//                   10-15; 341 before 09-16). Only staff's orders count, so a card the bot ever
+//                   got wrong can never be copied onto the next order.
 //   positions       hidden from workers, as on 634 of the last 785 staff orders
+//   order manager   Samurai AI (2257) on every order, as the old engine stamped it (Ben,
+//                   2026-08-25: "fill it, leave the contact alone"), so staff can tell an
+//                   automation-built order from theirs at a glance. The rebuild dropped it
+//                   until the create parity harness (scripts/create-ab.mts) caught it on 10-15.
 // ============================================================================
 import { httpTransport, OnsinchClient } from "../../engine/onsinch";
 import { shiftWindow, type Op } from "./ops";
 
 type CreateOp = Extract<Op, { kind: "create_order" }>;
-const HOUSE_CARD = 354;
+const HOUSE_CARD = 355;
+export const ORDER_MANAGER_ID = Number(process.env.SPARTAN_ORDER_MANAGER_ID || 2257);
 const rowsOf = (r: any): any[] => (Array.isArray(r?.data?.data) ? r.data.data : Array.isArray(r?.data) ? r.data : []);
 
 export type ApiCreated = { order_id: number; number: string; client_user_id: string; contact_from: string; card: number; card_from: string };
@@ -34,11 +41,17 @@ function api() {
 }
 
 /** The contact and rate card a new order for this client gets, and where each came from. */
-export async function clientDefaults(companyId: number, senderEmail: string): Promise<{ user_id: string; contact_from: string; card: number; card_from: string }> {
+/** `beforeId` asks the same question as it stood before that order existed (the parity harness's replay). */
+export async function clientDefaults(companyId: number, senderEmail: string, beforeId?: number): Promise<{ user_id: string; contact_from: string; card: number; card_from: string }> {
   const { t } = api();
   const company = rowsOf(await t("GET", `/companies?id[eq]=${companyId}&with=Client`))[0];
   const contacts = ([] as any[]).concat(company?.Client ?? []).filter((c) => c && !c.deleted);
-  const latest = rowsOf(await t("GET", `/orders?company_id[eq]=${companyId}&with=Job&sort=-id&limit=5`)).sort((a, b) => Number(b.id) - Number(a.id));
+  // /orders lists newest first by default, and `sort=-id` turns that into OLDEST first: with it
+  // here every bot order on 10-13/14 took the client's oldest card (Event Concept 42 where staff
+  // use 354, EMS 97 where staff use 323), caught by scripts/create-ab.mts on 10-15.
+  const latest = rowsOf(await t("GET", `/orders?company_id[eq]=${companyId}${beforeId ? `&id[lt]=${beforeId}` : ""}&with=Job&limit=20`))
+    .filter((o) => Number(o.creator) !== ORDER_MANAGER_ID)
+    .sort((a, b) => Number(b.id) - Number(a.id));
   const sender = contacts.find((c) => String(c.email ?? "").trim().toLowerCase() === senderEmail.trim().toLowerCase());
   const lastUser = latest.map((o) => String(o.user_id)).find((u) => contacts.some((c) => String(c.id) === u));
   const user_id = sender ? String(sender.id) : lastUser ?? (contacts[0] ? String(contacts[0].id) : "");
@@ -64,7 +77,7 @@ export function createBody(op: CreateOp, d: { user_id: string; card: number }): 
     return { name: s.name, profession_id: Number(row.profession_id), beginning: w.beginning, end: w.end, size: row.size, place_id: Number(s.place_id), hidden: true, ...(s.description ? { description: s.description } : {}) };
   });
   return [{
-    name: op.job_name, company_id: Number(op.company_id), user_id: Number(d.user_id), request_approval: true,
+    name: op.job_name, company_id: Number(op.company_id), user_id: Number(d.user_id), order_manager_id: ORDER_MANAGER_ID, request_approval: true,
     ...(op.po ? { intern_name: op.po } : {}), ...(op.specification ? { specification: op.specification } : {}),
     Job: { name: op.job_name, pricelist_category_id: d.card },
     SlotTeam: teams,
