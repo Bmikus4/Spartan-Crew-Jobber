@@ -3299,5 +3299,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0178",
+  "ts": "2026-10-15T02:41:53+00:00",
+  "kind": "measurement",
+  "headline": "test data cleared: 2 orders, 9 companies, 42 threads (912 rows); Settings button + 15-min sweep",
+  "subject": "Test data is cleared from OnSinch and the database by one rule set, on demand or every 15 minutes",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 193,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]

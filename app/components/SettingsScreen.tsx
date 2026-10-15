@@ -16,7 +16,7 @@ import InstallButton from "./InstallButton";
 
 type ReplyDelivery = "draft" | "send";
 type ReplyScope = "all" | "enquiries";
-interface Settings { replies_enabled: boolean; followup_drafting?: boolean; jobs_board_enabled?: boolean; analytics_tab_enabled?: boolean; reply_delivery: ReplyDelivery; reply_scope: ReplyScope; default_rate_card: number }
+interface Settings { replies_enabled: boolean; followup_drafting?: boolean; test_data_autoclear?: boolean; jobs_board_enabled?: boolean; analytics_tab_enabled?: boolean; reply_delivery: ReplyDelivery; reply_scope: ReplyScope; default_rate_card: number }
 
 const SETTINGS_FALLBACK: Settings = { replies_enabled: false, followup_drafting: false, reply_delivery: "draft", reply_scope: "all", default_rate_card: 315 };
 
@@ -233,6 +233,8 @@ export default function SettingsScreen({ signedInAs }: { signedInAs?: string }) 
           {s.followup_drafting && <Warn>Saved. Drafts are not written yet: the TV raises the follow-up, and the drafting itself is still to be built.</Warn>}
         </Panel>
 
+        <TestDataPanel autoclear={!!s.test_data_autoclear} onAutoclear={(v) => save({ ...s, test_data_autoclear: v })} />
+
         <Panel
           title="Screens"
           blurb={<>The Live Feed is the ops list: it carries every job from the old Jobs Board as completed. The board can come back to the menu here. Analytics opens from its folder tab, which is always at the top of this screen and on the TV board when switched on.</>}
@@ -291,6 +293,81 @@ export default function SettingsScreen({ signedInAs }: { signedInAs?: string }) 
         </Panel>
       </div>
     </div>
+  );
+}
+
+type Plan = { orders: { number: string; name: string }[]; companies: { name: string }[]; threads: number; rows: Record<string, number>; kept: string[]; over: string | null };
+type Cleared = { at: string; trigger: string; orders: string[]; companies: string[]; rows: Record<string, number>; failed: string[]; refused?: string };
+const total = (rows: Record<string, number>) => Object.values(rows ?? {}).reduce((a, b) => a + b, 0);
+const when = (iso: string) => new Date(iso).toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+const BY: Record<string, string> = { sweep: "the 15-minute sweep", button: "this button", cli: "the script" };
+
+/**
+ * Clearing is two steps on purpose: the list of what would go is shown first, and only the second
+ * press removes it. The rules are lib/testData.ts; this screen only asks for them to run.
+ */
+function TestDataPanel({ autoclear, onAutoclear }: { autoclear: boolean; onAutoclear: (v: boolean) => void }) {
+  const [last, setLast] = useState<Cleared | null>(null);
+  const [plan, setPlan] = useState<Plan | null>(null);
+  const [busy, setBusy] = useState<"preview" | "clear" | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => {
+    void fetch("/api/test-data").then((r) => r.json()).then((j) => setLast(j?.last?.result ?? null)).catch(() => {});
+  }, []);
+  async function call(action: "preview" | "clear") {
+    setBusy(action); setError(null);
+    try {
+      const r = await fetch("/api/test-data", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action }) });
+      const j = await r.json();
+      if (!r.ok || !j.ok) throw new Error(j?.error || String(r.status));
+      if (action === "preview") setPlan(j.plan);
+      else { setLast(j.result); setPlan(null); }
+    } catch (e: any) { setError(String(e?.message ?? e)); }
+    finally { setBusy(null); }
+  }
+  const empty = plan && !plan.orders.length && !plan.companies.length && !plan.threads && !total(plan.rows);
+  const btn = (tone: "accent" | "danger"): React.CSSProperties => ({ alignSelf: "flex-start", padding: "10px 18px", borderRadius: "var(--radius)", border: `1px solid var(--${tone}-border)`, background: `var(--${tone}-subtle)`, color: tone === "danger" ? "var(--danger)" : INK, fontSize: 13.5, fontWeight: 600, fontFamily: "inherit", cursor: busy ? "wait" : "pointer", opacity: busy ? 0.7 : 1 });
+  return (
+    <Panel
+      title="Test data"
+      blurb={<>Tests leave orders, companies and email records in the live system. This clears what tests made and nothing else: orders the automation created on a TEST company or for a test email, companies it created for test emails, and every record of emails from test addresses (Ben&apos;s own addresses, test-eventz.co.uk, example domains). <b style={{ color: SUB }}>Orders staff made, and anything named &quot;do not delete&quot;, always stay.</b></>}
+    >
+      <div>
+        <h3 style={{ fontSize: 13, fontWeight: 700, color: INK, margin: 0 }}>Clear automatically every 15 minutes</h3>
+        <p style={{ fontSize: 12.5, color: MUT, margin: "5px 0 0", lineHeight: 1.55 }}>Off means nothing is cleared on a timer; the button below still works.</p>
+      </div>
+      <Segmented label="Clear test data automatically" value={autoclear} onChange={onAutoclear}
+        options={[{ id: false, label: "Off" }, { id: true, label: "On" }]} />
+      <div style={{ borderTop: `1px solid ${BORDER}`, paddingTop: 14, display: "flex", flexDirection: "column", gap: 11 }}>
+        {!plan && (
+          <button type="button" disabled={!!busy} onClick={() => call("preview")} style={btn("accent")}>
+            {busy === "preview" ? "Looking…" : "Check for test data"}
+          </button>
+        )}
+        {plan && empty && <p style={{ fontSize: 12.5, color: SUB, margin: 0 }}>Nothing to clear.</p>}
+        {plan && !empty && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 8, fontSize: 12.5, color: SUB, lineHeight: 1.55 }}>
+            <b style={{ color: INK }}>This would remove:</b>
+            {!!plan.orders.length && <span>{plan.orders.length} OnSinch order{plan.orders.length === 1 ? "" : "s"}: {plan.orders.map((o) => `R${o.number}`).join(", ")}</span>}
+            {!!plan.companies.length && <span>{plan.companies.length} compan{plan.companies.length === 1 ? "y" : "ies"}: {plan.companies.map((c) => c.name).join(", ")}</span>}
+            {!!plan.threads && <span>{plan.threads} test email thread{plan.threads === 1 ? "" : "s"}</span>}
+            <span>{total(plan.rows)} records in all</span>
+            {plan.over && <Warn>More than a clear may remove on its own ({plan.over}). Nothing will be removed; the rules need looking at first.</Warn>}
+            <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+              {!plan.over && <button type="button" disabled={!!busy} onClick={() => call("clear")} style={btn("danger")}>{busy === "clear" ? "Clearing…" : "Clear it"}</button>}
+              <button type="button" disabled={!!busy} onClick={() => setPlan(null)} style={btn("accent")}>Cancel</button>
+            </div>
+          </div>
+        )}
+        {plan && empty && <button type="button" onClick={() => setPlan(null)} style={btn("accent")}>Done</button>}
+        {error && <span style={{ fontSize: 12, color: "var(--danger)", fontWeight: 700 }}>Not done: {error}</span>}
+        {last && (
+          <p style={{ fontSize: 12, color: MUT, margin: 0, lineHeight: 1.5 }}>
+            Last cleared {when(last.at)} by {BY[last.trigger] ?? last.trigger}: {last.refused ? `refused, ${last.refused}` : `${last.orders.length} order${last.orders.length === 1 ? "" : "s"}, ${last.companies.length} compan${last.companies.length === 1 ? "y" : "ies"}, ${total(last.rows)} records`}{last.failed?.length ? `; ${last.failed.length} could not be removed` : ""}.
+          </p>
+        )}
+      </div>
+    </Panel>
   );
 }
 

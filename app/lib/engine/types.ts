@@ -490,6 +490,12 @@ export interface Settings {
    */
   followup_drafting?: boolean;
   /**
+   * Clear test data every 15 minutes (Ben, 2026-10-14), from the minute sync (lib/testData.ts
+   * says what counts as a test). Off means nothing is cleared on a timer; the Settings button
+   * still clears on demand. Optional so a row written before it existed reads as off.
+   */
+  test_data_autoclear?: boolean;
+  /**
    * Tool 1 — the verbatim Spartan reply generator. OFF by default: the engine
    * still classifies + does order work, but drafts NO reply until this is on.
    */
@@ -548,6 +554,7 @@ export interface Settings {
 export const DEFAULT_SETTINGS: Settings = {
   replies_enabled: false,
   followup_drafting: false,
+  test_data_autoclear: false,
   jobs_board_enabled: false,
   analytics_tab_enabled: false,
   reply_delivery: "draft",
