@@ -3367,5 +3367,19 @@
     "of": 78
    }
   }
+ },
+ {
+  "id": "S-0181",
+  "ts": "2026-10-15T03:56:13+00:00",
+  "kind": "measurement",
+  "headline": "invariant scan: checked reads (no sort=, no failed-as-empty), add_shift no longer drafts, card changes reprice, sweep grace 30 min; R11552 card 354, R11500 draft fixed",
+  "subject": "OnSinch reads in the rebuild fail loudly, new positions are checked for draft and hidden, and the sweep spares work in progress",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 194,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]

@@ -19,6 +19,7 @@
 // ============================================================================
 import type { NeonQueryFunction } from "@neondatabase/serverless";
 import { httpTransport } from "../engine/onsinch";
+import { readRows } from "./read";
 
 type Sql = NeonQueryFunction<false, false>;
 export const HOLD_TV_MINUTES = 30;
@@ -87,46 +88,52 @@ export async function sweepLinks(sql: Sql, limit = 40): Promise<SweepReport> {
   const rep: SweepReport = { checked: 0, linked: 0, relinked: 0, held: 0, notes: [] };
   const links = (await sql`SELECT * FROM job_links WHERE coalesce(last_checked, 'epoch') < now() - interval '50 seconds' ORDER BY coalesce(last_checked, 'epoch') LIMIT ${limit}`) as any[];
   for (const l of links) {
-    rep.checked++;
-    let o: any = null;
-    let how = "";
-    // Sweep A: follow the job.
-    // The Job filter works only beside with=Job (10-13: with=Job__SlotTeam answers 400), so the
-    // job finds its order and the order is then read whole.
-    if (l.job_id) {
-      const holder = rowsOf(await t("GET", `/orders?with=Job&Job__id[eq]=${l.job_id}`))[0];
-      if (holder) o = rowsOf(await t("GET", `/orders?id[eq]=${holder.id}&with=Job__SlotTeam__Slot`))[0] ?? null;
-      how = o && Number(o.id) !== Number(l.order_id) ? `job J${l.job_id} moved to R${o.number}` : "";
-    }
-    // Sweep B: no J number, or the job is gone: the order, its R number, then its rebuild.
-    if (!o) { o = rowsOf(await t("GET", `/orders?id[eq]=${l.order_id}&with=Job__SlotTeam__Slot`))[0] ?? null; }
-    if (!o && l.r_number) { const byR = rowsOf(await t("GET", `/orders?number[eq]=${l.r_number}&with=Job__SlotTeam__Slot`))[0]; if (byR && Number(byR.company_id) === Number(l.company_id)) { o = byR; how = `R${l.r_number} is now order ${byR.id}`; } }
-    if (!o && l.company_id) {
-      // A rebuilt order: the same client, created after the link was made, holding every shift the link held.
-      const was: string[] = Array.isArray(l.shifts) ? l.shifts : [];
-      // Newest first is /orders' default; `sort=-id` reverses it and read the client's 30 OLDEST orders, so no rebuild was ever found.
-      const cands = rowsOf(await t("GET", `/orders?company_id[eq]=${l.company_id}&with=Job__SlotTeam__Slot&limit=30`))
-        .filter((c) => Date.parse(c.created) >= Date.parse(l.first_seen) - 3600e3 && was.length && was.every((w) => shape(c).shifts.includes(w)));
-      if (cands.length === 1) { o = cands[0]; how = `rebuilt by staff as R${o.number}`; }
-      else if (cands.length > 1) rep.notes.push(`${l.thread_id}: ${cands.length} orders could be the rebuild of R${l.r_number}`);
-    }
-    if (o) {
-      const s = shape(o);
-      const moved = Number(o.id) !== Number(l.order_id);
-      if (moved) {
-        await sql`DELETE FROM job_links WHERE thread_id = ${l.thread_id} AND order_id = ${Number(o.id)}`;
-        await sql`UPDATE job_links SET order_id = ${Number(o.id)}, r_number = ${s.r}, job_id = ${s.job_id}, shifts = ${JSON.stringify(s.shifts)}::jsonb, state = 'relinked', last_checked = now(), held_since = NULL, note = ${how}
-          WHERE thread_id = ${l.thread_id} AND order_id = ${Number(l.order_id)}`;
-        rep.relinked++; rep.notes.push(`${l.thread_id}: ${how}`);
-      } else {
-        await sql`UPDATE job_links SET r_number = ${s.r}, job_id = ${s.job_id}, shifts = CASE WHEN ${s.shifts.length} > 0 THEN ${JSON.stringify(s.shifts)}::jsonb ELSE shifts END,
-          state = CASE WHEN state = 'held' THEN 'linked' ELSE state END, last_checked = now(), held_since = NULL WHERE thread_id = ${l.thread_id} AND order_id = ${Number(l.order_id)}`;
-        rep.linked++;
+    // A read that failed says nothing about the order: the link is left exactly as it was and
+    // tried again next minute. Before 10-15 a 500 read as "not in OnSinch" and held the link.
+    try {
+      rep.checked++;
+      let o: any = null;
+      let how = "";
+      // Sweep A: follow the job.
+      // The Job filter works only beside with=Job (10-13: with=Job__SlotTeam answers 400), so the
+      // job finds its order and the order is then read whole.
+      if (l.job_id) {
+        const holder = (await readRows(t as any, `/orders?with=Job&Job__id[eq]=${l.job_id}`))[0];
+        if (holder) o = (await readRows(t as any, `/orders?id[eq]=${holder.id}&with=Job__SlotTeam__Slot`))[0] ?? null;
+        how = o && Number(o.id) !== Number(l.order_id) ? `job J${l.job_id} moved to R${o.number}` : "";
       }
-    } else {
-      await sql`UPDATE job_links SET state = 'held', held_since = coalesce(held_since, now()), last_checked = now(), note = 'the order and its job are not in OnSinch, and no rebuild was found'
-        WHERE thread_id = ${l.thread_id} AND order_id = ${Number(l.order_id)}`;
-      rep.held++;
+      // Sweep B: no J number, or the job is gone: the order, its R number, then its rebuild.
+      if (!o) { o = (await readRows(t as any, `/orders?id[eq]=${l.order_id}&with=Job__SlotTeam__Slot`))[0] ?? null; }
+      if (!o && l.r_number) { const byR = (await readRows(t as any, `/orders?number[eq]=${l.r_number}&with=Job__SlotTeam__Slot`))[0]; if (byR && Number(byR.company_id) === Number(l.company_id)) { o = byR; how = `R${l.r_number} is now order ${byR.id}`; } }
+      if (!o && l.company_id) {
+        // A rebuilt order: the same client, created after the link was made, holding every shift the link held.
+        const was: string[] = Array.isArray(l.shifts) ? l.shifts : [];
+        // Newest first is /orders' default; `sort=-id` reverses it and read the client's 30 OLDEST orders, so no rebuild was ever found.
+        const cands = (await readRows(t as any, `/orders?company_id[eq]=${l.company_id}&with=Job__SlotTeam__Slot&limit=30`))
+          .filter((c) => Date.parse(c.created) >= Date.parse(l.first_seen) - 3600e3 && was.length && was.every((w) => shape(c).shifts.includes(w)));
+        if (cands.length === 1) { o = cands[0]; how = `rebuilt by staff as R${o.number}`; }
+        else if (cands.length > 1) rep.notes.push(`${l.thread_id}: ${cands.length} orders could be the rebuild of R${l.r_number}`);
+      }
+      if (o) {
+        const s = shape(o);
+        const moved = Number(o.id) !== Number(l.order_id);
+        if (moved) {
+          await sql`DELETE FROM job_links WHERE thread_id = ${l.thread_id} AND order_id = ${Number(o.id)}`;
+          await sql`UPDATE job_links SET order_id = ${Number(o.id)}, r_number = ${s.r}, job_id = ${s.job_id}, shifts = ${JSON.stringify(s.shifts)}::jsonb, state = 'relinked', last_checked = now(), held_since = NULL, note = ${how}
+            WHERE thread_id = ${l.thread_id} AND order_id = ${Number(l.order_id)}`;
+          rep.relinked++; rep.notes.push(`${l.thread_id}: ${how}`);
+        } else {
+          await sql`UPDATE job_links SET r_number = ${s.r}, job_id = ${s.job_id}, shifts = CASE WHEN ${s.shifts.length} > 0 THEN ${JSON.stringify(s.shifts)}::jsonb ELSE shifts END,
+            state = CASE WHEN state = 'held' THEN 'linked' ELSE state END, last_checked = now(), held_since = NULL WHERE thread_id = ${l.thread_id} AND order_id = ${Number(l.order_id)}`;
+          rep.linked++;
+        }
+      } else {
+        await sql`UPDATE job_links SET state = 'held', held_since = coalesce(held_since, now()), last_checked = now(), note = 'the order and its job are not in OnSinch, and no rebuild was found'
+          WHERE thread_id = ${l.thread_id} AND order_id = ${Number(l.order_id)}`;
+        rep.held++;
+      }
+    } catch (e) {
+      rep.notes.push(`${l.thread_id}: OnSinch read failed, left as it was (${String((e as Error)?.message ?? e).slice(0, 100)})`);
     }
   }
   return rep;

@@ -130,8 +130,12 @@ async function fillAndSave(bot: Bot, sel: string, contract: Contract, orderId: n
     let input = form.locator(`[name="${name}"]`);
     if ((await input.count()) > 1) input = form.locator(`[name="${name}"]:not([type="hidden"])`);
     if ((await input.count()) !== 1) return { stage: "blocked", reasons: [`${name}: ${await input.count()} inputs`] };
-    const kind = await input.evaluate((e) => (e.tagName === "SELECT" ? "select" : e.classList.contains("date-picker") ? "date" : "text"));
-    if (kind === "select") {
+    const kind = await input.evaluate((e) => (e.tagName === "SELECT" ? "select" : (e as HTMLInputElement).type === "hidden" ? "hidden" : e.classList.contains("date-picker") ? "date" : "text"));
+    if (kind === "hidden") {
+      // A state field the form carries only as a hidden input (data[SlotTeam][concept] on the
+      // new-shift form) has no control to operate; its value is what gets posted.
+      await input.evaluate((e, v) => { (e as HTMLInputElement).value = v; }, value);
+    } else if (kind === "select") {
       await input.selectOption(value);
     } else if (kind === "date") {
       // The bootstrap date picker restores its own date on blur after a programmatic fill

@@ -20,6 +20,7 @@ import { apiRole, builderDate, builderEdit, opKey, positionCreateFields, rowsFor
 import { openBot } from "./session";
 import { cancelNode, createChild, editNode, type EditOutcome } from "./builder";
 import { apiCreateOrder, firstRow, ORDER_MANAGER_ID } from "./apiCreate";
+import { readPage } from "../read";
 
 export type RunResult = { op_key: string; status: LedgerStatus | "busy" | "seen"; reasons: string[]; detail?: Record<string, unknown> };
 
@@ -86,6 +87,19 @@ export function mismatches(op: Op, order: any): string[] {
   return [`no verification for ${(op as Op).kind}`];
 }
 
+/**
+ * Every position this write made must read back as staff's are: not a draft, hidden from
+ * workers. Checked on the result, not trusted to a form default: the new-shift form's default
+ * made R11500's added shift a draft on 10-14, after the same default was fixed for positions.
+ */
+export function stateProblems(before: any | null, after: any): string[] {
+  const had = new Set(before ? slotsOf(before).map((s: any) => Number(s.id)) : []);
+  return slotsOf(after).filter((s: any) => !had.has(Number(s.id))).flatMap((s: any) => [
+    ...(s.concept === true ? [`position ${s.id} went in as a draft (concept)`] : []),
+    ...(s.hidden !== true ? [`position ${s.id} is visible to workers`] : []),
+  ]);
+}
+
 function createMismatches(op: Extract<Op, { kind: "create_order" }>, order: any): string[] {
   const bad: string[] = [];
   if (String(order.company_id) !== op.company_id) bad.push(`company ${order.company_id}`);
@@ -124,8 +138,8 @@ export function liveFormValues(model: "Slot" | "Order", id: number, order: any):
 const AUDIT_FIELDS: Record<string, string[]> = { set_position_size: ["size"], set_position_times: ["beginning", "end"], set_po: ["intern_name"], cancel_position: ["cancelled"] };
 
 async function auditPage(t: any, page?: number): Promise<{ rows: any[]; pageCount: number }> {
-  const r = await t("GET", `/timelineAudits?action=common_change&limit=100&page=${page ?? 1}`);
-  return { rows: (r.data?.data ?? []) as any[], pageCount: Number(r?.data?.pagination?.pageCount) };
+  const r = await readPage(t, `/timelineAudits?action[eq]=common_change&limit=100&page=${page ?? 1}`);
+  return { rows: r.rows, pageCount: r.pageCount };
 }
 
 /** The newest staff-edit audit id right now; rows after it belong to what happens next. */
@@ -240,7 +254,7 @@ export async function runOp(source: string, op: Op, opts: { testOnly: boolean } 
         } finally { await bot.close(); }
       }
       const created = await readOrder(made.order_id);
-      const bad = mismatches(op, created);
+      const bad = [...mismatches(op, created), ...(created ? stateProblems(null, created) : [])];
       if (created && String(created.user_id) !== made.client_user_id) bad.push(`client reads ${created.user_id}, expected ${made.client_user_id}`);
       if (created && Number(created.order_manager_id) !== ORDER_MANAGER_ID) bad.push(`order manager reads ${created.order_manager_id}, expected ${ORDER_MANAGER_ID}`);
       if (steps.some((s) => !/: submitted$/.test(s))) bad.unshift(`stopped part-way: ${steps.join(", ")}`);
@@ -285,7 +299,8 @@ export async function runOp(source: string, op: Op, opts: { testOnly: boolean } 
       // never left looking like a refusal.
       const partial = op.kind === "add_shift" && steps[0] === "shift: submitted" && out.stage !== "submitted";
       if (out.stage !== "submitted" && !partial) { await ledgerSet(key, out.stage, { reasons: out.reasons, steps }); return { op_key: key, status: out.stage, reasons: out.reasons }; }
-      const bad = mismatches(op, await readOrder(op.order_id));
+      const after = await readOrder(op.order_id);
+      const bad = [...mismatches(op, after), ...(after ? stateProblems(before, after) : [])];
       if (partial) bad.unshift(`stopped part-way: ${steps.join(", ")}`, ...("reasons" in out ? out.reasons : []));
       await ledgerSet(key, bad.length ? "mismatch" : "verified", { readback: bad, steps });
       return { op_key: key, status: bad.length ? "mismatch" : "verified", reasons: bad };

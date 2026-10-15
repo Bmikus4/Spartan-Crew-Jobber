@@ -27,6 +27,7 @@
 // ============================================================================
 import { httpTransport, OnsinchClient } from "../../engine/onsinch";
 import { shiftWindow, type Op } from "./ops";
+import { readRows } from "../read";
 
 type CreateOp = Extract<Op, { kind: "create_order" }>;
 const HOUSE_CARD = 355;
@@ -44,12 +45,12 @@ function api() {
 /** `beforeId` asks the same question as it stood before that order existed (the parity harness's replay). */
 export async function clientDefaults(companyId: number, senderEmail: string, beforeId?: number): Promise<{ user_id: string; contact_from: string; card: number; card_from: string }> {
   const { t } = api();
-  const company = rowsOf(await t("GET", `/companies?id[eq]=${companyId}&with=Client`))[0];
+  const company = (await readRows(t as any, `/companies?id[eq]=${companyId}&with=Client`))[0];
   const contacts = ([] as any[]).concat(company?.Client ?? []).filter((c) => c && !c.deleted);
   // /orders lists newest first by default, and `sort=-id` turns that into OLDEST first: with it
   // here every bot order on 10-13/14 took the client's oldest card (Event Concept 42 where staff
   // use 354, EMS 97 where staff use 323), caught by scripts/create-ab.mts on 10-15.
-  const latest = rowsOf(await t("GET", `/orders?company_id[eq]=${companyId}${beforeId ? `&id[lt]=${beforeId}` : ""}&with=Job&limit=20`))
+  const latest = (await readRows(t as any, `/orders?company_id[eq]=${companyId}${beforeId ? `&id[lt]=${beforeId}` : ""}&with=Job&limit=20`))
     .filter((o) => Number(o.creator) !== ORDER_MANAGER_ID)
     .sort((a, b) => Number(b.id) - Number(a.id));
   const sender = contacts.find((c) => String(c.email ?? "").trim().toLowerCase() === senderEmail.trim().toLowerCase());
@@ -113,6 +114,6 @@ export async function apiCreateOrder(op: CreateOp): Promise<ApiCreated> {
   }
   const made = await client.createOrder(createBody(op, d));
   const id = Number((made as any).id);
-  const number = (made as any).number ?? rowsOf(await t("GET", `/orders?id[eq]=${id}`))[0]?.number;
+  const number = (made as any).number ?? (await readRows(t as any, `/orders?id[eq]=${id}`))[0]?.number;
   return { order_id: id, number: String(number ?? ""), client_user_id: d.user_id, contact_from: d.contact_from, card: d.card, card_from: d.card_from };
 }

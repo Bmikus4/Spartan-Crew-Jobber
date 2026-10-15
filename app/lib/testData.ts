@@ -21,6 +21,7 @@
 // "do not delete". A company goes only if 2257 created it and it has no contact and no order left.
 // ============================================================================
 import type { NeonQueryFunction } from "@neondatabase/serverless";
+import { readRows } from "./v2/read";
 
 export const AUTOMATION_USER = 2257;
 // Postgres ARE and JS read these the same way; [.] instead of \. so neither escaping layer eats it.
@@ -88,8 +89,7 @@ export function companyVerdict(c: { name: string; email_invoice?: string | null;
 async function companiesMadeByAutomation(t: OnsinchCall): Promise<Set<number>> {
   const out = new Set<number>();
   for (let page = 1; page <= 20; page++) {
-    const r = await t("GET", `/timelineAudits?creator[eq]=${AUTOMATION_USER}&action[eq]=company_create&limit=100&page=${page}`);
-    const rows = rowsOf(r);
+    const rows = await readRows(t as any, `/timelineAudits?creator[eq]=${AUTOMATION_USER}&action[eq]=company_create&limit=100&page=${page}`);
     for (const a of rows) { try { out.add(Number(JSON.parse(a.data).id)); } catch {} }
     if (rows.length < 100) break;
   }
@@ -99,16 +99,22 @@ async function companiesMadeByAutomation(t: OnsinchCall): Promise<Set<number>> {
 async function allOf(t: OnsinchCall, path: string, cap = 30): Promise<any[]> {
   const out: any[] = [];
   for (let page = 1; page <= cap; page++) {
-    const rows = rowsOf(await t("GET", `${path}${path.includes("?") ? "&" : "?"}limit=100&page=${page}`));
+    const rows = (await readRows(t as any, `${path}${path.includes("?") ? "&" : "?"}limit=100&page=${page}`));
     out.push(...rows);
     if (rows.length < 100) break;
   }
   return out;
 }
 
-/** What a clear would remove, without removing anything. */
-export async function planTestData(sql: Sql, t: OnsinchCall): Promise<TestDataPlan> {
+/**
+ * What a clear would remove, without removing anything. `graceMinutes` leaves alone whatever was
+ * made that recently: the sweep deleted a probe order mid-test on 10-15, and a test's ledger
+ * row is what stops its write running twice, so a sweep must never race work still under way.
+ */
+export async function planTestData(sql: Sql, t: OnsinchCall, opts: { graceMinutes?: number } = {}): Promise<TestDataPlan> {
   const kept: string[] = [];
+  const grace = Math.max(0, opts.graceMinutes ?? 0);
+  const cutoff = new Date(Date.now() - grace * 60e3).toISOString();
   const companies = await allOf(t, "/companies?with=Client", 40);
   const testCos = companies.filter((c) => isTestCompanyName(c.name)).map((c) => Number(c.id));
 
@@ -127,7 +133,10 @@ export async function planTestData(sql: Sql, t: OnsinchCall): Promise<TestDataPl
   const ids = [...new Set(cand.map((r) => r.thread_id).filter((x): x is string => !!x))];
   const real = new Set(((await sql`SELECT DISTINCT thread_id FROM thread_messages WHERE thread_id = ANY(${ids}) AND NOT is_from_spartan AND from_address IS NOT NULL AND NOT (from_address ~* ${TEST_SENDER})`) as any[]).map((r) => r.thread_id));
   for (const id of real) kept.push(`thread ${id}: marked as a test, but a real client wrote on it`);
-  const threads = ids.filter((id) => !real.has(id));
+  const fresh = new Set(grace ? ((await sql`SELECT thread_id FROM thread_messages WHERE thread_id = ANY(${ids}) AND first_seen_at > ${cutoff}
+    UNION SELECT thread_id FROM v2_decisions WHERE thread_id = ANY(${ids}) AND created_at > ${cutoff}`) as any[]).map((r) => r.thread_id) : []);
+  for (const id of fresh) kept.push(`thread ${id}: still in progress (under ${grace} minutes old)`);
+  const threads = ids.filter((id) => !real.has(id) && !fresh.has(id));
 
   // Orders: everything on a TEST company, and everything a test thread points at.
   const msgIds = ((await sql`SELECT message_id FROM thread_messages WHERE thread_id = ANY(${threads})`) as any[]).map((r) => r.message_id);
@@ -142,11 +151,12 @@ export async function planTestData(sql: Sql, t: OnsinchCall): Promise<TestDataPl
   const testThreadOrders = new Set(pointed.map((r) => Number(r.id)).filter((n) => n > 0));
   const seen = new Map<number, any>();
   for (const c of testCos) for (const o of await allOf(t, `/orders?company_id[eq]=${c}`)) seen.set(Number(o.id), o);
-  for (const id of testThreadOrders) if (!seen.has(id)) { const o = rowsOf(await t("GET", `/orders?id[eq]=${id}`))[0]; if (o) seen.set(id, o); }
+  for (const id of testThreadOrders) if (!seen.has(id)) { const o = (await readRows(t as any, `/orders?id[eq]=${id}`))[0]; if (o) seen.set(id, o); }
   const orders: PlanOrder[] = [];
   for (const o of seen.values()) {
     const v = orderVerdict(o, new Set(testCos), testThreadOrders);
     if (!v) continue;
+    if (v.go && grace && Date.parse(o.created) > Date.parse(cutoff)) { kept.push(`order R${o.number}: still in progress (under ${grace} minutes old)`); continue; }
     if (v.go) orders.push({ id: Number(o.id), number: String(o.number), company_id: Number(o.company_id), name: String(o.name ?? ""), why: v.why });
     else kept.push(`order R${o.number} "${o.name}": ${v.why}`);
   }
@@ -184,7 +194,7 @@ export async function planTestData(sql: Sql, t: OnsinchCall): Promise<TestDataPl
   for (const table of THREAD_TABLES) {
     try { rows[table] = Number(((await sql(`SELECT count(*)::int AS n FROM ${table} WHERE thread_id = ANY($1)`, [threads])) as any[])[0].n); } catch { /* a table this database never made */ }
   }
-  const extra = await extraRows(sql, testCos, msgIds, orders.map((o) => o.id), "count");
+  const extra = await extraRows(sql, testCos, msgIds, orders.map((o) => o.id), "count", cutoff);
   Object.assign(rows, extra);
 
   const plan: TestDataPlan = { at: new Date().toISOString(), threads, orders, companies: companiesOut, rows, kept, testCompanies: testCos, messages: msgIds };
@@ -195,10 +205,10 @@ export async function planTestData(sql: Sql, t: OnsinchCall): Promise<TestDataPl
 }
 
 /** Rows not keyed by a test thread: the ledger of test writes, local runs, and what was learned about TEST companies. */
-async function extraRows(sql: Sql, testCos: number[], msgIds: string[], orderIds: number[], mode: "count" | "delete"): Promise<Record<string, number>> {
+async function extraRows(sql: Sql, testCos: number[], msgIds: string[], orderIds: number[], mode: "count" | "delete", cutoff: string): Promise<Record<string, number>> {
   const q = (where: string) => (mode === "count" ? `SELECT count(*)::int AS n FROM ${where}` : `WITH d AS (DELETE FROM ${where} RETURNING 1) SELECT count(*)::int AS n FROM d`);
   const parts: [string, string, unknown[]][] = [
-    ["bot_ledger", `bot_ledger WHERE source ~* $1 OR split_part(source, '#', 1) = ANY($2) OR (detail->>'order_id') = ANY($3) OR (op->>'company_id') = ANY($4)`, [TEST_ID, msgIds, orderIds.map(String), testCos.map(String)]],
+    ["bot_ledger", `bot_ledger WHERE (source ~* $1 OR split_part(source, '#', 1) = ANY($2) OR (detail->>'order_id') = ANY($3) OR (op->>'company_id') = ANY($4)) AND created_at <= $5`, [TEST_ID, msgIds, orderIds.map(String), testCos.map(String), cutoff]],
     ["v2_decisions (local runs)", `v2_decisions WHERE code_version = 'local' AND (executed IS NULL OR jsonb_typeof(executed) <> 'array' OR jsonb_array_length(executed) = 0)`, []],
     ["sender_ledger", `sender_ledger WHERE addr ~* $1`, [TEST_SENDER]],
     ["entity_aliases", `entity_aliases WHERE kind = 'company' AND entity_id = ANY($1)`, [testCos]],
@@ -214,23 +224,23 @@ async function extraRows(sql: Sql, testCos: number[], msgIds: string[], orderIds
 export interface ClearResult { at: string; trigger: string; orders: string[]; companies: string[]; rows: Record<string, number>; failed: string[]; kept: string[]; refused?: string }
 
 /** Removes what a plan names, OnSinch first; an order or company that will not go is reported, not retried. */
-export async function clearTestData(sql: Sql, t: OnsinchCall, trigger: string, opts: { force?: boolean } = {}): Promise<ClearResult> {
-  const plan = await planTestData(sql, t);
+export async function clearTestData(sql: Sql, t: OnsinchCall, trigger: string, opts: { force?: boolean; graceMinutes?: number } = {}): Promise<ClearResult> {
+  const plan = await planTestData(sql, t, { graceMinutes: opts.graceMinutes });
   const res: ClearResult = { at: new Date().toISOString(), trigger, orders: [], companies: [], rows: {}, failed: [], kept: plan.kept };
   if (plan.over && !opts.force) { res.refused = `more than a sweep may clear on its own: ${plan.over}`; await log(sql, res); return res; }
   for (const o of plan.orders) {
     const r = await t("DELETE", "/orders", [o.id]);
-    const gone = !rowsOf(await t("GET", `/orders?id[eq]=${o.id}`))[0];
+    const gone = !(await readRows(t as any, `/orders?id[eq]=${o.id}`))[0];
     if ((r.status === 200 || r.status === 204) && gone) res.orders.push(`R${o.number}`);
     else res.failed.push(`order R${o.number}: ${r.status} ${JSON.stringify(r.data).slice(0, 120)}`);
   }
   for (const c of plan.companies) {
     const r = await t("DELETE", "/companies", [c.id]);
-    const gone = !rowsOf(await t("GET", `/companies?id[eq]=${c.id}`))[0];
+    const gone = !(await readRows(t as any, `/companies?id[eq]=${c.id}`))[0];
     if ((r.status === 200 || r.status === 204) && gone) res.companies.push(c.name);
     else res.failed.push(`company "${c.name}": ${r.status} ${JSON.stringify(r.data).slice(0, 120)}`);
   }
-  Object.assign(res.rows, await extraRows(sql, plan.testCompanies, plan.messages, plan.orders.map((o) => o.id), "delete"));
+  Object.assign(res.rows, await extraRows(sql, plan.testCompanies, plan.messages, plan.orders.map((o) => o.id), "delete", new Date(Date.parse(plan.at) - Math.max(0, opts.graceMinutes ?? 0) * 60e3).toISOString()));
   for (const table of THREAD_TABLES) {
     try { res.rows[table] = Number(((await sql(`WITH d AS (DELETE FROM ${table} WHERE thread_id = ANY($1) RETURNING 1) SELECT count(*)::int AS n FROM d`, [plan.threads])) as any[])[0].n); } catch { /* table absent */ }
   }
@@ -257,6 +267,8 @@ export async function lastClear(sql: Sql): Promise<{ last: ClearResult | null; r
 }
 
 export const SWEEP_MINUTES = 15;
+/** What the sweep leaves for its next pass: long enough for any test or harness run to finish. */
+export const SWEEP_GRACE_MINUTES = 30;
 
 /** The quarter-hourly clear: runs only with the setting on, and only when the last one is 15 minutes old. */
 export async function maybeSweep(sql: Sql, t: OnsinchCall, enabled: boolean, now = Date.now()): Promise<ClearResult | string> {
@@ -264,7 +276,7 @@ export async function maybeSweep(sql: Sql, t: OnsinchCall, enabled: boolean, now
   const last = (await sql`SELECT max(at) AS at FROM test_data_clears WHERE trigger = 'sweep'`.catch(() => [{ at: null }])) as any[];
   if (last[0]?.at && now - new Date(last[0].at).getTime() < SWEEP_MINUTES * 60e3 - 30e3) return "not due";
   try {
-    return await clearTestData(sql, t, "sweep");
+    return await clearTestData(sql, t, "sweep", { graceMinutes: SWEEP_GRACE_MINUTES });
   } catch (e: any) {
     // Logged as a sweep so a clear that keeps throwing is tried every 15 minutes, not every minute.
     const res: ClearResult = { at: new Date().toISOString(), trigger: "sweep", orders: [], companies: [], rows: {}, failed: [String(e?.message ?? e).slice(0, 200)], kept: [] };

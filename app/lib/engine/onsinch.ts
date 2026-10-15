@@ -711,6 +711,12 @@ export class OnsinchClient {
         throw new Error(`patchJob: ${JSON.stringify(p)} carries no job id`);
       if (Object.keys(p).length < 2)
         throw new Error(`patchJob: job ${p.id} carries no fields to change`);
+      // The "route for a human correcting a known mistake" above is a trap for the rate card:
+      // measured 10-15 on TEST, PATCH /jobs moves the label to the new card and leaves every
+      // position priced on the old one. The builder's Job form asks "Prices of job shifts will be
+      // recalculated!" and reprices (how R11552 was corrected), so that is the only route.
+      if ("pricelist_category_id" in p)
+        throw new Error(`patchJob: job ${p.id}: a rate card changed through the API leaves its positions priced on the old card; change it in the builder`);
     }
     const r = await this.t("PATCH", "/jobs", patches);
     if (r.status !== 204 && r.status !== 200)

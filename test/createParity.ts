@@ -5,6 +5,8 @@ import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { opFromV1, contentOfOp, contentOfV1, type V1Shape } from "../app/lib/v2/bot/parity";
 import { createBody, firstRow, ORDER_MANAGER_ID } from "../app/lib/v2/bot/apiCreate";
+import { stateProblems } from "../app/lib/v2/bot/run";
+import { SWEEP_GRACE_MINUTES, SWEEP_MINUTES } from "../app/lib/testData";
 let fails = 0;
 const ok = (c: boolean, m: string, d?: unknown) => { console.log(`  ${c ? "PASS" : "FAIL"}  ${m}${c ? "" : "  " + JSON.stringify(d)}`); if (!c) fails++; };
 const shapes = JSON.parse(readFileSync(join(__dirname, "fixtures", "v1-create-shapes.json"), "utf8")) as (V1Shape & { r: string })[];
@@ -56,6 +58,27 @@ console.log("[4] nothing in the rebuild leans on sort=-id, which lists /orders O
   const walk = (dir: string) => { for (const f of readdirSync(dir, { withFileTypes: true })) { const p = join(dir, f.name); if (f.isDirectory()) walk(p); else if (/\.ts$/.test(f.name) && /[?&]sort=-id/.test(readFileSync(p, "utf8").replace(/\/\/.*$/gm, ""))) hits.push(p); } };
   walk(join(__dirname, "..", "app", "lib", "v2"));
   ok(hits.length === 0, "no v2 query asks for sort=-id", hits);
+}
+
+console.log("[5] a failed OnSinch read is never read as an empty one");
+{
+  const hits: string[] = [];
+  const scan = (p: string) => { const src = readFileSync(p, "utf8").replace(/\/\/.*$/gm, ""); if (/rowsOf\(await t\(/.test(src) || /\.data\?\.data \?\? \[\]/.test(src)) hits.push(p); };
+  const walk = (dir: string) => { for (const f of readdirSync(dir, { withFileTypes: true })) { const p = join(dir, f.name); if (f.isDirectory()) walk(p); else if (/\.ts$/.test(f.name)) scan(p); } };
+  walk(join(__dirname, "..", "app", "lib", "v2"));
+  scan(join(__dirname, "..", "app", "lib", "testData.ts"));
+  ok(hits.length === 0, "every list read in the rebuild goes through read.ts, which throws on a failed answer", hits);
+}
+
+console.log("[6] every position a write made reads back not a draft, and hidden");
+{
+  const order = (slots: any[]) => ({ Job: [{ SlotTeam: [{ id: 1, Slot: slots }] }] });
+  const before = order([{ id: 10, concept: false, hidden: true }]);
+  ok(stateProblems(before, order([{ id: 10, concept: false, hidden: true }, { id: 11, concept: false, hidden: true }])).length === 0, "a new hidden, non-draft position passes");
+  ok(stateProblems(before, order([{ id: 10, concept: false, hidden: true }, { id: 11, concept: true, hidden: true }])).some((x) => /draft/.test(x)), "a new draft position is caught (R11500's added shift, 10-14)");
+  ok(stateProblems(before, order([{ id: 10, concept: false, hidden: true }, { id: 11, concept: false, hidden: false }])).some((x) => /visible/.test(x)), "a new position workers can see is caught");
+  ok(stateProblems(order([{ id: 10, concept: true, hidden: false }]), order([{ id: 10, concept: true, hidden: false }])).length === 0, "a position that was already there is not this write's to answer for");
+  ok(SWEEP_GRACE_MINUTES >= 2 * SWEEP_MINUTES, "the test-data sweep leaves anything under 30 minutes old for its next pass");
 }
 
 console.log(fails ? `\n${fails} FAILED` : "\nall passed");

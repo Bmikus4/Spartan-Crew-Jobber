@@ -106,7 +106,9 @@ export function windowFields(model: string, date: string, start: string, end: st
 /** The new-shift form: name, window, and its first position (plain Crew; see rowsFor). */
 export function shiftCreateFields(op: Extract<Op, { kind: "add_shift" }>, first: PositionSpec): Record<string, string> {
   if (!Number.isInteger(first.size) || first.size < 1) throw new Error(`refusing size ${first.size}`);
-  return { "data[SlotTeam][name]": op.name, "data[SlotTeam][profession_id]": first.profession_id, "data[SlotTeam][size]": String(first.size), ...windowFields("SlotTeam", op.date, op.start, op.end) };
+  // "Not a concept" (0), as on the new-position form: left to the form's default, R11500's shift
+  // added on 10-14 went in as a draft (slot 59716), the same miss fixed for positions on 10-13.
+  return { "data[SlotTeam][name]": op.name, "data[SlotTeam][profession_id]": first.profession_id, "data[SlotTeam][size]": String(first.size), ...windowFields("SlotTeam", op.date, op.start, op.end), "data[SlotTeam][concept]": "0" };
 }
 
 /** The new-position form. Its window must be set: the form defaults to an unrelated day (10-08). */

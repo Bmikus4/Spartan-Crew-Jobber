@@ -1,10 +1,12 @@
 // ============================================================================
-// A wrong rate card must be correctable, and correcting it must not be able to
-// become a no-op that reports success.
+// PATCH /jobs must not be able to become a no-op that reports success, and must not
+// change a rate card.
 // ----------------------------------------------------------------------------
-// `pricelist_category_id` on the Job is the only rate handle the API exposes.
-// Until now the client had no method for it, so an order created against the
-// wrong rate card could not be fixed through the engine at all.
+// It was written as the route to correct a wrong rate card. Measured 10-15 on TEST, it
+// is not one: PATCH /jobs moves the Job's pricelist_category_id and leaves every
+// position priced on the old card (pricelist_id and price_fix unchanged). The builder's
+// Job form reprices ("Prices of job shifts will be recalculated!"), so a card is changed
+// there and patchJob refuses it before anything is sent.
 //
 // The trap this file pins is the one test/patchApply.ts found on /orders:
 // PATCH with an id and no fields returns 204, changes nothing, and reads as
@@ -48,12 +50,15 @@ async function refuses(label: string, patches: any[], expect: RegExp) {
 async function main() {
   console.log("PATCH /jobs");
 
-  // The rate-card correction itself: the one write this method exists for.
+  // A rate card is refused: through the API it relabels the job and reprices nothing.
+  await refuses("a rate-card change is refused", [{ id: 13993, pricelist_category_id: 311 }], /priced on the old card/);
+
+  // Any other job field still goes through.
   sent.length = 0;
-  ok(await client.patchJob([{ id: 13993, pricelist_category_id: 311 }]), "a rate-card change is accepted");
+  ok(await client.patchJob([{ id: 13993, name: "Renamed" }]), "a name change is accepted");
   ok(sent.length === 1 && sent[0].method === "PATCH" && sent[0].path === "/jobs", "goes to PATCH /jobs");
   ok(
-    JSON.stringify(sent[0].body) === JSON.stringify([{ id: 13993, pricelist_category_id: 311 }]),
+    JSON.stringify(sent[0].body) === JSON.stringify([{ id: 13993, name: "Renamed" }]),
     "the array is sent at the tag root, unwrapped",
     JSON.stringify(sent[0].body)
   );
@@ -66,28 +71,28 @@ async function main() {
 
   // The patchApply.ts trap, on /jobs.
   await refuses("an id with no fields is refused", [{ id: 13993 }], /no fields to change/);
-  await refuses("a patch with no id is refused", [{ pricelist_category_id: 311 }], /no job id/);
-  await refuses("a non-numeric id is refused", [{ id: "13993abc", pricelist_category_id: 311 }], /no job id/);
-  await refuses("a zero id is refused", [{ id: 0, pricelist_category_id: 311 }], /no job id/);
-  await refuses("a negative id is refused", [{ id: -1, pricelist_category_id: 311 }], /no job id/);
+  await refuses("a patch with no id is refused", [{ name: "x" }], /no job id/);
+  await refuses("a non-numeric id is refused", [{ id: "13993abc", name: "x" }], /no job id/);
+  await refuses("a zero id is refused", [{ id: 0, name: "x" }], /no job id/);
+  await refuses("a negative id is refused", [{ id: -1, name: "x" }], /no job id/);
 
   // A bad entry anywhere in the array stops the whole array. Validating as it sends
   // would leave the earlier patches applied and the rest not - a half-applied change
   // nobody asked for, the same reason patchSlotTeams pre-validates.
   await refuses(
     "one bad entry stops the whole array",
-    [{ id: 13993, pricelist_category_id: 311 }, { id: 13994 }],
+    [{ id: 13993, name: "x" }, { id: 13994 }],
     /no fields to change/
   );
 
   // A non-204 must not read as success.
   const failing = new OnsinchClient(async () => ({
     status: 400,
-    data: { validationErrors: { pricelist_category_id: ["nope"] } },
+    data: { validationErrors: { name: ["nope"] } },
   }));
   let threw = "";
   try {
-    await failing.patchJob([{ id: 13993, pricelist_category_id: 311 }]);
+    await failing.patchJob([{ id: 13993, name: "x" }]);
   } catch (e: any) {
     threw = String(e?.message ?? e);
   }

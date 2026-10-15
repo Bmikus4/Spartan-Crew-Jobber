@@ -25,6 +25,7 @@ import { v2Writes } from "../paused";
 import { linkedOrderId } from "./threadOrder";
 import { recordLink } from "./links";
 import { bookingsOf, contextText, venuesOf, type ReadContext, type ThreadLine } from "./interpret/context";
+import { readRows } from "./read";
 
 let _sql: NeonQueryFunction<false, false> | null = null;
 let _ready = false;
@@ -69,32 +70,24 @@ const NESTED = "Job__SlotTeam__Slot__SlotLocation";
 export function onsinchWorld(): World {
   const t = httpTransport({ baseUrl: process.env.ONSINCH_BASE_URL || "https://spartancrew.onsinch.com/api/v1", apiKey: process.env.ONSINCH_API_KEY || "" });
   const client = new OnsinchClient(t);
-  let floor: number | null = null;
-  const recentFloor = async () => {
-    if (floor !== null) return floor;
-    const first = await t("GET", "/orders?limit=1&page=1");
-    const pages = Number(first?.data?.pagination?.pageCount);
-    const last = rowsOf(await t("GET", `/orders?limit=1&page=${pages}`))[0];
-    floor = Math.max(0, Number(last?.id ?? 0) - 2000);
-    return floor;
-  };
   return {
     companies: () => client.allCompanies(),
     placesNamed: async (name) => (await client.allPlaces()).filter((p: any) => normName(p.name) === normName(name)).map((p: any) => ({ id: Number(p.id), name: String(p.name) })),
     allPlaces: async () => (await client.allPlaces()).map((p: any) => ({ id: Number(p.id), name: String(p.name ?? ""), address: String(p.address ?? "").trim() || undefined })),
     companyOrders: async (companyId) => {
       const out: any[] = [];
+      // The client's newest 1,000 orders, newest first (the API's default order). A "recent
+      // floor" taken from the LAST page read the oldest id and so filtered nothing (10-15).
       for (let page = 1; page <= 10; page++) {
-        const r = await t("GET", `/orders?company_id[eq]=${companyId}&id[gte]=${await recentFloor()}&with=${NESTED}&limit=100&page=${page}`);
-        const rows = rowsOf(r);
+        const rows = await readRows(t as any, `/orders?company_id[eq]=${companyId}&with=${NESTED}&limit=100&page=${page}`);
         out.push(...rows);
         if (rows.length < 100) break;
       }
       return out;
     },
-    orderByNumber: async (n) => rowsOf(await t("GET", `/orders?number[eq]=${encodeURIComponent(n)}&with=${NESTED}`))[0] ?? null,
-    orderById: async (id) => rowsOf(await t("GET", `/orders?id[eq]=${id}&with=${NESTED}`))[0] ?? null,
-    professions: async () => rowsOf(await t("GET", "/professions?limit=200")).filter((p: any) => !p.deleted).map((p: any) => ({ id: String(p.id), name: String(p.name ?? "").trim() })),
+    orderByNumber: async (n) => (await readRows(t as any, `/orders?number[eq]=${encodeURIComponent(n)}&with=${NESTED}`))[0] ?? null,
+    orderById: async (id) => (await readRows(t as any, `/orders?id[eq]=${id}&with=${NESTED}`))[0] ?? null,
+    professions: async () => (await readRows(t as any, "/professions?limit=200")).filter((p: any) => !p.deleted).map((p: any) => ({ id: String(p.id), name: String(p.name ?? "").trim() })),
   };
 }
 

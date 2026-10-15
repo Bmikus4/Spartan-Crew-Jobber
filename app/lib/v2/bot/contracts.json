@@ -883,7 +883,8 @@
    "data[SlotTeam][beginning][date]",
    "data[SlotTeam][beginning][time]",
    "data[SlotTeam][end][date]",
-   "data[SlotTeam][end][time]"
+   "data[SlotTeam][end][time]",
+   "data[SlotTeam][concept]"
   ],
   "derived": [],
   "benched_at": "2026-10-08T03:19:04.527Z"
