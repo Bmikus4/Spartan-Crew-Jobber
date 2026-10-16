@@ -59,7 +59,8 @@ around on 2026-09-28: the retraction lived in two files and lost to a one-line s
   wearing "Order Created" and "Order Needs Created" together says the work is both done and
   outstanding. Conversation state — Needs Follow Up — is a different axis and must not join
   that set. The labels are DERIVED from the TV's cards every minute (`/api/bot/labels`, applied
-  by the n8n workflow from `scripts/install-label-workflow.mjs`); nothing sets one by hand.
+  inside the n8n minute sync, `scripts/install-sync-workflow.mjs` + `scripts/_labelNodes.mjs`);
+  nothing sets one by hand.
 - **A draft is not a message.** An unsent Gmail draft of ours must never count as Spartan
   having replied; counting one inverts who is waiting for whom, and that fact cannot be
   rebuilt afterwards.

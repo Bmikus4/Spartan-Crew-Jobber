@@ -3507,5 +3507,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0191",
+  "ts": "2026-10-16T04:37:57+00:00",
+  "kind": "measurement",
+  "headline": "labels LIVE (Ben go 10-16): renamed + 20/29 first run; batched writes, refused threads resent; one n8n execution per minute",
+  "subject": "Gmail labels are live inside the minute sync, five threads at a time, and a thread Gmail refuses is resent the next minute",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 200,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]

@@ -4,6 +4,7 @@
 // Offline.  npx tsx test/threadLabels.ts
 import { labelsFor, changes, ORDER_LABELS, FOLLOW_UP } from "../app/lib/mail/threadLabels";
 import type { FeedCard, FeedItem } from "../app/lib/feed/project";
+import { readFileSync } from "node:fs";
 let fails = 0;
 const ok = (c: boolean, m: string, d?: unknown) => { console.log(`  ${c ? "PASS" : "FAIL"}  ${m}${c ? "" : "  " + JSON.stringify(d)}`); if (!c) fails++; };
 
@@ -24,6 +25,12 @@ const steady = changes(now, new Map([["a", { order: "Order Created", follow_up: 
 ok(steady.length === 0, "nothing changed: nothing is sent to Gmail");
 const gone = changes([labelsFor(card("e", [item("needs-created")], { follow_up: true }))], new Map([["a", { order: "Order Created", follow_up: false }], ["e", { order: "Order Needs Created", follow_up: true }]]));
 ok(gone.length === 1 && gone[0].thread_id === "a" && gone[0].add.length === 0 && gone[0].remove.length === all.length, "a thread that left the TV loses every label of ours", gone);
+// The route forgets a thread Gmail refused, so the next minute sends it again (10-16: 9 of 29
+// refused on the first live run). Pinned in the source: the route talks to the database.
+const route = readFileSync("app/api/bot/labels/route.ts", "utf8");
+ok(/body\.mode === "failed"/.test(route) && /DELETE FROM thread_labels WHERE thread_id = ANY/.test(route), "a refused thread is forgotten and resent next minute");
+const n8n = readFileSync("scripts/_labelNodes.mjs", "utf8");
+ok(/batchSize: 5/.test(n8n) && /"Label thread": \{ main: \[\[to\("Refused threads"\)\]\] \}/.test(n8n), "n8n writes 5 threads at a time and reports the refused ones");
 ok(new Set(ORDER_LABELS).size === 4 && !ORDER_LABELS.includes(FOLLOW_UP as any), "four order labels, and follow-up is not one of them (CLAUDE.md)");
 
 console.log(fails ? `\n${fails} FAILED` : "\nall passed");

@@ -14,19 +14,27 @@ export const dynamic = "force-dynamic";
 const PER_RUN = 150;
 
 /**
- * Which labels each bookings thread should wear, for the n8n workflow "Spartan Labels"
- * (scripts/install-label-workflow.mjs), from the same cards the TV draws. Only threads whose
+ * Which labels each bookings thread should wear, for the label steps of the n8n workflow
+ * "Spartan Sync (every minute)" (scripts/_labelNodes.mjs), from the same cards the TV draws. Only threads whose
  * labels changed since they were last handed out are returned, and every hour all of them, so
  * a run n8n dropped is put right within the hour. mode "dry" hands out the same answer and
  * remembers nothing. Under /api/bot, so the machine secret is its only gate.
  */
 export async function POST(request: Request): Promise<Response> {
   if (!authorizeMachineCall(request).ok) return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
-  const body = (await request.json().catch(() => ({}))) as { mode?: string; full?: boolean };
+  const body = (await request.json().catch(() => ({}))) as { mode?: string; full?: boolean; failed?: unknown };
   const live = body.mode === "live";
   const now = Date.now();
   const sql = neon((process.env.DATABASE_URL || process.env.POSTGRES_URL || "").trim());
   await sql`CREATE TABLE IF NOT EXISTS thread_labels (thread_id TEXT PRIMARY KEY, order_label TEXT, follow_up BOOLEAN NOT NULL DEFAULT false, applied_at TIMESTAMPTZ NOT NULL DEFAULT now())`;
+
+  // Threads Gmail refused (n8n's "Refused threads"): forgotten, so the next minute sends them
+  // again. Remembering them as applied left them unlabelled until the hourly full resend.
+  if (body.mode === "failed") {
+    const failed = Array.isArray(body.failed) ? body.failed.filter((x): x is string => typeof x === "string").slice(0, 500) : [];
+    if (failed.length) await sql`DELETE FROM thread_labels WHERE thread_id = ANY(${failed})`;
+    return NextResponse.json({ ok: true, forgotten: failed.length });
+  }
 
   // The TV's projection without its side work: no verifier, no jobs board, no marks written.
   const feed = await serveFeed({ ...liveFeedDeps(), verify: undefined, verifyStatus: undefined, jobs: undefined, remember: undefined }, now);
