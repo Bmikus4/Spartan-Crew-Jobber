@@ -251,7 +251,8 @@ function shiftGroups(news: Request[], clientOrders: any[], live: LiveProfession[
   return out;
 }
 
-export async function plan(msg: Message, i: Interpretation, world: World, threadOrderId: number | null = null, opts: { leadDays?: number } = {}): Promise<Decision> {
+/** opts.leadDays: Settings' lead days; null = the rule is switched off; absent = CREATE_LEAD_DAYS. */
+export async function plan(msg: Message, i: Interpretation, world: World, threadOrderId: number | null = null, opts: { leadDays?: number | null } = {}): Promise<Decision> {
   const problems = [...i.problems, ...i.requests.flatMap((r) => r.problems)];
   // A quote, a question or an availability check whose shift is not bookable as written is
   // answered by a reply: "If you can check availability for Sunday" (Vivid), "send me a quote
@@ -503,8 +504,8 @@ export async function plan(msg: Message, i: Interpretation, world: World, thread
     // updates still should be enabled". A new order nearer than that is staff's to create;
     // shifts added to an order that already exists are updates and go on as before.
     const earliest = groups.map((g) => g.date).sort()[0];
-    const lead = opts.leadDays ?? CREATE_LEAD_DAYS;
-    if (earliest && daysBetween(sentDay, earliest) <= lead) return handoff(`a new booking from ${earliest}, within ${lead} days of the email, is for staff to create`);
+    const lead = opts.leadDays === null ? null : opts.leadDays ?? CREATE_LEAD_DAYS;
+    if (lead !== null && earliest && daysBetween(sentDay, earliest) <= lead) return handoff(`a new booking from ${earliest}, within ${lead} days of the email, is for staff to create`);
     const extra: string[] = [];
     for (const g of groups) {
       const venue = g.venue ?? news.find((x) => x.venue)?.venue;

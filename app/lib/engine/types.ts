@@ -503,6 +503,12 @@ export interface Settings {
    */
   create_lead_days?: number;
   /**
+   * Whether that lead rule applies at all (Ben, 2026-10-16: "keep the two week rule on, but allow
+   * it to be disabled in settings"). Off: the bot creates every new booking, however soon.
+   * Optional so a row written before it existed reads as on.
+   */
+  create_lead_enabled?: boolean;
+  /**
    * Tool 1 — the verbatim Spartan reply generator. OFF by default: the engine
    * still classifies + does order work, but drafts NO reply until this is on.
    */
@@ -563,6 +569,7 @@ export const DEFAULT_SETTINGS: Settings = {
   followup_drafting: false,
   test_data_autoclear: false,
   create_lead_days: 14,
+  create_lead_enabled: true,
   jobs_board_enabled: false,
   analytics_tab_enabled: false,
   reply_delivery: "draft",

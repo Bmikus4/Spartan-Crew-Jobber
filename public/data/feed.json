@@ -3521,5 +3521,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0192",
+  "ts": "2026-10-16T11:24:29+00:00",
+  "kind": "measurement",
+  "headline": "lead rule On/Off in Settings (stays on); TEST worker 2866 created",
+  "subject": "The two-week rule for new orders can be switched off in Settings, and the bot has a TEST worker to practise on",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 200,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]

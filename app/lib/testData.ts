@@ -24,6 +24,14 @@ import type { NeonQueryFunction } from "@neondatabase/serverless";
 import { readRows } from "./v2/read";
 
 export const AUTOMATION_USER = 2257;
+/**
+ * The bot's own TEST worker (Ben, 2026-10-16: "create a test worker, mark it as a test worker"):
+ * "TEST WORKER - bot tests, never book", no email and no phone, so OnSinch can notify no one.
+ * Only ever put on positions of TEST - Eventz (515). It is kept, never cleared: it is the bench
+ * the worker-drop tests stand on. Worker 2715 "ZZ DELETE ME ProbeWorker" is an older probe's
+ * leftover; /workers has no DELETE.
+ */
+export const TEST_WORKER = 2866;
 // Postgres ARE and JS read these the same way; [.] instead of \. so neither escaping layer eats it.
 export const TEST_SENDER = "^benjamintmikus@gmail[.]com$|@samuraisolutions[.]co[.]uk$|@test-eventz[.]co[.]uk$|@([a-z0-9-]+[.])*(example[.](com|org|net)|[a-z0-9-]+[.](example|test|invalid|localhost))$";
 export const TEST_ID = "^(e2e-|test-|bench-|vercel-bench-|harness-|spartan-pipeline-test|fixture-|canary-|probe-|verify-)";

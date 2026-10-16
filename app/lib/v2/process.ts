@@ -240,8 +240,8 @@ export type DecideDeps = {
   prior?: () => Promise<Request[]>;
   /** Null: decide and record only (shadow). */
   run: ((source: string, op: Op) => Promise<RunResult>) | null;
-  /** Settings' create_lead_days; absent, the planner's own default. */
-  leadDays?: () => Promise<number | undefined>;
+  /** Settings' create_lead_days; null when the rule is switched off; absent, the planner's own default. */
+  leadDays?: () => Promise<number | null | undefined>;
   /** The thread is now about this order: kept in job_links and swept every minute (links.ts). */
   link?: (order_id: number) => Promise<void>;
   record: (r: Recorded) => Promise<void>;
@@ -346,7 +346,8 @@ export async function processMessage(message_id: string, opts: { execute: boolea
     prior: async () => ((await sql`SELECT interpretation->'grounded'->'requests' AS rs FROM v2_decisions
       WHERE thread_id = ${m.thread_id} AND sent_at < ${m.date_iso} AND interpretation IS NOT NULL ORDER BY sent_at`) as any[]).flatMap((r) => (Array.isArray(r.rs) ? r.rs : [])),
     run: opts.execute ? runWhenFree : null,
-    leadDays: () => getSettings().then((s) => s.create_lead_days),
+    // A settings read that fails keeps the rule on: undefined is the planner's default, never null.
+    leadDays: () => getSettings().then((s) => (s.create_lead_enabled === false ? null : s.create_lead_days)),
     link: (order_id) => recordLink(sql, { thread_id: m.thread_id, order_id, source: "bot write" }),
     record: async (d) => {
       await sql`

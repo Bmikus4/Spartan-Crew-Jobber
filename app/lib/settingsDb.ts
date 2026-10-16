@@ -39,6 +39,7 @@ export function coerceSettings(body: unknown): Partial<Settings> {
   if (typeof b.replies_enabled === "boolean") next.replies_enabled = b.replies_enabled;
   if (typeof b.followup_drafting === "boolean") next.followup_drafting = b.followup_drafting;
   if (typeof b.test_data_autoclear === "boolean") next.test_data_autoclear = b.test_data_autoclear;
+  if (typeof b.create_lead_enabled === "boolean") next.create_lead_enabled = b.create_lead_enabled;
   if (typeof b.create_lead_days === "number" && Number.isInteger(b.create_lead_days) && b.create_lead_days >= 0 && b.create_lead_days <= 365)
     next.create_lead_days = b.create_lead_days;
   if (typeof b.jobs_board_enabled === "boolean") next.jobs_board_enabled = b.jobs_board_enabled;

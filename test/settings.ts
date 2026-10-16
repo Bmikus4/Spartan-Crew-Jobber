@@ -61,6 +61,7 @@ console.log("\n[3] junk is rejected without disturbing what is stored");
   ok(merge(stored, { default_rate_card: -1 }).default_rate_card === 315, "a negative card id is refused");
   ok(merge(stored, { default_rate_card: 0 }).default_rate_card === 0, "0 IS a real value - it means hold the thread instead");
   ok(merge(stored, { create_lead_days: 21 }).create_lead_days === 21, "the new-order lead days are saved");
+  ok(merge(stored, { create_lead_enabled: false }).create_lead_enabled === false && merge(stored, { create_lead_enabled: "no" }).create_lead_enabled === undefined, "the lead rule's switch saves a true or false, nothing else");
   ok(merge(stored, { create_lead_days: 2.5 }).create_lead_days === undefined && merge(stored, { create_lead_days: -1 }).create_lead_days === undefined && merge(stored, { create_lead_days: "14" }).create_lead_days === undefined, "lead days that are not a whole number of days from 0 are refused");
   ok(saved.replies_enabled === true, "non-boolean replies_enabled ignored");
   ok(saved.reply_delivery === "send", "bad reply_delivery ignored", saved.reply_delivery);

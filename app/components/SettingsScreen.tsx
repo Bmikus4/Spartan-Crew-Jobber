@@ -16,7 +16,7 @@ import InstallButton from "./InstallButton";
 
 type ReplyDelivery = "draft" | "send";
 type ReplyScope = "all" | "enquiries";
-interface Settings { replies_enabled: boolean; followup_drafting?: boolean; test_data_autoclear?: boolean; create_lead_days?: number; jobs_board_enabled?: boolean; analytics_tab_enabled?: boolean; reply_delivery: ReplyDelivery; reply_scope: ReplyScope; default_rate_card: number }
+interface Settings { replies_enabled: boolean; followup_drafting?: boolean; test_data_autoclear?: boolean; create_lead_days?: number; create_lead_enabled?: boolean; jobs_board_enabled?: boolean; analytics_tab_enabled?: boolean; reply_delivery: ReplyDelivery; reply_scope: ReplyScope; default_rate_card: number }
 
 const SETTINGS_FALLBACK: Settings = { replies_enabled: false, followup_drafting: false, reply_delivery: "draft", reply_scope: "all", default_rate_card: 315 };
 
@@ -233,7 +233,8 @@ export default function SettingsScreen({ signedInAs }: { signedInAs?: string }) 
           {s.followup_drafting && <Warn>Saved. Drafts are not written yet: the TV raises the follow-up, and the drafting itself is still to be built.</Warn>}
         </Panel>
 
-        <LeadDaysPanel days={s.create_lead_days ?? 14} onSave={(v) => save({ ...s, create_lead_days: v })} />
+        <LeadDaysPanel days={s.create_lead_days ?? 14} enabled={s.create_lead_enabled !== false}
+          onSave={(v) => save({ ...s, create_lead_days: v })} onEnabled={(v) => save({ ...s, create_lead_enabled: v })} />
 
         <TestDataPanel autoclear={!!s.test_data_autoclear} onAutoclear={(v) => save({ ...s, test_data_autoclear: v })} />
 
@@ -309,7 +310,7 @@ const BY: Record<string, string> = { sweep: "the 15-minute sweep", button: "this
  * Clearing is two steps on purpose: the list of what would go is shown first, and only the second
  * press removes it. The rules are lib/testData.ts; this screen only asks for them to run.
  */
-function LeadDaysPanel({ days, onSave }: { days: number; onSave: (v: number) => void }) {
+function LeadDaysPanel({ days, enabled, onSave, onEnabled }: { days: number; enabled: boolean; onSave: (v: number) => void; onEnabled: (v: boolean) => void }) {
   const [draft, setDraft] = useState(String(days));
   useEffect(() => { setDraft(String(days)); }, [days]);
   const n = Number(draft);
@@ -317,15 +318,17 @@ function LeadDaysPanel({ days, onSave }: { days: number; onSave: (v: number) => 
   return (
     <Panel
       title="New orders"
-      blurb={<>The system creates a new order in Orders To Confirm only when the first day is <b style={{ color: SUB }}>more than this many days</b> after the email. Nearer bookings are for the office to create. Changes to orders that already exist are always made.</>}
+      blurb={<>When this is on, the system creates a new order in Orders To Confirm only when the first day is <b style={{ color: SUB }}>more than this many days</b> after the email, and nearer bookings are for the office to create. When it is off, the system creates every new booking. Changes to orders that already exist are always made.</>}
     >
-      <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+      <Segmented label="Only create orders this far ahead" value={enabled} onChange={onEnabled}
+        options={[{ id: true, label: "On" }, { id: false, label: "Off" }]} />
+      {enabled && <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginTop: 12 }}>
         <input aria-label="Days ahead" inputMode="numeric" value={draft} onChange={(e) => setDraft(e.target.value.replace(/[^0-9]/g, ""))}
           style={{ width: 72, padding: "9px 10px", borderRadius: "var(--radius)", border: `1px solid ${BORDER}`, background: "var(--surface)", color: INK, fontSize: 16, fontFamily: "inherit", fontVariantNumeric: "tabular-nums" }} />
         <span style={{ fontSize: 13, color: SUB }}>days</span>
         <button type="button" disabled={!valid || n === days} onClick={() => onSave(n)}
           style={{ padding: "9px 16px", borderRadius: "var(--radius)", border: "1px solid var(--accent-border)", background: "var(--accent-subtle)", color: INK, fontSize: 13.5, fontWeight: 600, fontFamily: "inherit", cursor: !valid || n === days ? "default" : "pointer", opacity: !valid || n === days ? 0.5 : 1 }}>Save</button>
-      </div>
+      </div>}
     </Panel>
   );
 }

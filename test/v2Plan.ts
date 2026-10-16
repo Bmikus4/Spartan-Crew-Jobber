@@ -249,6 +249,11 @@ ok(JSON.stringify(positionsFor(25)) === JSON.stringify([{ size: 3, profession_id
     // The days are a setting (Ben: "make it a setting in the settings screen").
     const d7 = await plan(msg("crew@eventconcept.com", "4 crew at Business Design Centre on 14/10 18:45-20:45", "", "2026-10-06T09:00:00Z"), booking, world, null, { leadDays: 7 });
     ok(d7.kind === "write" && d7.ops[0].op.kind === "create_order", "with the setting at 7, a new order 8 days out is created", JSON.stringify(d7).slice(0, 160));
+    // Ben, 10-16: "keep the two week rule on, but allow it to be disabled in settings".
+    const off = await plan(msg("crew@eventconcept.com", "4 crew at Business Design Centre on 14/10 18:45-20:45", "", "2026-10-12T09:00:00Z"), booking, world, null, { leadDays: null });
+    ok(off.kind === "write" && off.ops[0].op.kind === "create_order", "with the rule switched off, a new order 2 days out is created", JSON.stringify(off).slice(0, 160));
+    const dflt = await plan(msg("crew@eventconcept.com", "4 crew at Business Design Centre on 14/10 18:45-20:45", "", "2026-10-12T09:00:00Z"), booking, world, null, {});
+    ok(dflt.kind === "handoff", "with no setting given, the rule is on");
     // Not linked: a fresh order, as before.
     const fresh = await plan(msg("crew@eventconcept.com", "4 crew at Business Design Centre on 14/10 18:45-20:45", "", EARLY), booking, world, null);
     ok(fresh.kind === "write" && fresh.ops[0].op.kind === "create_order", "no link: create_order", JSON.stringify(fresh).slice(0, 160));
