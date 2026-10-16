@@ -292,7 +292,9 @@ console.log("\n[15] the rebuild's decisions reach ops on the TV and nowhere else
   const linked = v2Sources([row("L", { subject: "Crew Thursday", link: { order_id: 16655, r_number: "11599", job_id: 16718 } })], NOW)[0];
   ok(linked.r_number === "R11599" && linked.j_number === "J16718" && linked.order_id === 16655, "a card shows the R and J number of the order its thread is linked to", JSON.stringify([linked.r_number, linked.j_number, linked.order_id]));
   const own = v2Sources([row("N", { kind: "write", decision: { kind: "write", ops: [create], why: [] }, executed: [{ op_key: "k", status: "verified", reasons: [], detail: { order_id: 16600, number: 11520 } }], link: { order_id: 16000, r_number: "11000", job_id: 1 } })], NOW)[0];
-  ok(own.r_number === "R11520" && own.order_id === 16600, "the order the decision itself wrote wins over an older link");
+  ok(own.r_number === "R11000" && own.order_id === 16000, "the thread's link wins over the order the decision wrote: the sweep moves it when that order is rebuilt or deleted (R11615 -> R11617)");
+  const unlinked = v2Sources([row("U", { kind: "write", decision: { kind: "write", ops: [create], why: [] }, executed: [{ op_key: "k", status: "verified", reasons: [], detail: { order_id: 16600, number: 11520 } }] })], NOW)[0];
+  ok(unlinked.r_number === "R11520" && unlinked.order_id === 16600, "with no link yet, the order the decision wrote");
   const fresh = project([], new Map(), [], null, NOW, new Map(), v2Sources([quote, change], NOW), NOW - 2 * H);
   const cut = project([], new Map(), [], null, NOW, new Map(), v2Sources([quote, change], NOW), NOW - 30 * 60_000);
   ok(fresh.cards.length === 2 && cut.cards.length === 0, "the TV starts from a given moment: older emails are not shown (Ben, 2026-10-10)");

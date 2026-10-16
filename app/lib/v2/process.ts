@@ -104,8 +104,8 @@ export async function readContext(world: World, companyId: number | null, sentIs
 /**
  * WRITES THAT STOPPED BEFORE ANYTHING WAS SENT ARE TRIED AGAIN, up to twice, within 6 hours: a
  * browser timeout before the submit, the bot busy, an unreadable audit log (Lux Technical
- * 10-12 timed out waiting for the builder and nothing ever tried again). Only "blocked" is
- * retried: nothing left the browser. "unknown" may have landed and is never re-sent.
+ * 10-12 timed out waiting for the builder and nothing ever tried again). Only "blocked" and
+ * "busy" are retried: nothing left the browser. "unknown" may have landed and is never re-sent.
  */
 const TRANSIENT = /bot error before submit|another operation holds the bot|audit log unreadable|Timeout|page raised|order read 5\d\d|net::|ECONNRESET|fetch failed/i;
 export async function retryStopped(): Promise<{ retried: number; results: string[] }> {
@@ -120,7 +120,9 @@ export async function retryStopped(): Promise<{ retried: number; results: string
     const ex = d.executed as RunResult[];
     const last = ex[ex.length - 1];
     const tries = Number(d.decision?.retries ?? 0);
-    if (!last || last.status !== "blocked" || !TRANSIENT.test(last.reasons.join(" ")) || tries >= 2 || !v2Writes()) continue;
+    // "busy" is answered before the ledger or the browser (runWhenFree waited 2 minutes for it).
+    const stopped = last && (last.status === "busy" || (last.status === "blocked" && TRANSIENT.test(last.reasons.join(" "))));
+    if (!stopped || tries >= 2 || !v2Writes()) continue;
     // Never a day already gone.
     if ((d.decision.ops as { op: any }[]).some(({ op }) => [op.date, ...(op.shifts ?? []).map((s: any) => s.date)].some((x) => typeof x === "string" && x < today))) continue;
     const done = ex.slice(0, -1);

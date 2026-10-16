@@ -114,11 +114,12 @@ export function v2Source(row: V2Row, now: number): FeedSource {
     thread_id: row.thread_id,
     days,
     item,
-    // THE THREAD'S LINK IS THE ORDER IT IS ABOUT. Until 10-15 a card took its R number only
-    // from the decision's own ops or the subject, and never a J number: 15 of 19 open cards
-    // showed neither, though the minute sweep held a link for threads whose order staff made.
-    order_id: order_id ?? row.link?.order_id ?? null,
-    r_number: made?.number != null && String(made.number) ? `R${String(made.number).replace(/^R/i, "")}` : r_numbers.length === 1 ? `R${r_numbers[0]}` : row.link?.r_number ? `R${String(row.link.r_number).replace(/^R/i, "")}` : null,
+    // THE THREAD'S LINK IS THE ORDER IT IS ABOUT, kept current by the minute sweep. Until 10-15
+    // a card took its R number only from the decision's own ops or the subject, and never a J
+    // number: 15 of 19 open cards showed neither. And the order a decision made can be gone:
+    // R11615, a duplicate deleted once staff keyed R11617, still headed its card.
+    order_id: row.link?.order_id ?? order_id ?? null,
+    r_number: row.link?.r_number ? `R${String(row.link.r_number).replace(/^R/i, "")}` : made?.number != null && String(made.number) ? `R${String(made.number).replace(/^R/i, "")}` : r_numbers.length === 1 ? `R${r_numbers[0]}` : null,
     j_number: row.link?.job_id ? `J${row.link.job_id}` : null,
     company_id: row.company_id,
     company: row.company,

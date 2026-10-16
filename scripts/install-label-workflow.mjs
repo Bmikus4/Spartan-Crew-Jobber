@@ -6,8 +6,8 @@
 // list again -> modify each changed thread -> strip the old systems' labels from the threads
 // still wearing them (a search per label, up to 100 threads a minute).
 //
-//   node scripts/install-label-workflow.mjs --dry      a webhook twin that changes NOTHING in
-//                                                      Gmail and answers with what it would do
+//   node scripts/install-label-workflow.mjs --dry      runs a webhook twin ONCE that changes NOTHING in
+//                                                      Gmail, prints what it would do, switches it off
 //   node scripts/install-label-workflow.mjs            install the minute workflow, INACTIVE
 //   node scripts/install-label-workflow.mjs --activate the same, switched on (after Ben's yes)
 //   node scripts/install-label-workflow.mjs --print
@@ -67,7 +67,8 @@ const plan = $('Plan').first().json;
 const found = $('Find stripped threads').all().map((x) => ({ label: x.json.label, threads: x.json.resultSizeEstimate ?? (x.json.threads || []).length }));
 return [{ json: { dry: true, renames: plan.renames, creates: plan.creates.map((c) => c.name), threads: (plan.app.threads || []).length,
   by_label: (plan.app.threads || []).reduce((a, t) => { const k = t.add.join(' + ') || 'none'; a[k] = (a[k] || 0) + 1; return a; }, {}),
-  sample: (plan.app.threads || []).slice(0, 12), strip: found } }];`;
+  sample: (plan.app.threads || []).slice(0, 12), strip: found,
+  gmail_labels: ($('List labels').first().json.labels || []).filter((l) => l.type === 'user').map((l) => l.name).sort() } }];`;
 
 const ask = { id: "ask", name: "Ask the app", type: "n8n-nodes-base.httpRequest", typeVersion: 4.2, position: [220, 0],
   parameters: { method: "POST", url: `${APP}/api/bot/labels`, sendHeaders: true, headerParameters: { parameters: [{ name: "x-webhook-secret", value: SECRET }] },
@@ -146,8 +147,19 @@ const res = have
 const wf = await res.json();
 if (!res.ok) { console.error("n8n refused:", res.status, JSON.stringify(wf).slice(0, 400)); process.exit(1); }
 console.log(`${have ? "updated" : "created"} "${WF_NAME}" ${wf.id}`);
-if (DRY || ACTIVATE) {
+if (ACTIVATE && !DRY) {
   const a = await fetch(`${BASE}/api/v1/workflows/${wf.id}/activate`, { method: "POST", headers: H });
   console.log("activate", a.status);
 }
-if (DRY) console.log(`dry run: POST ${BASE}/webhook/spartan-labels-dry`);
+// The dry run's webhook has no secret and answers with thread ids, so it is open only for the
+// one call that runs it, then switched off again.
+if (DRY) {
+  await fetch(`${BASE}/api/v1/workflows/${wf.id}/activate`, { method: "POST", headers: H });
+  try {
+    const r = await fetch(`${BASE}/webhook/spartan-labels-dry`, { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
+    console.log(JSON.stringify(await r.json(), null, 2));
+  } finally {
+    const off = await fetch(`${BASE}/api/v1/workflows/${wf.id}/deactivate`, { method: "POST", headers: H });
+    console.log("dry-run webhook switched off:", off.status);
+  }
+}

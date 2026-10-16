@@ -15,11 +15,12 @@ import { createHash } from "node:crypto";
 import { ground } from "../app/lib/v2/interpret/interpret";
 import { latestText } from "../app/lib/v2/interpret/ground";
 import { plan } from "../app/lib/v2/interpret/plan";
-import { extractWithMeta, PROMPT_ID } from "../app/lib/v2/interpret/extract";
+import { extractWithMeta, interpretModel, PROMPT_ID } from "../app/lib/v2/interpret/extract";
 import { contextText } from "../app/lib/v2/interpret/context";
 import { onsinchWorld, readContext } from "../app/lib/v2/process";
 const arg = (k: string, d: string) => { const i = process.argv.indexOf(k); return i > 0 ? process.argv[i + 1] : d; };
 const FROM = arg("--from", "2026-10-09T10:20:00Z");
+const LIMIT = Number(arg("--limit", "0"));
 const PAID = process.argv.includes("--paid");
 const MAX_USD = Number(arg("--max-usd", "5"));
 const acts = JSON.parse(readFileSync(arg("--acts", ".tmp-data/ops-truth-acts.json"), "utf8")) as any[];
@@ -30,6 +31,8 @@ const orders = async (c: number) => { if (!cache.has(c)) cache.set(c, await live
 const worldAt = (sent: string) => ({ ...live, companyOrders: async (c: number) => (await orders(c)).filter((o: any) => Date.parse(o.created) <= Date.parse(sent)) });
 const rows = (await sql`SELECT d.message_id, d.decision, d.interpretation->'extraction' AS x, d.from_address, d.company, d.company_id, m.thread_id, m.subject, m.body, m.date_iso
   FROM v2_decisions d JOIN thread_messages m USING (message_id) WHERE coalesce(d.code_version,'') <> 'local' AND d.created_at > ${FROM} AND d.interpretation IS NOT NULL ORDER BY m.date_iso`) as any[];
+// --limit N: the newest N, so a paid comparison of two models costs what it says.
+if (LIMIT > 0) rows.splice(0, Math.max(0, rows.length - LIMIT));
 
 const CACHE = ".tmp-data/extract-cache.jsonl";
 const readings = new Map<string, any>();
@@ -39,7 +42,9 @@ let spent = 0, calls = 0;
 async function readOf(r: any, text: string, read: any) {
   if (!PAID) return { x: r.x, read: undefined };
   const ctx = contextText(read);
-  const key = `${PROMPT_ID}|${r.message_id}|${createHash("sha256").update(`${r.subject}\n${text}\n${ctx}`).digest("hex").slice(0, 16)}`;
+  // The model is part of a reading: keyed without it, a run with another model is served the
+  // old model's cached readings and scores them as the new one's.
+  const key = `${PROMPT_ID}|${interpretModel()}|${r.message_id}|${createHash("sha256").update(`${r.subject}\n${text}\n${ctx}`).digest("hex").slice(0, 16)}`;
   const hit = readings.get(key);
   if (hit) return { x: hit.x, read };
   if (spent >= MAX_USD) throw new Error(`budget for this run (${MAX_USD} USD) reached`);

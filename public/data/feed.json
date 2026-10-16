@@ -3465,5 +3465,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0188",
+  "ts": "2026-10-16T03:24:48+00:00",
+  "kind": "measurement",
+  "headline": "browser proof 6/6 on TEST; adoption baseline 1/12; link outranks made order; busy retried",
+  "subject": "The browser bot's writes are proven from OnSinch's own timeline, and how staff treat the bot's orders is measured",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 199,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]
