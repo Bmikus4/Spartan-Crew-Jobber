@@ -3535,5 +3535,69 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0193",
+  "ts": "2026-10-16T13:24:47+00:00",
+  "kind": "measurement",
+  "headline": "TV cards without R and J over 9-16 Oct: 773 card-hours today, 45 with one state per thread (1,012 deliveries replayed, $0)",
+  "subject": "Replaying a week of email through the live code finds why TV cards lack R and J",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 202,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  },
+  "measured": {
+   "replay": {
+    "dataset": "every n8n delivery 2026-10-09 10:20 to 2026-10-16 12:23 UTC (1,012), its messages and stored readings, OnSinch read-only snapshot (2,987 orders, staff timeline 3,807 rows)",
+    "instrument": "harness/sim/run.mts (production code, PGlite, fake OnSinch, simulated bot, no network)",
+    "deliveries": 1012,
+    "intake_failures": 0,
+    "bot_operations_verified": 24,
+    "bot_operations": 24,
+    "production_open_cards_reproduced": 8,
+    "production_open_cards": 11,
+    "differences_traced": "8 of 8: code changed since production decided (2), one-off recheck pass in production (2), replay's own bot orders (2), email after production's TV snapshot (1), order read in today's shape (1)"
+   },
+   "tv_without_r_and_j": {
+    "dataset": "170 hourly frames of the replay's TV, 2026-10-09 11:00 to 2026-10-16 12:00 UTC",
+    "instrument": "harness/sim/onepass.mts --series (app/lib/v2/threadState.ts, each frame judged with only what existed by then)",
+    "card_hours_current": 773,
+    "card_hours_one_state": 45,
+    "max_at_once_current": 12,
+    "max_at_once_one_state": 2,
+    "hours_with_any_current": 118,
+    "hours_with_any_one_state": 32,
+    "end_open_current": 13,
+    "end_open_one_state": 1
+   },
+   "finder_blind": {
+    "dataset": "production job_links live rows whose order is in the snapshot (19 of 20)",
+    "instrument": "harness/sim/onepass.mts precision (link hidden)",
+    "agree": 16,
+    "disagree": 1,
+    "disagree_note": "Creative Technology Cytiva thread: production's link R11500 is the wrong order (bot wrote 2026-10-14 12:24); the finder's R11555 holds the job",
+    "not_found": 2,
+    "checked": 19
+   },
+   "dead_order_references": {
+    "dataset": "orders named by job_links, v2_decisions and conversation_state",
+    "instrument": "harness/sim/supplement.mts (read by id from OnSinch)",
+    "gone_from_onsinch": 128,
+    "named": 419,
+    "in_paused_engine_state": 114
+   },
+   "vercel_browser_bot": {
+    "dataset": "TEST company 515, run v100-mvaxdemb",
+    "instrument": "scripts/vercel-bot-100.mts --jobs 25 (no model)",
+    "creates_verified": 25,
+    "updates_verified": 25,
+    "operations_verified": 63,
+    "operations_sent": 63,
+    "test_orders_left": 0
+   }
+  }
  }
 ]

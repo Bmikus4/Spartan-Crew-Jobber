@@ -306,7 +306,8 @@ const _seenInProcess = new Set<string>();
 // --- sending ------------------------------------------------------------------------------
 
 /**
- * The n8n workflow "Spartan Alarms" (4QTUkIbqSDrkTC6h): webhook, Gmail on the "Test Email"
+ * The n8n workflow "Spartan Alarms" (mQkxdu2rLkTovYwn since 10-16, scripts/alarm-recipients.mjs;
+ * 4QTUkIbqSDrkTC6h before): webhook, Gmail on the "Test Email"
  * credential to ben@ and samuraisolutionsofficial@, then a JSON reply. Spartan's own, so House of
  * Hud's "Send Support Tickets" (switched off 09-28..09-30, reason unknown) can be on or off without
  * silencing Spartan, and never on "Gmail account 14", the credential whose expiry this channel

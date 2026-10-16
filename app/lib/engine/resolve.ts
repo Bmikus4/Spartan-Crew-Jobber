@@ -43,13 +43,13 @@ export interface CompanyRec {
  * these would attach every gmail.com sender to whichever client happened to have
  * a personal address on file.
  */
-const CONSUMER_DOMAINS = new Set([
+export const CONSUMER_DOMAINS = new Set([
   "gmail.com", "googlemail.com", "hotmail.com", "hotmail.co.uk", "outlook.com",
   "yahoo.com", "yahoo.co.uk", "icloud.com", "me.com", "live.co.uk", "live.com",
   "aol.com", "btinternet.com", "msn.com", "sky.com", "protonmail.com",
 ]);
 
-const domainOfEmail = (e?: string): string => {
+export const domainOfEmail = (e?: string): string => {
   const d = String(e || "").toLowerCase().trim().split("@")[1] || "";
   return d.replace(/>$/, "").trim();
 };
