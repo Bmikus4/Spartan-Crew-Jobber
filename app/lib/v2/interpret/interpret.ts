@@ -226,7 +226,9 @@ export function ground(x: Extraction, newest: string, sentIso: string, ctx: Grou
     }
     const need = (cond: boolean, what: string) => { if (!cond) own.push(`${tag}: no ${what} the client wrote`); };
     switch (action) {
-      case "new_shift": need(!!date, "day"); need(!!start, "start time"); need(!!end, "end time or duration"); need(!!crew, "crew count"); break;
+      // A new shift with no times is booked at assumed ones (Ben, 10-15; assume.ts), as the old
+      // engine booked 08:00 when no start was given. A day and a headcount cannot be assumed.
+      case "new_shift": need(!!date, "day"); need(!!crew, "crew count"); break;
       // A move to another day is a change by itself: "move Tuesday's shift to Wednesday, same times".
       case "change_times": need(!!(date || target?.date), "day"); need(!!(start || end || dur || (date && target?.date && date !== target.date)), "new time or length"); break;
       case "change_crew": need(!!(date || target?.date), "day"); need(!!(crew || add || less), "crew count"); break; // a total AND an increase must agree with the shift: plan.ts checks

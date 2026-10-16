@@ -33,6 +33,8 @@ export interface V2Row {
   company: string | null;
   from_address: string;
   subject: string | null;
+  /** The thread's link (job_links): the order it is about, whoever made it. */
+  link?: { order_id: number; r_number: string | null; job_id: number | null } | null;
 }
 
 const REF = /\b[A-Z]{2,5}-?\d{3,6}\b/g;
@@ -112,9 +114,12 @@ export function v2Source(row: V2Row, now: number): FeedSource {
     thread_id: row.thread_id,
     days,
     item,
-    order_id,
-    r_number: made?.number != null && String(made.number) ? `R${String(made.number).replace(/^R/i, "")}` : r_numbers.length === 1 ? `R${r_numbers[0]}` : null,
-    j_number: null,
+    // THE THREAD'S LINK IS THE ORDER IT IS ABOUT. Until 10-15 a card took its R number only
+    // from the decision's own ops or the subject, and never a J number: 15 of 19 open cards
+    // showed neither, though the minute sweep held a link for threads whose order staff made.
+    order_id: order_id ?? row.link?.order_id ?? null,
+    r_number: made?.number != null && String(made.number) ? `R${String(made.number).replace(/^R/i, "")}` : r_numbers.length === 1 ? `R${r_numbers[0]}` : row.link?.r_number ? `R${String(row.link.r_number).replace(/^R/i, "")}` : null,
+    j_number: row.link?.job_id ? `J${row.link.job_id}` : null,
     company_id: row.company_id,
     company: row.company,
     contact: null,

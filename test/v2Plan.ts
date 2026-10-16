@@ -179,10 +179,24 @@ ok(JSON.stringify(positionsFor(25)) === JSON.stringify([{ size: 3, profession_id
     ok(ops.length === 1 && ops[0].kind === "cancel_position" && ops[0].slot_id === 11, "4 to 3 (chief + 3): the chief is cancelled, the 3 crew stay as they are", JSON.stringify(d));
   }
 
+  console.log("what the client did not write is assumed and said (Ben, 10-15)");
+  {
+    const loose: World = { ...world, placesNamed: async (n) => (/^no location$/i.test(n) ? [{ id: 6922, name: "No Location" }] : /olympia/i.test(n) ? [{ id: 31, name: "Olympia" }, { id: 7001, name: "Olympia" }] : []),
+      allPlaces: async () => [{ id: 6922, name: "No Location" }, { id: 31, name: "Olympia", address: "Hammersmith Rd, London W14 8UX" }, { id: 7001, name: "Olympia" }] };
+    const d = await plan(msg("crew@eventconcept.com", "4 crew please on 20/11", "", EARLY), I([r({ date: "2026-11-20", crew: 4 })], { intent: "booking" }), loose);
+    const op = d.kind === "write" && d.ops[0].op.kind === "create_order" ? d.ops[0].op : null;
+    ok(!!op && op.shifts[0].place_id === "6922" && op.shifts[0].start === "08:00" && op.shifts[0].end === "12:00", "no venue, no times: booked at No Location, 08:00-12:00", JSON.stringify(d).slice(0, 300));
+    ok(!!op && /CHECK, assumed: .*no start time written/.test(op.specification ?? "") && /CHECK, assumed: no venue written/.test(op.specification ?? ""), "the order itself tells staff what was assumed", op?.specification);
+    const v = await plan(msg("crew@eventconcept.com", "4 crew at Olympia 20/11 09:00-17:00", "", EARLY), I([r({ date: "2026-11-20", start: "09:00", end: "17:00", crew: 4, venue: "Olympia" })], { intent: "booking" }), loose);
+    const vo = v.kind === "write" && v.ops[0].op.kind === "create_order" ? v.ops[0].op : null;
+    ok(!!vo && vo.shifts[0].place_id === "31" && v.kind === "write" && v.why.some((w) => /2 OnSinch venues are named "Olympia"; booked at Olympia \(place 31\)/.test(w)), "two places named Olympia, none booked before: the one with an address, flagged", JSON.stringify(v).slice(0, 300));
+  }
+
   console.log("already booked by hand (every engine order in To Confirm on 10-07)");
   {
     const d = await plan(msg("crew@eventconcept.com", "4 crew Friday 9th 09:00-17:00 at Business Design Centre"), I([r({ date: "2026-10-09", start: "09:00", end: "17:00", crew: 4, venue: "Business Design Centre" })], { intent: "booking" }), world);
     ok(d.kind === "none" && /R11352/.test((d as any).reason), "a shift ops already built is not booked again", JSON.stringify(d));
+    ok(d.kind === "none" && JSON.stringify(d.found) === "[16388]", "and the order found is named, so the thread is linked to it", JSON.stringify(d));
   }
   {
     // EMS 10-09: the Mandarin Oriental install had the Roundhouse derig's day and hours.

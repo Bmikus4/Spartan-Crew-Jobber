@@ -297,6 +297,10 @@ export async function decideMessage(m: MessageIn, deps: DecideDeps): Promise<Rec
   deps.trace("plan", { kind: decision.kind, ops: decision.kind === "write" ? decision.ops.map((o) => o.op.kind) : [], said: decision.kind === "write" ? decision.why : decision.kind === "handoff" ? decision.reasons : [decision.reason] }, Date.now() - t2);
   const out: Recorded = { kind: decision.kind, interpretation: { extraction: x, grounded: interpretation, meta }, decision, executed: null, client };
   await deps.record(out);
+  // AN ORDER THE PLANNER FOUND IS THE THREAD'S ORDER. "already booked: R11599" was decided and
+  // not kept, so the TV card for that thread showed no R number and the label sync had
+  // nothing to say. One order found is linked; several are left for a person.
+  if (decision.kind === "none" && decision.found?.length === 1 && deps.link) await deps.link(decision.found[0]).catch(() => {});
   if (!deps.run || decision.kind !== "write") { deps.trace("final", { kind: out.kind }); return out; }
   // RECORDED AFTER EVERY OPERATION, not once at the end: a function that times out between
   // two writes kept no record of the first, and the card said "not written" over a change

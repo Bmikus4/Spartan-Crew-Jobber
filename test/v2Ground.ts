@@ -33,6 +33,7 @@ eq(parseDuration("3hr call"), 180, "3hr call");
 eq(parseDuration("6hrs"), 360, "6hrs");
 eq(parseDuration("2-hour"), 120, "2-hour");
 eq(addMinutes("22:00", 240), "02:00", "22:00 + 4h wraps");
+eq(addMinutes("00:30", -60), "23:30", "an hour earlier than 00:30 wraps back to 23:30");
 eq(parseCount("3 x Crew"), 3, "3 x Crew");
 eq(parseCount("x3 Carpenter Crew"), 3, "x3 Carpenter Crew");
 eq(parseCount("X2 Crew"), 2, "X2");

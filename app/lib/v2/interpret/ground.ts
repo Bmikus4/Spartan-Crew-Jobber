@@ -77,7 +77,8 @@ export function parseDuration(raw: string): number | null {
 
 export function addMinutes(hhmm: string, mins: number): string {
   const [h, m] = hhmm.split(":").map(Number);
-  const t = (h * 60 + m + mins) % (24 * 60);
+  // Wraps both ways: "an hour earlier" on a 00:30 call is 23:30, never "-1:-30".
+  const t = (((h * 60 + m + mins) % 1440) + 1440) % 1440;
   return `${String(Math.floor(t / 60)).padStart(2, "0")}:${String(t % 60).padStart(2, "0")}`;
 }
 

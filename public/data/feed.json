@@ -3423,5 +3423,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0185",
+  "ts": "2026-10-16T03:04:17+00:00",
+  "kind": "measurement",
+  "headline": "cards carry linked R/J; found orders linked; missing time/venue assumed and flagged",
+  "subject": "A TV card shows the order its thread is linked to, and bookings missing a time or venue are booked with the assumption written on the order",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 198,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]

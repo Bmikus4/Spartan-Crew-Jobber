@@ -66,12 +66,18 @@ export const V2_FROM = "2026-10-09T10:20:00Z";
 async function v2(): Promise<V2Row[]> {
   const [t] = (await db()`SELECT to_regclass('public.v2_decisions') AS t`) as { t: string | null }[];
   if (!t?.t) return [];
+  const [l] = (await db()`SELECT to_regclass('public.job_links') AS t`) as { t: string | null }[];
   const rows = (await db()`
     SELECT d.thread_id, d.message_id, d.sent_at, d.kind, d.interpretation->'grounded' AS grounded, d.decision, d.executed,
            d.company_id, d.company, d.from_address, m.subject
     FROM v2_decisions d LEFT JOIN thread_messages m ON m.message_id = d.message_id
     WHERE d.kind IN ('write', 'handoff') AND coalesce(d.code_version, '') <> 'local' AND d.created_at >= ${V2_FROM}`) as any[];
-  return rows.map((r) => ({ ...r, company_id: r.company_id == null ? null : Number(r.company_id) }));
+  // A thread linked to one live order shows it; a thread linked to several shows none of them
+  // rather than a guess.
+  const links = l?.t ? ((await db()`SELECT thread_id, min(order_id) AS order_id, min(r_number) AS r_number, min(job_id) AS job_id
+    FROM job_links WHERE state IN ('linked', 'relinked') GROUP BY thread_id HAVING count(DISTINCT order_id) = 1`) as any[]) : [];
+  const byThread = new Map(links.map((x) => [String(x.thread_id), { order_id: Number(x.order_id), r_number: x.r_number == null ? null : String(x.r_number), job_id: x.job_id == null ? null : Number(x.job_id) }]));
+  return rows.map((r) => ({ ...r, company_id: r.company_id == null ? null : Number(r.company_id), link: byThread.get(String(r.thread_id)) ?? null }));
 }
 
 /** Links the minute sweep has held past HOLD_TV_MINUTES (links.ts). */
