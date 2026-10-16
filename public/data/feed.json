@@ -3493,5 +3493,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0190",
+  "ts": "2026-10-16T03:39:40+00:00",
+  "kind": "measurement",
+  "headline": "backfill no longer resurrects moved links; held links hidden when the thread has a live one (9 of 21 TV needs)",
+  "subject": "A link moved to staff's rebuild stays moved, so the TV stops raising Order not found for orders it knows",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 200,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]

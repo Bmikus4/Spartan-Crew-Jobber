@@ -88,7 +88,8 @@ async function held() {
     SELECT l.thread_id, l.r_number, l.held_since::text AS since, l.note,
            (SELECT company FROM v2_decisions d WHERE d.thread_id = l.thread_id AND d.company IS NOT NULL ORDER BY d.created_at DESC LIMIT 1) AS company,
            (SELECT subject FROM thread_messages m WHERE m.thread_id = l.thread_id ORDER BY m.date_iso DESC LIMIT 1) AS subject
-    FROM job_links l WHERE l.state = 'held' AND l.held_since < now() - (${HOLD_TV_MINUTES} || ' minutes')::interval`) as any[];
+    FROM job_links l WHERE l.state = 'held' AND l.held_since < now() - (${HOLD_TV_MINUTES} || ' minutes')::interval
+      AND NOT EXISTS (SELECT 1 FROM job_links o WHERE o.thread_id = l.thread_id AND o.state IN ('linked', 'relinked'))`) as any[];
 }
 
 export function liveFeedDeps(): FeedDeps {

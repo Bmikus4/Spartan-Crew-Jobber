@@ -71,7 +71,11 @@ export async function backfillLinks(sql: Sql): Promise<number> {
      WHERE d.kind = 'write' AND (x->'op'->>'order_id') ~ '^[0-9]+$' AND d.executed::text LIKE '%verified%'`) as any[];
   let n = 0;
   for (const r of rows) {
-    const have = (await sql`SELECT 1 FROM job_links WHERE thread_id = ${r.thread_id} AND order_id = ${Number(r.order_id)}`) as any[];
+    // ONLY A THREAD WITH NO LINK AT ALL. A link the sweep moved to staff's rebuild (or that was
+    // moved off a duplicate) no longer names the bot's order, and checking for that exact pair
+    // put the dead order back every minute: the sweep then held it and the TV showed "Order not
+    // found in OnSinch". 9 of 11 held links on 10-15 were these.
+    const have = (await sql`SELECT 1 FROM job_links WHERE thread_id = ${r.thread_id}`) as any[];
     if (have.length) continue;
     await recordLink(sql, { thread_id: r.thread_id, order_id: Number(r.order_id), company_id: r.company_id, source: "backfill" });
     n++;
