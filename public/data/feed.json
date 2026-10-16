@@ -3451,5 +3451,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0187",
+  "ts": "2026-10-16T03:16:37+00:00",
+  "kind": "measurement",
+  "headline": "label sync route + n8n installer (inactive); TV tabs; ticked successes off Needs Action",
+  "subject": "Every bookings thread gets its Gmail label from the TV's own state, and the TV splits into Needs Action and Everything",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 199,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]

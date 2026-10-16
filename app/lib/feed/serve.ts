@@ -87,7 +87,9 @@ export async function serveFeed(deps: FeedDeps, now: number): Promise<{ status: 
   // moved to the display TV"). An order the bot made or changed is the system's own work and a
   // question is answered from the inbox; both are counted, not shown. A need a person has since
   // dealt with stays for its dwell, as before.
-  const isFailure = (c: (typeof p.cards)[number]) => c.green || c.items.some((i) => i.kind === "needs-created" || i.kind === "needs-updated");
+  // A need, open or just dealt with. Until 10-15 any green card counted, so an order the bot made
+  // showed on the list the moment someone ticked it: a success on the failures list.
+  const isFailure = (c: (typeof p.cards)[number]) => c.items.some((i) => i.kind === "needs-created" || i.kind === "needs-updated");
   const shown = p.cards.filter(isFailure);
   const done_by_system = p.cards.filter((c) => !c.green && c.items.every((i) => i.kind === "created-check" || i.kind === "updated-check")).length;
   const held = deps.held ? await deps.held().catch(() => [] as HeldLink[]) : [];
@@ -116,6 +118,9 @@ export async function serveFeed(deps: FeedDeps, now: number): Promise<{ status: 
       },
       counts: { ...p.counts, done_by_system, held: heldCards.length },
       items: [...shown, ...heldCards, ...ported],
+      // THE EVERYTHING TAB (Ben, 10-15): every job on the TV, the system's own orders included,
+      // until its last shift is over. The Gmail labels read the same cards (mail/threadLabels.ts).
+      everything: [...p.cards, ...heldCards],
     },
   };
 }

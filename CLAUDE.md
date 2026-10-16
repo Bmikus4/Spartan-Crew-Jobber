@@ -53,10 +53,13 @@ around on 2026-09-28: the retraction lived in two files and lost to a one-line s
 - **`6922 "No Location"` is exempt from every venue phase.** Exactly one may exist, and
   the compiler finds it by name — the id is incidental.
 - **Zero references is permission to delete, never a reason to.**
-- **FOUR, AND ONLY FOUR order labels** (`app/lib/mail/gmailWrite.ts`). They are mutually
-  exclusive because a thread wearing "Order Built" and "Order Needs Built" together says
-  the work is both done and outstanding. Conversation state — follow-up — is a different
-  axis and must not join that set.
+- **FOUR, AND ONLY FOUR order labels** (`app/lib/mail/threadLabels.ts` since 2026-10-15:
+  Order Created, Order Updated, Order Needs Created, Order Needs Updated; "Order Built" and
+  "Order Needs Built" are renamed in place). They are mutually exclusive because a thread
+  wearing "Order Created" and "Order Needs Created" together says the work is both done and
+  outstanding. Conversation state — Needs Follow Up — is a different axis and must not join
+  that set. The labels are DERIVED from the TV's cards every minute (`/api/bot/labels`, applied
+  by the n8n workflow from `scripts/install-label-workflow.mjs`); nothing sets one by hand.
 - **A draft is not a message.** An unsent Gmail draft of ours must never count as Spartan
   having replied; counting one inverts who is waiting for whom, and that fact cannot be
   rebuilt afterwards.
