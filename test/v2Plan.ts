@@ -98,7 +98,15 @@ ok(JSON.stringify(positionsFor(25)) === JSON.stringify([{ size: 3, profession_id
   {
     const d = await plan(msg("crew@eventconcept.com", "crew to arrive 08:30 on Friday 9th"), I([r({ action: "change_times", start: "08:30", date: "2026-10-09" })]), world, 16388);
     const ops = d.kind === "write" ? d.ops.map((o) => o.op as any) : [];
-    ok(ops.length === 2 && ops.every((o) => o.start === "08:30" && o.end === "17:00"), "a new start moves every position on the shift and leaves the end as booked", JSON.stringify(ops));
+    // Measured 10-15 on staff's own edits: an earlier start kept the shift's length 10 times in
+    // 10 and never kept the end; a later start split 9 and 9, and keeping the end can leave no
+    // shift at all (R11029, 14:00-17:00 asked for 17:00).
+    ok(ops.length === 2 && ops.every((o) => o.start === "08:30" && o.end === "16:30"), "a new start moves every position on the shift and keeps its length", JSON.stringify(ops));
+  }
+  {
+    const d = await plan(msg("crew@eventconcept.com", "Can the crew arrive for 17:00 instead of 09:00 on Friday 9th"), I([r({ action: "change_times", start: "17:00", date: "2026-10-09" })]), world, 16388);
+    const ops = d.kind === "write" ? d.ops.map((o) => o.op as any) : [];
+    ok(ops.length === 2 && ops.every((o) => o.start === "17:00" && o.end === "01:00"), "a start moved to the old end keeps the 8 hours: never a shift from 17:00 to 17:00", JSON.stringify(d));
   }
 
   console.log("a new length (Wonder London 10-09: 'increase hours to 8 (currently 6)')");

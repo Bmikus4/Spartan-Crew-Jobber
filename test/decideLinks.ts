@@ -34,6 +34,9 @@ const deps: DecideDeps = {
 const r = await decideMessage({ message_id: "m1", thread_id: "t1", from_address: "crew@eventconcept.com", date_iso: "2026-10-15T09:00:00Z", subject: "Crew", body: text, is_from_spartan: false } as any, deps);
 ok(r.decision.kind === "none" && /already booked: R11599/.test((r.decision as any).reason), "staff's order holds the booking: nothing is written", r.decision);
 ok(JSON.stringify(linked) === "[16655]", "and the thread is linked to staff's order", linked);
+const broken = await decideMessage({ message_id: "m2", thread_id: "t2", from_address: "crew@eventconcept.com", date_iso: "2026-10-15T09:00:00Z", subject: "Crew", body: text, is_from_spartan: false } as any,
+  { ...deps, world: { ...world, companyOrders: async () => { throw new Error("OnSinch 500"); } } });
+ok(broken.decision.kind === "handoff" && /could not plan this email \(OnSinch 500\)/.test((broken.decision as any).reasons[0]), "a plan that throws is a card for a person, never a lost email", broken.decision);
 
 console.log(fails ? `\n${fails} FAILED` : "\nall passed");
 process.exit(fails ? 1 : 0);

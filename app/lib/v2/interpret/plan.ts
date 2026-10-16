@@ -337,8 +337,12 @@ export async function plan(msg: Message, i: Interpretation, world: World, thread
       if (r.crew && r.crew !== size) return handoff(`R${order.number} shift ${shift.id}: the email says ${r.crew} crew, the shift has ${size}`);
       const start = r.start ?? utcToLondon(first.beginning).time;
       // "Increase hours to 8 (currently 6)": the client gave a length, not a time. The
-      // shift keeps its start and the end moves (Ben, 10-09).
-      const end = r.end ?? (r.duration ? addMinutes(start, r.duration) : utcToLondon(first.end).time);
+      // shift keeps its start and the end moves (Ben, 10-09). A new start alone moves the
+      // whole call and keeps its length: "arrive for 17:00 instead of 14:00" on 14:00-17:00
+      // was planned 17:00-17:00, and ops moved it to 17:00-20:00 (R11029, 10-15).
+      const length = Math.round((Date.parse(first.end) - Date.parse(first.beginning)) / 60e3);
+      const end = r.end ?? (r.duration ? addMinutes(start, r.duration) : r.start ? addMinutes(start, length) : utcToLondon(first.end).time);
+      if (start === end) return handoff(`R${order.number} shift ${shift.id}: ${start}-${end} has no length`);
       // A position already at the asked times is left alone: a restated booking is not a change.
       for (const s of shift.slots) {
         const w = shiftWindow(date, start, end);

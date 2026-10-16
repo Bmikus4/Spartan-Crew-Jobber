@@ -3437,5 +3437,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0186",
+  "ts": "2026-10-16T03:13:10+00:00",
+  "kind": "measurement",
+  "headline": "start-only moves keep length; zero-length window refused; plan errors become cards",
+  "subject": "A new start time moves the whole shift and keeps its length, and a shift with no length is refused instead of read as 24 hours",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 199,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]

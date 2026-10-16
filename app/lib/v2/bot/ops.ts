@@ -76,6 +76,9 @@ export function utcToLondon(iso: string): { date: string; time: string } {
 
 /** A shift's end, rolled to the next day when it is not after the start (22:00-02:00). */
 export function shiftWindow(date: string, start: string, end: string): { beginning: string; end: string } {
+  // A start equal to its end is no shift: read as overnight it became 24 hours. "Arrive for
+  // 17:00 instead of 14:00" on a 14:00-17:00 call was planned 17:00-17:00 (R11029, 10-15).
+  if (start === end) throw new Error(`a shift from ${start} to ${end} has no length`);
   const b = londonToUtc(date, start);
   let e = londonToUtc(date, end);
   if (Date.parse(e) <= Date.parse(b)) {

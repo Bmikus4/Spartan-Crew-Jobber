@@ -28,6 +28,7 @@ ok(londonToUtc("2026-10-25", "02:30") === "2026-10-25T02:30:00.000Z", "fall-back
 ok(throws(() => londonToUtc("2026-03-29", "01:30")), "spring-forward 01:30 does not exist: refused");
 const w = shiftWindow("2026-10-10", "22:00", "02:00");
 ok(w.beginning === "2026-10-10T21:00:00.000Z" && w.end === "2026-10-11T01:00:00.000Z", "a shift past midnight ends the next day", JSON.stringify(w));
+ok((() => { try { shiftWindow("2026-10-21", "17:00", "17:00"); return false; } catch { return true; } })(), "a shift from 17:00 to 17:00 is refused, never read as 24 hours (R11029, 10-15)");
 
 console.log("keys");
 const a: Op = { kind: "set_position_size", order_id: 1, slot_id: 2, size: 3 };

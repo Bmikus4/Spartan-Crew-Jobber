@@ -293,7 +293,10 @@ export async function decideMessage(m: MessageIn, deps: DecideDeps): Promise<Rec
   deps.trace("ground", { problems: interpretation.problems.length + interpretation.requests.reduce((a, q) => a + q.problems.length, 0), notes: interpretation.notes ?? [] }, Date.now() - t1);
   const t2 = Date.now();
   const leadDays = deps.leadDays ? await deps.leadDays().catch(() => undefined) : undefined;
-  const decision = await plan({ message_id: m.message_id, from, subject: String(m.subject ?? ""), sentIso: m.date_iso, text: newest }, interpretation, deps.world, await deps.threadOrderId(), { leadDays });
+  // A PLAN THAT THROWS IS A CARD FOR A PERSON, like a read that fails: a time London's clock
+  // skips, a window with no length or an OnSinch read that failed would otherwise lose the email.
+  const decision: Decision = await plan({ message_id: m.message_id, from, subject: String(m.subject ?? ""), sentIso: m.date_iso, text: newest }, interpretation, deps.world, await deps.threadOrderId(), { leadDays })
+    .catch((e) => ({ kind: "handoff" as const, reasons: [`the system could not plan this email (${String((e as Error)?.message ?? e).slice(0, 120)})`] }));
   deps.trace("plan", { kind: decision.kind, ops: decision.kind === "write" ? decision.ops.map((o) => o.op.kind) : [], said: decision.kind === "write" ? decision.why : decision.kind === "handoff" ? decision.reasons : [decision.reason] }, Date.now() - t2);
   const out: Recorded = { kind: decision.kind, interpretation: { extraction: x, grounded: interpretation, meta }, decision, executed: null, client };
   await deps.record(out);
