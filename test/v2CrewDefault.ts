@@ -16,7 +16,8 @@ const ok = (cond: boolean, label: string, extra = "") => {
   if (!cond) fails++;
 };
 
-const SENT = "2026-10-12T09:00:00Z";
+// More than two weeks before the booking: the bot creates only orders that far out (Ben, 10-15).
+const SENT = "2026-10-05T09:00:00Z";
 function booking(tradeWords: string): { x: Extraction; text: string } {
   const text = `Can we get 4 ${tradeWords} on 20th October 08:00-16:00 at Olympia London please?`;
   const r: RawRequest = {

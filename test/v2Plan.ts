@@ -3,7 +3,7 @@
 //
 // Offline.  npx tsx test/v2Plan.ts
 // ============================================================================
-import { plan, positionsFor, type World, type Message } from "../app/lib/v2/interpret/plan";
+import { plan, positionsFor, chiefsFor, type World, type Message } from "../app/lib/v2/interpret/plan";
 import type { Interpretation, Request } from "../app/lib/v2/interpret/interpret";
 
 let fails = 0;
@@ -33,14 +33,21 @@ const world: World = {
   companyOrders: async (c) => (c === 137 ? [R11352, R11199] : c === 400 ? [LG] : []),
   orderByNumber: async (n) => [R11352, R11199, LG].find((o) => o.number === n) ?? null,
 };
-const msg = (from: string, text: string, subject = ""): Message => ({ message_id: "m1", from, subject, sentIso: "2026-10-07T09:00:00Z", text });
+const msg = (from: string, text: string, subject = "", sentIso = "2026-10-07T09:00:00Z"): Message => ({ message_id: "m1", from, subject, sentIso, text });
+// The bot creates only orders more than two weeks out (Ben, 10-15), so a test of how a create is
+// built sends its email three weeks before the booking.
+const EARLY = "2026-09-20T09:00:00Z";
 const r = (x: Partial<Request>): Request => ({ action: "new_shift", problems: [], ...x });
 const I = (requests: Request[], extra: Partial<Interpretation> = {}): Interpretation => ({ intent: "change", requests, problems: [], ...extra });
 
 console.log("positions by crew size (ops' practice)");
 ok(JSON.stringify(positionsFor(3)) === JSON.stringify([{ size: 3, profession_id: "1" }]), "3 crew: plain crew");
 ok(positionsFor(4)?.length === 2 && positionsFor(4)![0].role === "crew_chief" && positionsFor(4)![1].size === 3, "4 crew: crew chief + 3");
-ok(positionsFor(12) === null, "12 crew: not decided here");
+// Ben, 10-15: 4+ -> 1 chief, 10+ -> 2, 20+ -> 3, one more for every further 10, inside the headcount.
+ok(JSON.stringify([1, 3, 4, 9, 10, 19, 20, 29, 30, 41].map((n) => chiefsFor(n))) === JSON.stringify([0, 0, 1, 1, 2, 2, 3, 3, 4, 5]), "chiefs per headcount follow Ben's bands", JSON.stringify([1, 3, 4, 9, 10, 19, 20, 29, 30, 41].map((n) => chiefsFor(n))));
+ok(chiefsFor(2, true) === 1 && chiefsFor(1, true) === 1 && chiefsFor(3) === 0, "a chief the client asks for on 3 or fewer is booked, never refused");
+ok(JSON.stringify(positionsFor(12)) === JSON.stringify([{ size: 2, profession_id: "36", role: "crew_chief" }, { size: 10, profession_id: "1" }]), "12 crew: 2 chiefs + 10, not refused", JSON.stringify(positionsFor(12)));
+ok(JSON.stringify(positionsFor(25)) === JSON.stringify([{ size: 3, profession_id: "36", role: "crew_chief" }, { size: 22, profession_id: "1" }]), "25 crew: 3 chiefs + 22", JSON.stringify(positionsFor(25)));
 
 (async () => {
   console.log("a change is never linked to an order by its day alone (Ben, 10-03)");
@@ -129,7 +136,7 @@ ok(positionsFor(12) === null, "12 crew: not decided here");
   {
     const d = await plan(msg("someone@unknown.example", "4 crew on the 9th"), I([r({ date: "2026-10-09", start: "09:00", end: "17:00", crew: 4, venue: "Business Design Centre" })], { intent: "booking" }), world);
     ok(d.kind === "handoff", "an unknown sender with no company name written: ops");
-    const n = await plan(msg("jo@atcomms.example", "4 crew on the 9th"), I([r({ date: "2026-10-09", start: "09:00", end: "17:00", crew: 4, venue: "Business Design Centre" })], { intent: "booking", company_name: "AT Comms" }), world);
+    const n = await plan(msg("jo@atcomms.example", "4 crew on the 9th", "", EARLY), I([r({ date: "2026-10-09", start: "09:00", end: "17:00", crew: 4, venue: "Business Design Centre" })], { intent: "booking", company_name: "AT Comms" }), world);
     const op = n.kind === "write" ? (n.ops[0].op as any) : null;
     ok(op?.kind === "create_order" && op.company_id === "new:AT Comms" && /^AT Comms @ /.test(op.job_name), "a new client's first booking creates the client from its written name, then the order", JSON.stringify(n));
   }
@@ -138,16 +145,38 @@ ok(positionsFor(12) === null, "12 crew: not decided here");
     ok(d.kind === "handoff", "a quote request: ops (R11434)");
   }
   {
-    const d = await plan(msg("crew@eventconcept.com", "4 crew at the Old Vic on the 14th 18:45-20:45"), I([r({ date: "2026-10-14", start: "18:45", end: "20:45", crew: 4, venue: "the Old Vic" })], { intent: "booking" }), world);
+    const d = await plan(msg("crew@eventconcept.com", "4 crew at the Old Vic on the 14th 18:45-20:45", "", EARLY), I([r({ date: "2026-10-14", start: "18:45", end: "20:45", crew: 4, venue: "the Old Vic" })], { intent: "booking" }), world);
     const s0 = d.kind === "write" && d.ops[0].op.kind === "create_order" ? d.ops[0].op.shifts[0] : null;
     ok(!!s0 && s0.place_id === "new:the Old Vic" && d.kind === "write" && d.why.some((w) => /new to OnSinch/.test(w)), "a venue OnSinch does not hold is added as written, as ops add one", JSON.stringify(d));
   }
 
   console.log("a new booking");
   {
-    const d = await plan(msg("crew@eventconcept.com", "4 crew at Business Design Centre on 14/10 18:45-20:45"), I([r({ date: "2026-10-14", start: "18:45", end: "20:45", crew: 4, venue: "Business Design Centre" })], { intent: "booking", po: "E15626" }), world);
+    const d = await plan(msg("crew@eventconcept.com", "4 crew at Business Design Centre on 14/10 18:45-20:45", "", EARLY), I([r({ date: "2026-10-14", start: "18:45", end: "20:45", crew: 4, venue: "Business Design Centre" })], { intent: "booking", po: "E15626" }), world);
     const op = d.kind === "write" ? (d.ops[0].op as any) : null;
     ok(op?.kind === "create_order" && op.company_id === "137" && op.client_email === "crew@eventconcept.com" && op.po === "E15626" && op.shifts[0].place_id === "29" && op.shifts[0].positions.length === 2, "a new order: Event Concept, the sender as client, the PO, crew chief + 3", JSON.stringify(op));
+  }
+
+  console.log("the crew chief rule at every size (Ben, 10-15)");
+  {
+    const d = await plan(msg("crew@eventconcept.com", "12 crew at Business Design Centre on 14/10 08:00-16:00", "", EARLY), I([r({ date: "2026-10-14", start: "08:00", end: "16:00", crew: 12, venue: "Business Design Centre" })], { intent: "booking" }), world);
+    const p0 = d.kind === "write" && d.ops[0].op.kind === "create_order" ? d.ops[0].op.shifts[0].positions : null;
+    ok(JSON.stringify(p0) === JSON.stringify([{ size: 2, profession_id: "36", role: "crew_chief" }, { size: 10, profession_id: "1" }]), "12 crew is booked, not refused: 2 chiefs + 10", JSON.stringify(d));
+  }
+  {
+    const d = await plan(msg("crew@eventconcept.com", "2 crew and a crew chief at Business Design Centre on 14/10 08:00-16:00", "", EARLY), I([r({ date: "2026-10-14", start: "08:00", end: "16:00", crew: 3, crew_chief: true, venue: "Business Design Centre" })], { intent: "booking" }), world);
+    const p0 = d.kind === "write" && d.ops[0].op.kind === "create_order" ? d.ops[0].op.shifts[0].positions : null;
+    ok(JSON.stringify(p0) === JSON.stringify([{ size: 1, profession_id: "36", role: "crew_chief" }, { size: 2, profession_id: "1" }]), "a chief asked for on a crew of 3 is booked, not refused", JSON.stringify(d));
+  }
+  {
+    const d = await plan(msg("crew@eventconcept.com", "make Friday 9th 12 crew"), I([r({ action: "change_crew", date: "2026-10-09", crew: 12 })]), world, 16388);
+    const ops = d.kind === "write" ? d.ops.map((o) => o.op as any) : [];
+    ok(ops.length === 2 && ops.some((o) => o.kind === "set_position_size" && o.slot_id === 11 && o.size === 2) && ops.some((o) => o.kind === "set_position_size" && o.slot_id === 12 && o.size === 10), "4 to 12 on R11352: the chief position goes to 2, crew to 10", JSON.stringify(d));
+  }
+  {
+    const d = await plan(msg("crew@eventconcept.com", "drop Friday 9th to 3 crew"), I([r({ action: "change_crew", date: "2026-10-09", crew: 3 })]), world, 16388);
+    const ops = d.kind === "write" ? d.ops.map((o) => o.op as any) : [];
+    ok(ops.length === 1 && ops[0].kind === "cancel_position" && ops[0].slot_id === 11, "4 to 3 (chief + 3): the chief is cancelled, the 3 crew stay as they are", JSON.stringify(d));
   }
 
   console.log("already booked by hand (every engine order in To Confirm on 10-07)");
@@ -158,11 +187,11 @@ ok(positionsFor(12) === null, "12 crew: not decided here");
   {
     // EMS 10-09: the Mandarin Oriental install had the Roundhouse derig's day and hours.
     const venues: World = { ...world, placesNamed: async (n) => (/business design centre/i.test(n) ? [{ id: 29, name: "Business Design Centre" }] : /olympia/i.test(n) ? [{ id: 31, name: "Olympia" }] : []) };
-    const d = await plan(msg("crew@eventconcept.com", "4 crew Friday 9th 09:00-17:00 at Olympia"), I([r({ date: "2026-10-09", start: "09:00", end: "17:00", crew: 4, venue: "Olympia" })], { intent: "booking" }), venues);
+    const d = await plan(msg("crew@eventconcept.com", "4 crew Friday 9th 09:00-17:00 at Olympia", "", EARLY), I([r({ date: "2026-10-09", start: "09:00", end: "17:00", crew: 4, venue: "Olympia" })], { intent: "booking" }), venues);
     ok(d.kind === "write" && (d.ops[0].op as any).shifts[0].place_id === "31", "the same hours at another venue are not that booking", JSON.stringify(d).slice(0, 200));
   }
   {
-    const d = await plan(msg("crew@eventconcept.com", "4 crew at Business Design Centre, 32 Upper St, London on 14/10 18:45-20:45"), I([r({ date: "2026-10-14", start: "18:45", end: "20:45", crew: 4, venue: "Business Design Centre, 32 Upper St, London" })], { intent: "booking" }), world);
+    const d = await plan(msg("crew@eventconcept.com", "4 crew at Business Design Centre, 32 Upper St, London on 14/10 18:45-20:45", "", EARLY), I([r({ date: "2026-10-14", start: "18:45", end: "20:45", crew: 4, venue: "Business Design Centre, 32 Upper St, London" })], { intent: "booking" }), world);
     ok(d.kind === "write" && (d.ops[0].op as any).shifts[0].place_id === "29", "a venue written with its address matches on the name before the comma", JSON.stringify(d).slice(0, 200));
   }
 
@@ -175,8 +204,19 @@ ok(positionsFor(12) === null, "12 crew: not decided here");
     // Linked to a readable order: the new shift goes onto it.
     const seen = await plan(msg("crew@eventconcept.com", "4 crew at Business Design Centre on 14/10 18:45-20:45"), booking, world, 16388);
     ok(seen.kind === "write" && seen.ops.every((o) => o.op.kind === "add_shift" && (o.op as any).order_id === 16388), "linked order readable: add_shift onto it", JSON.stringify(seen).slice(0, 200));
+
+    // Ben, 10-15: new orders only when more than two weeks out; every update stays on.
+    const at = (sent: string) => plan(msg("crew@eventconcept.com", "4 crew at Business Design Centre on 14/10 18:45-20:45", "", sent), booking, world, null);
+    const d14 = await at("2026-09-30T09:00:00Z");
+    ok(d14.kind === "handoff" && /within 14 days of the email, is for staff to create/.test(d14.reasons[0]), "a new order 14 days out is staff's to create", JSON.stringify(d14));
+    const d15 = await at("2026-09-29T09:00:00Z");
+    ok(d15.kind === "write" && d15.ops[0].op.kind === "create_order", "a new order 15 days out is created", JSON.stringify(d15).slice(0, 160));
+    ok(seen.kind === "write", "a shift added to an existing order a week out is still written: updates are not held to two weeks");
+    // The days are a setting (Ben: "make it a setting in the settings screen").
+    const d7 = await plan(msg("crew@eventconcept.com", "4 crew at Business Design Centre on 14/10 18:45-20:45", "", "2026-10-06T09:00:00Z"), booking, world, null, { leadDays: 7 });
+    ok(d7.kind === "write" && d7.ops[0].op.kind === "create_order", "with the setting at 7, a new order 8 days out is created", JSON.stringify(d7).slice(0, 160));
     // Not linked: a fresh order, as before.
-    const fresh = await plan(msg("crew@eventconcept.com", "4 crew at Business Design Centre on 14/10 18:45-20:45"), booking, world, null);
+    const fresh = await plan(msg("crew@eventconcept.com", "4 crew at Business Design Centre on 14/10 18:45-20:45", "", EARLY), booking, world, null);
     ok(fresh.kind === "write" && fresh.ops[0].op.kind === "create_order", "no link: create_order", JSON.stringify(fresh).slice(0, 160));
   }
 

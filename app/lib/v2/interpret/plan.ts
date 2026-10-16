@@ -44,20 +44,33 @@ export type Decision =
   | { kind: "none"; reason: string };
 
 const handoff = (...reasons: string[]): Decision => ({ kind: "handoff", reasons });
+/** The bot creates an order only when its first day is more than this many days after the email; Settings can change it. */
+export const CREATE_LEAD_DAYS = 14;
+const daysBetween = (from: string, to: string) => Math.round((Date.parse(`${to}T12:00:00Z`) - Date.parse(`${from}T12:00:00Z`)) / 864e5);
 const ask = (...reasons: string[]): Decision => ({ kind: "handoff", reasons, reply: true });
 /** A detail the client did not write: the client is asked, nobody can book it without them. */
 const MISSING = /: no (day|start time|end time or duration|crew count|new time or length) the client wrote$|^no venue in the email$/;
 
 /**
- * Ops' practice, measured 10-08 on 725 staff-built shifts: 4-9 crew always carry exactly one
- * Crew Chief (243/243), counted within the total; 3 or fewer carry none (434/440). 10+ varies
- * from 1 to 6 chiefs, so it is not decided here.
+ * THE CREW CHIEF RULE (Ben, 10-15): 4 or more on a shift carry a Crew Chief, 10+ two, 20+
+ * three, and every further 10 one more, inside the headcount. Measured 10-15 on 3,145 staff-built
+ * shifts counting every seat, drivers and trades included: it matches 96.0% (1-3: 99.2%, 4-9:
+ * 93.3%, 10-19: 88.6%). Ops book more than it on 30+ (13 shifts). A chief the client asks for on
+ * a smaller shift is booked: no request is refused for its size. The old engine's
+ * chiefsForTeam (engine/compose.ts) stops at 3; this one does not, by Ben's rule.
  */
-export function positionsFor(total: number): PositionSpec[] | null {
+export function chiefsFor(total: number, asked = false): number {
+  if (!Number.isInteger(total) || total < 1) return 0;
+  return total < 4 ? (asked ? 1 : 0) : 1 + Math.floor(total / 10);
+}
+
+/** A shift of plain crew: its chiefs (chiefsFor) first, the rest as Crew. */
+export function positionsFor(total: number, asked = false): PositionSpec[] | null {
   if (!Number.isInteger(total) || total < 1) return null;
-  if (total <= 3) return [{ size: total, profession_id: "1" }];
-  if (total <= 9) return [{ size: 1, profession_id: "36", role: "crew_chief" }, { size: total - 1, profession_id: "1" }];
-  return null;
+  const c = chiefsFor(total, asked);
+  const out: PositionSpec[] = c ? [{ size: c, profession_id: "36", role: "crew_chief" }] : [];
+  if (total > c) out.push({ size: total - c, profession_id: "1" });
+  return out;
 }
 
 const teams = (o: any) =>
@@ -187,7 +200,8 @@ type ShiftGroup = { date: string; start: string; end: string; venue?: string; pl
  * one call is ONE shift with two positions (RG Jones, 10-09: read as two requests). The crew
  * chief rule counts everyone on the shift: across 402 staff-built shifts with a named trade, a
  * total of 4-9 carried a chief 128 times in 132, and counting crew alone fitted 71% against
- * 78%. The chief comes out of the plain crew, so it needs two or more of them.
+ * 78%. The chiefs come out of the plain crew, then out of the largest trade, so the people
+ * who turn up are the number the client asked for.
  */
 function shiftGroups(news: Request[], clientOrders: any[], live: LiveProfession[]): ShiftGroup[] | string {
   const byWindow = new Map<string, Request[]>();
@@ -213,21 +227,29 @@ function shiftGroups(news: Request[], clientOrders: any[], live: LiveProfession[
       if (trade.candidates.length > 1) notes.push(`${trade.label} booked as ${PROFESSION_NAME[p.id] ?? p.id}${p.fromHistory ? ", the one this client last had" : ", ops' most used (no history for this client)"}`);
     }
     const total = crew + [...profs.values()].reduce((a, b) => a + b, 0);
-    if (total > 9) return `${total} on one shift is not a shape the system builds`;
-    const chief = total >= 4 && crew >= 2;
-    if (rs.some((r) => r.crew_chief) && !chief) return "a crew chief was asked for on a crew of 3 or fewer";
+    const label = [crew ? `${crew} crew` : "", ...labels].filter(Boolean).join(", ");
+    const chiefs = chiefsFor(total, rs.some((r) => r.crew_chief));
+    let short = chiefs - Math.min(chiefs, crew);
+    crew -= chiefs - short;
+    while (short > 0) {
+      const [id, size] = [...profs].sort((a, b) => b[1] - a[1])[0];
+      const take = Math.min(short, size);
+      profs.set(id, size - take);
+      short -= take;
+    }
     // A shift of trades alone (2 carpenters) has no crew position: the API makes the shift
-    // with its first trade (apiCreate.ts), so it is booked rather than handed over.
-    const positions: PositionSpec[] = !crew ? [] : chief ? [{ size: 1, profession_id: "36", role: "crew_chief" }, { size: crew - 1, profession_id: "1" }] : [{ size: crew, profession_id: "1" }];
-    for (const [id, size] of profs) positions.push({ size, profession_id: id });
+    // with its first position (apiCreate.ts), so it is booked rather than handed over.
+    const positions: PositionSpec[] = chiefs ? [{ size: chiefs, profession_id: "36", role: "crew_chief" }] : [];
+    if (crew) positions.push({ size: crew, profession_id: "1" });
+    for (const [id, size] of profs) if (size) positions.push({ size, profession_id: id });
     const r0 = rs[0];
     const place_id = rs.map((r) => r.place_id).find(Boolean);
-    out.push({ date: r0.date!, start: r0.start!, end: r0.end!, venue: venues[0], place_id, positions, label: [crew ? `${crew} crew` : "", ...labels].filter(Boolean).join(", "), notes });
+    out.push({ date: r0.date!, start: r0.start!, end: r0.end!, venue: venues[0], place_id, positions, label, notes });
   }
   return out;
 }
 
-export async function plan(msg: Message, i: Interpretation, world: World, threadOrderId: number | null = null): Promise<Decision> {
+export async function plan(msg: Message, i: Interpretation, world: World, threadOrderId: number | null = null, opts: { leadDays?: number } = {}): Promise<Decision> {
   const problems = [...i.problems, ...i.requests.flatMap((r) => r.problems)];
   // A quote, a question or an availability check whose shift is not bookable as written is
   // answered by a reply: "If you can check availability for Sunday" (Vivid), "send me a quote
@@ -340,30 +362,33 @@ export async function plan(msg: Message, i: Interpretation, world: World, thread
       if (r.crew && r.crew_remove && r.crew !== current - r.crew_remove)
         return handoff(`R${order.number} shift ${shift.id}: ${r.crew_remove} fewer on ${current} makes ${current - r.crew_remove}, not the ${r.crew} written`);
       const total = r.crew ?? current + (r.crew_add ?? 0) - (r.crew_remove ?? 0);
-      // A shift of 10 or more, or one ops gave several chiefs, keeps its chiefs as ops set them:
-      // only the crew position moves (Event Concept R11404, "2 additional crew" on 8 + 2 chiefs).
-      if (total > 9 || current > 9 || chief.length > 1 || chiefSize > 1) {
+      // A shift ops gave several chief positions keeps them as ops set them: only the crew
+      // position moves (Event Concept R11404, "2 additional crew" on 8 + 2 chiefs).
+      if (chief.length > 1) {
         const size = Number(crew[0].size) + (total - current);
         if (size < 1) return handoff(`R${order.number} shift ${shift.id}: ${total} crew leaves no crew position`);
         if (size !== Number(crew[0].size)) ops.push({ source: src(n), op: { kind: "set_position_size", order_id: Number(order.id), slot_id: Number(crew[0].id), size } });
         why.push(`R${order.number} shift ${shift.id}: ${total} crew in all`);
         continue;
       }
-      const shape = positionsFor(total);
-      if (!shape) return handoff(`R${order.number}: ${total} crew is not a shape the system builds`);
-      if (chief.length > 1 || chiefSize > 1) return handoff(`R${order.number} shift ${shift.id}: ${chiefSize} crew chiefs`);
-      // Crossing the 3/4 line keeps ops' shape (positionsFor): 4-9 carry exactly one Crew Chief
-      // inside the total, 1-3 none. Up adds the chief's position, down cancels it; the crew
-      // position takes the rest. A signed-on chief is the bot's to refuse (run.ts preflight).
-      const wantsChief = shape.length === 2;
+      // The chiefs follow Ben's rule (chiefsFor) on everyone the shift will hold: its trades and
+      // other teams count too. A chief ops put on a shift of 3 or fewer stays while it stays
+      // that small. Up adds the chief position or grows it, down shrinks or cancels it; the crew
+      // position takes the rest.
+      const others = shift.slots.filter((s) => Number(s.role) !== 1 && Number(s.id) !== Number(crew[0].id)).reduce((a, s) => a + Number(s.size), 0);
+      const want = chiefsFor(total + others, !!r.crew_chief || (chiefSize > 0 && current + others < 4));
+      if (total - want < 1) return handoff(`R${order.number} shift ${shift.id}: ${total} crew leaves no crew position`);
       const londonStart = utcToLondon(first.beginning).time, londonEnd = utcToLondon(first.end).time;
-      if (wantsChief && chiefSize === 0) {
-        ops.push({ source: `${src(n)}:chief`, op: { kind: "add_position", order_id: Number(order.id), shift_id: shift.id, date, start: londonStart, end: londonEnd, position: shape[0] } });
-      } else if (!wantsChief && chiefSize === 1) {
+      if (want && !chiefSize) {
+        ops.push({ source: `${src(n)}:chief`, op: { kind: "add_position", order_id: Number(order.id), shift_id: shift.id, date, start: londonStart, end: londonEnd, position: { size: want, profession_id: "36", role: "crew_chief" } } });
+      } else if (!want && chiefSize) {
         ops.push({ source: `${src(n)}:chief`, op: { kind: "cancel_position", order_id: Number(order.id), slot_id: Number(chief[0].id) } });
+      } else if (want !== chiefSize) {
+        ops.push({ source: `${src(n)}:chief`, op: { kind: "set_position_size", order_id: Number(order.id), slot_id: Number(chief[0].id), size: want } });
       }
-      ops.push({ source: src(n), op: { kind: "set_position_size", order_id: Number(order.id), slot_id: Number(crew[0].id), size: wantsChief ? total - 1 : total } });
-      why.push(`R${order.number} shift ${shift.id}: ${total} crew in all${wantsChief !== (chiefSize === 1) ? (wantsChief ? ", a crew chief added" : ", the crew chief removed") : ""}`);
+      if (total - want !== Number(crew[0].size)) ops.push({ source: src(n), op: { kind: "set_position_size", order_id: Number(order.id), slot_id: Number(crew[0].id), size: total - want } });
+      const chiefNote = want === chiefSize ? "" : !want ? ", the crew chief removed" : !chiefSize ? (want === 1 ? ", a crew chief added" : `, ${want} crew chiefs added`) : `, crew chiefs ${chiefSize} to ${want}`;
+      why.push(`R${order.number} shift ${shift.id}: ${total} crew in all${chiefNote}`);
     }
   }
 
@@ -449,6 +474,12 @@ export async function plan(msg: Message, i: Interpretation, world: World, thread
     const shifts: ShiftSpec[] = [];
     const groups = shiftGroups(news, clientOrders, live);
     if (typeof groups === "string") return handoff(groups);
+    // Ben, 10-15: "we should only be creating orders that are more than two weeks out, all
+    // updates still should be enabled". A new order nearer than that is staff's to create;
+    // shifts added to an order that already exists are updates and go on as before.
+    const earliest = groups.map((g) => g.date).sort()[0];
+    const lead = opts.leadDays ?? CREATE_LEAD_DAYS;
+    if (earliest && daysBetween(sentDay, earliest) <= lead) return handoff(`a new booking from ${earliest}, within ${lead} days of the email, is for staff to create`);
     const extra: string[] = [];
     for (const g of groups) {
       const venue = g.venue ?? news.find((x) => x.venue)?.venue;

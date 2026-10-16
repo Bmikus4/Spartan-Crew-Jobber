@@ -26,6 +26,7 @@ import { linkedOrderId } from "./threadOrder";
 import { recordLink } from "./links";
 import { bookingsOf, contextText, venuesOf, type ReadContext, type ThreadLine } from "./interpret/context";
 import { readRows } from "./read";
+import { getSettings } from "../settingsDb";
 
 let _sql: NeonQueryFunction<false, false> | null = null;
 let _ready = false;
@@ -237,6 +238,8 @@ export type DecideDeps = {
   prior?: () => Promise<Request[]>;
   /** Null: decide and record only (shadow). */
   run: ((source: string, op: Op) => Promise<RunResult>) | null;
+  /** Settings' create_lead_days; absent, the planner's own default. */
+  leadDays?: () => Promise<number | undefined>;
   /** The thread is now about this order: kept in job_links and swept every minute (links.ts). */
   link?: (order_id: number) => Promise<void>;
   record: (r: Recorded) => Promise<void>;
@@ -289,7 +292,8 @@ export async function decideMessage(m: MessageIn, deps: DecideDeps): Promise<Rec
   const interpretation = ground(x, `${m.subject ?? ""}\n${newest}`, m.date_iso, { subject: String(m.subject ?? ""), prior: deps.prior ? await deps.prior().catch(() => []) : [], read, linkedOrderId: await deps.threadOrderId().catch(() => null) });
   deps.trace("ground", { problems: interpretation.problems.length + interpretation.requests.reduce((a, q) => a + q.problems.length, 0), notes: interpretation.notes ?? [] }, Date.now() - t1);
   const t2 = Date.now();
-  const decision = await plan({ message_id: m.message_id, from, subject: String(m.subject ?? ""), sentIso: m.date_iso, text: newest }, interpretation, deps.world, await deps.threadOrderId());
+  const leadDays = deps.leadDays ? await deps.leadDays().catch(() => undefined) : undefined;
+  const decision = await plan({ message_id: m.message_id, from, subject: String(m.subject ?? ""), sentIso: m.date_iso, text: newest }, interpretation, deps.world, await deps.threadOrderId(), { leadDays });
   deps.trace("plan", { kind: decision.kind, ops: decision.kind === "write" ? decision.ops.map((o) => o.op.kind) : [], said: decision.kind === "write" ? decision.why : decision.kind === "handoff" ? decision.reasons : [decision.reason] }, Date.now() - t2);
   const out: Recorded = { kind: decision.kind, interpretation: { extraction: x, grounded: interpretation, meta }, decision, executed: null, client };
   await deps.record(out);
@@ -333,6 +337,7 @@ export async function processMessage(message_id: string, opts: { execute: boolea
     prior: async () => ((await sql`SELECT interpretation->'grounded'->'requests' AS rs FROM v2_decisions
       WHERE thread_id = ${m.thread_id} AND sent_at < ${m.date_iso} AND interpretation IS NOT NULL ORDER BY sent_at`) as any[]).flatMap((r) => (Array.isArray(r.rs) ? r.rs : [])),
     run: opts.execute ? runWhenFree : null,
+    leadDays: () => getSettings().then((s) => s.create_lead_days),
     link: (order_id) => recordLink(sql, { thread_id: m.thread_id, order_id, source: "bot write" }),
     record: async (d) => {
       await sql`

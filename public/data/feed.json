@@ -3409,5 +3409,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0184",
+  "ts": "2026-10-16T02:55:49+00:00",
+  "kind": "measurement",
+  "headline": "chief rule at every size; staffed time changes on; create lead days a setting (14)",
+  "subject": "Shifts of any size get Ben's crew chief count, staffed positions take time changes, and new orders wait for the lead-days setting",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 196,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]

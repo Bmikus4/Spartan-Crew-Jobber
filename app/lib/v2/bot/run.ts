@@ -8,9 +8,10 @@
 // particular is final for the bot: the save may or may not have landed, and re-sending it
 // is how a crew of 4 becomes 8. Reconciliation reads OnSinch and a person decides.
 //
-// Signed-on crew (Ben, 10-06): "Any change that touches a signed-on worker goes to ops."
-// A position with anyone attending is handed over for any change except a size INCREASE,
-// which adds seats and moves nobody.
+// Staffed positions (Ben, 10-15, replacing his 10-06 "goes to ops" ruling, which "was for
+// safety"): every change is made, workers on the position included; OnSinch tells them as it
+// does for staff's edits. Only a change that would leave fewer seats than workers waits
+// (staffedRefusal) until the bot can drop a worker and log who.
 // ============================================================================
 import { httpTransport, OnsinchClient } from "../../engine/onsinch";
 import contracts from "./contracts.json";
@@ -55,9 +56,29 @@ export function holdsPositions(slots: any[], date: string, start: string, end: s
 export const slotsOf = (o: any): any[] =>
   ([] as any[]).concat(o?.Job ?? []).flatMap((j: any) => ([] as any[]).concat(j.SlotTeam ?? [])).flatMap((s: any) => ([] as any[]).concat(s.Slot ?? []));
 
+/**
+ * Attendance statuses that are a worker ON the position: 0 assigned, 3 confirmed, 1 (seen 8
+ * times, meaning unknown) counted to be safe. 2 is an offer waiting for a worker, not a worker:
+ * measured 10-15, slot 59917 held 2 people under 94 rows, 93 of them offers.
+ */
+export const ON_POSITION = new Set([0, 1, 3]);
+
 export async function attendingOn(orderId: number, slotId: number): Promise<number> {
   const rows = await api().client.liveTeamsForOrder(orderId);
-  return rows.filter((r: any) => Number((Array.isArray(r?.Slot) ? r.Slot[0] : r?.Slot)?.id) === slotId).length;
+  return rows.filter((r: any) => Number((Array.isArray(r?.Slot) ? r.Slot[0] : r?.Slot)?.id) === slotId && ON_POSITION.has(Number(r?.status))).length;
+}
+
+/**
+ * The one staffed change the bot does not make yet: fewer seats than workers on the position.
+ * Measured 10-15: staff cut such a size first and remove the workers after (22 of 39 within a
+ * minute), and OnSinch does not stop the cut. The bot holds it until it can drop a worker
+ * itself, as Ben ruled: unconfirmed first, then the most recent, each logged by name.
+ */
+export function staffedRefusal(op: Op, held: number): string[] {
+  if (held === 0) return [];
+  if (op.kind === "set_position_size" && op.size < held) return [`${held} workers on position ${op.slot_id}, cut to ${op.size}: a worker must be dropped first`];
+  if (op.kind === "cancel_position") return [`${held} workers on position ${op.slot_id}: cancelling it drops them`];
+  return [];
 }
 
 /** What OnSinch must hold after the operation, as reasons it does not. Empty = verified. */
@@ -179,7 +200,7 @@ async function auditExtras(model: string, ids: string[], cursor: number, allowed
 /** The OnSinch user the bot's login (and the old engine's API key) writes as. */
 const BOT_USER = 2257;
 
-/** Refusals that need no browser: the order, the position, signed-on crew, and TEST-only while benching. */
+/** Refusals that need no browser: the order, the position, a cut below its workers, and TEST-only while benching. */
 async function preflight(op: Op, order: any, testOnly: boolean): Promise<string[]> {
   if (op.kind === "create_order") return testOnly && op.company_id !== "515" ? ["bench mode: creates only on TEST 515"] : [];
   if (!order) return [`order ${op.order_id} not found`];
@@ -189,12 +210,8 @@ async function preflight(op: Op, order: any, testOnly: boolean): Promise<string[
   const slot = slotsOf(order).find((s) => Number(s.id) === op.slot_id);
   if (!slot) return [`position ${op.slot_id} is not on order ${op.order_id}`];
   if (slot.cancelled === true && op.kind !== "cancel_position") return [`position ${op.slot_id} is cancelled`];
-  const growOnly = op.kind === "set_position_size" && op.size > Number(slot.size);
-  if (!growOnly) {
-    const n = await attendingOn(op.order_id, op.slot_id);
-    if (n > 0) return [`signed-on crew: ${n} on position ${op.slot_id}; ops must make this change`];
-  }
-  return [];
+  const cut = op.kind === "cancel_position" || (op.kind === "set_position_size" && op.size < Number(slot.size));
+  return cut ? staffedRefusal(op, await attendingOn(op.order_id, op.slot_id)) : [];
 }
 
 /** After a builder write: ledger the outcome, read the order back, check the audit row. */

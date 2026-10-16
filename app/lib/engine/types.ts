@@ -496,6 +496,13 @@ export interface Settings {
    */
   test_data_autoclear?: boolean;
   /**
+   * The bot creates a new order only when its first day is MORE than this many days after the
+   * email (Ben, 2026-10-15: "2 weeks for now, make it a setting"). Nearer bookings are staff's
+   * to create; updates to existing orders are never held by it. Optional so a row written
+   * before it existed reads as the default, 14.
+   */
+  create_lead_days?: number;
+  /**
    * Tool 1 — the verbatim Spartan reply generator. OFF by default: the engine
    * still classifies + does order work, but drafts NO reply until this is on.
    */
@@ -555,6 +562,7 @@ export const DEFAULT_SETTINGS: Settings = {
   replies_enabled: false,
   followup_drafting: false,
   test_data_autoclear: false,
+  create_lead_days: 14,
   jobs_board_enabled: false,
   analytics_tab_enabled: false,
   reply_delivery: "draft",

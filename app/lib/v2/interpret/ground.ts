@@ -240,15 +240,17 @@ export function parseDate(raw: string, sentIso: string): string | null {
   const sent = new Date(sentDay + "T12:00:00Z");
   const weekday = weekdayIn(q);
   let d: number, mo: number | null = null, y: number | null = null;
-  let m = /\b(\d{1,2})[/.](\d{1,2})(?:[/.](\d{2}|\d{4}))?\b/.exec(q);
+  // A year is 2020-2099, or two digits that are not the start of a time: '2 Nov 0900' read the
+  // 24-hour time as the year 900 (O Films, 10-15) and '2 Nov 09:00' as 2009. All three forms.
+  let m = /\b(\d{1,2})[/.](\d{1,2})(?:[/.](\d{2}(?![:.]\d)|20[2-9]\d))?\b/.exec(q);
   if (m) {
     d = Number(m[1]); mo = Number(m[2]) - 1; if (m[3]) y = Number(m[3].length === 2 ? `20${m[3]}` : m[3]);
   } else {
-    m = /\b(\d{1,2})(?:st|nd|rd|th)?\s+(?:of\s+)?([a-z]{3,9})\b(?:\s+'?(\d{2}|\d{4})\b)?/.exec(q);
+    m = /\b(\d{1,2})(?:st|nd|rd|th)?\s+(?:of\s+)?([a-z]{3,9})\b(?:\s+'?(\d{2}(?![:.]\d)|20[2-9]\d)\b)?/.exec(q);
     let mi = m ? MONTHS.indexOf(m[2].slice(0, 3)) : -1;
     // "November 4th", "October 8 2026": month first. Read before the bare "4th" fallback,
     // which would otherwise take the day and put it in the sent month (measured 10-08).
-    const mf = mi < 0 ? /\b([a-z]{3,9})\s+(\d{1,2})(?:st|nd|rd|th)?\b(?:\s+(\d{4})\b)?/.exec(q) : null;
+    const mf = mi < 0 ? /\b([a-z]{3,9})\s+(\d{1,2})(?:st|nd|rd|th)?\b(?:\s+(20[2-9]\d)\b)?/.exec(q) : null;
     const mfi = mf ? MONTHS.indexOf(mf[1].slice(0, 3)) : -1;
     if (m && mi >= 0) {
       d = Number(m[1]); mo = mi; if (m[3]) y = Number(m[3].length === 2 ? `20${m[3]}` : m[3]);

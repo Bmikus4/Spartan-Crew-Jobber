@@ -45,6 +45,12 @@ eq(parseCount("some more"), null, "some more is not a number");
 console.log("dates, against the sent date");
 eq(parseDate("17th September", "2026-09-16T10:00:00Z"), "2026-09-17", "17th September, sent the day before");
 eq(parseDate("13th Oct", "2026-09-23T10:00:00Z"), "2026-10-13", "13th Oct");
+// A time after the date is not its year (O Films, 10-15: "2 Nov 0900" read as the year 900).
+eq(parseDate("2 Nov 0900", "2026-10-15T10:00:00Z"), "2026-11-02", "2 Nov 0900: 0900 is the start time");
+eq(parseDate("2 Nov 09:00", "2026-10-15T10:00:00Z"), "2026-11-02", "2 Nov 09:00: 09 is not 2009");
+eq(parseDate("3rd November 1400", "2026-10-15T10:00:00Z"), "2026-11-03", "3rd November 1400");
+eq(parseDate("November 2 0900", "2026-10-15T10:00:00Z"), "2026-11-02", "November 2 0900");
+eq(parseDate("2 Nov 2027", "2026-10-15T10:00:00Z"), "2027-11-02", "a written year still counts");
 eq(parseDate("Thursday 8th October 26", "2026-10-07T12:00:00Z"), "2026-10-08", "Thursday 8th October 26");
 eq(parseDate("Wednesday 8th October 26", "2026-10-07T12:00:00Z"), null, "a weekday that contradicts the date: refused");
 eq(parseDate("14/10", "2026-10-07T13:00:00Z"), "2026-10-14", "14/10");
