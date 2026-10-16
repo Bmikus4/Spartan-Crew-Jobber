@@ -93,7 +93,13 @@ export function userPrompt(sentIso: string, from: string, subject: string, newes
   return `Sent: ${sentIso}\nFrom: ${from}\nSubject: ${subject}\n\nNEWEST MESSAGE:\n${newest.slice(0, 6000)}${context ? `\n\n${context}` : ""}`;
 }
 
-export const interpretModel = () => process.env.SPARTAN_INTERPRET_MODEL || process.env.SPARTAN_MODEL || "anthropic/claude-opus-4.6";
+/**
+ * GPT-6.1 Sol reads the emails (Ben, 10-15: "go with sol"). On the newest 100 emails scored
+ * against what ops did, it got 5 of 20 bookings right where the stored Opus readings got 2 of
+ * 22, for $0.007 an email against $0.024. SPARTAN_MODEL is the paused engine's and is set in
+ * production, so the reader no longer falls back to it.
+ */
+export const interpretModel = () => process.env.SPARTAN_INTERPRET_MODEL || "openai/gpt-6.1-sol";
 /** Which prompt produced an extraction: a reading is only comparable to one made by the same prompt. */
 export const PROMPT_ID = `extract@${createHash("sha256").update(SYSTEM).digest("hex").slice(0, 12)}`;
 

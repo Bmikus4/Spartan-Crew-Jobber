@@ -437,6 +437,14 @@ export async function plan(msg: Message, i: Interpretation, world: World, thread
         const hits = (await placesFor(world, g.venue, clientOrders)).map((p) => atPlace.get(p.id)).filter((x): x is number => !!x);
         if (hits.length === 1) location_id = hits[0];
       }
+      // Still none: the location most of the order's shifts stand at, flagged for staff to check
+      // (Ben, 10-15: no hand-off for a detail the order itself can answer).
+      if (!location_id && locations.size > 1) {
+        const uses = new Map<number, number>();
+        for (const t of teams(named)) for (const s of t.slots) if (Number(s.slotlocation_id)) uses.set(Number(s.slotlocation_id), (uses.get(Number(s.slotlocation_id)) ?? 0) + 1);
+        location_id = [...uses].sort((a, b) => b[1] - a[1] || a[0] - b[0])[0][0];
+        assumed.push(`assumed: R${named.number} has ${locations.size} locations and the email names none; the new shift on ${g.date} is at the one most of its shifts use`);
+      }
       if (!location_id) return handoff(`R${named.number} has ${locations.size} locations; which one the new shift belongs to is not written`);
       ops.push({ source: src(50 + n), op: { kind: "add_shift", order_id: Number(named.id), location_id, name: "Crew", date: g.date, start: g.start, end: g.end, positions: g.positions } });
       why.push(`R${named.number}: add a shift on ${g.date} ${g.start}-${g.end}, ${g.label}`, ...g.notes);

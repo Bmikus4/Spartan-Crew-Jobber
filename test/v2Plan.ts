@@ -200,6 +200,18 @@ ok(JSON.stringify(positionsFor(25)) === JSON.stringify([{ size: 3, profession_id
     ok(!!vo && vo.shifts[0].place_id === "31" && v.kind === "write" && v.why.some((w) => /2 OnSinch venues are named "Olympia"; booked at Olympia \(place 31\)/.test(w)), "two places named Olympia, none booked before: the one with an address, flagged", JSON.stringify(v).slice(0, 300));
   }
 
+  {
+    // R11349 (10-15): a shift added to an order at two venues, the email naming neither.
+    const two = { id: 16500, number: "11349", company_id: 137, intern_name: "", Job: [{ SlotTeam: [
+      { id: 7, name: "Crew", Slot: [{ ...slot(71, "2026-11-10", "08:00", "16:00", 4, false, 501), SlotLocation: { place_id: 61 } }, { ...slot(72, "2026-11-10", "08:00", "16:00", 1, true, 501), SlotLocation: { place_id: 61 } }] },
+      { id: 8, name: "Crew", Slot: [{ ...slot(81, "2026-11-11", "08:00", "16:00", 4, false, 502), SlotLocation: { place_id: 62 } }] },
+    ] }] };
+    const w2: World = { ...world, companyOrders: async () => [two] };
+    const d = await plan(msg("crew@eventconcept.com", "please add 4 crew on 12/11 08:00-16:00 too"), I([r({ date: "2026-11-12", start: "08:00", end: "16:00", crew: 4 })]), w2, 16500);
+    const op = d.kind === "write" ? (d.ops[0].op as any) : null;
+    ok(op?.kind === "add_shift" && op.location_id === 501 && d.kind === "write" && d.why.some((x) => /2 locations and the email names none/.test(x)), "two venues, none named: the one most of its shifts use, flagged", JSON.stringify(d).slice(0, 300));
+  }
+
   console.log("already booked by hand (every engine order in To Confirm on 10-07)");
   {
     const d = await plan(msg("crew@eventconcept.com", "4 crew Friday 9th 09:00-17:00 at Business Design Centre"), I([r({ date: "2026-10-09", start: "09:00", end: "17:00", crew: 4, venue: "Business Design Centre" })], { intent: "booking" }), world);

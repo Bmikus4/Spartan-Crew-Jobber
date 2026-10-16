@@ -97,7 +97,9 @@ const WORDS: Record<string, number> = { one: 1, two: 2, three: 3, four: 4, five:
 const PERSON = "(?:person|man|guy|lad|chap|carpenter|chippie|joiner|driver|tech|technician|operator|labourer|rigger|hand|crew ?member|crew ?chief|chief|steward|electrician|engineer)";
 export function oneIn(raw: string): boolean {
   const q = norm(raw);
-  return new RegExp(`(?:^|\\b(?:add|need|require|book|get|want|and|plus|also)\\s+)(?:someone|somebody|(?:a|an|one|1)\\s+(?:extra\\s+|more\\s+|additional\\s+|other\\s+)?${PERSON}s?\\b)`).test(q) && !/\b(couple|few)\b/.test(q);
+  // Up to two words may describe the person ("a local crew person", Solotech 10-15), never a
+  // number: "a two person team" is not one person.
+  return new RegExp(`(?:^|\\b(?:add|need|require|book|get|want|and|plus|also)\\s+)(?:someone|somebody|(?:a|an|one|1)\\s+(?:(?!(?:one|two|three|four|five|six|seven|eight|nine|ten|couple|few)\\b)[a-z]+\\s+){0,2}${PERSON}s?\\b)`).test(q) && !/\b(couple|few)\b/.test(q);
 }
 
 /** The number in an increase or decrease ("add 2", "another 3", "add a carpenter", "stand down one"). */
@@ -205,7 +207,7 @@ export function subjectDate(subject: string, sentIso: string): string | null {
   const s = norm(subject).replace(/^((re|fw|fwd)\s*:\s*)+/g, "");
   // "today"/"tomorrow" in a subject count from the day the SUBJECT was first written, which a
   // reply's sent date does not give, so a subject carrying one has no date here.
-  if (/\b(today|tonight|tomorrow)\b/.test(s)) return null;
+  if (/\b(today|tonight|tomorrow|yesterday)\b/.test(s)) return null;
   const tokens = s.match(/\b\d{1,2}[/.]\d{1,2}(?:[/.]\d{2,4})?\b|\b\d{1,2}(?:st|nd|rd|th)\b(?:\s+(?:of\s+)?[a-z]{3,9})?/g) ?? [];
   if (tokens.length !== 1) return null;
   return parseDate(tokens[0], sentIso);
@@ -223,11 +225,11 @@ export function parseDate(raw: string, sentIso: string): string | null {
     const ahead = ((want - sent + 7) % 7) || 7;
     return new Date(Date.parse(sentDay + "T12:00:00Z") + ahead * 864e5).toISOString().slice(0, 10);
   }
-  // "today" / "tomorrow" are the client's own words counted from the day they sent them.
-  // Anything else in the same quote must agree, or the date does not exist.
-  const rel = /\b(today|tonight|tomorrow)\b/.exec(q);
+  // "today" / "tomorrow" / "yesterday" are the client's own words counted from the day they
+  // sent them. Anything else in the same quote must agree, or the date does not exist.
+  const rel = /\b(today|tonight|tomorrow|yesterday)\b/.exec(q);
   if (rel) {
-    const day = new Date(Date.parse(sentDay + "T12:00:00Z") + (rel[1] === "tomorrow" ? 864e5 : 0));
+    const day = new Date(Date.parse(sentDay + "T12:00:00Z") + (rel[1] === "tomorrow" ? 864e5 : rel[1] === "yesterday" ? -864e5 : 0));
     const iso = day.toISOString().slice(0, 10);
     const rest = q.replace(rel[0], " ");
     const wd = weekdayIn(rest);
@@ -312,6 +314,8 @@ export function timesIn(raw: string): Set<string> {
     if (a <= 23 && b <= 23) { out.add(hm(a, am)); out.add(hm(b, bm)); }
   }
   for (const tok of q.split(/[\s,;()/]+|(?<=\d)-(?=\d)/)) { const t = parseTime(tok); if (t) out.add(t); }
+  // "Call time 2 PM" (SN ExCeL, 10-15): a time and its am/pm a space apart.
+  for (const m of q.matchAll(/\b\d{1,2}(?:[:.]\d{2})?\s+(?:am|pm)\b/g)) { const t = parseTime(m[0].replace(/\s+/, "")); if (t) out.add(t); }
   return out;
 }
 
@@ -324,6 +328,9 @@ export function countsIn(raw: string): Set<number> {
   if (one) out.add(one);
   if (oneIn(q)) out.add(1);
   for (const m of q.matchAll(/\b(\d{1,3})\s*x\b|\bx\s*(\d{1,3})\b|\b(\d{1,3})\s*x(?=\s*\d)/g)) out.add(Number(m[1] ?? m[2] ?? m[3]));
+  // "Could we up this call to 4 too please" (RG Jones, 10-15): a total after its verb, a few
+  // words between, anywhere in the quote.
+  for (const m of q.matchAll(/\b(?:up|increase|bump|raise|take|make|go)\s+(?:[a-z]+\s+){0,3}to\s+(\d{1,3})\b/g)) out.add(Number(m[1]));
   const who = "(?:crew|staff|people|persons?|bodies|hands|guys|men|lads|helpers|labourers|stagehands|riggers|carpenters?|drivers?|techs?|technicians?|stewards?|workers?)";
   for (const m of q.matchAll(new RegExp(String.raw`\b(\d{1,3}|${WORD_N})\s+(?:x\s+)?(?:more\s+|extra\s+|additional\s+)?(?:local\s+|general\s+)?${who}\b`, "g"))) out.add(/\d/.test(m[1]) ? Number(m[1]) : WORDS[m[1]]);
   for (const m of q.matchAll(new RegExp(String.raw`\bat least\s+(\d{1,3}|${WORD_N})\b`, "g"))) out.add(/\d/.test(m[1]) ? Number(m[1]) : WORDS[m[1]]);

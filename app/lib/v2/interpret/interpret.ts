@@ -4,7 +4,7 @@
 // is dropped and named in `problems`. A request with problems produces no write.
 // ============================================================================
 import type { Extraction, Grounded, RawRequest } from "./extract";
-import { addMinutes, amountIn, countsIn, datesIn, durationsIn, norm, oneIn, parseCount, parseDate, parseDuration, parseNewDate, parseTime, poAfterLabel, quoteIn, subjectDate, timesIn } from "./ground";
+import { addMinutes, amountIn, countsIn, datesIn, durationsIn, londonDay, norm, oneIn, parseCount, parseDate, parseDuration, parseNewDate, parseTime, poAfterLabel, quoteIn, subjectDate, timesIn } from "./ground";
 import { quotable, type ReadContext } from "./context";
 
 export type Request = {
@@ -79,6 +79,16 @@ export function ground(x: Extraction, newest: string, sentIso: string, ctx: Grou
     const v = parse(g.quote);
     if (v !== null && v === g.value) return v;
     if (among && among(g.quote).has(g.value)) return g.value;
+    // "Arrival: 12:00 instead of 13:00", "today instead of yesterday": the new value comes
+    // before "instead of", the old one after it. A target is the old one. Measured 10-15 on
+    // Sol's readings: 3 of 10 refusals were a quote holding both values.
+    const sides = /^(.*?)\b(?:instead of|rather than)\b(.*)$/i.exec(g.quote);
+    if (sides) {
+      // Each side without a label or emphasis: "Arrival: 12:00*" is 12:00.
+      const side = (/target/.test(name) ? sides[2] : sides[1]).replace(/^[^:\d]*:\s*(?=\d)/, "").replace(/[*_~]+/g, "").trim();
+      const w = side ? parse(side) : null;
+      if ((w !== null && w === g.value) || (among && side && among(side).has(g.value))) return g.value;
+    }
     problems.push(`${name}: "${g.quote}" reads as ${JSON.stringify(v)}, not ${JSON.stringify(g.value)}`);
     return undefined;
   };
@@ -87,6 +97,13 @@ export function ground(x: Extraction, newest: string, sentIso: string, ctx: Grou
     const before = problems.length;
     const tag = `request ${i + 1}`;
     let date = check(`${tag} date`, r.date, (q) => parseNewDate(q, sentIso));
+    // "04.11.25" in an email of 14 Oct 2026 (Event Concept's November requests; ops booked them
+    // in 2026): last year's date, whose day comes round within 120 days, is that coming day.
+    if (date && Number(date.slice(0, 4)) === Number(londonDay(sentIso).slice(0, 4)) - 1) {
+      const next = `${Number(date.slice(0, 4)) + 1}${date.slice(4)}`;
+      const ahead = (Date.parse(`${next}T12:00:00Z`) - Date.parse(`${londonDay(sentIso)}T12:00:00Z`)) / 864e5;
+      if (ahead >= 0 && ahead <= 120) { notes.push(`${tag}: the email gives ${date.slice(0, 4)} for ${next.slice(5)}; read as ${next}, the coming one`); date = next; }
+    }
     const where = r.action === "new_shift" ? all : mine;
     let start = check(`${tag} start`, r.start, parseTime, timesIn, where);
     const dur = check(`${tag} duration`, r.duration_minutes, parseDuration, durationsIn, where);

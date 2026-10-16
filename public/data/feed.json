@@ -3479,5 +3479,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0189",
+  "ts": "2026-10-16T03:35:24+00:00",
+  "kind": "measurement",
+  "headline": "reader = Sol; vs ops 9/22 (9/15 allowed) from 2/22; instead-of, yesterday, 2 PM, up to N, year roll",
+  "subject": "GPT-6.1 Sol reads the emails, and the checks on its readings understand how clients actually write times, counts and dates",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 199,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]

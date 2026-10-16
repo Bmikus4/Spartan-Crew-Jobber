@@ -4,7 +4,7 @@
 //
 // Offline.  npx tsx test/v2Ground.ts
 // ============================================================================
-import { latestText, quoteIn, parseTime, parseDuration, parseCount, parseDate, addMinutes, poAfterLabel } from "../app/lib/v2/interpret/ground";
+import { latestText, quoteIn, parseTime, parseDuration, parseCount, parseDate, addMinutes, poAfterLabel, oneIn, timesIn, countsIn } from "../app/lib/v2/interpret/ground";
 import { ground } from "../app/lib/v2/interpret/interpret";
 
 let fails = 0;
@@ -136,6 +136,26 @@ eq(parseDate("Friday the 16th", "2026-10-23T13:01:00Z"), "2026-10-16", "Friday t
 eq(parseDate("Sunday the 16th", "2026-10-23T13:01:00Z"), null, "no 16th in reach is a Sunday: no date");
 ok(poAfterLabel("The PO for R40012 is 37463.", "37463"), "The PO for R40012 is 37463");
 ok(!poAfterLabel("The PO for R40012 is 374631.", "37463"), "and only the whole reference");
+
+console.log("what the checker could not read on Sol's readings (10-15)");
+{
+  const sent = "2026-10-15T09:00:00Z";
+  eq(parseDate("yesterday", sent), "2026-10-14", "yesterday is the day before the email was sent");
+  ok(oneIn("a local crew person"), "a local crew person is one person (Solotech)");
+  ok(!oneIn("a two person team"), "a two person team is not one person");
+  const email = "Morning, can the crew have Arrival: 12:00* instead of 13:00* on Friday please";
+  const x = { intent: "change" as const, po: null, note: "", requests: [{ action: "change_times" as const, date: { value: "2026-10-16", quote: "Friday" }, start: { value: "12:00", quote: "Arrival: 12:00* instead of 13:00*" }, end: null, duration_minutes: null, crew: null, crew_add: null, venue: null, crew_chief: null, trade: null,
+    target: { quote: "Arrival: 12:00* instead of 13:00*", date: null as any, start: { value: "13:00", quote: "Arrival: 12:00* instead of 13:00*" } } }] };
+  const g = ground(x as any, email, sent);
+  eq(g.requests[0]?.start, "12:00", "the new time is the one before 'instead of'");
+  eq(g.requests[0]?.target?.start, "13:00", "the target's time is the one after it");
+  eq(g.problems.length + (g.requests[0]?.problems.length ?? 0), 0, "and nothing is refused");
+  ok(timesIn("Call time 2 PM").has("14:00"), "Call time 2 PM holds 14:00 (SN ExCeL)");
+  ok(countsIn("Could we up this call to 4 too please Tracy?").has(4), "up this call to 4 is a total of 4 (RG Jones)");
+  const nov = "Could we please book in the below new requests with you for November?\n04.11.25 Somerset House\n8x 2hr 10:00";
+  const y = ground({ intent: "booking", po: null, note: "", requests: [{ action: "new_shift", date: { value: "2025-11-04", quote: "04.11.25" }, start: { value: "10:00", quote: "8x 2hr 10:00" }, end: null, duration_minutes: { value: 120, quote: "8x 2hr 10:00" }, crew: { value: 8, quote: "8x 2hr 10:00" }, crew_add: null, venue: { value: "Somerset House", quote: "Somerset House" }, crew_chief: null, trade: null, target: null }] } as any, nov, "2026-10-14T16:35:37Z");
+  eq(y.requests[0]?.date, "2026-11-04", "04.11.25 written in October 2026 is the coming 4 November (Event Concept; ops booked 2026)");
+}
 
 console.log("a decrease must say it is one (crew_remove, 10-11)");
 {
