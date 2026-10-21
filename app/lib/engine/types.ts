@@ -490,13 +490,6 @@ export interface Settings {
    */
   intake_paused?: boolean;
   /**
-   * Follow-up drafting (Ben, 2026-10-10): whether a job the TV raises as "Needs Follow Up"
-   * should get a drafted chase in its Gmail thread. OFF by default. Stored only: nothing
-   * drafts from it yet (the chase composer has no caller), and the Settings screen says so.
-   * Optional so a stored row written before it existed still reads as off.
-   */
-  followup_drafting?: boolean;
-  /**
    * Clear test data every 15 minutes (Ben, 2026-10-14), from the minute sync (lib/testData.ts
    * says what counts as a test). Off means nothing is cleared on a timer; the Settings button
    * still clears on demand. Optional so a row written before it existed reads as off.
@@ -516,8 +509,11 @@ export interface Settings {
    */
   create_lead_enabled?: boolean;
   /**
-   * Tool 1 — the verbatim Spartan reply generator. OFF by default: the engine
-   * still classifies + does order work, but drafts NO reply until this is on.
+   * AI email drafts: the ONE switch for any email the system writes into a Gmail thread for a
+   * person, a reply to an inbound email and a chase on a job the TV marks Needs Follow Up alike.
+   * A separate follow-up switch is the same thing twice (Ben, 2026-10-21), so a new kind of draft
+   * joins this one rather than adding another. OFF by default. reply_delivery and reply_scope
+   * below apply to every draft.
    */
   replies_enabled: boolean;
   /**
@@ -573,7 +569,6 @@ export interface Settings {
 
 export const DEFAULT_SETTINGS: Settings = {
   replies_enabled: false,
-  followup_drafting: false,
   test_data_autoclear: false,
   create_lead_days: 14,
   create_lead_enabled: true,

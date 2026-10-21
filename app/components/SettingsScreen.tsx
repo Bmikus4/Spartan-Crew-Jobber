@@ -16,9 +16,9 @@ import InstallButton from "./InstallButton";
 
 type ReplyDelivery = "draft" | "send";
 type ReplyScope = "all" | "enquiries";
-interface Settings { replies_enabled: boolean; followup_drafting?: boolean; test_data_autoclear?: boolean; create_lead_days?: number; create_lead_enabled?: boolean; jobs_board_enabled?: boolean; analytics_tab_enabled?: boolean; intake_paused?: boolean; reply_delivery: ReplyDelivery; reply_scope: ReplyScope; default_rate_card: number }
+interface Settings { replies_enabled: boolean; test_data_autoclear?: boolean; create_lead_days?: number; create_lead_enabled?: boolean; jobs_board_enabled?: boolean; analytics_tab_enabled?: boolean; intake_paused?: boolean; reply_delivery: ReplyDelivery; reply_scope: ReplyScope; default_rate_card: number }
 
-const SETTINGS_FALLBACK: Settings = { replies_enabled: false, followup_drafting: false, reply_delivery: "draft", reply_scope: "all", default_rate_card: 315 };
+const SETTINGS_FALLBACK: Settings = { replies_enabled: false, reply_delivery: "draft", reply_scope: "all", default_rate_card: 315 };
 
 const INK = "var(--text-primary)";
 const SUB = "var(--text-secondary)";
@@ -178,11 +178,14 @@ export default function SettingsScreen({ signedInAs }: { signedInAs?: string }) 
         </header>
 
         <Panel
-          title="AI email replies"
-          blurb={<>When on, the engine drafts a Spartan Crew reply to each inbound email, in Spartan&apos;s voice and with the whole thread as context. <b style={{ color: SUB }}>Off by default</b> — classification and order staging run without it.</>}
+          title="AI email drafts"
+          blurb={<>One switch for every email the system writes in a Gmail thread for a person: a reply to an inbound email, in Spartan&apos;s voice with the whole thread as context, and a follow-up on a job the office TV marks <b style={{ color: SUB }}>Needs Follow Up</b> (nothing from anyone for 24 hours). <b style={{ color: SUB }}>Off by default</b>: orders are read and made without it.</>}
         >
-          <Segmented label="AI email replies" value={s.replies_enabled} onChange={(v) => save({ ...s, replies_enabled: v })}
+          <Segmented label="AI email drafts" value={s.replies_enabled} onChange={(v) => save({ ...s, replies_enabled: v })}
             options={[{ id: false, label: "Off" }, { id: true, label: "On" }]} />
+          {/* Said on the screen, not left to be discovered: a switch that changes nothing while
+              looking like it worked is how the replies toggle failed before (settingsDb). */}
+          {s.replies_enabled && <Warn tone="accent">Saved. No drafts are written yet: drafting is parked, and the current engine has no drafting step.</Warn>}
 
           {/* The two settings below only mean anything once replies are on, so they
               stay out of the way until then. */}
@@ -221,17 +224,6 @@ export default function SettingsScreen({ signedInAs }: { signedInAs?: string }) 
             before, including the rule that an order priced from it is never written
             hands-free. Nothing about pricing behaviour changed; the knob is not on the
             wall any more. */}
-
-        <Panel
-          title="Follow-up drafting"
-          blurb={<>A job with nothing on it from anyone for 24 hours shows <b style={{ color: SUB }}>Needs Follow Up</b> on the office TV, whichever side is waiting. When this is on, the system is to draft a follow-up in that job&apos;s Gmail thread for a person to send. <b style={{ color: SUB }}>Off by default.</b></>}
-        >
-          <Segmented label="Follow-up drafting" value={!!s.followup_drafting} onChange={(v) => save({ ...s, followup_drafting: v })}
-            options={[{ id: false, label: "Off" }, { id: true, label: "On" }]} />
-          {/* Said on the screen, not left to be discovered: a switch that changed nothing
-              while looking like it worked is how the replies toggle failed before (settingsDb). */}
-          {s.followup_drafting && <Warn>Saved. Drafts are not written yet: the TV raises the follow-up, and the drafting itself is still to be built.</Warn>}
-        </Panel>
 
         <LeadDaysPanel days={s.create_lead_days ?? 14} enabled={s.create_lead_enabled !== false}
           onSave={(v) => save({ ...s, create_lead_days: v })} onEnabled={(v) => save({ ...s, create_lead_enabled: v })} />

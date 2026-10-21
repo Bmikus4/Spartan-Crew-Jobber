@@ -14,6 +14,7 @@ import { DEFAULT_SETTINGS, type Settings } from "../app/lib/engine/types";
 // The REAL whitelist and the REAL wire rule - not reimplementations, so this
 // test cannot drift away from what the route actually does.
 import { coerceSettings, replyDeliveryForWire } from "../app/lib/settingsDb";
+import { readFileSync } from "node:fs";
 
 let fails = 0;
 const ok = (cond: boolean, label: string, extra = "") => {
@@ -62,6 +63,10 @@ console.log("\n[3] junk is rejected without disturbing what is stored");
   ok(merge(stored, { default_rate_card: 0 }).default_rate_card === 0, "0 IS a real value - it means hold the thread instead");
   ok(merge(stored, { create_lead_days: 21 }).create_lead_days === 21, "the new-order lead days are saved");
   ok(merge(stored, { create_lead_enabled: false }).create_lead_enabled === false && merge(stored, { create_lead_enabled: "no" }).create_lead_enabled === undefined, "the lead rule's switch saves a true or false, nothing else");
+  // Ben, 10-21: follow-up drafting and AI email replies were two switches for one thing.
+  ok(!("followup_drafting" in whitelist({ followup_drafting: true })), "the retired follow-up drafting switch is no longer saved: AI email drafts is the one switch");
+  const screen = readFileSync("app/components/SettingsScreen.tsx", "utf8");
+  ok(!/followup_drafting/.test(screen) && (screen.match(/label="AI email drafts"/g) ?? []).length === 1, "the Settings screen has one drafting switch, AI email drafts");
   ok(merge(stored, { intake_paused: true }).intake_paused === true && merge(stored, { intake_paused: "yes" }).intake_paused === undefined, "the intake-paused switch saves a true or false, nothing else");
   ok(merge(stored, { create_lead_days: 2.5 }).create_lead_days === undefined && merge(stored, { create_lead_days: -1 }).create_lead_days === undefined && merge(stored, { create_lead_days: "14" }).create_lead_days === undefined, "lead days that are not a whole number of days from 0 are refused");
   ok(saved.replies_enabled === true, "non-boolean replies_enabled ignored");
