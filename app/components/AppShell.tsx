@@ -12,6 +12,8 @@ import LiveFeedScreen from "./LiveFeedScreen";
 import SettingsScreen from "./SettingsScreen";
 import LoginScreen from "./LoginScreen";
 import OnboardingFlow from "./onboarding/OnboardingFlow";
+import HelpWidget from "./HelpWidget";
+import TipHost from "./ui/TipHost";
 
 // TWO SCREENS (Ben, 2026-10-11): the Live Feed, which is the ops list, and Settings. The Jobs
 // Board returns only when Settings switches it on; Analytics is a popup from a folder tab.
@@ -79,6 +81,11 @@ export default function AppShell() {
   return (
     <div style={{ display: "flex", height: "100%", width: "100%", background: "var(--bg)" }}>
       {gate}
+      {/* The help bubble, once somebody is signed in and through onboarding. Never on the TV (the
+          tv branch above returns first): a wall screen has nobody at it to ask. TipHost draws the
+          bubble's tooltips; nothing else in Spartan carries data-tip. */}
+      {auth.authenticated && onboarded && <HelpWidget />}
+      <TipHost />
       {/* The rail is flush and unframed; the content window is the only framed thing
           on screen. It used to be a second floating card with its own border, radius
           and inset highlight, competing with the panel that holds the work. */}
