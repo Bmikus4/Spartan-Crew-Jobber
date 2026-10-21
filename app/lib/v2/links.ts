@@ -58,6 +58,23 @@ export async function recordLink(sql: Sql, l: { thread_id: string; order_id: num
       shifts = CASE WHEN EXCLUDED.shifts = '[]'::jsonb THEN job_links.shifts ELSE EXCLUDED.shifts END, state = 'linked', last_checked = now(), held_since = NULL`;
 }
 
+/**
+ * AN ORDER THE PLANNER FOUND (by evidence, not by writing it) becomes the thread's link, so the
+ * TV's R and J are the order's own (measured 10-21: 59 of 107 need threads had their order in
+ * OnSinch and no link, because only a bot write made one). It never displaces a live link to
+ * another order: the bot's own order stays the thread's until it is gone (0cdb4ec). A held link
+ * is an order that is gone, and the found one replaces it.
+ */
+export async function linkFound(sql: Sql, l: { thread_id: string; order_id: number; source: string }): Promise<"linked" | "same" | "kept"> {
+  await ensureLinks(sql);
+  const have = (await sql`SELECT order_id, state FROM job_links WHERE thread_id = ${l.thread_id}`) as Array<{ order_id: string | number; state: string }>;
+  if (have.some((h) => Number(h.order_id) === l.order_id && h.state !== "held")) return "same";
+  if (have.some((h) => h.state !== "held")) return "kept";
+  await sql`DELETE FROM job_links WHERE thread_id = ${l.thread_id} AND state = 'held'`;
+  await recordLink(sql, l);
+  return "linked";
+}
+
 /** Every order the bot made or changed, from the decisions, recorded as a link once. */
 export async function backfillLinks(sql: Sql): Promise<number> {
   await ensureLinks(sql);

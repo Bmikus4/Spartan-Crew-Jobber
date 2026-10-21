@@ -3696,5 +3696,45 @@
    "app/lib/v2/interpret/interpret.ts",
    "test/v2History.ts"
   ]
+ },
+ {
+  "id": "S-0198",
+  "ts": "2026-10-21T03:14:49+00:00",
+  "kind": "measurement",
+  "headline": "Release 2: open cards with R and J 9 -> 31 of 49 (dry run on production)",
+  "subject": "The planner finds a thread's order by evidence, links it, and plans every open card again each minute against OnSinch now",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 204,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  },
+  "measured": {
+   "dataset": "production, read-only dry run of replanOpen on every open card (v2_decisions since 2026-10-09T10:20Z, job not over), 2026-10-21 ~04:00Z, OnSinch as it is now",
+   "open_cards": 49,
+   "planner_now_says": {
+    "already booked or done (card resolves)": 22,
+    "same need, now naming its order": 14,
+    "unchanged": 13,
+    "of": 49
+   },
+   "cards_with_R_and_J": {
+    "before": 9,
+    "after": 31,
+    "of": 49,
+    "how": "a live job_links row before; a live link or the order the planner now names after"
+   },
+   "examples": "SN ExCeL -> R10522 J13877; Icon Events -> R11442 J16551; Zest4 -> R11749 J16876 (was the deleted bot R11747); MK Crew -> already booked R11750-R11752; Subfrantic -> already booked R11698/R11701/R11705; Video Illusions -> staff changed R11765 after the email",
+   "writes_to_onsinch": 0
+  },
+  "deferred": [
+   "Bearded Kitten '3 llifters' (R11507) stays unlinked: its 16 Oct is only in a later email of the thread"
+  ],
+  "sources": [
+   "app/lib/v2/replan.ts",
+   "app/lib/v2/interpret/plan.ts",
+   "test/v2Finder.ts"
+  ]
  }
 ]

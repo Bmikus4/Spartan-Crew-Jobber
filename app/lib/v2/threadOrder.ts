@@ -1,16 +1,14 @@
 // ============================================================================
-// The order a thread is already linked to, wherever the link was recorded.
+// The order a thread is already linked to: its job_links row (a bot write, or an order the
+// planner found, links.ts), else an order the rebuild created in it or planned a change on.
 // ----------------------------------------------------------------------------
-// Three places hold one, and the planner read only the first:
-//   1. conversation_state.onsinch_order_id, the paused engine's binding (frozen: v2 never
-//      writes it, so nothing v2 does ever appears here);
-//   2. v2_decisions: an order the rebuild created in the thread (executed detail) or planned
-//      a change on (an op's order_id);
-//   3. feed_marks matched / order-found: the order the TV's verifier found for the thread.
-// Reading only (1) meant a second booking email in a thread whose order the bot had made,
-// or whose hand-built order the verifier had found, was planned as a NEW order, with only
-// the exact-window "already booked" check standing between it and a duplicate.
-// The paused engine's binding outranks the others; within a source the newest wins.
+// Two sources were dropped on 2026-10-21 and must not come back:
+//   - the paused engine's conversation_state binding: frozen since 10-08, and 114 of the orders
+//     it names are deleted from OnSinch;
+//   - the TV verifier's screen-only matched / order-found marks: one, found by "date and venue",
+//     put Creative Technology's Cytiva shift into R11500 on 14 Oct while staff's R11555 held it.
+// The planner finds a thread's order itself, by evidence (plan.ts findOrder); a find it is sure
+// of becomes a job_links row, so there is one source of a thread's order.
 // ============================================================================
 import type { NeonQueryFunction } from "@neondatabase/serverless";
 import { ensureLinks } from "./links";
@@ -19,22 +17,13 @@ export async function linkedOrderId(sql: NeonQueryFunction<false, false>, thread
   await ensureLinks(sql);
   const rows = (await sql`
     SELECT o FROM (
-      SELECT onsinch_order_id::bigint AS o, 1 AS pri, now() AS at
-        FROM conversation_state WHERE thread_id = ${threadId} AND onsinch_order_id > 0
-      UNION ALL
-      SELECT (e->'detail'->>'order_id')::bigint, 2, d.created_at
+      SELECT (e->'detail'->>'order_id')::bigint AS o, 2 AS pri, d.created_at AS at
         FROM v2_decisions d, jsonb_array_elements(CASE WHEN jsonb_typeof(d.executed) = 'array' THEN d.executed ELSE '[]'::jsonb END) e
        WHERE d.thread_id = ${threadId} AND (e->'detail'->>'order_id') ~ '^[0-9]+$'
       UNION ALL
       SELECT (x->'op'->>'order_id')::bigint, 2, d.created_at
         FROM v2_decisions d, jsonb_array_elements(CASE WHEN jsonb_typeof(d.decision->'ops') = 'array' THEN d.decision->'ops' ELSE '[]'::jsonb END) x
        WHERE d.thread_id = ${threadId} AND d.kind = 'write' AND (x->'op'->>'order_id') ~ '^[0-9]+$'
-      UNION ALL
-      SELECT (f.evidence->>'order_id')::bigint, 3, f.at
-        FROM feed_marks f
-       WHERE f.thread_id = ${threadId} AND f.mark IN ('matched', 'order-found') AND (f.evidence->>'order_id') ~ '^[0-9]+$'
-         -- The verifier's day-only finds never link a thread for the planner (Ben 10-03).
-         AND coalesce(f.evidence->>'by', f.evidence->>'text', '') !~ '(only order on those days|sender''s name)'
       UNION ALL
       SELECT order_id::bigint, 0, coalesce(last_checked, first_seen)
         FROM job_links WHERE thread_id = ${threadId} AND state IN ('linked', 'relinked') AND order_id > 0

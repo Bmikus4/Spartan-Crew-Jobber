@@ -23,7 +23,8 @@ import { utcToLondon } from "./bot/ops";
 import { noTrace, type Tracer } from "./trace";
 import { v2Writes } from "../paused";
 import { linkedOrderId } from "./threadOrder";
-import { recordLink } from "./links";
+import { linkFound, recordLink } from "./links";
+import type { Grounded as Asked, ThreadMsg } from "./threadState";
 import { bookingsOf, contextText, venuesOf, type ReadContext, type ThreadLine } from "./interpret/context";
 import { readRows } from "./read";
 import { getSettings } from "../settingsDb";
@@ -244,8 +245,16 @@ export type DecideDeps = {
   leadDays?: () => Promise<number | null | undefined>;
   /** The moment of deciding: a day before it is already over and is never written. Absent, only a day before the email is refused. */
   now?: () => number;
-  /** The thread is now about this order: kept in job_links and swept every minute (links.ts). */
-  link?: (order_id: number) => Promise<void>;
+  /** Planned again after the fact (v2/replan.ts): staff's work since the email stands (plan.ts PlanOpts.again). */
+  again?: boolean;
+  /** The whole thread, ours included, for finding the order it is about (plan.ts findOrder). */
+  threadMessages?: () => Promise<ThreadMsg[]>;
+  /**
+   * The thread is now about this order: kept in job_links and swept every minute (links.ts).
+   * `source` "bot write" for an order the bot wrote; anything else is a find, which never
+   * displaces a live link (links.ts linkFound).
+   */
+  link?: (order_id: number, source?: string) => Promise<void>;
   record: (r: Recorded) => Promise<void>;
   trace: Tracer;
 };
@@ -293,13 +302,17 @@ export async function decideMessage(m: MessageIn, deps: DecideDeps): Promise<Rec
   const { x, meta } = got;
   deps.trace("extract", { ...meta, intent: x.intent, requests: x.requests?.length ?? 0 }, meta.ms);
   const t1 = Date.now();
-  const interpretation = ground(x, `${m.subject ?? ""}\n${newest}`, m.date_iso, { subject: String(m.subject ?? ""), prior: deps.prior ? await deps.prior().catch(() => []) : [], read, linkedOrderId: await deps.threadOrderId().catch(() => null) });
+  const prior = deps.prior ? await deps.prior().catch(() => [] as Request[]) : [];
+  const interpretation = ground(x, `${m.subject ?? ""}\n${newest}`, m.date_iso, { subject: String(m.subject ?? ""), prior, read, linkedOrderId: await deps.threadOrderId().catch(() => null) });
   deps.trace("ground", { problems: interpretation.problems.length + interpretation.requests.reduce((a, q) => a + q.problems.length, 0), notes: interpretation.notes ?? [] }, Date.now() - t1);
   const t2 = Date.now();
   const leadDays = deps.leadDays ? await deps.leadDays().catch(() => undefined) : undefined;
   // A PLAN THAT THROWS IS A CARD FOR A PERSON, like a read that fails: a time London's clock
   // skips, a window with no length or an OnSinch read that failed would otherwise lose the email.
-  const decision: Decision = await plan({ message_id: m.message_id, from, subject: String(m.subject ?? ""), sentIso: m.date_iso, text: newest }, interpretation, deps.world, await deps.threadOrderId(), { leadDays, now: deps.now?.() })
+  const decision: Decision = await plan({ message_id: m.message_id, from, subject: String(m.subject ?? ""), sentIso: m.date_iso, text: newest }, interpretation, deps.world, await deps.threadOrderId(),
+    { leadDays, now: deps.now?.(), again: deps.again, thread: deps.threadMessages ? await deps.threadMessages().catch(() => undefined) : undefined,
+      // The thread's earlier requests name its days too: SN ExCeL's 17th, 18th, 20th and 21st single out R10522.
+      raw: [...rawRequests(x), ...prior.map((r) => ({ date: r.date ?? r.target?.date, start: r.start, crew: r.crew, place_id: r.place_id, venue: r.venue, target: r.target }))] })
     .catch((e) => ({ kind: "handoff" as const, reasons: [`the system could not plan this email (${String((e as Error)?.message ?? e).slice(0, 120)})`] }));
   deps.trace("plan", { kind: decision.kind, ops: decision.kind === "write" ? decision.ops.map((o) => o.op.kind) : [], said: decision.kind === "write" ? decision.why : decision.kind === "handoff" ? decision.reasons : [decision.reason] }, Date.now() - t2);
   const out: Recorded = { kind: decision.kind, interpretation: { extraction: x, grounded: interpretation, meta }, decision, executed: null, client };
@@ -307,7 +320,9 @@ export async function decideMessage(m: MessageIn, deps: DecideDeps): Promise<Rec
   // AN ORDER THE PLANNER FOUND IS THE THREAD'S ORDER. "already booked: R11599" was decided and
   // not kept, so the TV card for that thread showed no R number and the label sync had
   // nothing to say. One order found is linked; several are left for a person.
-  if (decision.kind === "none" && decision.found?.length === 1 && deps.link) await deps.link(decision.found[0]).catch(() => {});
+  if (decision.kind === "none" && decision.found?.length === 1 && deps.link) await deps.link(decision.found[0], "planner find").catch(() => {});
+  // A card for a person names the order it is about, so the TV shows its R and J (plan.ts settle).
+  if (decision.kind === "handoff" && decision.order_id && deps.link) await deps.link(decision.order_id, "finder").catch(() => {});
   if (!deps.run || decision.kind !== "write") { deps.trace("final", { kind: out.kind }); return out; }
   // RECORDED AFTER EVERY OPERATION, not once at the end: a function that times out between
   // two writes kept no record of the first, and the card said "not written" over a change
@@ -322,10 +337,35 @@ export async function decideMessage(m: MessageIn, deps: DecideDeps): Promise<Rec
     await deps.record(out);
     if (r.status !== "verified") break;
     const made = Number((r.detail as any)?.order_id) || ("order_id" in op ? Number(op.order_id) : 0);
-    if (made && deps.link) await deps.link(made).catch(() => {});
+    if (made && deps.link) await deps.link(made, "bot write").catch(() => {});
   }
   deps.trace("final", { kind: out.kind, executed: executed.map((e) => e.status) });
   return out;
+}
+
+/** The reader's own values, for finding an order only: a day grounding refused still names it. */
+const val = (g: unknown): any => (g && typeof g === "object" && "value" in (g as object) ? (g as { value: unknown }).value : g) ?? undefined;
+export function rawRequests(x: Extraction): Asked[] {
+  return (x.requests ?? []).map((q) => ({
+    date: val(q.date), start: val(q.start), crew: typeof val(q.crew) === "number" ? val(q.crew) : undefined, venue: val(q.venue),
+    target: q.target ? { date: val(q.target.date), start: val(q.target.start) } : undefined,
+  }));
+}
+
+/** What a decision reads from the stored thread: the reader's context, the client's earlier requests, the whole thread. */
+export function threadReads(sql: NeonQueryFunction<false, false>, m0: MessageIn, withIds: string[] = []): Pick<DecideDeps, "thread" | "prior" | "threadMessages"> {
+  return {
+    thread: async () => ((await sql`SELECT is_from_spartan, date_iso, body FROM thread_messages
+      WHERE thread_id = ${m0.thread_id} AND date_iso < ${m0.date_iso} AND message_id <> ALL(${[m0.message_id, ...withIds]}) ORDER BY date_iso`) as any[])
+      .slice(-6).map((r) => ({ who: r.is_from_spartan ? "spartan" as const : "client" as const, at: String(r.date_iso), text: latestText(String(r.body ?? "")) })),
+    prior: async () => ((await sql`SELECT interpretation->'grounded'->'requests' AS rs FROM v2_decisions
+      WHERE thread_id = ${m0.thread_id} AND sent_at < ${m0.date_iso} AND interpretation IS NOT NULL ORDER BY sent_at`) as any[]).flatMap((r) => (Array.isArray(r.rs) ? r.rs : [])),
+    threadMessages: async () => ((await sql`SELECT message_id, from_address, to_addresses, date_iso, subject, body, is_from_spartan FROM thread_messages
+      WHERE thread_id = ${m0.thread_id} ORDER BY date_iso`) as any[]).map((r) => ({
+        message_id: String(r.message_id), from: addr(r.from_address), to: ([] as unknown[]).concat(r.to_addresses ?? []).map(String), at: Date.parse(String(r.date_iso)),
+        subject: String(r.subject ?? ""), body: String(r.body ?? ""), ours: !!r.is_from_spartan || /@spartancrew\.co\.uk$/i.test(addr(r.from_address)),
+      })),
+  };
 }
 
 export async function processMessage(message_id: string, opts: { execute: boolean; world?: World; with?: string[] } = { execute: false }): Promise<Processed> {
@@ -340,18 +380,17 @@ export async function processMessage(message_id: string, opts: { execute: boolea
   const r = await decideMessage(m, {
     extract: extractWithMeta,
     world: opts.world ?? onsinchWorld(),
-    // Every recorded link, not only the paused engine's binding (threadOrder.ts says why).
+    // Every recorded link (threadOrder.ts says which count).
     threadOrderId: () => linkedOrderId(sql, m.thread_id),
-    thread: async () => ((await sql`SELECT is_from_spartan, date_iso, body FROM thread_messages
-      WHERE thread_id = ${m.thread_id} AND date_iso < ${m0.date_iso} AND message_id <> ALL(${[m0.message_id, ...(opts.with ?? [])]}) ORDER BY date_iso`) as any[])
-      .slice(-6).map((r) => ({ who: r.is_from_spartan ? "spartan" as const : "client" as const, at: String(r.date_iso), text: latestText(String(r.body ?? "")) })),
-    prior: async () => ((await sql`SELECT interpretation->'grounded'->'requests' AS rs FROM v2_decisions
-      WHERE thread_id = ${m.thread_id} AND sent_at < ${m.date_iso} AND interpretation IS NOT NULL ORDER BY sent_at`) as any[]).flatMap((r) => (Array.isArray(r.rs) ? r.rs : [])),
+    ...threadReads(sql, m0, opts.with ?? []),
     run: opts.execute ? runWhenFree : null,
     // A settings read that fails keeps the rule on: undefined is the planner's default, never null.
     leadDays: () => getSettings().then((s) => (s.create_lead_enabled === false ? null : s.create_lead_days)),
     now: () => Date.now(),
-    link: (order_id) => recordLink(sql, { thread_id: m.thread_id, order_id, source: "bot write" }),
+    link: async (order_id, source = "bot write") => {
+      if (source === "bot write") await recordLink(sql, { thread_id: m.thread_id, order_id, source });
+      else await linkFound(sql, { thread_id: m.thread_id, order_id, source });
+    },
     record: async (d) => {
       await sql`
         INSERT INTO v2_decisions (message_id, thread_id, from_address, sent_at, kind, interpretation, decision, executed, code_version, company_id, company)

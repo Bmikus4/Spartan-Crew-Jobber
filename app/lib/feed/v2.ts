@@ -35,6 +35,8 @@ export interface V2Row {
   subject: string | null;
   /** The thread's link (job_links): the order it is about, whoever made it. */
   link?: { order_id: number; r_number: string | null; job_id: number | null } | null;
+  /** The planner's answer on this email now (v2/replan.ts), when it has been planned again. */
+  replan?: Decision | null;
 }
 
 const REF = /\b[A-Z]{2,5}-?\d{3,6}\b/g;
@@ -62,41 +64,56 @@ function startOf(date: string, start?: string): number {
   try { return Date.parse(londonToUtc(date, start ?? "00:00")); } catch { return NaN; }
 }
 
-export function v2Source(row: V2Row, now: number): FeedSource {
-  const d = row.decision;
+/** What a decision says about its card: the kind, the order it is about, what the bot did for it. */
+function classify(row: V2Row, d: Decision) {
   const g = row.grounded;
   const ops = d.kind === "write" ? d.ops.map((o) => o.op) : [];
   const said = d.kind === "write" ? d.why : d.kind === "handoff" ? d.reasons : [d.reason];
   const r_numbers = [...new Set(rNumbersIn(`${row.subject ?? ""}\n${said.join("\n")}`))];
-
   const creates = ops.some((o) => o.kind === "create_order");
-  const written = !!row.executed?.length && row.executed.length === ops.length && row.executed.every((r) => r.status === "verified");
+  // What the bot ran belongs to the decision it ran for: a decision planned again sent nothing.
+  const executed = d === row.decision ? row.executed : null;
+  const written = !!executed?.length && executed.length === ops.length && executed.every((r) => r.status === "verified");
   const orderOp = ops.find((o): o is Extract<Op, { order_id: number }> => "order_id" in o);
   // A created order's ids exist only in what the bot read back, and the verifier needs them to watch the check.
-  const made = row.executed?.find((r) => Number(r.detail?.order_id) > 0)?.detail as { order_id?: unknown; number?: unknown } | undefined;
-  const order_id = orderOp ? orderOp.order_id : made ? Number(made.order_id) : null;
+  const made = executed?.find((r) => Number(r.detail?.order_id) > 0)?.detail as { order_id?: unknown; number?: unknown } | undefined;
+  const order_id = orderOp ? orderOp.order_id : made ? Number(made.order_id) : d.kind === "handoff" && d.order_id ? d.order_id : null;
   if (made?.number != null && String(made.number)) r_numbers.push(String(made.number).replace(/^R/i, ""));
   // A thread that names an order, or a request aimed at an existing shift, is an update even
   // when it also adds a shift: "move the de-rig to Tuesday, and 6 more on Wednesday" (The
   // Events House, 10-11) read as Needs Created because one of its requests was a new shift.
   const aimsAtOrder = !!r_numbers.length || !!order_id || !!g?.requests.some((r) => r.action !== "new_shift" || r.target);
   const asksNew = g ? !aimsAtOrder && (g.intent === "booking" || g.intent === "quote_request" || g.requests.some((r) => r.action === "new_shift")) : !r_numbers.length;
-
   let kind: FeedKind;
   if (d.kind === "write" && written) kind = creates ? "created-check" : "updated-check";
   else if (d.kind === "write") kind = creates ? "needs-created" : "needs-updated";
   else if (d.kind === "handoff" && (d.reply ?? d.reasons.every((x) => REPLY_REASON.test(x)))) kind = "needs-reply";
   else kind = asksNew ? "needs-created" : "needs-updated";
-  const note = cardNote({ decision: d, grounded: g, executed: row.executed, written });
+  return { kind, ops, r_numbers, executed, written, order_id, made };
+}
+
+/**
+ * A thread's card is the planner's CURRENT answer on its email: the decision made when it
+ * arrived, or the one v2/replan.ts made since against OnSinch as it is now. An answer of "none"
+ * leaves nothing to show, so a card that was on the TV turns green with the reason (project.ts).
+ * The item key stays the email's first decision's, so a tick or a remembered need survives the
+ * card being planned again with another kind or order (a re-keyed card loses its marks).
+ */
+export function v2Source(row: V2Row, now: number): FeedSource {
+  const d = row.replan ?? row.decision;
+  const c = classify(row, d);
+  const first = row.replan ? classify(row, row.decision) : c;
+  const g = row.grounded;
+  const note = d.kind === "none" ? null : cardNote({ decision: d, grounded: g, executed: c.executed, written: c.written });
   const at = Date.parse(row.sent_at) || now;
-  const item: Omit<FeedItem, "green"> & { order_id: number | null } = {
-    item_key: `${kind}:${row.thread_id}:${order_id ?? 0}:${row.message_id}`,
-    kind, status: STATUS_TEXT[kind], at, order_id,
+  const item: (Omit<FeedItem, "green"> & { order_id: number | null }) | null = d.kind === "none" ? null : {
+    item_key: `${first.kind}:${row.thread_id}:${first.order_id ?? 0}:${row.message_id}`,
+    kind: c.kind, status: STATUS_TEXT[c.kind], at, order_id: c.order_id,
   };
 
   const shifts: Array<{ date: string; start?: string; end?: string; place_id?: number; venue?: string; crew?: number }> = [
     ...(g?.requests ?? []).map((r) => ({ date: r.target?.date ?? r.date ?? "", start: r.start, end: r.end, venue: r.venue, crew: r.crew })),
-    ...ops.flatMap(opDays),
+    ...c.ops.flatMap(opDays),
   ].filter((s) => /^\d{4}-\d{2}-\d{2}$/.test(s.date));
   const days = [...new Set(shifts.map((s) => s.date))].sort();
   const windows = shifts.flatMap((s) => (s.start && s.end ? [{ ...window(s.date, s.start, s.end), p: s.place_id ?? null }] : []))
@@ -108,7 +125,8 @@ export function v2Source(row: V2Row, now: number): FeedSource {
   const refs = new Set<string>();
   if (g?.po) refs.add(g.po);
   for (const m of (row.subject ?? "").matchAll(REF)) if (!/^R-?\d+$/i.test(m[0])) refs.add(m[0]);
-  const want: FeedWant = { r_numbers, refs: [...refs], place_id: places.length === 1 ? places[0] : null, shifts: windows, sender: row.from_address || null };
+  const want: FeedWant = { r_numbers: c.r_numbers, refs: [...refs], place_id: places.length === 1 ? places[0] : null, shifts: windows, sender: row.from_address || null };
+  const booked = d.kind === "none" && /^already booked: /.test(d.reason) ? d.reason.replace(/^already booked: /, "").split(";")[0] : null;
 
   return {
     thread_id: row.thread_id,
@@ -118,8 +136,8 @@ export function v2Source(row: V2Row, now: number): FeedSource {
     // a card took its R number only from the decision's own ops or the subject, and never a J
     // number: 15 of 19 open cards showed neither. And the order a decision made can be gone:
     // R11615, a duplicate deleted once staff keyed R11617, still headed its card.
-    order_id: row.link?.order_id ?? order_id ?? null,
-    r_number: row.link?.r_number ? `R${String(row.link.r_number).replace(/^R/i, "")}` : made?.number != null && String(made.number) ? `R${String(made.number).replace(/^R/i, "")}` : r_numbers.length === 1 ? `R${r_numbers[0]}` : null,
+    order_id: row.link?.order_id ?? c.order_id ?? null,
+    r_number: row.link?.r_number ? `R${String(row.link.r_number).replace(/^R/i, "")}` : c.made?.number != null && String(c.made.number) ? `R${String(c.made.number).replace(/^R/i, "")}` : c.r_numbers.length === 1 ? `R${c.r_numbers[0]}` : null,
     j_number: row.link?.job_id ? `J${row.link.job_id}` : null,
     company_id: row.company_id,
     company: row.company,
@@ -128,10 +146,10 @@ export function v2Source(row: V2Row, now: number): FeedSource {
     subject: row.subject ?? "",
     crew: crews.length ? Math.max(...crews) : null,
     starts_at: starts[0] ?? null,
-    last_write: written ? at : 0,
+    last_write: c.written ? at : 0,
     want,
     note,
-    resolvedText: "Cleared by the system",
+    resolvedText: booked ? `Already booked in OnSinch: ${booked}` : "Cleared by the system",
   };
 }
 
@@ -139,13 +157,13 @@ export function v2Source(row: V2Row, now: number): FeedSource {
 export function v2Sources(rows: V2Row[], now: number): FeedSource[] {
   const byThread = new Map<string, V2Row[]>();
   for (const r of rows) byThread.set(r.thread_id, [...(byThread.get(r.thread_id) ?? []), r]);
-  const out: FeedSource[] = [];
-  for (const list of byThread.values()) {
-    list.sort((a, b) => Date.parse(a.sent_at) - Date.parse(b.sent_at));
-    const newest = list[list.length - 1];
-    out.push(v2Source(openNeedUnder(list) ?? newest, now));
-  }
-  return out;
+  return [...byThread.values()].map((list) => v2Source(cardRow(list), now));
+}
+
+/** The decision a thread's card is: its newest, or an older need a newer write left open. v2/replan.ts plans the same row again. */
+export function cardRow<T extends V2Row>(list: T[]): T {
+  const sorted = [...list].sort((a, b) => Date.parse(a.sent_at) - Date.parse(b.sent_at));
+  return (openNeedUnder(sorted) as T | null) ?? sorted[sorted.length - 1];
 }
 
 /**

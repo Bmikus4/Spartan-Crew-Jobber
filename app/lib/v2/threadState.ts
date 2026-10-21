@@ -177,7 +177,7 @@ export function coveredBy(t: ThreadIn, w: StateWorld, companyIds: number[]): Ord
 }
 
 /** A staff hand on the order since `at`, by its own stamps: some edits never reach the timeline. */
-function stampedSince(o: any, at: number, now = Infinity): boolean {
+export function stampedSince(o: any, at: number, now = Infinity): boolean {
   const parts = [o, ...([] as any[]).concat(o?.Job ?? [])];
   for (const j of ([] as any[]).concat(o?.Job ?? [])) for (const t of ([] as any[]).concat(j?.SlotTeam ?? [])) parts.push(t, ...([] as any[]).concat(t?.Slot ?? []));
   return parts.some((x) => x?.modifier && Number(x.modifier) !== BOT_USER && Date.parse(x.modified) > at && Date.parse(x.modified) <= now);

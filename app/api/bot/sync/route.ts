@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { authorizeMachineCall } from "../../../lib/apiAuth";
 import { backfillLinks, sweepLinks } from "../../../lib/v2/links";
 import { retryStopped } from "../../../lib/v2/process";
+import { replanOpen } from "../../../lib/v2/replan";
 import { neon } from "@neondatabase/serverless";
 import { httpTransport } from "../../../lib/engine/onsinch";
 import { getSettings } from "../../../lib/settingsDb";
@@ -26,10 +27,12 @@ export async function POST(request: Request): Promise<Response> {
   const backfilled = await backfillLinks(sql).catch((e) => `error: ${String(e?.message ?? e).slice(0, 120)}`);
   const sweep = await sweepLinks(sql).catch((e) => ({ error: String(e?.message ?? e).slice(0, 160) }));
   const retry = await retryStopped().catch((e) => ({ error: String(e?.message ?? e).slice(0, 160) }));
+  // The planner again on every open card, against OnSinch now (Ben approved 10-20): reads only, never a write.
+  const replan = await replanOpen(sql).catch((e) => ({ error: String(e?.message ?? e).slice(0, 160) }));
   const t = httpTransport({ baseUrl: process.env.ONSINCH_BASE_URL || "https://spartancrew.onsinch.com/api/v1", apiKey: process.env.ONSINCH_API_KEY || "" }) as unknown as OnsinchCall;
   const testData = await getSettings()
     .then((s) => maybeSweep(sql, t, !!s.test_data_autoclear))
     .then((r) => (typeof r === "string" ? r : { orders: r.orders.length, companies: r.companies.length, rows: Object.values(r.rows).reduce((a, b) => a + b, 0), refused: r.refused ?? null, failed: r.failed.length }))
     .catch((e) => ({ error: String(e?.message ?? e).slice(0, 160) }));
-  return NextResponse.json({ ok: true, ms: Date.now() - t0, backfilled, sweep, retry, testData });
+  return NextResponse.json({ ok: true, ms: Date.now() - t0, backfilled, sweep, retry, replan, testData });
 }

@@ -70,7 +70,7 @@ async function v2(): Promise<V2Row[]> {
   const [l] = (await db()`SELECT to_regclass('public.job_links') AS t`) as { t: string | null }[];
   const rows = (await db()`
     SELECT d.thread_id, d.message_id, d.sent_at, d.kind, d.interpretation->'grounded' AS grounded, d.decision, d.executed,
-           d.company_id, d.company, d.from_address, m.subject
+           d.company_id, d.company, d.from_address, m.subject, to_jsonb(d)->'replan' AS replan
     FROM v2_decisions d LEFT JOIN thread_messages m ON m.message_id = d.message_id
     WHERE d.kind IN ('write', 'handoff') AND coalesce(d.code_version, '') <> 'local' AND d.created_at >= ${V2_FROM}`) as any[];
   // A thread linked to one live order shows it; a thread linked to several shows none of them
