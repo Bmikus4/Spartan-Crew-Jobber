@@ -16,7 +16,7 @@ import InstallButton from "./InstallButton";
 
 type ReplyDelivery = "draft" | "send";
 type ReplyScope = "all" | "enquiries";
-interface Settings { replies_enabled: boolean; test_data_autoclear?: boolean; create_lead_days?: number; create_lead_enabled?: boolean; jobs_board_enabled?: boolean; analytics_tab_enabled?: boolean; intake_paused?: boolean; tv_show_unlinked?: boolean; reply_delivery: ReplyDelivery; reply_scope: ReplyScope; default_rate_card: number }
+interface Settings { replies_enabled: boolean; test_data_autoclear?: boolean; create_lead_days?: number; create_lead_enabled?: boolean; jobs_board_enabled?: boolean; analytics_tab_enabled?: boolean; intake_paused?: boolean; bot_writes_enabled?: boolean; tv_show_unlinked?: boolean; reply_delivery: ReplyDelivery; reply_scope: ReplyScope; default_rate_card: number }
 
 const SETTINGS_FALLBACK: Settings = { replies_enabled: false, reply_delivery: "draft", reply_scope: "all", default_rate_card: 315 };
 
@@ -176,6 +176,15 @@ export default function SettingsScreen({ signedInAs }: { signedInAs?: string }) 
             {failed ? "Save failed — not applied" : saving ? "Saving…" : savedAt ? "Saved" : "Changes save as you make them"}
           </span>
         </header>
+
+        <Panel
+          title="Bot orders and updates"
+          blurb={<>The master switch for the bot&apos;s work in OnSinch: creating new orders in Orders To Confirm and updating existing ones. <b style={{ color: SUB }}>Off</b>, every email is still read and decided, and anything the bot would write shows on the TV for a person to do by hand. Off by default.</>}
+        >
+          <Segmented label="Bot orders and updates" value={!!s.bot_writes_enabled} onChange={(v) => save({ ...s, bot_writes_enabled: v })}
+            options={[{ id: false, label: "Off" }, { id: true, label: "On" }]} />
+          {s.bot_writes_enabled && <Warn tone="accent">On: the bot creates and updates orders for clients from the next email.</Warn>}
+        </Panel>
 
         <Panel
           title="AI email drafts"

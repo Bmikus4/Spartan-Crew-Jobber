@@ -3807,5 +3807,23 @@
    "app/components/LiveFeedScreen.tsx",
    "app/api/feed/route.ts"
   ]
+ },
+ {
+  "id": "S-0202",
+  "ts": "2026-10-21T12:30:36+00:00",
+  "kind": "decision",
+  "headline": "Master switch: Bot orders and updates (Ben 10-21)",
+  "subject": "Settings has a master switch for the bot creating and updating orders, read at every write",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 205,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  },
+  "sources": [
+   "app/lib/v2/process.ts",
+   "test/botWritesSwitch.ts"
+  ]
  }
 ]

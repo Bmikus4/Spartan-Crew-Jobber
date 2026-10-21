@@ -22,6 +22,16 @@ import type { Op } from "./bot/ops";
 import { utcToLondon } from "./bot/ops";
 import { noTrace, type Tracer } from "./trace";
 import { v2Writes } from "../paused";
+
+/**
+ * Whether the bot may create and update orders for real clients now: the Settings master switch
+ * (bot_writes_enabled) AND the server's SPARTAN_WRITES=live. Read at every decision, so turning
+ * it off in Settings stops the next write. A settings read that fails is off: TEST 515 only.
+ */
+export async function botWrites(): Promise<boolean> {
+  if (!v2Writes()) return false;
+  return getSettings().then((s) => s.bot_writes_enabled === true).catch(() => false);
+}
 import { linkedOrderId } from "./threadOrder";
 import { linkFound, recordLink } from "./links";
 import type { Grounded as Asked, ThreadMsg } from "./threadState";
@@ -117,20 +127,21 @@ export async function retryStopped(): Promise<{ retried: number; results: string
     WHERE kind = 'write' AND jsonb_typeof(executed) = 'array' AND created_at > now() - interval '6 hours' AND code_version = ${codeVersion()} ORDER BY created_at`) as any[];
   const results: string[] = [];
   const today = utcToLondon(new Date().toISOString()).date;
+  const writing = await botWrites();
   for (const d of rows) {
     const ex = d.executed as RunResult[];
     const last = ex[ex.length - 1];
     const tries = Number(d.decision?.retries ?? 0);
     // "busy" is answered before the ledger or the browser (runWhenFree waited 2 minutes for it).
     const stopped = last && (last.status === "busy" || (last.status === "blocked" && TRANSIENT.test(last.reasons.join(" "))));
-    if (!stopped || tries >= 2 || !v2Writes()) continue;
+    if (!stopped || tries >= 2 || !writing) continue;
     // Never a day already gone.
     if ((d.decision.ops as { op: any }[]).some(({ op }) => [op.date, ...(op.shifts ?? []).map((s: any) => s.date)].some((x) => typeof x === "string" && x < today))) continue;
     const done = ex.slice(0, -1);
     const todo = (d.decision.ops as { source: string; op: Op }[]).slice(done.length);
     const out: RunResult[] = [...done];
     for (const { source, op } of todo) {
-      const r = await runOp(`${source}:retry${tries + 1}`, op, { testOnly: !v2Writes() });
+      const r = await runOp(`${source}:retry${tries + 1}`, op, { testOnly: !writing });
       out.push(r);
       if (r.status !== "verified") break;
       const made = Number((r.detail as any)?.order_id) || ("order_id" in op ? Number(op.order_id) : 0);
@@ -203,7 +214,7 @@ export async function decideDelivery(newIds: string[]): Promise<Processed[]> {
   }
   if (newest) {
     const seen = (await sql`SELECT kind FROM v2_decisions WHERE message_id = ${newest.message_id}`) as any[];
-    out.push(seen.length ? { message_id: newest.message_id, skipped: `already decided (${seen[0].kind})` } : await processMessage(newest.message_id, { execute: v2Writes(), with: earlier.map((r) => r.message_id) }));
+    out.push(seen.length ? { message_id: newest.message_id, skipped: `already decided (${seen[0].kind})` } : await processMessage(newest.message_id, { execute: await botWrites(), with: earlier.map((r) => r.message_id) }));
   }
   return out;
 }
@@ -215,7 +226,7 @@ export async function decideDelivery(newIds: string[]): Promise<Processed[]> {
  */
 async function runWhenFree(source: string, op: Parameters<typeof runOp>[1]): Promise<RunResult> {
   for (let waited = 0; ; waited += 10) {
-    const r = await runOp(source, op, { testOnly: !v2Writes() });
+    const r = await runOp(source, op, { testOnly: !(await botWrites()) });
     if (r.status !== "busy" || waited >= 120) return r;
     await new Promise((done) => setTimeout(done, 10_000));
   }

@@ -490,6 +490,14 @@ export interface Settings {
    */
   intake_paused?: boolean;
   /**
+   * THE MASTER SWITCH for the bot's work in OnSinch (Ben, 2026-10-21): creating orders and
+   * updating them. Off, every decision is still made and shown, and a write it would make is a
+   * card for a person ("Not written, do it by hand"). The server's SPARTAN_WRITES=live is a second,
+   * hard switch: the bot writes only when both are on. OFF by default, and a settings read that
+   * fails is off.
+   */
+  bot_writes_enabled?: boolean;
+  /**
    * The TV lists only jobs whose R and J numbers name an order in OnSinch now (Ben, 2026-10-20:
    * "I only see orders WITH R and J numbers in the list"). On: the enquiries with no order yet are
    * listed too, as before. Off (the default): they are counted at the foot of the list, and keep
@@ -582,6 +590,7 @@ export const DEFAULT_SETTINGS: Settings = {
   jobs_board_enabled: false,
   analytics_tab_enabled: false,
   intake_paused: false,
+  bot_writes_enabled: false,
   tv_show_unlinked: false,
   reply_delivery: "draft",
   reply_scope: "all",
