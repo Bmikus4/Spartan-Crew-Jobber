@@ -21,7 +21,12 @@ function db(): NeonQueryFunction<false, false> {
   return _sql;
 }
 
-async function states(): Promise<ConversationState[]> {
+/**
+ * The paused engine's threads. The TV no longer draws them (Ben approved 10-20, Q4: they had drawn
+ * nothing since FEED_FROM, and 114 of the orders they name are deleted); only the jobs board's
+ * carried-over tiles read them, for the company name (ported.ts).
+ */
+async function pausedStates(): Promise<ConversationState[]> {
   const rows = (await db()`SELECT state FROM conversation_state`) as { state: ConversationState }[];
   return rows.map((r) => r.state);
 }
@@ -95,7 +100,7 @@ async function held() {
 
 export function liveFeedDeps(): FeedDeps {
   return {
-    states, inbound, marks: allMarks, v2, from: FEED_FROM, held,
+    states: async () => [], portedStates: pausedStates, inbound, marks: allMarks, v2, from: FEED_FROM, held,
     // Every job the board ever held (948 tickets, 457 client jobs on 2026-10-11), not its first 300.
     jobs: () => listTickets(5000),
     replies: followupsEnabled() ? replies : null,
@@ -110,5 +115,6 @@ export function liveFeedDeps(): FeedDeps {
     verifyStatus,
     remember: async (ms) => { for (const m of ms) await addMark(m); },
     intakePaused: () => getSettings().then((s) => s.intake_paused === true),
+    showUnlinked: () => getSettings().then((s) => s.tv_show_unlinked === true),
   };
 }

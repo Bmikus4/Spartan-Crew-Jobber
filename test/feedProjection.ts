@@ -182,7 +182,9 @@ console.log("\n[12] how long the client has waited for a reply");
     [{ item_key: `needs-updated:m:0:${NOW - 5 * H}`, thread_id: "m", mark: "matched", by: null, evidence: { r_number: "11029", j_number: "J16100" }, at: NOW - H }], null, NOW);
   const jb = new Map(jobs.cards.map((c) => [c.thread_id, c]));
   ok(jb.get("u")?.awaiting_reply_since === null && jb.get("c")?.awaiting_reply_since === null, "a job has no clock, whether it needs updating or the engine wrote it (Ben, 2026-10-06)");
-  ok(jb.get("m")?.r_number === "R11029" && jb.get("m")?.awaiting_reply_since === null, "nor does a need matched to a job staff booked by hand");
+  // The verifier's find never puts numbers on a card: they come from the thread's link (v2.ts).
+  // Its find by "date and venue" put the Cytiva shift's thread on R11500 on 14 Oct (D1, 10-21).
+  ok(jb.get("m")?.r_number === null && jb.get("m")?.j_number === null, "a need the verifier matched to an order shows no numbers it did not get from the thread");
 }
 
 console.log("\n[13] the order of the list (Ben, 2026-10-04 and 10-05)");

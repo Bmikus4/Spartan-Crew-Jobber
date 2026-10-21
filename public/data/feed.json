@@ -3736,5 +3736,41 @@
    "app/lib/v2/interpret/plan.ts",
    "test/v2Finder.ts"
   ]
+ },
+ {
+  "id": "S-0199",
+  "ts": "2026-10-21T03:33:57+00:00",
+  "kind": "measurement",
+  "headline": "Release 3: TV open cards 12 -> 4, every one with R and J (Ben 10-16, 10-20)",
+  "subject": "The TV lists only jobs with an R and a J of an order in OnSinch now, and counts the rest at the foot",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 204,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  },
+  "measured": {
+   "dataset": "production TV drawn read-only with this code (harness-style serveFeed, no verifier, no marks) at 2026-10-21 03:20Z, after Release 2's minute re-plan had planned all 50 open cards",
+   "open_cards_listed": {
+    "before": "12 (handoff snapshot 01:18Z)",
+    "after": 4
+   },
+   "open_listed_with_R_and_J": {
+    "before": 3,
+    "after": 4,
+    "of_listed": 4
+   },
+   "listed_now": "SN ExCeL R10522/J13877; Light Motif R11662/J16784; Zest4 R11749/J16876 (was the deleted bot R11747); Icon Events R11442/J16551",
+   "not_listed_counted_at_foot": {
+    "n": 7,
+    "which": "Cells4Life cancel, barnabyhartwill new lead, Event Concept venue change, Bearded Kitten 3 lifters, Halo NYE rates, CT stand-down, EMS held R11562"
+   },
+   "correction": "S-0198's dry run ran at about 02:50Z on 10-21, not ~04:00Z as its dataset label says"
+  },
+  "sources": [
+   "app/lib/feed/serve.ts",
+   "test/feedServe.ts"
+  ]
  }
 ]

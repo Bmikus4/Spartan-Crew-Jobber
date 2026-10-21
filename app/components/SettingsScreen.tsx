@@ -16,7 +16,7 @@ import InstallButton from "./InstallButton";
 
 type ReplyDelivery = "draft" | "send";
 type ReplyScope = "all" | "enquiries";
-interface Settings { replies_enabled: boolean; test_data_autoclear?: boolean; create_lead_days?: number; create_lead_enabled?: boolean; jobs_board_enabled?: boolean; analytics_tab_enabled?: boolean; intake_paused?: boolean; reply_delivery: ReplyDelivery; reply_scope: ReplyScope; default_rate_card: number }
+interface Settings { replies_enabled: boolean; test_data_autoclear?: boolean; create_lead_days?: number; create_lead_enabled?: boolean; jobs_board_enabled?: boolean; analytics_tab_enabled?: boolean; intake_paused?: boolean; tv_show_unlinked?: boolean; reply_delivery: ReplyDelivery; reply_scope: ReplyScope; default_rate_card: number }
 
 const SETTINGS_FALLBACK: Settings = { replies_enabled: false, reply_delivery: "draft", reply_scope: "all", default_rate_card: 315 };
 
@@ -246,6 +246,12 @@ export default function SettingsScreen({ signedInAs }: { signedInAs?: string }) 
               <p style={{ fontSize: 12.5, color: MUT, margin: "5px 0 0", lineHeight: 1.55 }}>Off by default.</p>
             </div>
             <Segmented label="Analytics tab on the TV board" value={!!s.analytics_tab_enabled} onChange={(v) => save({ ...s, analytics_tab_enabled: v })}
+              options={[{ id: false, label: "Off" }, { id: true, label: "On" }]} />
+            <div style={{ borderTop: `1px solid ${BORDER}`, paddingTop: 14 }}>
+              <h3 style={{ fontSize: 13, fontWeight: 700, color: INK, margin: 0 }}>Enquiries with no order on the TV board</h3>
+              <p style={{ fontSize: 12.5, color: MUT, margin: "5px 0 0", lineHeight: 1.55 }}>Off by default: the TV lists only jobs with an R and a J number in OnSinch, and counts the rest at the foot of the list. They keep their Gmail label either way.</p>
+            </div>
+            <Segmented label="Enquiries with no order on the TV board" value={!!s.tv_show_unlinked} onChange={(v) => save({ ...s, tv_show_unlinked: v })}
               options={[{ id: false, label: "Off" }, { id: true, label: "On" }]} />
             <div style={{ borderTop: `1px solid ${BORDER}`, paddingTop: 14 }}>
               <h3 style={{ fontSize: 13, fontWeight: 700, color: INK, margin: 0 }}>Email intake paused</h3>

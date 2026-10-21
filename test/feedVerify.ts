@@ -238,7 +238,9 @@ void (async () => {
     ok(ev(move.find((m) => m.mark === "staff-edit")) === "order, job, a block edited after the client's email", "an update goes green only on a person's edit after the email");
     ok(ev(w.find((m) => m.thread_id === "po" && m.mark === "order-found")) === "order R10954 is in OnSinch", "a needed order that already exists is found");
     const shown = project([unbound("move", "update"), unbound("po", "new-job")], new Map([["move", sent], ["po", sent]]), w, null, NOW).cards;
-    ok(shown.every((c) => c.r_number === "R10954" && c.order_id === null), "the screen shows the found numbers; the binding stays the engine's", shown.map((c) => `${c.r_number}/${c.order_id}`).join(","));
+    // Since 10-21 a card's numbers are its thread's own (the link the planner keeps): the
+    // verifier's find closes a card, it never names its order on the TV.
+    ok(shown.every((c) => c.r_number === null && c.order_id === null), "the verifier's find puts no numbers on the screen and binds nothing", shown.map((c) => `${c.r_number}/${c.order_id}`).join(","));
 
     w = await run([unbound("vague", "new-job", { company_id: 62, place_id: null })], { "62": [order(1, "1", 24, "2026-10-16T09:00:00+00:00", "2026-10-16T17:00:00+00:00"), order(2, "2", 49, "2026-10-16T09:00:00+00:00", "2026-10-16T17:00:00+00:00")] });
     ok(w.length === 0, "two orders that day and nothing to tell them apart: refused, the card stays open", w.map((m) => m.mark).join(","));

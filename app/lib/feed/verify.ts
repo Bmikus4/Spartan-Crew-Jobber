@@ -257,9 +257,11 @@ async function findOrder(client: OnsinchClient, t: Transport, card: FeedCard, wa
   }
   if (scored.length === 1) {
     const [s] = scored;
-    // A company's only order that day is still a different job if it is somewhere else.
-    if (!card.company_id || want?.place_id == null || s.place || s.shifts > 0) return { o: s.o, by: card.company_id ? "the only order on those days" : "the sender's name on that day's order" };
-    return null;
+    // NEVER A DATE ALONE (Ben, 10-03 and 10-15): a client's only order that day is found only with
+    // its venue or a shift as asked. "The only order on those days" made 10 of the verifier's 68
+    // finds to 10-21, Solotech's among them on the wrong order.
+    if (!card.company_id) return { o: s.o, by: "the sender's name on that day's order" };
+    return s.place || s.shifts > 0 ? { o: s.o, by: s.place ? "venue" : "shift times" } : null;
   }
   const score = (s: { place: boolean; shifts: number }) => (s.place ? 100 : 0) + s.shifts;
   const best = Math.max(...scored.map(score));

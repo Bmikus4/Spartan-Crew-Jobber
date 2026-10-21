@@ -30,6 +30,8 @@ function deps(over: Partial<FeedDeps> = {}): FeedDeps {
     inbound: async () => ({ byThread: new Map(), latest: NOW - 10 * 60_000 }),
     marks: async () => [],
     replies: null,
+    // These checks are about serving, not about which cards the list holds ([7] is): every card listed.
+    showUnlinked: async () => true,
     ...over,
   };
 }
@@ -113,6 +115,24 @@ void (async () => {
     const failing = await serveFeed(deps({ states: async () => [need], remember: boom }), NOW);
     ok(failing.status === 200 && (failing.body.items as unknown[]).length === 1, "a failed memory write never costs the feed");
     ok(/remember: async/.test(readFileSync("app/lib/feed/live.ts", "utf8")), "production wires memory to addMark");
+  }
+
+  console.log("\n[7] only jobs with an R and a J are listed (Ben, 10-16 and 10-20)");
+  {
+    const numbered = { ...created, thread_id: "n", classification: "update", status: "error", order_action_log: [], onsinch_order_number: "11029", onsinch_job_id: 16100 } as unknown as ConversationState;
+    const bare = { ...created, thread_id: "b", classification: "update", status: "error", order_action_log: [], onsinch_order_id: undefined } as unknown as ConversationState;
+    const lastIn = new Map([["n", NOW - 30 * H], ["b", NOW - 30 * H]]);
+    const r = await serveFeed(deps({ states: async () => [numbered, bare], inbound: async () => ({ byThread: lastIn, latest: NOW - 10 * 60_000 }), showUnlinked: undefined }), NOW);
+    const items = r.body.items as FeedCard[];
+    const counts = r.body.counts as Record<string, number>;
+    ok(items.map((c) => c.thread_id).join() === "n", "the card with R11029 and J16100 is listed; the one with no order is not", items.map((c) => c.thread_id).join());
+    ok(counts.unlinked === 1, "the one not listed is counted, for the foot of the list", JSON.stringify(counts));
+    ok(counts.needs_follow_up === 1, "Needs Follow Up counts the list, not every card (it said 9 over 8 badges on 10-21)", JSON.stringify(counts));
+    ok((r.all ?? []).length === 2, "the Gmail labels still see both");
+    const on = await serveFeed(deps({ states: async () => [numbered, bare], showUnlinked: async () => true }), NOW);
+    ok((on.body.items as FeedCard[]).length === 2, "Settings can list the enquiries with no order too");
+    const live = readFileSync("app/lib/feed/live.ts", "utf8");
+    ok(/states: async \(\) => \[\]/.test(live) && /portedStates: pausedStates/.test(live) && /showUnlinked: \(\) => getSettings\(\)/.test(live), "production draws nothing from the paused engine (approved 10-20, Q4) and reads the setting");
   }
 
   console.log("\n[5] the route is guarded and serves through serveFeed");

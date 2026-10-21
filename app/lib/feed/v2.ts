@@ -111,9 +111,13 @@ export function v2Source(row: V2Row, now: number): FeedSource {
     kind: c.kind, status: STATUS_TEXT[c.kind], at, order_id: c.order_id,
   };
 
+  // A day the planner says is already over is the card's day too, so the card leaves with its job
+  // (project.ts): Encore's 13 Oct, planned again on 10-21, was listed with no day of its own.
+  const over = d.kind === "handoff" ? d.reasons.map((x) => /^(\d{4}-\d{2}-\d{2}) is already over/.exec(x)?.[1]).filter((x): x is string => !!x) : [];
   const shifts: Array<{ date: string; start?: string; end?: string; place_id?: number; venue?: string; crew?: number }> = [
     ...(g?.requests ?? []).map((r) => ({ date: r.target?.date ?? r.date ?? "", start: r.start, end: r.end, venue: r.venue, crew: r.crew })),
     ...c.ops.flatMap(opDays),
+    ...over.map((date) => ({ date })),
   ].filter((s) => /^\d{4}-\d{2}-\d{2}$/.test(s.date));
   const days = [...new Set(shifts.map((s) => s.date))].sort();
   const windows = shifts.flatMap((s) => (s.start && s.end ? [{ ...window(s.date, s.start, s.end), p: s.place_id ?? null }] : []))

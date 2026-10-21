@@ -40,6 +40,10 @@ export interface FeedDeps {
   jobs?: () => Promise<Job[]>;
   /** Intake is switched off on purpose (Settings intake_paused): its silence is not a fault. */
   intakePaused?: () => Promise<boolean>;
+  /** Settings tv_show_unlinked: the enquiries with no order are listed too. */
+  showUnlinked?: () => Promise<boolean>;
+  /** The paused engine's threads, read only for the jobs board's company names (ported.ts); `states` is what the TV draws. */
+  portedStates?: () => Promise<ConversationState[]>;
 }
 
 /**
@@ -90,7 +94,7 @@ export async function serveFeed(deps: FeedDeps, now: number): Promise<{ status: 
 
   // The board's history is extra: if it cannot be read the live list is still the live list.
   const jobs = deps.jobs ? await deps.jobs().catch((err) => { console.error("[feed] jobs board read failed", err); return [] as Job[]; }) : [];
-  const ported = portedCards(jobs, states, new Set(p.cards.map((c) => c.thread_id)));
+  const ported = portedCards(jobs, deps.portedStates ? await deps.portedStates().catch(() => states) : states, new Set(p.cards.map((c) => c.thread_id)));
 
   // THE TV SHOWS ONLY WHAT THE SYSTEM COULD NOT DO (Ben, 10-13: "Only those cases should be
   // moved to the display TV"). An order the bot made or changed is the system's own work and a
@@ -99,10 +103,18 @@ export async function serveFeed(deps: FeedDeps, now: number): Promise<{ status: 
   // A need, open or just dealt with. Until 10-15 any green card counted, so an order the bot made
   // showed on the list the moment someone ticked it: a success on the failures list.
   const isFailure = (c: (typeof p.cards)[number]) => c.items.some((i) => i.kind === "needs-created" || i.kind === "needs-updated");
-  const shown = p.cards.filter(isFailure);
+  // ONLY JOBS WITH AN R AND A J (Ben, 2026-10-16 and 10-20: "I only see orders WITH R and J
+  // numbers in the list"). A J comes only from the thread's link (v2.ts), and sweepLinks checks
+  // every minute that the linked order still exists, so these are orders in OnSinch now. The
+  // rest are counted at the foot (`unlinked`) and keep their Gmail labels; Settings can list them.
+  const showAll = deps.showUnlinked ? await deps.showUnlinked().catch(() => false) : false;
+  const numbered = (c: { r_number: string | null; j_number: string | null }) => showAll || (!!c.r_number && !!c.j_number);
+  const needs = p.cards.filter(isFailure);
+  const shown = needs.filter(numbered);
+  const unlinked = needs.filter((c) => !c.green && !numbered(c)).length;
   const done_by_system = p.cards.filter((c) => !c.green && c.items.every((i) => i.kind === "created-check" || i.kind === "updated-check")).length;
   const held = deps.held ? await deps.held().catch(() => [] as HeldLink[]) : [];
-  const heldCards = held.filter((h) => !shown.some((c) => c.thread_id === h.thread_id)).map((h) => ({
+  const heldCards = held.filter((h) => !needs.some((c) => c.thread_id === h.thread_id)).map((h) => ({
     thread_id: h.thread_id, colour: "blue" as const, lane: "need" as const,
     items: [{ item_key: `held:${h.thread_id}:${h.r_number ?? ""}`, kind: "needs-updated" as const, status: "Order not found in OnSinch", at: Date.parse(h.since) || now, green: null }],
     green: false, at: Date.parse(h.since) || now, order_id: null, company_id: null, company: h.company, contact: null,
@@ -128,8 +140,10 @@ export async function serveFeed(deps: FeedDeps, now: number): Promise<{ status: 
         replies_enabled: deps.replies !== null,
         verify: { last_at: status?.last_verify_at ?? null, note: verify?.note ?? status?.note ?? null },
       },
-      counts: { ...p.counts, done_by_system, held: heldCards.length },
-      items: [...shown, ...heldCards, ...ported],
+      // The header counts what the list holds: "Needs Follow Up" counted every card (9 against
+      // the 8 badges on the list, 10-21).
+      counts: { ...p.counts, needs_follow_up: shown.filter((c) => c.follow_up).length, done_by_system, held: heldCards.length, unlinked: unlinked + heldCards.filter((c) => !numbered(c)).length },
+      items: [...shown, ...heldCards.filter(numbered), ...ported.filter(numbered)],
     },
     all: [...p.cards, ...heldCards],
   };

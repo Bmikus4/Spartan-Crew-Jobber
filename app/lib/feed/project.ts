@@ -347,17 +347,9 @@ export function project(
   for (const m of [...marks].sort((a, b) => a.at - b.at)) if (GREEN_MARKS.has(m.mark) && !byKey.has(m.item_key)) byKey.set(m.item_key, m);
   // A tick outranks automatic evidence for what the card SAYS, not for when it went green.
   const ticked = new Map(marks.filter((m) => m.mark === "checked").map((m) => [m.item_key, m]));
-  /**
-   * The numbers of an order the verifier found for a thread the engine never bound, for the
-   * screen only: order_id stays null, because binding is the engine's and the TV never does it.
-   */
-  const foundNo = new Map<string, { r: string | null; j: string | null }>();
-  for (const m of marks) {
-    const e = m.evidence as { r_number?: unknown; j_number?: unknown } | null;
-    if ((m.mark === "matched" || m.mark === "order-found") && str(e?.r_number)) {
-      foundNo.set(m.item_key, { r: `R${String(e!.r_number).replace(/^R/i, "")}`, j: str(e?.j_number) });
-    }
-  }
+  // A card's R and J are its thread's own (the link the planner keeps, v2.ts), never the
+  // verifier's find for the screen: 11 of its 83 finds named another order than the evidence
+  // finder (10-21), and the R/J-only list (serve.ts) would have listed those as known jobs.
   const green = (it: Omit<FeedItem, "green">): FeedItem["green"] => {
     const first = byKey.get(it.item_key);
     if (!first) return null;
@@ -448,8 +440,8 @@ export function project(
     else counts.to_check++;
 
     const { order_id, ...item } = it;
-    const r_number = s.r_number ?? foundNo.get(it.item_key)?.r ?? null;
-    const j_number = s.j_number ?? (order_id ? null : foundNo.get(it.item_key)?.j ?? null);
+    const r_number = s.r_number;
+    const j_number = s.j_number;
     /**
      * A JOB HAS NO TIMER (Ben, 2026-10-06). Once an order exists in OnSinch the reply clock is
      * gone, and with it the clock's pull to the top of the list; it counts only for an enquiry

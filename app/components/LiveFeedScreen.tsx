@@ -607,6 +607,11 @@ export default function LiveFeedScreen({ isActive, tv = false }: { isActive: boo
               <Section s={s} label="Done" n={doneRows.length} color={GREEN} />
               {/* Done tiles redraw once a minute, not every second: with the jobs board carried over there are hundreds. */}
               {doneRows.map((card) => <JobTile key={card.thread_id} card={card} now={Math.floor(now / 60_000) * 60_000} s={s} phase="steady" onTick={tick} />)}
+              {c && (c as FeedCounts & { unlinked?: number }).unlinked ? (
+                <div style={{ padding: `${10 * s}px ${4 * s}px`, fontSize: 15 * s, color: "var(--text-muted)", flexShrink: 0 }}>
+                  {(c as FeedCounts & { unlinked?: number }).unlinked} {(c as FeedCounts & { unlinked?: number }).unlinked === 1 ? "enquiry has" : "enquiries have"} no order in OnSinch yet, not listed: see the Gmail labels.
+                </div>
+              ) : null}
               {c && c.older > 0 && (
                 <div style={{ padding: `${10 * s}px ${4 * s}px`, fontSize: 15 * s, color: "var(--text-muted)", flexShrink: 0 }}>
                   {c.older} older undated {c.older === 1 ? "enquiry" : "enquiries"} with no word from the client for two weeks, not shown.
