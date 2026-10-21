@@ -3653,5 +3653,48 @@
    "app/lib/engine/types.ts",
    "app/components/SettingsScreen.tsx"
   ]
+ },
+ {
+  "id": "S-0197",
+  "ts": "2026-10-21T03:10:04+00:00",
+  "kind": "measurement",
+  "headline": "Release 1: duplicate bot shifts 6 -> 0 in the 10-09..10-21 replay",
+  "subject": "The planner never books the thread's history again, finds a booking by its day and start, and never writes a day already over",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 203,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  },
+  "measured": {
+   "replay_window": "2026-10-09T10:20Z..2026-10-21T02:29Z, 1,423 deliveries, stored readings, $0 (harness/sim, snapshot 10-21 02:29Z)",
+   "bot_operations": {
+    "before": 36,
+    "after": 30,
+    "denominator": "simulated bot operations in the window"
+   },
+   "add_shift": {
+    "before": 6,
+    "after": 0,
+    "denominator": "bot shifts added to an existing order"
+   },
+   "removed_writes": "Roof Gardens R11766 14:00-15:00 beside staff's 14:00-16:00 (duplicate); COG 18 Oct and 20 Oct from a 27 July email (18 Oct already over); Lux 1 Oct (already over); We Are Family 26 Oct (staff built it after the email; the same email's time changes are still written); Encore 13 Oct (a confirmation no order holds: now a card)",
+   "other_writes_changed": 0,
+   "decisions_changed_kind": {
+    "of": 942,
+    "write_to_handoff": 3,
+    "handoff_to_none": 10,
+    "write_to_none": 1
+   }
+  },
+  "deferred": [
+   "Premier PR's two duplicates (13 Oct) did not occur in the replay; they are pinned by test/v2History.ts on the real emails"
+  ],
+  "sources": [
+   "app/lib/v2/interpret/plan.ts",
+   "app/lib/v2/interpret/interpret.ts",
+   "test/v2History.ts"
+  ]
  }
 ]

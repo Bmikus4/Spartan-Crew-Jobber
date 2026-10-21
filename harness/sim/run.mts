@@ -144,12 +144,12 @@ const endState = {
   links: await sql`SELECT thread_id, order_id, r_number, job_id, state, source, first_seen FROM job_links`,
   grounded: await sql`SELECT thread_id, message_id, created_at::text AS created_at, interpretation->'grounded'->'requests' AS requests FROM v2_decisions WHERE interpretation->'grounded' IS NOT NULL`,
   frames,
-  cards: feed.body.everything,
+  cards: feed.all,
 };
 writeFileSync(".tmp-data/sim/end.json", JSON.stringify(endState));
 
 const slim = (c: any) => ({ thread_id: c.thread_id, kinds: c.items.map((i: any) => i.kind), green: c.green, r: c.r_number, j: c.j_number, company: c.company, subject: c.subject, note: c.note, dates: c.dates });
-const items = (feed.body.items as any[]).map(slim), every = (feed.body.everything as any[]).map(slim);
+const items = (feed.body.items as any[]).map(slim), every = (feed.all ?? []).map(slim);
 const open = items.filter((c) => !c.green);
 const simDecisions = await sql`SELECT message_id, thread_id, sent_at::text AS sent_at, kind, decision, executed, company_id, company, interpretation->'grounded' AS grounded FROM v2_decisions`;
 const simLinks = await sql`SELECT thread_id, order_id, r_number, job_id, state, source FROM job_links`;

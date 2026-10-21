@@ -27,6 +27,13 @@ export type Request = {
   shift_id?: number;
   /** A venue from the client's own venues, by its OnSinch place id. */
   place_id?: number;
+  /**
+   * None of its values is in the client's own newest words: it comes from the thread's history
+   * (a quoted email, a reply's subject, the earlier request a confirmation brings back). Never new
+   * work: the planner only checks that an order holds it (Ben approved 10-20). Of the 6 shifts the
+   * bot added from 9 to 20 Oct, 4 were such requests written beside staff's own identical shift.
+   */
+  history?: boolean;
   problems: string[];
 };
 
@@ -45,6 +52,17 @@ export type GroundContext = { subject?: string; prior?: Request[]; read?: ReadCo
 
 /** A reply that books what was asked before, in the client's words. */
 const CONFIRM = /\b(please (?:may|can|could) (?:this|that|it|these|they) be booked|please (?:book|confirm)(?: (?:this|that|it|these|them|in))?\b|(?:happy|ok|okay|good) to (?:go ahead|proceed|book|confirm)|please go ahead|go ahead (?:and|with)|let'?s (?:confirm|book|go ahead)|(?:can|could) (?:i|we) (?:please )?confirm|we(?:'d| would) like to (?:confirm|book|go ahead)|confirm(?:ing)? (?:the|this|that|our) (?:booking|job|order|quote))\b/i;
+/**
+ * CONFIRM, except where the client asks US to confirm: "PO will be raised when you can confirm
+ * the quote amount?" (Premier PR, 10-13) brought back the earlier booking and the bot wrote a
+ * second 06:00-10:00 beside staff's. "can you please confirm", "if you could confirm" are the same.
+ */
+export function confirms(text: string): boolean {
+  for (const m of text.matchAll(new RegExp(CONFIRM.source, "gi"))) {
+    if (!/\b(?:you|u)\b[\s\w']{0,20}$/i.test(text.slice(Math.max(0, m.index! - 30), m.index))) return true;
+  }
+  return false;
+}
 const CANCELS = /\b(cancel(l?ed|l?ing|lation)?|no longer (?:need|required|needed|going ahead)|not (?:be )?(?:needed|required)|filled (?:it )?elsewhere|(?:sorted|covered) (?:this |it )?(?:internally|elsewhere)|(?:do not|don'?t) need (?:the|this|that|them|it)|won'?t (?:be )?need(?:ed|ing)?)\b/i;
 const REFERS_BACK = /\b(also|as well|same day|that day|too)\b/i;
 
@@ -72,6 +90,12 @@ export function ground(x: Extraction, newest: string, sentIso: string, ctx: Grou
   // old figure: "Happy to go ahead with this booking" set Wall to Wall R11486 to the 4 of the
   // quote it accepted (replay 10-13).
   const mine = `${ctx.subject ?? ""}\n${newest}`;
+  // THE CLIENT'S OWN WORDS in this email: the newest message, and the subject only when it is
+  // this email's own. A reply's subject ("Re: 4 x crew for 6am - 10am Wednesday 14th") is the
+  // thread's first email, so a request whose every value is there or in the quoted thread is
+  // history (Request.history). process.ts puts the subject on the newest message's first line.
+  const body = ctx.subject != null && newest.startsWith(`${ctx.subject}\n`) ? newest.slice(ctx.subject.length + 1) : newest;
+  const ownWords = /^\s*(re|fw|fwd|aw)\s*:/i.test(ctx.subject ?? "") ? body : `${ctx.subject ?? ""}\n${body}`;
   const check = <T>(name: string, g: Grounded<T> | undefined, parse: (q: string) => T | null, among?: (q: string) => Set<T>, text = all): T | undefined => {
     if (!g) return undefined;
     if (typeof g !== "object" || typeof g.quote !== "string") { problems.push(`${name}: a value with no words quoted for it`); return undefined; }
@@ -256,7 +280,20 @@ export function ground(x: Extraction, newest: string, sentIso: string, ctx: Grou
       // Technology 10-12) is for the inbox; the time change is still made.
       default: if ((x.requests ?? []).some((q) => q.action !== "other")) notes.push(`${tag}: "${r.target?.quote ?? "a request"}" is not a booking change and is left for the inbox`); else own.push(`${tag}: not an operation the system performs`);
     }
-    return { action, date, start, end, duration: start || end ? undefined : dur, crew, crew_add: add, crew_remove: less, venue, crew_chief: chief, trade, target, order_id, order, shift_id, place_id, problems: own };
+    // History when the values it SETS have words and none of them is the client's own. Which
+    // shift a change or a cancellation is about may well come from the thread: "I'll not be
+    // needing this call now" (RG Jones R11549) and "no thank you" (Bearded Kitten R11545) name
+    // their day only in the quoted email, and are the client's own cancellations, so a cancel and
+    // an ask the system does not perform are never history. A trade ("crew") or a chief says
+    // nothing about which email asked, so they do not count either way.
+    const sets = r.action === "new_shift" ? [r.date, r.start, r.end, r.crew, r.venue]
+      : r.action === "change_times" ? [r.start, r.end, r.duration_minutes]
+      : r.action === "change_crew" ? [r.crew, r.crew_add, r.crew_remove] : [];
+    const quotes = sets
+      .map((g) => (g && typeof g === "object" && typeof (g as { quote?: unknown }).quote === "string" ? (g as { quote: string }).quote : null))
+      .filter((x): x is string => !!x && !!x.trim());
+    const history = quotes.length > 0 && !quotes.some((x) => quoteIn(ownWords, x)) && !(call && quoteIn(ownWords, call[0]));
+    return { action, date, start, end, duration: start || end ? undefined : dur, crew, crew_add: add, crew_remove: less, venue, crew_chief: chief, trade, target, order_id, order, shift_id, place_id, ...(history ? { history: true } : {}), problems: own };
   });
 
   // "Can I also add 3 people for the load out on Sunday 25th, this would be the same timings"
@@ -294,10 +331,11 @@ export function ground(x: Extraction, newest: string, sentIso: string, ctx: Grou
   // request on the thread, narrowed to a day this email names ("let's confirm Monday").
   let intent = x.intent;
   let reqs = requests;
-  if (!reqs.length && intent !== "cancellation" && intent !== "change" && prior.length && CONFIRM.test(newest)) {
+  // What it brings back is the thread's history: never written again, only found (plan.ts).
+  if (!reqs.length && intent !== "cancellation" && intent !== "change" && prior.length && confirms(newest)) {
     const named = new Set(prior.map((p) => p.date!).filter((d) => dayNamedIn(newest, d, sentIso)));
     const take = named.size ? prior.filter((p) => named.has(p.date!)) : prior;
-    reqs = take.map((p) => ({ ...p, problems: [] }));
+    reqs = take.map((p) => ({ ...p, problems: [], history: true }));
     intent = "booking";
     notes.push(`confirms the booking asked for earlier in this thread (${[...new Set(take.map((p) => p.date))].join(", ")})`);
   }

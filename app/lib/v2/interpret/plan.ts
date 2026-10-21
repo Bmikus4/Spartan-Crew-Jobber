@@ -13,11 +13,12 @@
 // ============================================================================
 import type { Op, PositionSpec, ShiftSpec } from "../bot/ops";
 import { shiftWindow, utcToLondon } from "../bot/ops";
-import type { Interpretation, Request } from "./interpret";
+import { confirms, type Interpretation, type Request } from "./interpret";
 import { addMinutes } from "./ground";
 import { fillTimes, pastShifts } from "./assume";
 import { tradeOf, pickProfession, PROFESSION_NAME, type LiveProfession } from "./professions";
 import { matchCompanyByDomain, rNumbersIn, normName } from "../../engine/resolve";
+import { evidenceMatch, wantOf, BOT_USER, type Found } from "../evidence";
 
 export type World = {
   companies(): Promise<any[]>;
@@ -77,7 +78,7 @@ export function positionsFor(total: number, asked = false): PositionSpec[] | nul
 
 const teams = (o: any) =>
   ([] as any[]).concat(o?.Job ?? []).flatMap((j: any) => ([] as any[]).concat(j.SlotTeam ?? []))
-    .map((t: any) => ({ id: Number(t.id), name: String(t.name ?? ""), slots: ([] as any[]).concat(t.Slot ?? []).filter((s: any) => s.cancelled !== true) }))
+    .map((t: any) => ({ id: Number(t.id), name: String(t.name ?? ""), raw: t, slots: ([] as any[]).concat(t.Slot ?? []).filter((s: any) => s.cancelled !== true) }))
     .filter((t) => t.slots.length);
 const dayOf = (iso: string) => utcToLondon(iso).date;
 const SHIFT_WORDS = ["derig", "de-rig", "install", "build", "setup", "set up", "rig", "get in", "get out", "load in", "load out", "breakdown", "strike", "collection", "delivery"];
@@ -251,9 +252,92 @@ function shiftGroups(news: Request[], clientOrders: any[], live: LiveProfession[
   return out;
 }
 
-/** opts.leadDays: Settings' lead days; null = the rule is switched off; absent = CREATE_LEAD_DAYS. */
-export async function plan(msg: Message, i: Interpretation, world: World, threadOrderId: number | null = null, opts: { leadDays?: number | null } = {}): Promise<Decision> {
-  const problems = [...i.problems, ...i.requests.flatMap((r) => r.problems)];
+/** One call the email asks for: its day and window, everyone on it, and the requests it came from. */
+type Call = { date: string; start: string; end: string; crew?: number; chief: boolean; plain: boolean; rs: Request[] };
+function windowsOf(news: Request[]): Call[] {
+  const by = new Map<string, Call>();
+  for (const r of news) {
+    const k = `${r.date}|${r.start}|${r.end}`;
+    const w = by.get(k) ?? { date: r.date!, start: r.start!, end: r.end!, crew: 0, chief: false, plain: true, rs: [] };
+    w.rs.push(r);
+    w.crew = w.crew != null && r.crew != null ? w.crew + r.crew : undefined;
+    w.chief ||= !!r.crew_chief;
+    const t = tradeOf(r.trade);
+    if (t && !t.asCrew) w.plain = false;
+    by.set(k, w);
+  }
+  return [...by.values()];
+}
+
+/** A person's hand on this shift after `sent`: made or changed by anyone but the bot. */
+function staffSince(t: { raw: any; slots: any[] }, slots: any[], sent: number): boolean {
+  const staff = (u: unknown) => u != null && Number(u) > 0 && Number(u) !== BOT_USER;
+  const after = (x: unknown) => Date.parse(String(x ?? "")) > sent;
+  const r = t.raw ?? {};
+  return (after(r.created) && staff(r.creator)) || (after(r.modified) && staff(r.modifier))
+    || (staff(r.modifier ?? r.creator) && slots.some((s) => after(s.created) || after(s.modified)));
+}
+
+/**
+ * FIX 2 (Ben approved 10-20): ALREADY BOOKED IS THE DAY AND THE START, NOT THE EXACT WINDOW.
+ * Measured 10-20 on every bot write since 9 Oct: 4 of the 6 shifts the bot added sat beside
+ * staff's own shift on that day at that start, let through because the end differed (Roof
+ * Gardens 14:00-15:00 beside 14:00-16:00, COG 08:00-18:00 beside 08:00-17:00). Every position at
+ * that start counts together, so a chief and 3 crew are 4. Who has the last word:
+ *   - a person made or changed that shift after the email: their shape stands, nothing is written
+ *     (staff's 14:00-16:00 is not cut to the asked 15:00, their chief is not split back out);
+ *   - it was there before the email: the difference is the client's change, a new count or a new
+ *     finish on that shift, planned like any other change ("even booked orders may still need
+ *     updated", Ben 10-20);
+ *   - nothing starts then: a new shift, as before.
+ * A trade beside the crew ("2 carpenters at 08:00") is not a new count for the crew's shift, so
+ * only the same window holds it.
+ */
+function bookedAt(o: any, w: Call, sent: number): "fresh" | { synth: Request[] } | string {
+  const win = shiftWindow(w.date, w.start, w.end);
+  const b = Date.parse(win.beginning), e = Date.parse(win.end);
+  if (!w.plain) return teams(o).some((t) => t.slots.some((s) => Date.parse(s.beginning) === b && Date.parse(s.end) === e)) ? { synth: [] } : "fresh";
+  const at = teams(o).map((t) => ({ t, slots: t.slots.filter((s) => Date.parse(s.beginning) === b) })).filter((x) => x.slots.length);
+  if (!at.length) return "fresh";
+  if (at.some((x) => staffSince(x.t, x.slots, sent))) return { synth: [] };
+  const total = at.reduce((a, x) => a + x.slots.reduce((k, s) => k + Number(s.size), 0), 0);
+  const sameEnd = at.every((x) => x.slots.every((s) => Date.parse(s.end) === e));
+  const sameCrew = w.crew == null || w.crew === total;
+  if (sameEnd && sameCrew) return { synth: [] };
+  if (at.length > 1) return `R${o.number}: ${at.length} shifts on ${w.date} could be the one meant`;
+  const base = { order_id: Number(o.id), order: `R${o.number}`, shift_id: at[0].t.id, target: { quote: at[0].t.name, date: w.date, start: w.start }, problems: [] as string[] };
+  return { synth: [
+    ...(sameCrew ? [] : [{ ...base, action: "change_crew" as const, date: w.date, crew: w.crew, ...(w.chief ? { crew_chief: true } : {}) }]),
+    ...(sameEnd ? [] : [{ ...base, action: "change_times" as const, date: w.date, start: w.start, end: w.end }]),
+  ] };
+}
+
+/**
+ * opts.leadDays: Settings' lead days; null = the rule is switched off; absent = CREATE_LEAD_DAYS.
+ * opts.now: the moment of deciding. A day before it is already over and never written; without
+ * it only a day before the email is refused, so every production caller passes it (process.ts).
+ */
+export async function plan(msg: Message, i: Interpretation, world: World, threadOrderId: number | null = null, opts: { leadDays?: number | null; now?: number } = {}): Promise<Decision> {
+  // A request from the thread's history (interpret.ts) is never new work: what it lacks blocks
+  // nothing, and it is only checked against the client's orders below.
+  let reqs = i.requests.filter((r) => !r.history);
+  const hist = i.requests.filter((r) => r.history);
+  let problems = [...i.problems, ...reqs.flatMap((r) => r.problems)];
+  // A STAND-DOWN WITH NOTHING BOOKED THAT DAY CHANGES NOTHING (R10, recommended with Release 1):
+  // "we're going with a different crew company for this job" (Cells4Life, 10-19) had no words
+  // cancelling a whole shift, and nothing of theirs was booked on the 25th, yet it was a card.
+  const STANDS = /: no words cancelling the whole shift$/;
+  if (problems.some((p) => STANDS.test(p))) {
+    const cid = matchCompanyByDomain(msg.from, await world.companies()) || (threadOrderId && world.orderById ? Number((await world.orderById(threadOrderId).catch(() => null))?.company_id) || 0 : 0);
+    const booked = new Set((cid ? await world.companyOrders(cid) : []).filter((o) => Number(o.status) !== -1).flatMap((o) => teams(o).flatMap((t) => t.slots.map((x) => dayOf(x.beginning)))));
+    const idle = reqs.filter((r) => r.action === "cancel_shift" && r.problems.some((p) => STANDS.test(p)) && !!(r.target?.date ?? r.date) && !booked.has((r.target?.date ?? r.date)!));
+    if (idle.length) {
+      const gone = new Set(idle.flatMap((r) => r.problems));
+      problems = problems.filter((p) => !gone.has(p));
+      reqs = reqs.filter((r) => !idle.includes(r));
+      if (!problems.length && !reqs.length) return { kind: "none", reason: `nothing is booked on ${[...new Set(idle.map((r) => r.target?.date ?? r.date))].join(", ")}, so there is nothing to cancel` };
+    }
+  }
   // A quote, a question or an availability check whose shift is not bookable as written is
   // answered by a reply: "If you can check availability for Sunday" (Vivid), "send me a quote
   // for Friday 16th" (Blackout) were order cards before.
@@ -286,7 +370,7 @@ export async function plan(msg: Message, i: Interpretation, world: World, thread
   const newClient = !companyId && i.company_name && !nameClash && (i.intent === "booking" || i.intent === "quote_request") && i.requests.length && i.requests.every((r) => r.action === "new_shift") ? i.company_name : null;
   if (!companyId && !newClient) return handoff(`no single client company for ${msg.from}`);
   const clientOrders = await world.companyOrders(companyId);
-  const live = i.requests.some((r) => tradeOf(r.trade)?.named) && world.professions ? await world.professions() : [];
+  const live = reqs.some((r) => tradeOf(r.trade)?.named) && world.professions ? await world.professions() : [];
   const professionOf = (r: Request) => {
     const trade = tradeOf(r.trade);
     const prof = trade && !trade.asCrew ? pickProfession(trade, clientOrders, live) : null;
@@ -299,14 +383,39 @@ export async function plan(msg: Message, i: Interpretation, world: World, thread
   // A day before the email was sent is never written: a shift that has happened is not booked
   // or changed (ec938be planned Lux Technical R11206 on 1 October from a 13 October email).
   const sentDay = utcToLondon(msg.sentIso).date;
-  const past = i.requests.find((r) => (r.date && r.date < sentDay) || (r.target?.date && r.target.date < sentDay && r.action !== "new_shift"));
+  const past = reqs.find((r) => (r.date && r.date < sentDay) || (r.target?.date && r.target.date < sentDay && r.action !== "new_shift"));
   if (past) return handoff(`a request is for ${past.date ?? past.target?.date}, before the email was sent`);
+  // FIX 3 (Ben approved 10-20): A DAY ALREADY OVER IS NEVER WRITTEN. A change to a shift that has
+  // happened is a timesheet or billing question. COG's 27 July email was decided on 19 Oct and
+  // wrote a shift for 18 Oct, and 42 of 712 decisions since 9 Oct were on emails over 7 days old.
+  const today = opts.now != null ? utcToLondon(new Date(opts.now).toISOString()).date : null;
+  const overDay = (r: Request) => [r.date, r.target?.date].find((d) => !!d && !!today && d < today);
+  const over = reqs.find((r) => overDay(r));
+  if (over) return handoff(`${overDay(over)} is already over: a person adjusts it`);
+  // FIX 1 (Ben approved 10-20): REQUESTS FROM HISTORY ARE NEVER NEW WORK. The client's newest
+  // words asked for nothing new ("All confirmed on my side", "Quote looks great"), so a request
+  // read from the quoted thread or the subject is checked against the client's orders by its day
+  // and one more fact: held, nothing to do; held by no order, the card stays for a person.
+  const histNew = hist.filter((r) => r.action === "new_shift" && r.date && r.date >= (today ?? sentDay));
+  const holders = histNew.map((r) => evidenceMatch(wantOf([r]), clientOrders));
+  const unheld = histNew.filter((_, k) => !holders[k]);
+  if (unheld.length) return handoff(`the client confirmed ${[...new Set(unheld.map((r) => r.date))].join(", ")}, and no order holds it yet`);
+  // A change from the thread that the client now confirms is a person's to make: "Can we confirm
+  // this?" under our offer of "an additional three crew" (Light Motif R11662, 10-20). Without
+  // their yes it is only the quoted email read again, and nothing is asked.
+  const histChange = hist.filter((r) => r.action === "change_times" || r.action === "change_crew");
+  if (histChange.length && confirms(msg.text)) return handoff(`the client confirmed a change from the thread (${[...new Set(histChange.map((r) => r.target?.date ?? r.date ?? "a shift"))].join(", ")}): a person makes it`);
+  if (!reqs.length && hist.length) {
+    const held = [...new Map(holders.filter((h): h is Found => !!h && h !== "ambiguous").map((h) => [Number(h.order.id), h.order])).values()];
+    const reason = held.length ? `already booked: ${held.map((o) => `R${o.number}`).join(", ")}` : "nothing new asked for: the requests are the thread's earlier ones";
+    return { kind: "none", reason: [reason, ...(i.notes ?? [])].join("; "), ...(held.length ? { found: held.map((o) => Number(o.id)) } : {}) };
+  }
   const assumed: string[] = [];
   const history = pastShifts(clientOrders);
   const news: Request[] = [];
-  for (const r of i.requests.filter((q) => q.action === "new_shift")) {
+  for (const r of reqs.filter((q) => q.action === "new_shift")) {
     if (r.start && r.end) { news.push(r); continue; }
-    const venue = r.venue ?? i.requests.find((x) => x.venue)?.venue;
+    const venue = r.venue ?? reqs.find((x) => x.venue)?.venue;
     const one = !r.place_id && venue ? await placesFor(world, venue, clientOrders) : [];
     const place_id = r.place_id ?? (one.length === 1 ? Number(one[0].id) : null);
     const f = fillTimes(r, history, { place_id, place_name: one.length === 1 ? one[0].name : venue });
@@ -316,16 +425,17 @@ export async function plan(msg: Message, i: Interpretation, world: World, thread
   // A time change that also asks for more or fewer people is two changes on that shift: "start
   // an hour earlier, so 07:00 - 15:00? And add 2 more crew" (end to end on TEST, 10-13) made
   // only the time change. Both are planned against the shift as it stands.
-  const changes = i.requests.filter((r) => r.action !== "new_shift").flatMap((r) =>
+  const changes = reqs.filter((r) => r.action !== "new_shift").flatMap((r) =>
     r.action === "change_times" && (r.crew_add || r.crew_remove) ? [{ ...r, crew_add: undefined, crew_remove: undefined }, { ...r, action: "change_crew" as const, start: undefined, end: undefined, duration: undefined, crew: undefined }] : [r]);
 
-  for (const [n, r] of changes.entries()) {
+  /** One change on one order's shift: its operations, or why a person must make it. */
+  const change = async (n: number, r: Request): Promise<string | null> => {
     const picked = r.order_id ? clientOrders.find((o) => Number(o.id) === r.order_id) : null;
     const order = picked ?? (await findOrder(msg, companyId, world, threadOrderId));
-    if (typeof order === "string") return handoff(order);
+    if (typeof order === "string") return (order);
     const pickedShift = r.shift_id ? teams(order).find((t) => t.id === r.shift_id) : undefined;
     const shift = pickedShift ?? targetShift(order, r);
-    if (typeof shift === "string") return handoff(`R${order.number}: ${shift}`);
+    if (typeof shift === "string") return (`R${order.number}: ${shift}`);
     const first = shift.slots[0];
     // A change names its shift by the day it is on (target) and may give a NEW day (date).
     // Until 10-11 the new day was ignored, so "move Tuesday's shift to Wednesday, 9-5" wrote
@@ -335,7 +445,7 @@ export async function plan(msg: Message, i: Interpretation, world: World, thread
       // "Tuesday 13th 2 x Crew 8 hours": a count written beside a time change says which shift
       // the client means, so it must be that shift's size or this is another shift.
       const size = shift.slots.reduce((a, s) => a + Number(s.size), 0);
-      if (r.crew && r.crew !== size) return handoff(`R${order.number} shift ${shift.id}: the email says ${r.crew} crew, the shift has ${size}`);
+      if (r.crew && r.crew !== size) return (`R${order.number} shift ${shift.id}: the email says ${r.crew} crew, the shift has ${size}`);
       const start = r.start ?? utcToLondon(first.beginning).time;
       // "Increase hours to 8 (currently 6)": the client gave a length, not a time. The
       // shift keeps its start and the end moves (Ben, 10-09). A new start alone moves the
@@ -343,7 +453,7 @@ export async function plan(msg: Message, i: Interpretation, world: World, thread
       // was planned 17:00-17:00, and ops moved it to 17:00-20:00 (R11029, 10-15).
       const length = Math.round((Date.parse(first.end) - Date.parse(first.beginning)) / 60e3);
       const end = r.end ?? (r.duration ? addMinutes(start, r.duration) : r.start ? addMinutes(start, length) : utcToLondon(first.end).time);
-      if (start === end) return handoff(`R${order.number} shift ${shift.id}: ${start}-${end} has no length`);
+      if (start === end) return (`R${order.number} shift ${shift.id}: ${start}-${end} has no length`);
       // A position already at the asked times is left alone: a restated booking is not a change.
       for (const s of shift.slots) {
         const w = shiftWindow(date, start, end);
@@ -359,7 +469,7 @@ export async function plan(msg: Message, i: Interpretation, world: World, thread
       // profession on the shift, beside the crew. Only an addition: a total or a reduction of
       // a profession is for a person to square with what is booked.
       const { trade, prof } = professionOf(r)!;
-      if (!r.crew_add || r.crew || r.crew_remove) return handoff(`R${order.number}: a change to the ${trade.label} count other than adding`);
+      if (!r.crew_add || r.crew || r.crew_remove) return (`R${order.number}: a change to the ${trade.label} count other than adding`);
       const londonStart = utcToLondon(first.beginning).time, londonEnd = utcToLondon(first.end).time;
       ops.push({ source: `${src(n)}:prof`, op: { kind: "add_position", order_id: Number(order.id), shift_id: shift.id, date, start: londonStart, end: londonEnd, position: { size: r.crew_add, profession_id: prof.id } } });
       why.push(`R${order.number}: add ${r.crew_add} ${trade.label} on ${date}`);
@@ -370,24 +480,24 @@ export async function plan(msg: Message, i: Interpretation, world: World, thread
       // A shift with several plain crew positions (a general crew and a named team, Event Concept
       // R11461) changes on its largest, where ops put general crew.
       const crew = shift.slots.filter((s) => Number(s.role) !== 1 && Number(s.profession_id) === 1).sort((a, b) => Number(b.size) - Number(a.size)).slice(0, 1);
-      if (crew.length !== 1) return handoff(`R${order.number} shift ${shift.id}: no crew position to change`);
+      if (crew.length !== 1) return (`R${order.number} shift ${shift.id}: no crew position to change`);
       const chiefSize = chief.reduce((a, s) => a + Number(s.size), 0);
       const current = chiefSize + Number(crew[0].size);
       // "Add 2 more, making it 4 x Crew": both written, so both must hold against the shift
       // as it stands. If they disagree the client and OnSinch see different shifts.
       if (r.crew && r.crew_add && r.crew !== current + r.crew_add)
-        return handoff(`R${order.number} shift ${shift.id}: ${r.crew_add} more on ${current} makes ${current + r.crew_add}, not the ${r.crew} written`);
+        return (`R${order.number} shift ${shift.id}: ${r.crew_add} more on ${current} makes ${current + r.crew_add}, not the ${r.crew} written`);
       if (r.crew && r.crew_remove && r.crew !== current - r.crew_remove)
-        return handoff(`R${order.number} shift ${shift.id}: ${r.crew_remove} fewer on ${current} makes ${current - r.crew_remove}, not the ${r.crew} written`);
+        return (`R${order.number} shift ${shift.id}: ${r.crew_remove} fewer on ${current} makes ${current - r.crew_remove}, not the ${r.crew} written`);
       const total = r.crew ?? current + (r.crew_add ?? 0) - (r.crew_remove ?? 0);
       // A shift ops gave several chief positions keeps them as ops set them: only the crew
       // position moves (Event Concept R11404, "2 additional crew" on 8 + 2 chiefs).
       if (chief.length > 1) {
         const size = Number(crew[0].size) + (total - current);
-        if (size < 1) return handoff(`R${order.number} shift ${shift.id}: ${total} crew leaves no crew position`);
+        if (size < 1) return (`R${order.number} shift ${shift.id}: ${total} crew leaves no crew position`);
         if (size !== Number(crew[0].size)) ops.push({ source: src(n), op: { kind: "set_position_size", order_id: Number(order.id), slot_id: Number(crew[0].id), size } });
         why.push(`R${order.number} shift ${shift.id}: ${total} crew in all`);
-        continue;
+        return null;
       }
       // The chiefs follow Ben's rule (chiefsFor) on everyone the shift will hold: its trades and
       // other teams count too. A chief ops put on a shift of 3 or fewer stays while it stays
@@ -395,7 +505,7 @@ export async function plan(msg: Message, i: Interpretation, world: World, thread
       // position takes the rest.
       const others = shift.slots.filter((s) => Number(s.role) !== 1 && Number(s.id) !== Number(crew[0].id)).reduce((a, s) => a + Number(s.size), 0);
       const want = chiefsFor(total + others, !!r.crew_chief || (chiefSize > 0 && current + others < 4));
-      if (total - want < 1) return handoff(`R${order.number} shift ${shift.id}: ${total} crew leaves no crew position`);
+      if (total - want < 1) return (`R${order.number} shift ${shift.id}: ${total} crew leaves no crew position`);
       const londonStart = utcToLondon(first.beginning).time, londonEnd = utcToLondon(first.end).time;
       if (want && !chiefSize) {
         ops.push({ source: `${src(n)}:chief`, op: { kind: "add_position", order_id: Number(order.id), shift_id: shift.id, date, start: londonStart, end: londonEnd, position: { size: want, profession_id: "36", role: "crew_chief" } } });
@@ -408,7 +518,9 @@ export async function plan(msg: Message, i: Interpretation, world: World, thread
       const chiefNote = want === chiefSize ? "" : !want ? ", the crew chief removed" : !chiefSize ? (want === 1 ? ", a crew chief added" : `, ${want} crew chiefs added`) : `, crew chiefs ${chiefSize} to ${want}`;
       why.push(`R${order.number} shift ${shift.id}: ${total} crew in all${chiefNote}`);
     }
-  }
+    return null;
+  };
+  for (const [n, r] of changes.entries()) { const no = await change(n, r); if (no) return handoff(no); }
 
   // New shifts on a booking the email names (R number, or the thread the bot booked it in)
   // are added to it: Legal Geek's "add a derig on the 13th" is a shift on #13709, not a new
@@ -418,17 +530,27 @@ export async function plan(msg: Message, i: Interpretation, world: World, thread
   // of that email's new shifts go there too (Harbour Scenic 10-12, all added to R11508 by ops).
   if (pins.length > 1) return handoff(`new shifts for ${pins.length} existing bookings in one email`);
   const named = news.length ? (pins.length ? clientOrders.find((o) => Number(o.id) === pins[0]) ?? "the picked booking is not readable" : await findOrder(msg, companyId, world, threadOrderId)) : null;
+  const sent = Date.parse(msg.sentIso);
   if (named && typeof named !== "string") {
     // Each of the order's locations, by the OnSinch place it stands at.
     const atPlace = new Map<number, number>();
     for (const t of teams(named)) for (const s of t.slots) if (Number(s.slotlocation_id)) atPlace.set(Number(s.SlotLocation?.place_id), Number(s.slotlocation_id));
     const locations = new Set(atPlace.values());
-    // A shift the order already holds over the same window is the client restating the
-    // booking ("Re: Crew Booking - Tuesday 13th", Light Motif 10-12), not asking for a second:
-    // 12 of the replay's writes ops never made were exactly this.
-    const held = (r: Request) => { const w = shiftWindow(r.date!, r.start!, r.end!); return teams(named).some((t) => t.slots.some((x) => Date.parse(x.beginning) === Date.parse(w.beginning) && Date.parse(x.end) === Date.parse(w.end))); };
-    const fresh = news.filter((r) => !held(r));
-    if (!fresh.length) return { kind: "none", reason: [`already booked: R${named.number}`, ...(i.notes ?? [])].join("; "), found: [Number(named.id)] };
+    // A shift the order already holds on that day at that start is the client restating the
+    // booking or changing it, never a second one (bookedAt says who has the last word).
+    const fresh: Request[] = [];
+    const synth: Request[] = [];
+    for (const w of windowsOf(news)) {
+      const b = bookedAt(named, w, sent);
+      if (b === "fresh") fresh.push(...w.rs);
+      else if (typeof b === "string") return handoff(b);
+      else synth.push(...b.synth);
+    }
+    // The email's changes still stand when its new shifts are already booked: "change both days to
+    // 10pm-2am, and add 2 crew on Monday 26th" lost its time changes once the 26th was booked
+    // (We Are Family R11349, replay 10-21).
+    if (!fresh.length && !synth.length) return ops.length ? { kind: "write", ops, why: [...why, `already booked: R${named.number}`, ...assumed, ...(i.notes ?? [])] } : { kind: "none", reason: [`already booked: R${named.number}`, ...(i.notes ?? [])].join("; "), found: [Number(named.id)] };
+    for (const [n, r] of synth.entries()) { const no = await change(300 + n, r); if (no) return handoff(no); }
     const groups = shiftGroups(fresh, clientOrders, live);
     if (typeof groups === "string") return handoff(groups);
     for (const [n, g] of groups.entries()) {
@@ -456,9 +578,9 @@ export async function plan(msg: Message, i: Interpretation, world: World, thread
     // client's). Booking afresh would put a second order on a job that has one.
     return handoff(`this thread is linked to order ${threadOrderId}, which the system could not read: ${typeof named === "string" ? named : "not found"}`);
   } else if (news.length) {
-    // Already booked: a client's order holding a live shift over exactly the asked window on
-    // that day. Measured 10-07: every engine order in To Confirm duplicated one ops had built
-    // by hand. Some booked and some not is for a person to untangle.
+    // Already booked: a client's order with a live shift on that day at that start. Measured
+    // 10-07: every engine order in To Confirm duplicated one ops had built by hand. Some booked
+    // and some not is for a person to untangle.
     // The venue counts when the email names one OnSinch knows: EMS's Mandarin Oriental install
     // (10-09) has the same day, hours and crew as its Roundhouse derig, and was not booked.
     const orders = clientOrders;
@@ -468,28 +590,43 @@ export async function plan(msg: Message, i: Interpretation, world: World, thread
       const places = venue ? await placesFor(world, venue, clientOrders) : [];
       placeIds.set(r, places.length === 1 ? new Set(places.map((p) => Number(p.id))) : null);
     }
-    const crewOf = (t: { slots: any[] }) => t.slots.reduce((a, x) => a + Number(x.size), 0);
-    // The venue counts: EMS's Mandarin install and Roundhouse derig share a day, hours and crew
-    // and are two jobs (10-09). A restated booking on its own thread is caught by the thread's
-    // link instead (the bot links every order it makes, links.ts).
-    const bookedIn = (r: Request, loose = false) => {
-      const w = shiftWindow(r.date!, r.start!, r.end!);
-      const at = placeIds.get(r);
-      return orders.find((o) => teams(o).some((t) => t.slots.some((s) => Date.parse(s.beginning) === Date.parse(w.beginning) && Date.parse(s.end) === Date.parse(w.end)
-        && (!at || at.has(Number(s.SlotLocation?.place_id)) || (loose && r.crew != null && crewOf(t) === r.crew)))));
-    };
-    const booked = news.map((r) => bookedIn(r));
-    if (booked.every(Boolean)) return { kind: "none", reason: `already booked: ${[...new Set(booked.map((o) => `R${o.number}`))].join(", ")}`, found: [...new Set(booked.map((o) => Number(o.id)))] };
+    type Verdict = { w: Call; order: any | null; synth: Request[] };
+    const verdicts: Verdict[] = [];
+    for (const w of windowsOf(news)) {
+      const at = placeIds.get(w.rs[0]);
+      const begins = Date.parse(shiftWindow(w.date, w.start, w.end).beginning);
+      const hits = orders.filter((o) => Number(o.status) !== -1 && teams(o).some((t) => t.slots.some((s) => Date.parse(s.beginning) === begins && (!at || at.has(Number(s.SlotLocation?.place_id))))));
+      if (!hits.length) { verdicts.push({ w, order: null, synth: [] }); continue; }
+      const each = hits.map((o) => bookedAt(o, w, sent));
+      if (hits.length > 1) {
+        // Booked as asked in every one of them is still booked; anything else needs a person to pick.
+        if (each.every((v) => typeof v === "object" && !v.synth.length)) { verdicts.push({ w, order: hits[0], synth: [] }); continue; }
+        return handoff(`${hits.length} of the client's orders have a shift on ${w.date} at ${w.start}`);
+      }
+      const v = each[0];
+      if (v === "fresh") verdicts.push({ w, order: null, synth: [] });
+      else if (typeof v === "string") return handoff(v);
+      else verdicts.push({ w, order: hits[0], synth: v.synth });
+    }
+    const bookedV = verdicts.filter((v) => v.order);
+    const synth = bookedV.flatMap((v) => v.synth);
+    if (bookedV.length === verdicts.length && !synth.length) {
+      const found = [...new Map(bookedV.map((v) => [Number(v.order.id), v.order])).values()];
+      const booked = `already booked: ${found.map((o) => `R${o.number}`).join(", ")}`;
+      return ops.length ? { kind: "write", ops, why: [...why, booked, ...assumed, ...(i.notes ?? [])] } : { kind: "none", reason: booked, found: found.map((o) => Number(o.id)) };
+    }
+    for (const [n, r] of synth.entries()) { const no = await change(300 + n, r); if (no) return handoff(no); }
+    if (bookedV.length === verdicts.length) return ops.length ? { kind: "write", ops, why: [...why, ...assumed, ...(i.notes ?? [])] } : { kind: "none", reason: [why.join("; ") || "already as asked", ...(i.notes ?? [])].join("; ") };
     // Some of it already booked, all in ONE order: the email re-lists that booking and adds to
     // it ("Yes please, 2 x crew also for 2 hours at 21:30", Encore 10-09, which ops added to
     // R11498). The rest is added to that order at its one location; anything else is a person's.
-    if (booked.some(Boolean)) {
-      const hit = [...new Set(booked.filter(Boolean).map((o) => Number(o.id)))];
-      const o = booked.find(Boolean);
+    if (bookedV.length) {
+      const hit = [...new Set(bookedV.map((v) => Number(v.order.id)))];
+      const o = bookedV[0].order;
       const locs = new Set(teams(o).flatMap((t) => t.slots.map((x) => Number(x.slotlocation_id)).filter(Boolean)));
-      const rest = news.filter((_, k) => !booked[k]);
+      const rest = verdicts.filter((v) => !v.order).flatMap((v) => v.w.rs);
       const groups = hit.length === 1 && locs.size === 1 ? shiftGroups(rest, clientOrders, live) : null;
-      if (!groups || typeof groups === "string") return handoff(`part of this is already booked (${booked.filter(Boolean).map((x) => `R${x.number}`).join(", ")})`);
+      if (!groups || typeof groups === "string") return handoff(`part of this is already booked (${[...new Set(bookedV.map((v) => `R${v.order.number}`))].join(", ")})`);
       for (const [n, g] of groups.entries()) {
         ops.push({ source: src(50 + n), op: { kind: "add_shift", order_id: Number(o.id), location_id: [...locs][0], name: "Crew", date: g.date, start: g.start, end: g.end, positions: g.positions } });
         why.push(`R${o.number}: add a shift on ${g.date} ${g.start}-${g.end}, ${g.label} (the rest of the email is already booked there)`, ...g.notes);

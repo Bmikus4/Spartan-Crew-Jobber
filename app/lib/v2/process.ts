@@ -242,6 +242,8 @@ export type DecideDeps = {
   run: ((source: string, op: Op) => Promise<RunResult>) | null;
   /** Settings' create_lead_days; null when the rule is switched off; absent, the planner's own default. */
   leadDays?: () => Promise<number | null | undefined>;
+  /** The moment of deciding: a day before it is already over and is never written. Absent, only a day before the email is refused. */
+  now?: () => number;
   /** The thread is now about this order: kept in job_links and swept every minute (links.ts). */
   link?: (order_id: number) => Promise<void>;
   record: (r: Recorded) => Promise<void>;
@@ -297,7 +299,7 @@ export async function decideMessage(m: MessageIn, deps: DecideDeps): Promise<Rec
   const leadDays = deps.leadDays ? await deps.leadDays().catch(() => undefined) : undefined;
   // A PLAN THAT THROWS IS A CARD FOR A PERSON, like a read that fails: a time London's clock
   // skips, a window with no length or an OnSinch read that failed would otherwise lose the email.
-  const decision: Decision = await plan({ message_id: m.message_id, from, subject: String(m.subject ?? ""), sentIso: m.date_iso, text: newest }, interpretation, deps.world, await deps.threadOrderId(), { leadDays })
+  const decision: Decision = await plan({ message_id: m.message_id, from, subject: String(m.subject ?? ""), sentIso: m.date_iso, text: newest }, interpretation, deps.world, await deps.threadOrderId(), { leadDays, now: deps.now?.() })
     .catch((e) => ({ kind: "handoff" as const, reasons: [`the system could not plan this email (${String((e as Error)?.message ?? e).slice(0, 120)})`] }));
   deps.trace("plan", { kind: decision.kind, ops: decision.kind === "write" ? decision.ops.map((o) => o.op.kind) : [], said: decision.kind === "write" ? decision.why : decision.kind === "handoff" ? decision.reasons : [decision.reason] }, Date.now() - t2);
   const out: Recorded = { kind: decision.kind, interpretation: { extraction: x, grounded: interpretation, meta }, decision, executed: null, client };
@@ -348,6 +350,7 @@ export async function processMessage(message_id: string, opts: { execute: boolea
     run: opts.execute ? runWhenFree : null,
     // A settings read that fails keeps the rule on: undefined is the planner's default, never null.
     leadDays: () => getSettings().then((s) => (s.create_lead_enabled === false ? null : s.create_lead_days)),
+    now: () => Date.now(),
     link: (order_id) => recordLink(sql, { thread_id: m.thread_id, order_id, source: "bot write" }),
     record: async (d) => {
       await sql`
