@@ -3599,5 +3599,23 @@
     "test_orders_left": 0
    }
   }
+ },
+ {
+  "id": "S-0194",
+  "ts": "2026-10-21T02:14:22+00:00",
+  "kind": "decision",
+  "headline": "Intake paused state: no red sync icon during Ben's pause",
+  "subject": "The TV reads Intake Paused, not a sync error, while Settings says email intake is off on purpose",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 202,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  },
+  "sources": [
+   "app/lib/feed/serve.ts",
+   "app/lib/intakeHealth.ts:17"
+  ]
  }
 ]

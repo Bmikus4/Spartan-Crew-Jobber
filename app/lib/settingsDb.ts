@@ -44,6 +44,7 @@ export function coerceSettings(body: unknown): Partial<Settings> {
     next.create_lead_days = b.create_lead_days;
   if (typeof b.jobs_board_enabled === "boolean") next.jobs_board_enabled = b.jobs_board_enabled;
   if (typeof b.analytics_tab_enabled === "boolean") next.analytics_tab_enabled = b.analytics_tab_enabled;
+  if (typeof b.intake_paused === "boolean") next.intake_paused = b.intake_paused;
   if (b.reply_delivery === "draft" || b.reply_delivery === "send") next.reply_delivery = b.reply_delivery;
   if (b.reply_scope === "all" || b.reply_scope === "enquiries") next.reply_scope = b.reply_scope;
   // 0 is a real value here - it means "no fallback, hold the thread" - so this

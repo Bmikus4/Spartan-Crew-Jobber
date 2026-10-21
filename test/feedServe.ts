@@ -61,6 +61,13 @@ void (async () => {
     ok((quiet.body.health as Record<string, unknown>).intake_stale === true, "quiet for 3 hours on a Monday morning is stale");
     const never = await serveFeed(deps({ inbound: async () => ({ byThread: new Map(), latest: null }) }), NOW);
     ok((never.body.health as Record<string, unknown>).intake_stale === true, "no mail ever is stale, not calm");
+    // Ben paused intake 2026-10-21: the silence is on purpose, so the TV must not call it a fault.
+    const paused = await serveFeed(deps({ inbound: async () => ({ byThread: new Map(), latest: NOW - 3 * H }), intakePaused: async () => true }), NOW);
+    const ph = paused.body.health as Record<string, unknown>;
+    ok(ph.intake_stale === false && ph.intake_paused === true, "intake paused in Settings: the silence is not stale, and the TV is told it is paused", JSON.stringify(ph));
+    const unread = await serveFeed(deps({ inbound: async () => ({ byThread: new Map(), latest: NOW - 3 * H }), intakePaused: boom }), NOW);
+    ok((unread.body.health as Record<string, unknown>).intake_stale === true, "a settings read that fails judges the silence as usual: an outage is never hidden by a failed read");
+    ok(/intakePaused: \(\) => getSettings\(\)/.test(readFileSync("app/lib/feed/live.ts", "utf8")), "production reads the pause from Settings");
   }
 
   console.log("\n[3] the reply lane exists only when the feature is on");

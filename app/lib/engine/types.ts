@@ -483,6 +483,13 @@ export interface Settings {
   /** The Analytics folder tab on the TV board (Ben, 2026-10-11). Settings always has it. */
   analytics_tab_enabled?: boolean;
   /**
+   * Email intake is switched off on purpose (Ben paused it 2026-10-21). The TV's sync icon
+   * then reads "Intake Paused" instead of going red after 90 quiet working minutes: staff told
+   * the system is off must not see it report a fault. Clear it when intake is turned back on,
+   * or a real outage is hidden.
+   */
+  intake_paused?: boolean;
+  /**
    * Follow-up drafting (Ben, 2026-10-10): whether a job the TV raises as "Needs Follow Up"
    * should get a drafted chase in its Gmail thread. OFF by default. Stored only: nothing
    * drafts from it yet (the chase composer has no caller), and the Settings screen says so.
@@ -572,6 +579,7 @@ export const DEFAULT_SETTINGS: Settings = {
   create_lead_enabled: true,
   jobs_board_enabled: false,
   analytics_tab_enabled: false,
+  intake_paused: false,
   reply_delivery: "draft",
   reply_scope: "all",
   default_rate_card: 315,

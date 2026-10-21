@@ -38,6 +38,8 @@ export interface FeedDeps {
   from?: number;
   /** The jobs board's tickets, carried onto the TV as completed (ported.ts). */
   jobs?: () => Promise<Job[]>;
+  /** Intake is switched off on purpose (Settings intake_paused): its silence is not a fault. */
+  intakePaused?: () => Promise<boolean>;
 }
 
 export async function serveFeed(deps: FeedDeps, now: number): Promise<{ status: number; body: Record<string, unknown> }> {
@@ -102,6 +104,8 @@ export async function serveFeed(deps: FeedDeps, now: number): Promise<{ status: 
   }));
 
   const intake = intakeHealth({ lastReceivedAt: inbound.latest, now });
+  // A settings read that fails says nothing about intake: the silence is judged as usual.
+  const paused = deps.intakePaused ? await deps.intakePaused().catch(() => false) : false;
   return {
     status: 200,
     body: {
@@ -110,7 +114,8 @@ export async function serveFeed(deps: FeedDeps, now: number): Promise<{ status: 
       health: {
         last_email_at: intake.last_received_at,
         minutes_since_email: intake.minutes_since,
-        intake_stale: intake.stale,
+        intake_stale: intake.stale && !paused,
+        intake_paused: paused,
         within_working_hours: intake.within_working_hours,
         quiet_minutes: intake.quiet_minutes,
         replies_enabled: deps.replies !== null,

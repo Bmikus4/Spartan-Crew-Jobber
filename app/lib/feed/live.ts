@@ -9,6 +9,7 @@ import { HOLD_TV_MINUTES } from "../v2/links";
 import { FEED_FROM, type ReplyNeed } from "./project";
 import type { V2Row } from "./v2";
 import { listTickets } from "../ticketsDb";
+import { getSettings } from "../settingsDb";
 import type { ConversationState } from "../engine/types";
 
 let _sql: NeonQueryFunction<false, false> | null = null;
@@ -108,5 +109,6 @@ export function liveFeedDeps(): FeedDeps {
     }, marks, undefined, wants),
     verifyStatus,
     remember: async (ms) => { for (const m of ms) await addMark(m); },
+    intakePaused: () => getSettings().then((s) => s.intake_paused === true),
   };
 }

@@ -25,7 +25,7 @@ import AnalyticsPopup from "./AnalyticsPopup";
 interface FeedResponse {
   ok: boolean;
   generated_at: string;
-  health: { last_email_at: string | null; minutes_since_email: number | null; intake_stale: boolean; replies_enabled: boolean; verify?: { last_at: string | null; note: string | null } };
+  health: { last_email_at: string | null; minutes_since_email: number | null; intake_stale: boolean; intake_paused?: boolean; replies_enabled: boolean; verify?: { last_at: string | null; note: string | null } };
   counts: FeedCounts;
   items: FeedCard[];
   everything?: FeedCard[];
@@ -249,11 +249,12 @@ function Tick({ card, it, s, height, onTick }: { card: FeedCard; it: FeedItem; s
  *   red    an error: the system answered with a failure, Gmail has gone quiet in working
  *          hours, or OnSinch could not be read
  *   green  connected, and both are coming through
+ *   grey   paused, as well: email intake is off on purpose (Settings), OnSinch still syncs
  */
-function Sync({ s, state, why }: { s: number; state: "ok" | "offline" | "error"; why: string }) {
+function Sync({ s, state, why }: { s: number; state: "ok" | "offline" | "error" | "paused"; why: string }) {
   const color = state === "ok" ? GREEN : state === "error" ? RED : GREY;
-  const title = state === "ok" ? "Synced" : state === "error" ? "Sync Error" : "Offline";
-  const full = state === "ok" ? "Synced with Gmail and OnSinch" : state === "error" ? `Sync error: ${why || "Gmail or OnSinch"}` : "Offline: not syncing";
+  const title = state === "ok" ? "Synced" : state === "error" ? "Sync Error" : state === "paused" ? "Intake Paused" : "Offline";
+  const full = state === "ok" ? "Synced with Gmail and OnSinch" : state === "error" ? `Sync error: ${why || "Gmail or OnSinch"}` : state === "paused" ? "Email intake is paused; jobs still sync with OnSinch" : "Offline: not syncing";
   return (
     <div role="status" aria-label={full} title={full} style={{ display: "flex", alignItems: "center", gap: 8 * s, whiteSpace: "nowrap" }}>
       <svg width={44 * s} height={44 * s} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden style={{ flexShrink: 0, transition: "stroke 300ms" }}>
@@ -562,11 +563,12 @@ export default function LiveFeedScreen({ isActive, tv = false }: { isActive: boo
   const dataAge = okAt == null ? null : now - okAt;
   const emailStale = !!data?.health.intake_stale;
   const onsinchUnread = /unreadable|failed/i.test(data?.health.verify?.note ?? "");
-  const sync: "ok" | "offline" | "error" =
+  const sync: "ok" | "offline" | "error" | "paused" =
     failKind === "offline" || data == null || (dataAge != null && dataAge > STALE_DATA_MS && failKind == null) ? "offline"
     : failKind === "error" || emailStale || onsinchUnread ? "error"
+    : data.health.intake_paused ? "paused"
     : "ok";
-  const warn = sync !== "ok";
+  const warn = sync !== "ok" && sync !== "paused";
   const urgentCount = cards.filter((x) => urgent(x, now)).length;
   const openCount = cards.filter(isOpen).length;
   const pad = 28 * s;
