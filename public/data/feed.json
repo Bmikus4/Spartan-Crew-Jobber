@@ -3891,5 +3891,46 @@
    "app/lib/v2/links.ts",
    "test/feedServe.ts"
   ]
+ },
+ {
+  "id": "S-0205",
+  "ts": "2026-10-21T13:20:13+00:00",
+  "kind": "measurement",
+  "headline": "Measured after S-0204: wrong or dead numbers on the TV 184 -> 0",
+  "subject": "No card on the TV shows a wrong or deleted order's number: 0 of 201, down from 184 of 455",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 207,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  },
+  "measured": {
+   "dataset": "production TV read-only at 2026-10-21 13:15Z, every card followed by its J to the order holding it in OnSinch, after S-0204 had linked all 356 jobs-board tickets (177 live orders, 179 gone or cancelled)",
+   "jobs_board_tiles": {
+    "before": "434 shown, 179 with correct numbers",
+    "after": "183 shown, 183 correct"
+   },
+   "open_cards": {
+    "cards": 6,
+    "correct_R_and_J": 2,
+    "no_numbers": 4,
+    "wrong_numbers": 0,
+    "no_numbers_are": "a new lead, Event Concept's undated venue change, Halo's rates question, CT's stand-down on a quote never booked: none has an order"
+   },
+   "done_24h": {
+    "cards": 12,
+    "correct_R_and_J": 8,
+    "no_numbers": 3,
+    "cancelled_order": "1 (Forta R8811, the right order, cancelled by staff)"
+   },
+   "cards_with_a_wrong_or_dead_number": {
+    "before": 184,
+    "after": 0
+   }
+  },
+  "sources": [
+   ".tmp-v2/rj/audit.mts"
+  ]
  }
 ]
