@@ -28,6 +28,8 @@ interface FeedResponse {
   health: { last_email_at: string | null; minutes_since_email: number | null; intake_stale: boolean; intake_paused?: boolean; replies_enabled: boolean; verify?: { last_at: string | null; note: string | null } };
   counts: FeedCounts;
   items: FeedCard[];
+  /** The deployment that answered (api/feed/route.ts). */
+  build?: string | null;
 }
 
 const REFRESH_MS = 20_000;
@@ -368,6 +370,7 @@ export default function LiveFeedScreen({ isActive, tv = false }: { isActive: boo
   const lastChime = useRef(0);
   const shown = useRef<string[]>([]);
   const wasGreen = useRef<Set<string> | null>(null);
+  const build = useRef<string | null>(null);
 
   const s = full || tv ? 1 : 0.72;
 
@@ -394,6 +397,13 @@ export default function LiveFeedScreen({ isActive, tv = false }: { isActive: boo
       // Something new goes to the top, so the top is where the screen has to be looking.
       if (arrived) window.setTimeout(() => listRef.current?.scrollTo({ top: 0, behavior: "smooth" }), 50);
       seen.current = keys;
+      // A NEW BUILD RELOADS THE SCREEN. The TV polls for data but never for its own code, so after
+      // the Everything tab was deleted (10-21) the office screen kept drawing the old tab until
+      // someone reloaded it by hand.
+      if (body.build) {
+        if (build.current && build.current !== body.build) { window.location.reload(); return; }
+        build.current = body.build;
+      }
       setData(body);
       setOkAt(Date.now());
       setFailKind(null);

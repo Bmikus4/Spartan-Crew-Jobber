@@ -16,5 +16,7 @@ export async function GET(request: Request): Promise<Response> {
   const caller = await authorizeAction(request);
   if (!caller.ok) return Response.json({ ok: false, error: "unauthorized" }, { status: 401 });
   const r = await serveFeed(liveFeedDeps(), Date.now());
-  return Response.json(r.body, { status: r.status, headers: { "cache-control": "no-store" } });
+  // The build serving this answer: a screen that sees it change reloads (LiveFeedScreen).
+  const build = process.env.VERCEL_GIT_COMMIT_SHA || null;
+  return Response.json({ ...r.body, build }, { status: r.status, headers: { "cache-control": "no-store" } });
 }

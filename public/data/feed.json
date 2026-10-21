@@ -3789,5 +3789,23 @@
   "sources": [
    "app/lib/v2/bot/apiCreate.ts"
   ]
+ },
+ {
+  "id": "S-0201",
+  "ts": "2026-10-21T12:23:36+00:00",
+  "kind": "decision",
+  "headline": "TV auto-reloads on a new build (the Everything tab lingered on the office screen)",
+  "subject": "The TV reloads itself when a new build is live, so a deleted tab cannot linger on an open screen",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 204,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  },
+  "sources": [
+   "app/components/LiveFeedScreen.tsx",
+   "app/api/feed/route.ts"
+  ]
  }
 ]

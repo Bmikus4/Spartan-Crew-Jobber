@@ -141,6 +141,9 @@ void (async () => {
     const get = src.slice(src.indexOf("export async function GET"));
     ok(get.indexOf("authorizeAction") >= 0 && get.indexOf("authorizeAction") < get.indexOf("serveFeed"), "authorizeAction before anything is read");
     ok(/status: 401/.test(get) && /status: r\.status/.test(get), "401 when refused, serveFeed's status otherwise");
+    // 10-21: the office screen kept drawing the deleted Everything tab until reloaded by hand.
+    const screen = readFileSync("app/components/LiveFeedScreen.tsx", "utf8");
+    ok(/build/.test(get) && /build\.current !== body\.build\) \{ window\.location\.reload\(\)/.test(screen), "the feed says which build answered, and a screen that sees it change reloads itself");
   }
 
   console.log(fails ? `\n${fails} FAILED` : "\nALL PASS");
