@@ -164,7 +164,8 @@ export function companiesOf(addresses: string[], companies: CompanyRec[]): numbe
  * (Subfrantic 10-16: R11698 for Job 1, R11701 and R11705 for Job 2's two options).
  */
 export function coveredBy(t: ThreadIn, w: StateWorld, companyIds: number[]): OrderRef[] | null {
-  const dated = t.requests.filter((r) => r.date);
+  // Earliest day first, so the first order named holds the booking's first day.
+  const dated = t.requests.filter((r) => r.date).sort((a, b) => String(a.date).localeCompare(String(b.date)));
   if (!dated.length) return null;
   const pool = w.orders.filter((o) => live(o) && companyIds.includes(Number(o.company_id)));
   const out = new Map<number, OrderRef>();

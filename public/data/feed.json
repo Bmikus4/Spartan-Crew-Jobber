@@ -3839,5 +3839,57 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0204",
+  "ts": "2026-10-21T12:55:57+00:00",
+  "kind": "measurement",
+  "headline": "Every job listed with its checked R and J (Ben 10-21); jobs-board tiles verified by their J",
+  "subject": "Every job on the TV is listed, and its R and J are only ever its own order's, checked against OnSinch every minute",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 207,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  },
+  "measured": {
+   "dataset": "production, read-only, 2026-10-21 ~04:30Z: every card the TV holds (455) followed by its J to the order holding it in OnSinch; then the minute re-plan dry run with this code",
+   "audit_before": {
+    "open": {
+     "cards": 9,
+     "correct": 2,
+     "no_numbers": 6,
+     "dead_R": 1
+    },
+    "done_24h": {
+     "cards": 12,
+     "correct": 6,
+     "no_numbers": 4,
+     "cancelled_order": 2
+    },
+    "jobs_board_tiles": {
+     "cards": 434,
+     "correct": 179,
+     "J_not_in_OnSinch": 158,
+     "no_numbers": 74,
+     "cancelled_order": 23
+    }
+   },
+   "replan_dry_run_open_cards_with_R_and_J": {
+    "after": 35,
+    "of": 50
+   },
+   "found_now": "MK Crew R11750/J16877; Subfrantic R11698/J16824; Bearded Kitten R11507/J16624; Cells4Life resolves (nothing booked on the 25th)",
+   "still_without_an_order": "CT NVIDIA stand-down (a quote never booked), Event Concept undated venue change, Halo rates question, barnabyhartwill new lead"
+  },
+  "deferred": [
+   "the jobs board tiles are linked 20 a minute by the minute sync; their after-count is measured once that has run"
+  ],
+  "sources": [
+   "app/lib/feed/serve.ts",
+   "app/lib/v2/links.ts",
+   "test/feedServe.ts"
+  ]
  }
 ]

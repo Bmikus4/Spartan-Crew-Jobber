@@ -69,8 +69,8 @@ export async function linkFound(sql: Sql, l: { thread_id: string; order_id: numb
   await ensureLinks(sql);
   const have = (await sql`SELECT order_id, state FROM job_links WHERE thread_id = ${l.thread_id}`) as Array<{ order_id: string | number; state: string }>;
   if (have.some((h) => Number(h.order_id) === l.order_id && h.state !== "held")) return "same";
-  if (have.some((h) => h.state !== "held")) return "kept";
-  await sql`DELETE FROM job_links WHERE thread_id = ${l.thread_id} AND state = 'held'`;
+  if (have.some((h) => h.state !== "held" && h.state !== "gone")) return "kept";
+  await sql`DELETE FROM job_links WHERE thread_id = ${l.thread_id} AND state IN ('held', 'gone')`;
   await recordLink(sql, l);
   return "linked";
 }
@@ -100,6 +100,39 @@ export async function backfillLinks(sql: Sql): Promise<number> {
   return n;
 }
 
+/**
+ * THE JOBS BOARD'S TICKETS, LINKED BY THEIR J (ported.ts says why): each ticket thread with no link
+ * gets one to the order that holds its job now, found by the J (stable) rather than its R (reused
+ * after a delete) or its order id. A job OnSinch no longer has, or a cancelled order, gets none.
+ * A few a minute, so the minute's other work is not held up; the tickets no longer change.
+ */
+export async function backfillBoardLinks(sql: Sql, limit = 20): Promise<{ linked: number; gone: number }> {
+  await ensureLinks(sql);
+  const [t] = (await sql`SELECT to_regclass('public.tickets') AS t`) as { t: string | null }[];
+  if (!t?.t) return { linked: 0, gone: 0 };
+  const rows = (await sql`
+    SELECT k.thread_id, k.onsinch_order_id, k.onsinch_job_id, k.company_id FROM tickets k
+    WHERE NOT EXISTS (SELECT 1 FROM job_links l WHERE l.thread_id = k.thread_id)
+      AND (k.onsinch_job_id > 0 OR k.onsinch_order_id > 0)
+      AND coalesce(k.classification, '') <> 'not-a-job' AND coalesce(k.status, '') <> 'ignored' AND k.is_client_inquiry IS NOT FALSE
+    ORDER BY k.updated_at DESC LIMIT ${limit}`) as any[];
+  const t2 = api();
+  let linked = 0, gone = 0;
+  for (const k of rows) {
+    const holder = Number(k.onsinch_job_id) > 0 ? (await readRows(t2 as any, `/orders?with=Job&Job__id[eq]=${Number(k.onsinch_job_id)}`))[0]
+      : (await readRows(t2 as any, `/orders?id[eq]=${Number(k.onsinch_order_id)}&with=Job`))[0];
+    if (!holder || Number(holder.status) === -1) {
+      // Remembered as "gone", so it is asked once: a link no card, sweep or finder reads.
+      await sql`INSERT INTO job_links (thread_id, order_id, state, source, note, last_checked) VALUES (${k.thread_id}, ${Number(k.onsinch_order_id) || 0}, 'gone', 'jobs board', 'its job is not in OnSinch, or its order is cancelled', now()) ON CONFLICT (thread_id, order_id) DO NOTHING`;
+      gone++;
+      continue;
+    }
+    await recordLink(sql, { thread_id: k.thread_id, order_id: Number(holder.id), company_id: k.company_id ?? null, source: "jobs board" });
+    linked++;
+  }
+  return { linked, gone };
+}
+
 export type SweepReport = { checked: number; linked: number; relinked: number; held: number; notes: string[] };
 
 /** Sweeps A and B over the links not checked in the last minute, oldest first. */
@@ -107,7 +140,9 @@ export async function sweepLinks(sql: Sql, limit = 40): Promise<SweepReport> {
   await ensureLinks(sql);
   const t = api();
   const rep: SweepReport = { checked: 0, linked: 0, relinked: 0, held: 0, notes: [] };
-  const links = (await sql`SELECT * FROM job_links WHERE coalesce(last_checked, 'epoch') < now() - interval '50 seconds' ORDER BY coalesce(last_checked, 'epoch') LIMIT ${limit}`) as any[];
+  // The TV's own threads first; the jobs board's carried-over tiles take what the minute has left.
+  const links = (await sql`SELECT * FROM job_links WHERE state <> 'gone' AND coalesce(last_checked, 'epoch') < now() - interval '50 seconds'
+    ORDER BY (coalesce(source, '') = 'jobs board'), coalesce(last_checked, 'epoch') LIMIT ${limit}`) as any[];
   for (const l of links) {
     // A read that failed says nothing about the order: the link is left exactly as it was and
     // tried again next minute. Before 10-15 a 500 read as "not in OnSinch" and held the link.

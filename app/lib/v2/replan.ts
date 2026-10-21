@@ -15,7 +15,7 @@
 // This is the planner itself, run again; there is no second pass or second state (Ben, 10-17).
 // ============================================================================
 import type { NeonQueryFunction } from "@neondatabase/serverless";
-import { decideMessage, onsinchWorld, threadReads, type Recorded, type MessageIn } from "./process";
+import { decideMessage, onsinchWorld, rawRequests, threadReads, type Recorded, type MessageIn } from "./process";
 import type { World } from "./interpret/plan";
 import { linkedOrderId } from "./threadOrder";
 import { linkFound } from "./links";
@@ -102,6 +102,12 @@ export async function replanOpen(sql: Sql, opts: { limit?: number; budgetMs?: nu
         leadDays: async () => leadDays,
         now: () => now,
         again: true,
+        // Every email's reading on the thread, later ones too: Bearded Kitten's "3 lifters" names
+        // its 16 Oct only in a later email, and that day is what finds R11507.
+        asked: async () => byThread.get(row.thread_id)!.flatMap((d: any) => [
+          ...((d.interpretation?.grounded?.requests ?? []) as any[]).map((r) => ({ date: r.date ?? r.target?.date, start: r.start, crew: r.crew, place_id: r.place_id, venue: r.venue, target: r.target })),
+          ...rawRequests(d.interpretation?.extraction ?? { requests: [] }),
+        ]),
         link: async (order_id, source = "planner") => { links.push({ order_id, source }); },
         record: async (r) => { got = r; },
         trace: noTrace,

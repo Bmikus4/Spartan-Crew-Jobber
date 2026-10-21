@@ -260,6 +260,8 @@ export type DecideDeps = {
   again?: boolean;
   /** The whole thread, ours included, for finding the order it is about (plan.ts findOrder). */
   threadMessages?: () => Promise<ThreadMsg[]>;
+  /** Every request read anywhere on the thread, later emails included (replan.ts), for finding only. */
+  asked?: () => Promise<Asked[]>;
   /**
    * The thread is now about this order: kept in job_links and swept every minute (links.ts).
    * `source` "bot write" for an order the bot wrote; anything else is a find, which never
@@ -323,7 +325,8 @@ export async function decideMessage(m: MessageIn, deps: DecideDeps): Promise<Rec
   const decision: Decision = await plan({ message_id: m.message_id, from, subject: String(m.subject ?? ""), sentIso: m.date_iso, text: newest }, interpretation, deps.world, await deps.threadOrderId(),
     { leadDays, now: deps.now?.(), again: deps.again, thread: deps.threadMessages ? await deps.threadMessages().catch(() => undefined) : undefined,
       // The thread's earlier requests name its days too: SN ExCeL's 17th, 18th, 20th and 21st single out R10522.
-      raw: [...rawRequests(x), ...prior.map((r) => ({ date: r.date ?? r.target?.date, start: r.start, crew: r.crew, place_id: r.place_id, venue: r.venue, target: r.target }))] })
+      raw: [...rawRequests(x), ...prior.map((r) => ({ date: r.date ?? r.target?.date, start: r.start, crew: r.crew, place_id: r.place_id, venue: r.venue, target: r.target })),
+        ...(deps.asked ? await deps.asked().catch(() => []) : [])] })
     .catch((e) => ({ kind: "handoff" as const, reasons: [`the system could not plan this email (${String((e as Error)?.message ?? e).slice(0, 120)})`] }));
   deps.trace("plan", { kind: decision.kind, ops: decision.kind === "write" ? decision.ops.map((o) => o.op.kind) : [], said: decision.kind === "write" ? decision.why : decision.kind === "handoff" ? decision.reasons : [decision.reason] }, Date.now() - t2);
   const out: Recorded = { kind: decision.kind, interpretation: { extraction: x, grounded: interpretation, meta }, decision, executed: null, client };
@@ -331,7 +334,9 @@ export async function decideMessage(m: MessageIn, deps: DecideDeps): Promise<Rec
   // AN ORDER THE PLANNER FOUND IS THE THREAD'S ORDER. "already booked: R11599" was decided and
   // not kept, so the TV card for that thread showed no R number and the label sync had
   // nothing to say. One order found is linked; several are left for a person.
-  if (decision.kind === "none" && decision.found?.length === 1 && deps.link) await deps.link(decision.found[0], "planner find").catch(() => {});
+  // A booking staff split over several orders (MK Crew R11750-R11752, one per day) shows the order
+  // holding its first day, the planner naming that one first: a job with no number is the error.
+  if (decision.kind === "none" && decision.found?.length && deps.link) await deps.link(decision.found[0], "planner find").catch(() => {});
   // A card for a person names the order it is about, so the TV shows its R and J (plan.ts settle).
   if (decision.kind === "handoff" && decision.order_id && deps.link) await deps.link(decision.order_id, "finder").catch(() => {});
   if (!deps.run || decision.kind !== "write") { deps.trace("final", { kind: out.kind }); return out; }

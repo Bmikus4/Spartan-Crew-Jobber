@@ -86,6 +86,15 @@ const NOW = Date.parse("2026-10-20T09:00:00Z");
     ok(d.kind === "none" && /already booked: R11698/.test(d.reason), "every day asked is in an order staff made after the email: done, through the planner", JSON.stringify(d));
   }
 
+  console.log("Cells4Life (10-19): a stand-down that lost its day is weighed on the thread's days");
+  {
+    const i: Interpretation = { intent: "cancellation", requests: [r({ action: "cancel_shift", problems: ["request 1: no day the client wrote", "request 1: no words cancelling the whole shift"] })], problems: [] };
+    const none = await plan(msg("jobs@subfrantic.com", "Re: Quote request", "we're going with a different crew company for this job", "2026-10-19T09:30:00Z"), i, world, null, { now: NOW, raw: [{ date: "2026-11-25" }] });
+    ok(none.kind === "none" && /nothing is booked on 2026-11-25/.test(none.reason), "nothing of the client's on the day the thread asked for: nothing to cancel, no card", JSON.stringify(none));
+    const booked = await plan(msg("jobs@subfrantic.com", "Re: Quote request", "we're going with a different crew company for this job", "2026-10-19T09:30:00Z"), i, world, null, { now: NOW, raw: [{ date: "2026-11-20" }] });
+    ok(booked.kind === "handoff", "the 20th is booked (R11698): a person checks what the client called off", JSON.stringify(booked));
+  }
+
   console.log("A second job on the same day is never the new booking");
   {
     const i: Interpretation = { intent: "booking", requests: [r({ date: "2026-10-28", start: "09:00", end: "17:00", crew: 4, venue: "ExCeL" })], problems: [] };

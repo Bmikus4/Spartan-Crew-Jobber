@@ -6,7 +6,7 @@
 // Run: npx tsx test/feedServe.ts
 // ============================================================================
 import { readFileSync } from "node:fs";
-import { serveFeed, type FeedDeps } from "../app/lib/feed/serve";
+import { serveFeed, type FeedDeps, type HeldLink } from "../app/lib/feed/serve";
 import type { ConversationState } from "../app/lib/engine/types";
 import type { FeedCard, FeedMark } from "../app/lib/feed/project";
 
@@ -30,8 +30,6 @@ function deps(over: Partial<FeedDeps> = {}): FeedDeps {
     inbound: async () => ({ byThread: new Map(), latest: NOW - 10 * 60_000 }),
     marks: async () => [],
     replies: null,
-    // These checks are about serving, not about which cards the list holds ([7] is): every card listed.
-    showUnlinked: async () => true,
     ...over,
   };
 }
@@ -117,22 +115,29 @@ void (async () => {
     ok(/remember: async/.test(readFileSync("app/lib/feed/live.ts", "utf8")), "production wires memory to addMark");
   }
 
-  console.log("\n[7] only jobs with an R and a J are listed (Ben, 10-16 and 10-20)");
+  console.log("\n[7] every job is listed, with the R and J of its own order (Ben, 10-21)");
   {
     const numbered = { ...created, thread_id: "n", classification: "update", status: "error", order_action_log: [], onsinch_order_number: "11029", onsinch_job_id: 16100 } as unknown as ConversationState;
     const bare = { ...created, thread_id: "b", classification: "update", status: "error", order_action_log: [], onsinch_order_id: undefined } as unknown as ConversationState;
     const lastIn = new Map([["n", NOW - 30 * H], ["b", NOW - 30 * H]]);
-    const r = await serveFeed(deps({ states: async () => [numbered, bare], inbound: async () => ({ byThread: lastIn, latest: NOW - 10 * 60_000 }), showUnlinked: undefined }), NOW);
+    const held: HeldLink[] = [
+      { thread_id: "h", r_number: "11562", company: "EMS Events", subject: "J46434", since: new Date(NOW - 2 * H).toISOString(), note: null, days: ["2026-10-02"] },
+      { thread_id: "h2", r_number: "11600", company: "Later", subject: "x", since: new Date(NOW - 2 * H).toISOString(), note: null, days: ["2026-10-09"] },
+    ];
+    const r = await serveFeed(deps({ states: async () => [numbered, bare], inbound: async () => ({ byThread: lastIn, latest: NOW - 10 * 60_000 }), held: async () => held }), NOW);
     const items = r.body.items as FeedCard[];
     const counts = r.body.counts as Record<string, number>;
-    ok(items.map((c) => c.thread_id).join() === "n", "the card with R11029 and J16100 is listed; the one with no order is not", items.map((c) => c.thread_id).join());
-    ok(counts.unlinked === 1, "the one not listed is counted, for the foot of the list", JSON.stringify(counts));
-    ok(counts.needs_follow_up === 1, "Needs Follow Up counts the list, not every card (it said 9 over 8 badges on 10-21)", JSON.stringify(counts));
-    ok((r.all ?? []).length === 2, "the Gmail labels still see both");
-    const on = await serveFeed(deps({ states: async () => [numbered, bare], showUnlinked: async () => true }), NOW);
-    ok((on.body.items as FeedCard[]).length === 2, "Settings can list the enquiries with no order too");
+    ok(items.some((c) => c.thread_id === "n") && items.some((c) => c.thread_id === "b"), "the job with its numbers and the one still without are both listed: no job is hidden for lacking them", items.map((c) => c.thread_id).join());
+    ok(counts.needs_follow_up === 2 && !("unlinked" in counts), "Needs Follow Up counts the list, and nothing is counted as hidden", JSON.stringify(counts));
+    const h2 = items.find((c) => c.thread_id === "h2");
+    ok(!items.some((c) => c.thread_id === "h") && !!h2 && h2.r_number === null && /R11600 is no longer in OnSinch/.test(h2.note ?? ""), "a held link's job that is over leaves; one still to come shows no R: the number is a gone order's, and may be reused", JSON.stringify(h2));
+    // The jobs board's tiles: numbers from the thread's live link, or no tile.
+    const tickets = [{ thread_id: "p1", classification: "new-job", status: "ordered", order_id: 1, order_number: "999", job_id: 5, dates: [], subject: "s" }, { thread_id: "p2", classification: "new-job", status: "ordered", order_id: 2, order_number: "11029", job_id: 6, dates: [], subject: "s" }] as any[];
+    const p = await serveFeed(deps({ states: async () => [], jobs: async () => tickets, links: async () => new Map([["p2", { order_id: 16100, r_number: "11777", job_id: 16200 }]]) }), NOW);
+    const tiles = (p.body.items as FeedCard[]).filter((c) => /^ported:/.test(c.items[0].item_key));
+    ok(tiles.length === 1 && tiles[0].thread_id === "p2" && tiles[0].r_number === "R11777" && tiles[0].j_number === "J16200", "a carried-over tile shows its order's numbers as OnSinch has them now, and one with no live order is not shown", JSON.stringify(tiles.map((c) => [c.thread_id, c.r_number, c.j_number])));
     const live = readFileSync("app/lib/feed/live.ts", "utf8");
-    ok(/states: async \(\) => \[\]/.test(live) && /portedStates: pausedStates/.test(live) && /showUnlinked: \(\) => getSettings\(\)/.test(live), "production draws nothing from the paused engine (approved 10-20, Q4) and reads the setting");
+    ok(/states: async \(\) => \[\]/.test(live) && /portedStates: pausedStates/.test(live) && /\blinks,/.test(live), "production draws nothing from the paused engine (approved 10-20, Q4) and gives the tiles the live links");
   }
 
   console.log("\n[5] the route is guarded and serves through serveFeed");

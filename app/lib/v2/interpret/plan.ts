@@ -444,12 +444,16 @@ async function decide(msg: Message, i: Interpretation, world: World, threadOrder
   if (problems.some((p) => STANDS.test(p))) {
     const cid = matchCompanyByDomain(msg.from, await world.companies()) || (threadOrderId && world.orderById ? Number((await world.orderById(threadOrderId).catch(() => null))?.company_id) || 0 : 0);
     const booked = new Set((cid ? await world.companyOrders(cid) : []).filter((o) => Number(o.status) !== -1).flatMap((o) => teams(o).flatMap((t) => t.slots.map((x) => dayOf(x.beginning)))));
-    const idle = reqs.filter((r) => r.action === "cancel_shift" && r.problems.some((p) => STANDS.test(p)) && !!(r.target?.date ?? r.date) && !booked.has((r.target?.date ?? r.date)!));
+    // A stand-down with no day of its own is about the days the thread asked for: Cells4Life's
+    // "going with a different crew company" lost its 25th when the booking it named was cancelled.
+    const threadDays = [...new Set((opts.raw ?? []).map((x) => x.date ?? x.target?.date).filter((d): d is string => typeof d === "string" && /^\d{4}-\d{2}-\d{2}$/.test(d)))];
+    const daysOf = (r: Request) => (r.target?.date ?? r.date ? [(r.target?.date ?? r.date)!] : threadDays);
+    const idle = reqs.filter((r) => r.action === "cancel_shift" && r.problems.some((p) => STANDS.test(p)) && daysOf(r).length > 0 && daysOf(r).every((d) => !booked.has(d)));
     if (idle.length) {
       const gone = new Set(idle.flatMap((r) => r.problems));
       problems = problems.filter((p) => !gone.has(p));
       reqs = reqs.filter((r) => !idle.includes(r));
-      if (!problems.length && !reqs.length) return { kind: "none", reason: `nothing is booked on ${[...new Set(idle.map((r) => r.target?.date ?? r.date))].join(", ")}, so there is nothing to cancel` };
+      if (!problems.length && !reqs.length) return { kind: "none", reason: `nothing is booked on ${[...new Set(idle.flatMap(daysOf))].join(", ")}, so there is nothing to cancel` };
     }
   }
   // A quote, a question or an availability check whose shift is not bookable as written is

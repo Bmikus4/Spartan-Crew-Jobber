@@ -498,13 +498,6 @@ export interface Settings {
    */
   bot_writes_enabled?: boolean;
   /**
-   * The TV lists only jobs whose R and J numbers name an order in OnSinch now (Ben, 2026-10-20:
-   * "I only see orders WITH R and J numbers in the list"). On: the enquiries with no order yet are
-   * listed too, as before. Off (the default): they are counted at the foot of the list, and keep
-   * their Gmail label either way.
-   */
-  tv_show_unlinked?: boolean;
-  /**
    * Clear test data every 15 minutes (Ben, 2026-10-14), from the minute sync (lib/testData.ts
    * says what counts as a test). Off means nothing is cleared on a timer; the Settings button
    * still clears on demand. Optional so a row written before it existed reads as off.
@@ -591,7 +584,6 @@ export const DEFAULT_SETTINGS: Settings = {
   analytics_tab_enabled: false,
   intake_paused: false,
   bot_writes_enabled: false,
-  tv_show_unlinked: false,
   reply_delivery: "draft",
   reply_scope: "all",
   default_rate_card: 315,

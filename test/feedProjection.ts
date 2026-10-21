@@ -267,7 +267,7 @@ console.log("\n[15] the rebuild's decisions reach ops on the TV and nowhere else
   const by = new Map(p.cards.map((c) => [c.thread_id, c]));
   // A quote is answered by a reply, not an order (Ben, 10-11), and the line is cardNote's.
   ok(by.get("q")?.items[0].kind === "needs-reply" && /Price it and send the quote$/.test(by.get("q")?.note ?? "") && by.get("q")?.company === "Impact Collective", "a quote is a reply for a person, with what to do on the card", by.get("q")?.note ?? "");
-  ok(by.get("c")?.items[0].kind === "needs-updated" && by.get("c")?.r_number === "R11475" && by.get("c")?.dates[0] === "2026-10-12" && by.get("c")?.crew === 6, "a change it could not make reads needs updated, on the order the reason names");
+  ok(by.get("c")?.items[0].kind === "needs-updated" && by.get("c")?.r_number === null && by.get("c")?.dates[0] === "2026-10-12" && by.get("c")?.crew === 6, "a change it could not make reads needs updated; the R its reason names is not shown until the planner links that order (Ben 10-21: always the correct numbers)");
   ok(p.wants.get("c")?.r_numbers[0] === "11475", "and the verifier looks for that order, so a staff edit there closes it");
   ok(by.get("w")?.items[0].kind === "needs-updated" && by.get("w")?.order_id === 950 && by.get("w")?.note === "Times now 11:00-15:00 · Not written, do it by hand", "a planned write not yet made is still a person's job, saying what the system would do");
   ok(by.get("x")?.items[0].kind === "updated-check" && !by.get("x")?.green && p.counts.to_check === 1, "a write the system made is a check, never an automatic green");
@@ -289,14 +289,14 @@ console.log("\n[15] the rebuild's decisions reach ops on the TV and nowhere else
   ok(project([state], new Map(), [], null, NOW).cards[0]?.note === null, "the paused engine's own cards carry no note");
   const create = { source: "m-n#100", op: { kind: "create_order" as const, company_id: "343", company_name: "Impact Collective", client_email: "sam@impact.example", job_name: "Impact @ Roundhouse", shifts: [{ name: "Crew", date: "2026-10-14", start: "04:00", end: "08:00", place_id: "11", place_label: "Roundhouse", positions: [{ size: 3, profession_id: "1" }] }] } };
   const made = v2Sources([row("n", { kind: "write", decision: { kind: "write", ops: [create], why: ["new order: 1 shift(s) at Roundhouse"] }, executed: [{ op_key: "k", status: "verified", reasons: [], detail: { order_id: 16600, number: 11520 } }] })], NOW)[0];
-  ok(made.item?.kind === "created-check" && made.order_id === 16600 && made.r_number === "R11520", "an order the bot created carries the ids it read back, so the verifier can watch the check");
+  ok(made.item?.kind === "created-check" && made.order_id === 16600 && made.r_number === null, "an order the bot created carries its id for the verifier; its R and J come with its link, made within the minute (links.ts backfillLinks)");
   // 10-15: 15 of 19 open cards showed no R or J number though the thread was linked.
   const linked = v2Sources([row("L", { subject: "Crew Thursday", link: { order_id: 16655, r_number: "11599", job_id: 16718 } })], NOW)[0];
   ok(linked.r_number === "R11599" && linked.j_number === "J16718" && linked.order_id === 16655, "a card shows the R and J number of the order its thread is linked to", JSON.stringify([linked.r_number, linked.j_number, linked.order_id]));
   const own = v2Sources([row("N", { kind: "write", decision: { kind: "write", ops: [create], why: [] }, executed: [{ op_key: "k", status: "verified", reasons: [], detail: { order_id: 16600, number: 11520 } }], link: { order_id: 16000, r_number: "11000", job_id: 1 } })], NOW)[0];
   ok(own.r_number === "R11000" && own.order_id === 16000, "the thread's link wins over the order the decision wrote: the sweep moves it when that order is rebuilt or deleted (R11615 -> R11617)");
   const unlinked = v2Sources([row("U", { kind: "write", decision: { kind: "write", ops: [create], why: [] }, executed: [{ op_key: "k", status: "verified", reasons: [], detail: { order_id: 16600, number: 11520 } }] })], NOW)[0];
-  ok(unlinked.r_number === "R11520" && unlinked.order_id === 16600, "with no link yet, the order the decision wrote");
+  ok(unlinked.r_number === null && unlinked.order_id === 16600, "with no link yet, the order the decision wrote is watched, and no unchecked number is shown");
   const fresh = project([], new Map(), [], null, NOW, new Map(), v2Sources([quote, change], NOW), NOW - 2 * H);
   const cut = project([], new Map(), [], null, NOW, new Map(), v2Sources([quote, change], NOW), NOW - 30 * 60_000);
   ok(fresh.cards.length === 2 && cut.cards.length === 0, "the TV starts from a given moment: older emails are not shown (Ben, 2026-10-10)");

@@ -88,7 +88,9 @@ function evidenceLine(it: FeedItem): string | null {
   if (g.mark === "checked") { const who = personName(g.by, e.name); return `Confirmed${who ? ` by ${who}` : ""} ${when}`; }
   if (e.held) return "Already in OnSinch: every shift asked for";
   if (g.mark === "staff-edit") return `Changed in OnSinch by staff: ${e.text ?? "edited"}, ${when}`;
-  if (g.mark === "order-found") return `Order found in OnSinch: ${e.r_number ? `R${String(e.r_number).replace(/^R/i, "")}` : e.text ?? "it exists"}, ${when}`;
+  // The tile's own columns carry its R and J; a mark's number may be another order's (a date-only
+  // find named R11029 on We Are Family's R11772, 10-21), so the line never repeats one.
+  if (g.mark === "order-found") return `Order found in OnSinch, ${when}`;
   return `${e.text ?? "Done by the system"}, ${when}`;
 }
 
@@ -617,11 +619,6 @@ export default function LiveFeedScreen({ isActive, tv = false }: { isActive: boo
               <Section s={s} label="Done" n={doneRows.length} color={GREEN} />
               {/* Done tiles redraw once a minute, not every second: with the jobs board carried over there are hundreds. */}
               {doneRows.map((card) => <JobTile key={card.thread_id} card={card} now={Math.floor(now / 60_000) * 60_000} s={s} phase="steady" onTick={tick} />)}
-              {c && (c as FeedCounts & { unlinked?: number }).unlinked ? (
-                <div style={{ padding: `${10 * s}px ${4 * s}px`, fontSize: 15 * s, color: "var(--text-muted)", flexShrink: 0 }}>
-                  {(c as FeedCounts & { unlinked?: number }).unlinked} {(c as FeedCounts & { unlinked?: number }).unlinked === 1 ? "enquiry has" : "enquiries have"} no order in OnSinch yet, not listed: see the Gmail labels.
-                </div>
-              ) : null}
               {c && c.older > 0 && (
                 <div style={{ padding: `${10 * s}px ${4 * s}px`, fontSize: 15 * s, color: "var(--text-muted)", flexShrink: 0 }}>
                   {c.older} older undated {c.older === 1 ? "enquiry" : "enquiries"} with no word from the client for two weeks, not shown.

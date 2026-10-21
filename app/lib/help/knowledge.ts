@@ -26,7 +26,7 @@ The tool reads every email that reaches the bookings inbox and works out what th
 ## 3 · The Live Feed (the TV board)
 One tile per job that needs a person. Each tile shows the client, a label, the job's R number and J number from OnSinch (R is the order, J is the job), and the day it starts: Today, Tomorrow or the date, with "+2 Days" when it runs longer. The line under the client says what is needed, for example "New booking 08:00-16:00, 4 crew", "Add 2 crew", "Times to 09:00-17:00", "Move Mon to Tue", "Cancel Fri 24 Oct" or "Quote request", or why the bot left it for a person.
 - The labels: **Order Needs Created** (the client asked for crew and the order still has to be made) and **Order Needs Updated** (a change the client asked for still has to be made in OnSinch), in orange. When the work is done the same tile reads **Order Created** or **Order Updated** in green. **Needs Reply** means the client asked something that needs an email answer.
-- The list shows only jobs whose order is in OnSinch with an R and a J number. Enquiries with no order yet are counted at the foot of the list instead ("enquiries have no order in OnSinch yet, not listed: see the Gmail labels") and keep their Gmail label. Settings, **Enquiries with no order on the TV board**, lists them again.
+- Every job needing a person is listed. Its R and J are always its own order's, checked against OnSinch every minute by following the J (R numbers are reused after a delete, J numbers are not). A tile with no R or J is one whose order the system has not found yet, or a new enquiry nobody has booked. If an order is deleted, its tile says the order is no longer in OnSinch, without its old R. Tiles carried over from the old Jobs Board show only when their order still exists.
 - **Confirm** is the button to press once you have dealt with a job: the tile turns green, waits a moment, then moves to **Done**, and **Undo** appears for a few seconds in case it was the wrong one. A tile that turned green on its own (the bot made the change, or staff did it in OnSinch) shows **Done** and needs nothing. Its line then says what happened: changed in OnSinch by staff, order found in OnSinch, or **Cleared by the system**.
 - Jobs with nothing new for a week sink under a heading, "Nothing New For 7+ Days"; finished jobs are under **Done**. At the bottom, "more waiting below" counts tiles under the fold. The TV glides back to the top 20 seconds after anyone scrolls, and chimes when something new arrives (once somebody has clicked the screen to allow sound).
 - The figures at the top count the list: **Needs Follow Up** (open jobs with nothing from anyone for 24 hours), **Within 48 Hours** (open jobs starting within two days, shown larger because time is running out), and **Needs Reply** when AI email drafts are switched on.
@@ -35,7 +35,7 @@ One tile per job that needs a person. Each tile shows the client, a label, the j
 - **Analytics**, a tab above the list, opens the numbers, when it is switched on in Settings.
 
 ## 4 · The Gmail labels
-Every thread carries exactly one of four labels, set from the board every minute; nobody sets them by hand: **Order Created**, **Order Updated**, **Order Needs Created**, **Order Needs Updated**. A thread can also carry **Needs Follow Up**, which is about the conversation, not the order. An enquiry with no order in OnSinch keeps its label even though the board does not list it.
+Every thread carries exactly one of four labels, set from the board every minute; nobody sets them by hand: **Order Created**, **Order Updated**, **Order Needs Created**, **Order Needs Updated**. A thread can also carry **Needs Follow Up**, which is about the conversation, not the order.
 
 ## 5 · What the bot does in OnSinch
 When the bot is allowed to write (the live state below says whether it is now):
@@ -53,7 +53,7 @@ The older board, off unless Settings, **Jobs Board in the menu**, is on. It list
 Changes here apply to the whole team.
 - **Bot orders and updates**: the master switch for the bot creating and updating orders in OnSinch; off by default. Off, every email is still read and decided, and anything the bot would have written appears on the board as a card to do by hand. (A second switch on the server must also be on before the bot writes.)
 - **AI email drafts**: one switch for every email the system writes into a Gmail thread, replies and chases alike; off by default. **Reply delivery**: **Draft** (left in Gmail for a person to send; the default) or **Send**. **Which emails get a reply**: **All emails** or **New enquiries only**.
-- **Screens**: **Jobs Board in the menu**, **Analytics tab on the TV board**, **Enquiries with no order on the TV board** (off by default).
+- **Screens**: **Jobs Board in the menu**, **Analytics tab on the TV board**.
 - **Email intake paused**: the system has been switched off on purpose; the board shows **Intake Paused** instead of an error.
 - **New orders**: **Only create orders this far ahead**, with **Days ahead**.
 - **Test data**: **Clear test data automatically** removes the practice orders made on the test company.

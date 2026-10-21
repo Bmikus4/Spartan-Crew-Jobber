@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { authorizeMachineCall } from "../../../lib/apiAuth";
-import { backfillLinks, sweepLinks } from "../../../lib/v2/links";
+import { backfillBoardLinks, backfillLinks, sweepLinks } from "../../../lib/v2/links";
 import { retryStopped } from "../../../lib/v2/process";
 import { replanOpen } from "../../../lib/v2/replan";
 import { neon } from "@neondatabase/serverless";
@@ -25,6 +25,7 @@ export async function POST(request: Request): Promise<Response> {
   const sql = neon((process.env.DATABASE_URL || process.env.POSTGRES_URL || "").trim());
   const t0 = Date.now();
   const backfilled = await backfillLinks(sql).catch((e) => `error: ${String(e?.message ?? e).slice(0, 120)}`);
+  const board = await backfillBoardLinks(sql).catch((e) => ({ error: String(e?.message ?? e).slice(0, 160) }));
   const sweep = await sweepLinks(sql).catch((e) => ({ error: String(e?.message ?? e).slice(0, 160) }));
   const retry = await retryStopped().catch((e) => ({ error: String(e?.message ?? e).slice(0, 160) }));
   // The planner again on every open card, against OnSinch now (Ben approved 10-20): reads only, never a write.
@@ -34,5 +35,5 @@ export async function POST(request: Request): Promise<Response> {
     .then((s) => maybeSweep(sql, t, !!s.test_data_autoclear))
     .then((r) => (typeof r === "string" ? r : { orders: r.orders.length, companies: r.companies.length, rows: Object.values(r.rows).reduce((a, b) => a + b, 0), refused: r.refused ?? null, failed: r.failed.length }))
     .catch((e) => ({ error: String(e?.message ?? e).slice(0, 160) }));
-  return NextResponse.json({ ok: true, ms: Date.now() - t0, backfilled, sweep, retry, replan, testData });
+  return NextResponse.json({ ok: true, ms: Date.now() - t0, backfilled, board, sweep, retry, replan, testData });
 }

@@ -4,7 +4,7 @@ import { allMarks, verifyStatus, addMark, claimVerify, saveVerify } from "./mark
 import { verify } from "./verify";
 import { httpTransport } from "../engine/onsinch";
 import { followupsEnabled } from "../followup/enabled";
-import type { FeedDeps } from "./serve";
+import type { FeedDeps, LiveLink } from "./serve";
 import { HOLD_TV_MINUTES } from "../v2/links";
 import { FEED_FROM, type ReplyNeed } from "./project";
 import type { V2Row } from "./v2";
@@ -90,12 +90,22 @@ async function v2(): Promise<V2Row[]> {
 async function held() {
   const [t] = (await db()`SELECT to_regclass('public.job_links') AS t`) as { t: string | null }[];
   if (!t?.t) return [];
-  return (await db()`
-    SELECT l.thread_id, l.r_number, l.held_since::text AS since, l.note,
+  return ((await db()`
+    SELECT l.thread_id, l.r_number, l.held_since::text AS since, l.note, l.shifts,
            (SELECT company FROM v2_decisions d WHERE d.thread_id = l.thread_id AND d.company IS NOT NULL ORDER BY d.created_at DESC LIMIT 1) AS company,
            (SELECT subject FROM thread_messages m WHERE m.thread_id = l.thread_id ORDER BY m.date_iso DESC LIMIT 1) AS subject
     FROM job_links l WHERE l.state = 'held' AND l.held_since < now() - (${HOLD_TV_MINUTES} || ' minutes')::interval
-      AND NOT EXISTS (SELECT 1 FROM job_links o WHERE o.thread_id = l.thread_id AND o.state IN ('linked', 'relinked'))`) as any[];
+      AND NOT EXISTS (SELECT 1 FROM job_links o WHERE o.thread_id = l.thread_id AND o.state IN ('linked', 'relinked'))`) as any[])
+    .map((h) => ({ ...h, days: (Array.isArray(h.shifts) ? h.shifts : []).map((w: string) => new Date(String(w).split("|")[0]).toLocaleDateString("en-CA", { timeZone: "Europe/London" })) }));
+}
+
+/** Every thread linked to exactly one live order (as v2() reads them), for the jobs board's tiles. */
+async function links(): Promise<Map<string, LiveLink>> {
+  const [l] = (await db()`SELECT to_regclass('public.job_links') AS t`) as { t: string | null }[];
+  if (!l?.t) return new Map();
+  const rows = (await db()`SELECT thread_id, min(order_id) AS order_id, min(r_number) AS r_number, min(job_id) AS job_id
+    FROM job_links WHERE state IN ('linked', 'relinked') GROUP BY thread_id HAVING count(DISTINCT order_id) = 1`) as any[];
+  return new Map(rows.map((x) => [String(x.thread_id), { order_id: Number(x.order_id), r_number: x.r_number == null ? null : String(x.r_number), job_id: x.job_id == null ? null : Number(x.job_id) }]));
 }
 
 export function liveFeedDeps(): FeedDeps {
@@ -115,6 +125,6 @@ export function liveFeedDeps(): FeedDeps {
     verifyStatus,
     remember: async (ms) => { for (const m of ms) await addMark(m); },
     intakePaused: () => getSettings().then((s) => s.intake_paused === true),
-    showUnlinked: () => getSettings().then((s) => s.tv_show_unlinked === true),
+    links,
   };
 }
