@@ -14,5 +14,10 @@ ok(b.SlotTeam[0].profession_id === 1 && b.SlotTeam[0].size === 3, "a shift is ma
 ok(b.SlotTeam[1].profession_id === 3 && b.SlotTeam[1].size === 2, "a shift of carpenters alone is made with the carpenters", b.SlotTeam[1]);
 ok(b.SlotTeam[0].beginning === "2027-12-17T07:00:00+00:00" || /2027-12-17T07:00/.test(b.SlotTeam[0].beginning), "times are London times", b.SlotTeam[0].beginning);
 ok(firstRow(shift([{ size: 1, profession_id: "36", role: "crew_chief" }])) === null, "a chief alone has no position to make the shift with");
+// Ben, 10-15: an assumed card is flagged. The API gives no client default (10-21), so every card is one.
+const [f] = createBody(op, { user_id: "1591", card: 354, card_from: "the client's last order" });
+ok(f.specification === "4 crew\nCHECK price list: card 354, from the client's last order; the client's default was not read" && f.Job.pricelist_category_id === 354, "the order says which price list was assumed and from where", f.specification);
+const [h] = createBody({ ...op, specification: undefined }, { user_id: "1591", card: 355, card_from: "house card" });
+ok(/^CHECK price list: card 355, from house card/.test(h.specification), "the house card is flagged too, even with no description", h.specification);
 console.log(fails ? `\n${fails} FAILED` : "\nall passed");
 process.exit(fails ? 1 : 0);

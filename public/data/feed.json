@@ -3772,5 +3772,22 @@
    "app/lib/feed/serve.ts",
    "test/feedServe.ts"
   ]
+ },
+ {
+  "id": "S-0200",
+  "ts": "2026-10-21T03:39:58+00:00",
+  "kind": "decision",
+  "headline": "Assumed price list flagged on bot orders (Ben 10-15; IET R11552)",
+  "subject": "Every order the bot creates says which price list it assumed and from where",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 204,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  },
+  "sources": [
+   "app/lib/v2/bot/apiCreate.ts"
+  ]
  }
 ]

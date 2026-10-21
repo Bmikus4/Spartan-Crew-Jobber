@@ -69,8 +69,19 @@ export function firstRow(s: CreateOp["shifts"][number]) {
   return s.positions.find((p) => p.profession_id === "1" && !p.role) ?? s.positions.find((p) => !p.role) ?? null;
 }
 
+/**
+ * The line that tells staff the price list was assumed (Ben, 10-15: flag a card the bot assumed).
+ * OnSinch's API does not give a client's default price list (the company record has no such
+ * field, read 10-21), so every card the bot picks is an assumption until the default is read
+ * from the order builder (Release 4's probe, held while job creation is paused): IET's R11552
+ * went out on a card staff then called "not the default that's set to the client".
+ */
+export function cardCheck(d: { card: number; card_from?: string }): string | null {
+  return d.card_from ? `CHECK price list: card ${d.card}, from ${d.card_from}; the client's default was not read` : null;
+}
+
 /** The create body: each shift with its first position, every position hidden, approval asked. */
-export function createBody(op: CreateOp, d: { user_id: string; card: number }): any[] {
+export function createBody(op: CreateOp, d: { user_id: string; card: number; card_from?: string }): any[] {
   const teams = op.shifts.map((s, i) => {
     const row = firstRow(s);
     if (!row) throw new Error(`shift ${i}: only a crew chief, no position to make the shift with`);
@@ -79,7 +90,8 @@ export function createBody(op: CreateOp, d: { user_id: string; card: number }): 
   });
   return [{
     name: op.job_name, company_id: Number(op.company_id), user_id: Number(d.user_id), order_manager_id: ORDER_MANAGER_ID, request_approval: true,
-    ...(op.po ? { intern_name: op.po } : {}), ...(op.specification ? { specification: op.specification } : {}),
+    ...(op.po ? { intern_name: op.po } : {}),
+    ...(op.specification || cardCheck(d) ? { specification: [op.specification, cardCheck(d)].filter(Boolean).join("\n").slice(0, 1000) } : {}),
     Job: { name: op.job_name, pricelist_category_id: d.card },
     SlotTeam: teams,
   }];
