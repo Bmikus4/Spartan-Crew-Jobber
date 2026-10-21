@@ -39,7 +39,8 @@ export async function POST(request: Request): Promise<Response> {
   // The TV's projection without its side work: no verifier, no jobs board, no marks written.
   const feed = await serveFeed({ ...liveFeedDeps(), verify: undefined, verifyStatus: undefined, jobs: undefined, remember: undefined }, now);
   if (feed.status !== 200) return NextResponse.json({ ok: false, error: "the feed could not be read; no labels change this minute" }, { status: 503 });
-  const cards = (feed.body.everything ?? []) as FeedCard[];
+  // Every card, not the TV's list: the system's own orders are labelled though not listed.
+  const cards: FeedCard[] = feed.all ?? [];
   const want = [...new Map(cards.map((c) => [c.thread_id, labelsFor(c)])).values()];
 
   const rows = (await sql`SELECT thread_id, order_label, follow_up FROM thread_labels`) as { thread_id: string; order_label: string | null; follow_up: boolean }[];

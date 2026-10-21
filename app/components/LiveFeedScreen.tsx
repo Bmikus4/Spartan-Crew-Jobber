@@ -28,7 +28,6 @@ interface FeedResponse {
   health: { last_email_at: string | null; minutes_since_email: number | null; intake_stale: boolean; intake_paused?: boolean; replies_enabled: boolean; verify?: { last_at: string | null; note: string | null } };
   counts: FeedCounts;
   items: FeedCard[];
-  everything?: FeedCard[];
 }
 
 const REFRESH_MS = 20_000;
@@ -327,30 +326,6 @@ const JobTile = memo(function JobTile({ card, now, s, phase, onTick }: { card: F
   );
 });
 
-/**
- * NEEDS ACTION | EVERYTHING. The TV opens on Needs Action, the list it has always shown: what
- * the system could not do. Everything adds the orders the system made or changed, until their
- * last shift is over, so a person can see the work without it crowding the failures.
- */
-function ViewTabs({ s, view, onView, counts }: { s: number; view: "action" | "everything"; onView: (v: "action" | "everything") => void; counts: { action: number; everything: number } }) {
-  const tab = (id: "action" | "everything", label: string, n: number) => {
-    const on = view === id;
-    return (
-      <button key={id} type="button" role="tab" aria-selected={on} onClick={() => onView(id)}
-        style={{ display: "inline-flex", alignItems: "baseline", gap: 10 * s, padding: `${10 * s}px ${22 * s}px`, border: "1px solid var(--border-strong)", borderBottom: on ? "1px solid var(--bg)" : "1px solid var(--border-strong)", marginBottom: -1, borderRadius: `${12 * s}px ${12 * s}px 0 0`, background: on ? "var(--bg)" : "var(--surface)", color: on ? "var(--text-primary)" : "var(--text-muted)", fontFamily: "inherit", fontSize: 15 * s, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", cursor: "pointer", position: "relative", zIndex: on ? 1 : 0 }}>
-        {label}
-        <span className="tnum" style={{ fontSize: 15 * s, fontWeight: 600, letterSpacing: 0, color: "var(--text-muted)" }}>{n}</span>
-      </button>
-    );
-  };
-  return (
-    <div role="tablist" aria-label="Which jobs" style={{ display: "flex", gap: 6 * s, borderBottom: "1px solid var(--border-strong)", flexShrink: 0, marginTop: -8 * s }}>
-      {tab("action", "Needs Action", counts.action)}
-      {tab("everything", "Everything", counts.everything)}
-    </div>
-  );
-}
-
 function Section({ s, label, n, color }: { s: number; label: string; n: number; color?: string }) {
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 14 * s, padding: `${14 * s}px ${4 * s}px ${4 * s}px`, fontSize: 16 * s, fontWeight: 600, color: color ?? "var(--text-muted)", flexShrink: 0 }}>
@@ -379,8 +354,6 @@ export default function LiveFeedScreen({ isActive, tv = false }: { isActive: boo
   /** The Analytics folder tab shows on the TV only when Settings turns it on (Ben, 2026-10-11). */
   const [analyticsTab, setAnalyticsTab] = useState(false);
   const [analyticsOpen, setAnalyticsOpen] = useState(false);
-  /** Two tabs (Ben, 10-15): what needs a person, and everything the system has on, its own orders included. */
-  const [view, setView] = useState<"action" | "everything">("action");
   useEffect(() => {
     const read = async () => {
       try { const r = await fetch("/api/settings", { cache: "no-store" }); if (r.ok) setAnalyticsTab(!!(await r.json()).analytics_tab_enabled); } catch { /* keep what it was */ }
@@ -530,7 +503,7 @@ export default function LiveFeedScreen({ isActive, tv = false }: { isActive: boo
   }, [load]);
 
   // The server's order (orderCards, app/lib/feed/order.ts), where test/feedProjection.ts pins it.
-  const cards = (view === "everything" ? data?.everything : data?.items) ?? [];
+  const cards = data?.items ?? [];
 
   // Open tiles, with any tile still settling held at the place it stood.
   const settlingRows = cards.filter((c) => settling.has(c.thread_id));
@@ -613,15 +586,13 @@ export default function LiveFeedScreen({ isActive, tv = false }: { isActive: boo
 
       {analyticsTab && <FolderTab label="Analytics" s={s} onOpen={() => { unlockAudio(); setAnalyticsOpen(true); }} />}
 
-      <ViewTabs s={s} view={view} onView={setView} counts={{ action: (data?.items ?? []).filter(isOpen).length, everything: (data?.everything ?? []).length }} />
-
       <div style={{ position: "relative", flex: 1, minHeight: 0, display: "flex" }}>
         <div ref={listRef} className="feed-list" onScroll={() => { lastScrollAt.current = Date.now(); }} style={{ flex: 1, minHeight: 0, overflowY: "auto", display: "flex", flexDirection: "column", gap: 12 * s, paddingBottom: 8 * s }}>
           {data == null ? (
             <div style={{ padding: 40 * s, fontSize: 22 * s, fontWeight: 600, color: failed ? AMBER : "var(--text-muted)" }}>{failed ? "The feed could not be read. Retrying." : "Loading…"}</div>
           ) : (
             <>
-              {openRows.length === 0 && view === "action" && (
+              {openRows.length === 0 && (
                 <div style={{ padding: `${24 * s}px ${24 * s}px`, border: "1px solid var(--border)", borderRadius: 14 * s, fontSize: 20 * s, fontWeight: 600, color: warn ? AMBER : GREEN, background: warn ? tint(AMBER, 8) : tint(GREEN, 8), flexShrink: 0 }}>
                   {warn ? "Nothing listed, but the sync is not healthy." : openCount === 0 ? "Everything is checked." : "Nothing else waiting."}
                 </div>
@@ -633,7 +604,7 @@ export default function LiveFeedScreen({ isActive, tv = false }: { isActive: boo
                   <JobTile card={card} now={now} s={s} phase={phaseOf(card)} onTick={tick} />
                 </Fragment>
               ))}
-              {view === "action" && <Section s={s} label="Done" n={doneRows.length} color={GREEN} />}
+              <Section s={s} label="Done" n={doneRows.length} color={GREEN} />
               {/* Done tiles redraw once a minute, not every second: with the jobs board carried over there are hundreds. */}
               {doneRows.map((card) => <JobTile key={card.thread_id} card={card} now={Math.floor(now / 60_000) * 60_000} s={s} phase="steady" onTick={tick} />)}
               {c && c.older > 0 && (

@@ -3617,5 +3617,23 @@
    "app/lib/feed/serve.ts",
    "app/lib/intakeHealth.ts:17"
   ]
+ },
+ {
+  "id": "S-0195",
+  "ts": "2026-10-21T02:19:23+00:00",
+  "kind": "decision",
+  "headline": "Everything tab deleted (Ben 10-20, 10-21)",
+  "subject": "The TV has one list: the Everything tab is gone, and the Gmail labels still read every card",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 202,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  },
+  "sources": [
+   "app/lib/feed/serve.ts",
+   "app/api/bot/labels/route.ts"
+  ]
  }
 ]

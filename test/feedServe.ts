@@ -51,10 +51,14 @@ void (async () => {
     const r = await serveFeed(deps(), NOW);
     const items = r.body.items as { thread_id: string }[];
     ok(r.status === 200 && r.body.ok === true && items.length === 0 && (r.body.counts as Record<string, number>).done_by_system === 1, "200; an order the system created is counted, not shown (Ben 10-13: the TV shows only what the system could not do)");
-    const every = r.body.everything as { thread_id: string }[];
-    ok(every.length === 1 && every[0].thread_id === "c", "the Everything tab carries the order the system created (Ben, 10-15)", JSON.stringify(every));
+    // Ben, 10-20 and 10-21: "delete the everything tab completely". The labels still need every card.
+    ok(!("everything" in r.body), "no Everything list is sent to the TV");
+    const every = r.all ?? [];
+    ok(every.length === 1 && every[0].thread_id === "c", "the labels' cards still carry the order the system created", JSON.stringify(every.map((c) => c.thread_id)));
     const ticked = await serveFeed(deps({ marks: async () => [{ item_key: (every[0] as any).items[0].item_key, mark: "checked", by: null, evidence: null, at: NOW - 60_000 } as any] }), NOW);
-    ok((ticked.body.everything as any[])[0]?.green === true && (ticked.body.items as unknown[]).length === 0, "a ticked success stays off the Needs Action list: it was never a failure", JSON.stringify((ticked.body.items as any[]).map((c) => c.thread_id)));
+    ok((ticked.all ?? [])[0]?.green === true && (ticked.body.items as unknown[]).length === 0, "a ticked success stays off the Needs Action list: it was never a failure", JSON.stringify((ticked.body.items as any[]).map((c) => c.thread_id)));
+    const route = readFileSync("app/api/bot/labels/route.ts", "utf8");
+    ok(/feed\.all/.test(route) && !/body\.everything|body\.items/.test(route), "the Gmail labels read every card, not the TV's list");
     const h = r.body.health as Record<string, unknown>;
     ok(h.minutes_since_email === 10 && h.intake_stale === false, "email age reported, not stale at 10 minutes");
     const quiet = await serveFeed(deps({ inbound: async () => ({ byThread: new Map(), latest: NOW - 3 * H }) }), NOW);

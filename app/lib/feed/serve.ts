@@ -42,7 +42,14 @@ export interface FeedDeps {
   intakePaused?: () => Promise<boolean>;
 }
 
-export async function serveFeed(deps: FeedDeps, now: number): Promise<{ status: number; body: Record<string, unknown> }> {
+/**
+ * `all` is every card, the system's own orders included, and is never sent to a screen: the
+ * Gmail labels read it (api/bot/labels), so a thread the bot booked still wears "Order Created"
+ * though the TV does not list it. It left the body with the Everything tab (Ben, 2026-10-20 and
+ * 10-21: "delete the everything tab completely"); reading `items` instead would strip every
+ * Created / Updated label within the minute.
+ */
+export async function serveFeed(deps: FeedDeps, now: number): Promise<{ status: number; body: Record<string, unknown>; all?: FeedCard[] }> {
   let states: ConversationState[], inbound: Awaited<ReturnType<FeedDeps["inbound"]>>, marks: FeedMark[], replies: ReplyNeed[] | null, v2rows: V2Row[];
   try {
     [states, inbound, marks, replies, v2rows] = await Promise.all([
@@ -123,9 +130,7 @@ export async function serveFeed(deps: FeedDeps, now: number): Promise<{ status: 
       },
       counts: { ...p.counts, done_by_system, held: heldCards.length },
       items: [...shown, ...heldCards, ...ported],
-      // THE EVERYTHING TAB (Ben, 10-15): every job on the TV, the system's own orders included,
-      // until its last shift is over. The Gmail labels read the same cards (mail/threadLabels.ts).
-      everything: [...p.cards, ...heldCards],
     },
+    all: [...p.cards, ...heldCards],
   };
 }
