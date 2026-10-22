@@ -154,7 +154,8 @@ ok(JSON.stringify(positionsFor(25)) === JSON.stringify([{ size: 3, profession_id
     const op2 = again.kind === "write" ? (again.ops[0].op as any) : null;
     ok(op2?.kind === "create_order" && op2.company_id === "900", "the new client's next booking from the same sender is booked to that client, not a card", JSON.stringify(again));
     const colleague = await plan(msg("sam@atcomms.example", "4 crew on the 9th", "", EARLY), I([r({ date: "2026-10-09", start: "09:00", end: "17:00", crew: 4, venue: "Business Design Centre" })], { intent: "booking", company_name: "AT Comms" }), after);
-    ok(colleague.kind === "handoff", "a colleague at the same domain is still a card until staff add a contact", JSON.stringify(colleague));
+    const op3 = colleague.kind === "write" ? (colleague.ops[0].op as any) : null;
+    ok(op3?.kind === "create_order" && op3.company_id === "900", "a colleague at the new client's domain is booked to that client too", JSON.stringify(colleague));
   }
   {
     const d = await plan(msg("crew@eventconcept.com", "quote for 4 crew"), I([r({ date: "2026-10-14", start: "18:45", end: "20:45", crew: 4 })], { intent: "quote_request" }), world);

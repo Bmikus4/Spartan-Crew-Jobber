@@ -3960,5 +3960,33 @@
    "test/v2Plan.ts",
    ".tmp-v2/sender-match.mts"
   ]
+ },
+ {
+  "id": "S-0207",
+  "ts": "2026-10-22T11:31:45+00:00",
+  "kind": "measurement",
+  "headline": "Client lookup: a bot-made client's colleagues found by its invoice email's domain; 0 of 810 live companies affected",
+  "subject": "A bot-made client's colleagues are matched by its invoice email's domain",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 207,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  },
+  "measured": {
+   "dataset": "production read-only 2026-10-22T11:26:48.988Z: distinct senders of v2 'no single client company' cards since 10-09, against all 810 OnSinch companies",
+   "denominator": "all OnSinch companies; distinct senders of 'no single client company' cards",
+   "companies": 810,
+   "companies_without_contact_with_real_invoice_email": 0,
+   "senders": 8,
+   "identified_after": 2,
+   "identified_after_S0206": 2
+  },
+  "sources": [
+   "app/lib/engine/resolve.ts",
+   "test/companyMatch.ts",
+   ".tmp-v2/sender-match.mts"
+  ]
  }
 ]

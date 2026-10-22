@@ -93,17 +93,22 @@ export function matchCompanyByDomain(email: string | undefined, companies: Compa
 }
 
 /**
- * The sender's company: the domain rule above, else the sender's EXACT address on one company,
- * as a contact or as its invoice email.
+ * The sender's company: the domain rule above; else the sender's EXACT address on one company,
+ * as a contact or as its invoice email; else, among companies with NO contact, the one whose
+ * invoice email shares the sender's domain.
  *
  * A CLIENT THE BOT CREATES HAS NO CONTACT, AND NONE CAN BE ADDED: OnSinch's /users is GET-only
  * (POST/PATCH answer 405) and there is no /clients. The sender is kept only as the company's
  * email_invoice (v2/bot/apiCreate.ts), so the domain rule never found that client again: its
  * next email in a new thread was a "no single client company" card, the name it signs with now
- * clashing with the company made for it. The exact address finds it, a free-mail sender
- * included, and only fills a null: it runs after the domain rule, so no answer that rule gives
- * changes. Still not found: a colleague of the sender at the same domain, until staff add a
- * contact. The invoice email's DOMAIN stays unused, for the reason given above.
+ * clashing with the company made for it. The exact address finds the sender, a free-mail one
+ * included; the invoice domain finds their colleagues, the way contacts find a known client's.
+ *
+ * Each step only fills a null: it runs after the domain rule, so no answer that rule gives
+ * changes. The invoice DOMAIN stands in only for a company with no contact, the bot's own
+ * clients; on a company with contacts it stays unused, for the reason given above. When this
+ * was written no live company had no contact and a real invoice email (0 of 810, 22 Oct), so
+ * that step reaches only clients the bot makes. Free mail is never matched by domain.
  */
 export function matchCompanyBySender(email: string | undefined, companies: CompanyRec[]): number | null {
   const byDomain = matchCompanyByDomain(email, companies);
@@ -112,9 +117,13 @@ export function matchCompanyBySender(email: string | undefined, companies: Compa
   const d = domainOfEmail(a);
   if (!d.includes(".") || SPARTAN_DOMAINS.some((s) => d === s || d.endsWith("." + s))) return null;
   const same = (e: unknown) => String(e ?? "").trim().toLowerCase() === a;
-  const hits = new Set<number>();
-  for (const c of companies) if (same(c.email_invoice) || (c.Client ?? []).some((cl) => same(cl.email))) hits.add(c.id);
-  return hits.size === 1 ? [...hits][0] : null;
+  const exact = new Set<number>();
+  for (const c of companies) if (same(c.email_invoice) || (c.Client ?? []).some((cl) => same(cl.email))) exact.add(c.id);
+  if (exact.size) return exact.size === 1 ? [...exact][0] : null;
+  if (CONSUMER_DOMAINS.has(d)) return null;
+  const bare = new Set<number>();
+  for (const c of companies) if (!(c.Client ?? []).length && domainOfEmail(c.email_invoice) === d) bare.add(c.id);
+  return bare.size === 1 ? [...bare][0] : null;
 }
 
 /** Kept in step with normalize.ts's list; duplicated to keep resolve.ts dependency-free. */

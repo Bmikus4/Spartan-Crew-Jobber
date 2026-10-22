@@ -204,12 +204,16 @@ console.log("\n[9] the sender's exact address: a client the bot created has no c
     { id: 903, name: "Shared Invoices B", email_invoice: "accounts@twofold.example" },
     { id: 904, name: "Personal Contact Client", Client: [{ id: 905, email: "sue.events@hotmail.co.uk" }] },
     { id: 906, name: "Internal", email_invoice: "bookings@spartancrew.co.uk" },
+    { id: 910, name: "Parent Billed", email_invoice: "ap@parentco.example", Client: [{ id: 911, email: "ops@brand.example" }] },
   ];
   ok(matchCompanyBySender("jo@atcomms.example", MADE) === 900, "the bot's new client is found again by its sender", String(matchCompanyBySender("jo@atcomms.example", MADE)));
   ok(matchCompanyBySender("Jo Smith <JO@atcomms.example>", MADE) === 900, "whatever the case and display name");
   ok(matchCompanyBySender("dave1974@gmail.com", MADE) === 901, "a free-mail sender is found by the exact address, never by the domain");
   ok(matchCompanyBySender("sue.events@hotmail.co.uk", MADE) === 904, "a free-mail contact of one company is that company");
-  ok(matchCompanyBySender("sam@atcomms.example", MADE) === null, "a colleague at the same domain is not: that needs a contact");
+  ok(matchCompanyBySender("sam@atcomms.example", MADE) === 900, "a colleague of the bot's new client is found by its invoice email's domain", String(matchCompanyBySender("sam@atcomms.example", MADE)));
+  ok(matchCompanyBySender("other@twofold.example", MADE) === null, "two companies without contacts on one invoice domain are ambiguous");
+  ok(matchCompanyBySender("someone@parentco.example", MADE) === null, "a company with contacts is never matched by its invoice domain");
+  ok(matchCompanyBySender("friend@gmail.com", MADE) === null, "free mail is never matched by domain, even a bot client's");
   ok(matchCompanyBySender("accounts@twofold.example", MADE) === null, "an address on two companies is ambiguous");
   ok(matchCompanyBySender("bookings@spartancrew.co.uk", MADE) === null, "Spartan's own address is never a client");
   ok(matchCompanyBySender("NikhilS@eclipse.global", MADE) === 126, "the domain rule still answers first");
