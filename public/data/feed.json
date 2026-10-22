@@ -3932,5 +3932,33 @@
   "sources": [
    ".tmp-v2/rj/audit.mts"
   ]
+ },
+ {
+  "id": "S-0206",
+  "ts": "2026-10-22T02:56:15+00:00",
+  "kind": "measurement",
+  "headline": "Client lookup falls back to the sender's exact address: 0 -> 2 of 8 unidentified senders; a bot-made client is found again",
+  "subject": "A sender is matched to a client by exact address when the domain rule finds none",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 207,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  },
+  "measured": {
+   "dataset": "production read-only 2026-10-22T02:48:01.838Z: distinct senders of v2 'no single client company' cards since 10-09, against all 810 OnSinch companies",
+   "denominator": "distinct senders of 'no single client company' cards",
+   "senders": 8,
+   "identified_by_domain_rule": 0,
+   "identified_after": 2,
+   "identified": "Hot to Trot (invoice email, free-mail sender); AT Communications (contact, domain on 3 companies)",
+   "bot_new_client_creates_planned_since_10_09": 0
+  },
+  "sources": [
+   "app/lib/engine/resolve.ts",
+   "test/v2Plan.ts",
+   ".tmp-v2/sender-match.mts"
+  ]
  }
 ]

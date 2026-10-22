@@ -12,7 +12,7 @@
 // ============================================================================
 import { neon, type NeonQueryFunction } from "@neondatabase/serverless";
 import { httpTransport, OnsinchClient } from "../engine/onsinch";
-import { matchCompanyByDomain, normName } from "../engine/resolve";
+import { matchCompanyBySender, normName } from "../engine/resolve";
 import { extractWithMeta, type Extraction, type ExtractMeta } from "./interpret/extract";
 import { ground, type Interpretation, type Request } from "./interpret/interpret";
 import { latestText } from "./interpret/ground";
@@ -163,7 +163,7 @@ const addr = (from: unknown) => String(from ?? "").replace(/.*</, "").replace(/>
 async function clientOf(from: string, world: World): Promise<{ id: number | null; name: string | null }> {
   try {
     const companies = await world.companies();
-    const id = matchCompanyByDomain(from, companies);
+    const id = matchCompanyBySender(from, companies);
     const name = id ? String(companies.find((c) => Number(c.id) === id)?.name ?? "").trim() : "";
     return { id: id || null, name: name || null };
   } catch {

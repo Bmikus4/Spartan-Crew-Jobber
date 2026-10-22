@@ -24,7 +24,7 @@
 //
 // Run: npx tsx test/companyMatch.ts
 // ============================================================================
-import { matchCompany, matchCompanyByDomain, type CompanyRec } from "../app/lib/engine/resolve";
+import { matchCompany, matchCompanyByDomain, matchCompanyBySender, type CompanyRec } from "../app/lib/engine/resolve";
 
 let fails = 0;
 const ok = (cond: boolean, label: string, extra = "") => {
@@ -190,6 +190,36 @@ console.log("\n[7] empty and junk input");
   ok(matchCompany(undefined, LIVE) === null, "undefined -> null");
   ok(matchCompany("", LIVE) === null, "empty -> null");
   ok(matchCompany("Ltd", LIVE) === null, "a bare legal suffix normalises to nothing -> null");
+}
+
+console.log("\n[9] the sender's exact address: a client the bot created has no contact to match");
+{
+  // OnSinch's API cannot add a contact, so a company the bot makes carries its sender only as
+  // email_invoice. The domain rule never found it again; the exact address does.
+  const MADE: CompanyRec[] = [
+    { id: 126, name: "Eclipse", Client: [{ id: 227, email: "RyanC@eclipse.global" }] },
+    { id: 900, name: "AT Comms", email_invoice: "jo@atcomms.example", Client: [] },
+    { id: 901, name: "Dave's Staging", email_invoice: "dave1974@gmail.com" },
+    { id: 902, name: "Shared Invoices A", email_invoice: "accounts@twofold.example" },
+    { id: 903, name: "Shared Invoices B", email_invoice: "accounts@twofold.example" },
+    { id: 904, name: "Personal Contact Client", Client: [{ id: 905, email: "sue.events@hotmail.co.uk" }] },
+    { id: 906, name: "Internal", email_invoice: "bookings@spartancrew.co.uk" },
+  ];
+  ok(matchCompanyBySender("jo@atcomms.example", MADE) === 900, "the bot's new client is found again by its sender", String(matchCompanyBySender("jo@atcomms.example", MADE)));
+  ok(matchCompanyBySender("Jo Smith <JO@atcomms.example>", MADE) === 900, "whatever the case and display name");
+  ok(matchCompanyBySender("dave1974@gmail.com", MADE) === 901, "a free-mail sender is found by the exact address, never by the domain");
+  ok(matchCompanyBySender("sue.events@hotmail.co.uk", MADE) === 904, "a free-mail contact of one company is that company");
+  ok(matchCompanyBySender("sam@atcomms.example", MADE) === null, "a colleague at the same domain is not: that needs a contact");
+  ok(matchCompanyBySender("accounts@twofold.example", MADE) === null, "an address on two companies is ambiguous");
+  ok(matchCompanyBySender("bookings@spartancrew.co.uk", MADE) === null, "Spartan's own address is never a client");
+  ok(matchCompanyBySender("NikhilS@eclipse.global", MADE) === 126, "the domain rule still answers first");
+  ok(matchCompanyBySender(undefined, MADE) === null && matchCompanyBySender("junk", MADE) === null, "no address or junk -> null");
+  // Never a different answer from the domain rule, only an answer where it had none.
+  const SHARED: CompanyRec[] = [
+    { id: 1, name: "A", Client: [{ id: 11, email: "x@client.example" }] },
+    { id: 2, name: "B", email_invoice: "y@client.example" },
+  ];
+  ok(matchCompanyBySender("y@client.example", SHARED) === 1, "a domain the contacts tie to one company keeps that company");
 }
 
 console.log(fails ? `\n${fails} FAILED\n` : "\nALL PASS\n");

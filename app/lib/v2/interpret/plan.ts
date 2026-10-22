@@ -17,7 +17,7 @@ import { confirms, type Interpretation, type Request } from "./interpret";
 import { addMinutes } from "./ground";
 import { fillTimes, pastShifts } from "./assume";
 import { tradeOf, pickProfession, PROFESSION_NAME, type LiveProfession } from "./professions";
-import { matchCompanyByDomain, rNumbersIn, normName } from "../../engine/resolve";
+import { matchCompanyBySender, rNumbersIn, normName } from "../../engine/resolve";
 import { evidenceMatch, wantOf, BOT_USER, type Found } from "../evidence";
 import { findOrder as findByEvidence, companiesOf, coveredBy, stampedSince, type ThreadIn, type ThreadMsg, type StateWorld, type Grounded } from "../threadState";
 
@@ -215,7 +215,7 @@ async function evidenceOf(msg: Message, i: Interpretation, world: World, threadO
   const thread: ThreadMsg[] = opts.thread?.length ? opts.thread : [{ message_id: msg.message_id, from: msg.from, to: [], at: Date.parse(msg.sentIso), subject: msg.subject, body: msg.text, ours: false }];
   const linked = threadOrderId && world.orderById ? await world.orderById(threadOrderId).catch(() => null) : null;
   // Finding may search every company the addresses could be; booking still needs exactly one.
-  const ids = [...new Set([matchCompanyByDomain(msg.from, companies) || 0, Number(linked?.company_id) || 0,
+  const ids = [...new Set([matchCompanyBySender(msg.from, companies) || 0, Number(linked?.company_id) || 0,
     ...companiesOf(thread.filter((m) => !m.ours).flatMap((m) => [m.from, ...m.to]), companies)].filter((x) => x > 0))].slice(0, 4);
   if (!ids.length && !linked) return null;
   const pool: any[] = [];
@@ -442,7 +442,7 @@ async function decide(msg: Message, i: Interpretation, world: World, threadOrder
   // cancelling a whole shift, and nothing of theirs was booked on the 25th, yet it was a card.
   const STANDS = /: no words cancelling the whole shift$/;
   if (problems.some((p) => STANDS.test(p))) {
-    const cid = matchCompanyByDomain(msg.from, await world.companies()) || (threadOrderId && world.orderById ? Number((await world.orderById(threadOrderId).catch(() => null))?.company_id) || 0 : 0);
+    const cid = matchCompanyBySender(msg.from, await world.companies()) || (threadOrderId && world.orderById ? Number((await world.orderById(threadOrderId).catch(() => null))?.company_id) || 0 : 0);
     const booked = new Set((cid ? await world.companyOrders(cid) : []).filter((o) => Number(o.status) !== -1).flatMap((o) => teams(o).flatMap((t) => t.slots.map((x) => dayOf(x.beginning)))));
     // A stand-down with no day of its own is about the days the thread asked for: Cells4Life's
     // "going with a different crew company" lost its 25th when the booking it named was cancelled.
@@ -470,7 +470,7 @@ async function decide(msg: Message, i: Interpretation, world: World, threadOrder
   // The client: the sender's domain, else the company of the order this thread is already
   // linked to. "Re: SN ExCeL" from amy@mvstaging.com (10-13), a contact OnSinch does not hold,
   // is about an order that has a company.
-  let companyId: number = matchCompanyByDomain(msg.from, await world.companies()) || 0;
+  let companyId: number = matchCompanyBySender(msg.from, await world.companies()) || 0;
   if (!companyId && threadOrderId && world.orderById) { const o = await world.orderById(threadOrderId).catch(() => null); if (o && Number(o.company_id) > 0) companyId = Number(o.company_id); }
   // Else the company of the order the finder names: tom@fulltilt.london is on companies 501 and
   // 635, and the card read "new client, not in OnSinch" over staff's R11750 (MK Crew, 10-19).

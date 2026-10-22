@@ -147,6 +147,14 @@ ok(JSON.stringify(positionsFor(25)) === JSON.stringify([{ size: 3, profession_id
     const n = await plan(msg("jo@atcomms.example", "4 crew on the 9th", "", EARLY), I([r({ date: "2026-10-09", start: "09:00", end: "17:00", crew: 4, venue: "Business Design Centre" })], { intent: "booking", company_name: "AT Comms" }), world);
     const op = n.kind === "write" ? (n.ops[0].op as any) : null;
     ok(op?.kind === "create_order" && op.company_id === "new:AT Comms" && /^AT Comms @ /.test(op.job_name), "a new client's first booking creates the client from its written name, then the order", JSON.stringify(n));
+    // The company made for that booking has no contact (the API cannot add one) and carries the
+    // sender as its invoice email. The sender's next booking, in a new thread, is that client's.
+    const after: World = { ...world, companies: async () => [...(await world.companies()), { id: 900, name: "AT Comms", email_invoice: "jo@atcomms.example", Client: [] }] };
+    const again = await plan(msg("jo@atcomms.example", "4 crew on the 9th", "", EARLY), I([r({ date: "2026-10-09", start: "09:00", end: "17:00", crew: 4, venue: "Business Design Centre" })], { intent: "booking", company_name: "AT Comms" }), after);
+    const op2 = again.kind === "write" ? (again.ops[0].op as any) : null;
+    ok(op2?.kind === "create_order" && op2.company_id === "900", "the new client's next booking from the same sender is booked to that client, not a card", JSON.stringify(again));
+    const colleague = await plan(msg("sam@atcomms.example", "4 crew on the 9th", "", EARLY), I([r({ date: "2026-10-09", start: "09:00", end: "17:00", crew: 4, venue: "Business Design Centre" })], { intent: "booking", company_name: "AT Comms" }), after);
+    ok(colleague.kind === "handoff", "a colleague at the same domain is still a card until staff add a contact", JSON.stringify(colleague));
   }
   {
     const d = await plan(msg("crew@eventconcept.com", "quote for 4 crew"), I([r({ date: "2026-10-14", start: "18:45", end: "20:45", crew: 4 })], { intent: "quote_request" }), world);

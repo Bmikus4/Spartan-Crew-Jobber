@@ -92,6 +92,31 @@ export function matchCompanyByDomain(email: string | undefined, companies: Compa
   return hits.size === 1 ? [...hits][0] : null;
 }
 
+/**
+ * The sender's company: the domain rule above, else the sender's EXACT address on one company,
+ * as a contact or as its invoice email.
+ *
+ * A CLIENT THE BOT CREATES HAS NO CONTACT, AND NONE CAN BE ADDED: OnSinch's /users is GET-only
+ * (POST/PATCH answer 405) and there is no /clients. The sender is kept only as the company's
+ * email_invoice (v2/bot/apiCreate.ts), so the domain rule never found that client again: its
+ * next email in a new thread was a "no single client company" card, the name it signs with now
+ * clashing with the company made for it. The exact address finds it, a free-mail sender
+ * included, and only fills a null: it runs after the domain rule, so no answer that rule gives
+ * changes. Still not found: a colleague of the sender at the same domain, until staff add a
+ * contact. The invoice email's DOMAIN stays unused, for the reason given above.
+ */
+export function matchCompanyBySender(email: string | undefined, companies: CompanyRec[]): number | null {
+  const byDomain = matchCompanyByDomain(email, companies);
+  if (byDomain) return byDomain;
+  const a = String(email || "").replace(/.*</, "").replace(/>.*/, "").trim().toLowerCase();
+  const d = domainOfEmail(a);
+  if (!d.includes(".") || SPARTAN_DOMAINS.some((s) => d === s || d.endsWith("." + s))) return null;
+  const same = (e: unknown) => String(e ?? "").trim().toLowerCase() === a;
+  const hits = new Set<number>();
+  for (const c of companies) if (same(c.email_invoice) || (c.Client ?? []).some((cl) => same(cl.email))) hits.add(c.id);
+  return hits.size === 1 ? [...hits][0] : null;
+}
+
 /** Kept in step with normalize.ts's list; duplicated to keep resolve.ts dependency-free. */
 const SPARTAN_DOMAINS = ["spartancrew.co.uk"];
 export interface ClientRec { id: number; email?: string; name?: string; surname?: string }
