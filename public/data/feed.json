@@ -4006,5 +4006,73 @@
    "app/lib/threadMessagesDb.ts",
    "n8n/nodes/build-engine-payload.js"
   ]
+ },
+ {
+  "id": "S-0209",
+  "ts": "2026-10-23T02:03:09+00:00",
+  "kind": "measurement",
+  "headline": "Gold set (3,145 emails) and matcher evidence, recall 1,498/1,498 (matcher steps 2-3)",
+  "subject": "The new matcher offers the true order for 1,498 of 1,498 gold-set emails",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 210,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  },
+  "measured": {
+   "matcher_gold_set": {
+    "dataset": "production read-only snapshot 2026-10-23T01:45:22.758Z: every stored client email from 2026-07-29, OnSinch timeline over the same window",
+    "instrument": "scripts/gold/truth.mts",
+    "denominator": "client emails (not ours, not system mail) since the window start",
+    "emails": 3145,
+    "labelled_strong_medium_or_inherited": 1947,
+    "staff_actions": 14712,
+    "staff_actions_attributed": 8629,
+    "by_label": {
+     "no-order-signal/null": 807,
+     "existing/strong": 550,
+     "existing/medium": 483,
+     "new-job/strong": 399,
+     "existing/inherited": 391,
+     "existing/weak": 306,
+     "several/strong": 53,
+     "several/weak": 46,
+     "several/medium": 40,
+     "new-job/weak": 39,
+     "new-job/inherited": 16,
+     "new-job/medium": 15
+    }
+   },
+   "matcher_candidates": {
+    "dataset": "gold set v1: 3145 client emails 2026-07-29 to 2026-10-23, labels from staff actions (scripts/gold/truth.mts), OnSinch as at each email",
+    "instrument": "scripts/gold/features.mts",
+    "denominator": "labelled emails whose order existed before the email (strong, medium or inherited)",
+    "recall": 1498,
+    "of": 1498,
+    "new_job_order_offered": 0,
+    "candidates_median": 3,
+    "candidates_p90": 11,
+    "candidates_max": 35,
+    "availability": {
+     "reference": 0.982,
+     "person": 0.995,
+     "precedent": 0.914,
+     "company": 1,
+     "time": 0.558,
+     "coverage": 0.255,
+     "size": 0.033,
+     "place": 0.639,
+     "subject": 0.994,
+     "thread": 0.554,
+     "state": 1,
+     "age": 1
+    }
+   }
+  },
+  "sources": [
+   "scripts/gold/truth.mts",
+   "scripts/gold/features.mts"
+  ]
  }
 ]
