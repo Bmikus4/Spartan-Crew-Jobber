@@ -57,6 +57,11 @@ async function ensure(sql: NeonQueryFunction<false, false>): Promise<void> {
   // evidence). `reference_ids`, not `references`, which is a reserved word in Postgres.
   await sql`ALTER TABLE thread_messages ADD COLUMN IF NOT EXISTS in_reply_to TEXT[]`;
   await sql`ALTER TABLE thread_messages ADD COLUMN IF NOT EXISTS reference_ids TEXT[]`;
+  // For the job matcher: who was copied in (a colleague on Cc is often the order's contact)
+  // and the files' names (a PO arrives as "PO 1244.pdf"). Kept apart from to_addresses, which
+  // finders already read: folding Cc in would change which companies a thread resolves to.
+  await sql`ALTER TABLE thread_messages ADD COLUMN IF NOT EXISTS cc_addresses JSONB`;
+  await sql`ALTER TABLE thread_messages ADD COLUMN IF NOT EXISTS attachment_names JSONB`;
   _ready = true;
 }
 
@@ -91,6 +96,10 @@ export interface StoredMessage {
   /** In-Reply-To and References as parsed, nearest ancestor first. Absent when not known. */
   in_reply_to?: string[];
   reference_ids?: string[];
+  /** Cc as sent; absent when the sender of the payload could not read the header. */
+  cc_addresses?: string[];
+  /** The files' names; absent when the message's parts could not be read. */
+  attachment_names?: string[];
 }
 
 /**
@@ -121,6 +130,7 @@ export function rowFromGmail(
     rfc_message_id: mail.message_id || null,
     in_reply_to: mail.in_reply_to ?? [],
     reference_ids: mail.references ?? [],
+    cc_addresses: mail.cc,
   };
 }
 
@@ -220,13 +230,20 @@ export function messagesFromPayload(payload: unknown): StoredMessage[] {
     if (!message_id) continue;          // no id means no identity means not storable
     if (isAnUnsentDraft(r)) continue;   // the client never saw it — see the note above
     const from = groupAuthor(r) ?? addrOf(r.from ?? r.fromAddress);
-    // The reply-chain headers, once n8n's "Build Engine Payload" sends them (SP-18). Absent
-    // keys stay absent: "not sent" and "the message had none" are different facts.
+    // The reply-chain headers, as n8n's "Build Engine Payload" sends them (SP-18), or inside
+    // its curated `headers` from builds before 10-22, which carried In-Reply-To and References
+    // there and nowhere else. Absent keys stay absent: "not sent" and "the message had none"
+    // are different facts.
     const header = (v: unknown) => (Array.isArray(v) ? v.join(" ") : String(v ?? ""));
+    const hd = (r.headers && typeof r.headers === "object" ? r.headers : {}) as Record<string, unknown>;
+    const rfc = r.rfc_message_id ?? hd["message-id"], irt = r.in_reply_to ?? hd["in-reply-to"], refs = r.references ?? hd["references"];
+    const files = Array.isArray(r.attachments) ? r.attachments.map((a) => (a && typeof a === "object" ? (a as { filename?: unknown }).filename : a)).filter((a): a is string => typeof a === "string" && !!a) : null;
     const chain = {
-      ...(r.rfc_message_id != null ? { rfc_message_id: idsIn(header(r.rfc_message_id))[0] || null } : {}),
-      ...(r.in_reply_to != null ? { in_reply_to: idsIn(header(r.in_reply_to)) } : {}),
-      ...(r.references != null ? { reference_ids: idsIn(header(r.references)) } : {}),
+      ...(rfc != null ? { rfc_message_id: idsIn(header(rfc))[0] || null } : {}),
+      ...(irt != null ? { in_reply_to: idsIn(header(irt)) } : {}),
+      ...(refs != null ? { reference_ids: idsIn(header(refs)) } : {}),
+      ...(r.cc != null ? { cc_addresses: addrList(r.cc).map((a) => a.toLowerCase()) } : {}),
+      ...(files ? { attachment_names: files } : {}),
     };
     out.push({
       ...chain,
@@ -260,19 +277,45 @@ export async function storeThreadMessages(payload: unknown):
       const rows = (await sql`
         INSERT INTO thread_messages
           (message_id, thread_id, from_address, to_addresses, date_iso, subject, body, is_from_spartan,
-           rfc_message_id, in_reply_to, reference_ids)
+           rfc_message_id, in_reply_to, reference_ids, cc_addresses, attachment_names)
         VALUES (${m.message_id}, ${m.thread_id}, ${m.from_address},
                 ${JSON.stringify(m.to_addresses)}, ${m.date_iso}, ${m.subject},
                 ${m.body}, ${m.is_from_spartan},
-                ${m.rfc_message_id || null}, ${m.in_reply_to ?? null}, ${m.reference_ids ?? null})
+                ${m.rfc_message_id || null}, ${m.in_reply_to ?? null}, ${m.reference_ids ?? null},
+                ${m.cc_addresses ? JSON.stringify(m.cc_addresses) : null}, ${m.attachment_names ? JSON.stringify(m.attachment_names) : null})
         ON CONFLICT DO NOTHING
         RETURNING message_id`) as { message_id: string }[];
       if (rows.length) ids.push(m.message_id);
+      else await fillHeaders(sql, m);
     }
     return { ok: true, inserted: ids.length, seen: msgs.length, ids };
   } catch (err) {
     console.error("[thread_messages] store failed", err);
     return { ok: false, inserted: 0, seen: msgs.length, ids: [] };
+  }
+}
+
+/**
+ * A message already stored gets the header columns it lacks when its thread is delivered
+ * again. Rows stored before 22 Oct have none, and a reply's In-Reply-To can only be followed
+ * to a parent whose Message-ID is kept. Only empty columns are filled and nothing else on the
+ * row moves; it is a separate UPDATE with no RETURNING, so a re-delivery still never counts as
+ * a new message. Its own try: a failure here must not stop the rest of the thread being stored.
+ */
+async function fillHeaders(sql: NeonQueryFunction<false, false>, m: StoredMessage): Promise<void> {
+  if (!m.rfc_message_id && !m.in_reply_to?.length && !m.reference_ids?.length && !m.cc_addresses && !m.attachment_names) return;
+  const rfc = m.rfc_message_id || null;
+  try {
+    await sql`
+      UPDATE thread_messages SET
+        rfc_message_id = coalesce(rfc_message_id, CASE WHEN EXISTS (SELECT 1 FROM thread_messages x WHERE x.rfc_message_id = ${rfc}) THEN NULL ELSE ${rfc} END),
+        in_reply_to = coalesce(in_reply_to, ${m.in_reply_to ?? null}),
+        reference_ids = coalesce(reference_ids, ${m.reference_ids ?? null}),
+        cc_addresses = coalesce(cc_addresses, ${m.cc_addresses ? JSON.stringify(m.cc_addresses) : null}::jsonb),
+        attachment_names = coalesce(attachment_names, ${m.attachment_names ? JSON.stringify(m.attachment_names) : null}::jsonb)
+      WHERE message_id = ${m.message_id}`;
+  } catch (err) {
+    console.error("[thread_messages] header fill failed", m.message_id, err);
   }
 }
 
@@ -305,11 +348,12 @@ export async function storeMessage(m: StoredMessage): Promise<{ ok: boolean; ins
     await ensure(sql);
     const rows = (await sql`
       INSERT INTO thread_messages
-        (message_id, thread_id, from_address, to_addresses, date_iso, subject, body, is_from_spartan, rfc_message_id, in_reply_to, reference_ids)
+        (message_id, thread_id, from_address, to_addresses, date_iso, subject, body, is_from_spartan, rfc_message_id, in_reply_to, reference_ids, cc_addresses, attachment_names)
       VALUES (${m.message_id}, ${m.thread_id}, ${m.from_address},
               ${JSON.stringify(m.to_addresses ?? [])}, ${m.date_iso}, ${m.subject},
               ${m.body}, ${m.is_from_spartan}, ${m.rfc_message_id || null},
-              ${m.in_reply_to ?? null}, ${m.reference_ids ?? null})
+              ${m.in_reply_to ?? null}, ${m.reference_ids ?? null},
+              ${m.cc_addresses ? JSON.stringify(m.cc_addresses) : null}, ${m.attachment_names ? JSON.stringify(m.attachment_names) : null})
       ON CONFLICT DO NOTHING
       RETURNING message_id`) as { message_id: string }[];
     return { ok: true, inserted: rows.length > 0 };

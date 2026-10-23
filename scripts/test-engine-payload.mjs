@@ -291,6 +291,50 @@ console.log("10. triage headers reach the engine, curated");
      "an ordinary email carries no headers key at all", JSON.stringify(plain[0].json.messages[0].headers));
 }
 
+// ---------------------------------------------------------------------------
+// 11. the reply chain, Cc and attachment names reach the engine (matcher plan, 10-22)
+console.log("11. reply chain, Cc and attachment names, in both shapes Gmail hands over");
+{
+  // The thread shape: headers flattened onto the item, a PDF among the MIME parts.
+  const t = runNode({ nodes: { "Get a thread2": { id: "t11", messages: [{
+    id: "m11", threadId: "t11", internalDate: "1785336574000",
+    From: "Jo Smith <jo@client.co.uk>", To: "bookings@spartancrew.co.uk",
+    Cc: '"Smith, Ann" <ann@client.co.uk>, ops@client.co.uk',
+    Subject: "Re: Crew Friday", "Message-ID": "<abc@mail.client.co.uk>",
+    "In-Reply-To": "<prev@spartancrew.co.uk>", References: "<first@client.co.uk> <prev@spartancrew.co.uk>",
+    payload: { mimeType: "multipart/mixed", filename: "", parts: [
+      { mimeType: "text/plain", filename: "", body: { data: b64("PO attached") } },
+      { mimeType: "application/pdf", filename: "PO 1244.pdf", body: { attachmentId: "x", size: 900 } },
+    ] },
+  }] } }, json: {} });
+  const m = t[0].json.messages[0];
+  ok(m.rfc_message_id === "<abc@mail.client.co.uk>", "Message-ID kept as rfc_message_id", String(m.rfc_message_id));
+  ok(m.in_reply_to === "<prev@spartancrew.co.uk>", "In-Reply-To kept", String(m.in_reply_to));
+  ok(/first@client/.test(m.references) && /prev@spartan/.test(m.references), "References kept, both ids", String(m.references));
+  ok(JSON.stringify(m.cc) === JSON.stringify(["ann@client.co.uk", "ops@client.co.uk"]), "Cc read by pattern, a comma in a name does not split it", JSON.stringify(m.cc));
+  ok(JSON.stringify(m.attachments) === JSON.stringify(["PO 1244.pdf"]), "the attachment's name", JSON.stringify(m.attachments));
+  ok(m.message_id === "m11", "message_id is still the Gmail id", m.message_id);
+
+  // The parsed shape a message get returns: address objects and an attachments list.
+  const g = runNode({ nodes: { "Get a thread2": { id: "t12", messages: [{
+    id: "m12", threadId: "t12", text: "see attached", subject: "PO",
+    from: { value: [{ address: "jo@client.co.uk" }] }, to: { value: [{ address: "bookings@spartancrew.co.uk" }] },
+    cc: { value: [{ address: "Ann@Client.co.uk" }, { address: "ops@client.co.uk" }], text: "Ann <Ann@Client.co.uk>, ops@client.co.uk" },
+    messageId: "<p12@client.co.uk>", inReplyTo: "<q@spartancrew.co.uk>", references: ["<r@client.co.uk>", "<q@spartancrew.co.uk>"],
+    attachments: [{ filename: "Purchase Order 5521.pdf" }],
+  }] } }, json: {} });
+  const n = g[0].json.messages[0];
+  ok(n.rfc_message_id === "<p12@client.co.uk>" && n.in_reply_to === "<q@spartancrew.co.uk>", "parsed messageId and inReplyTo kept", `${n.rfc_message_id} ${n.in_reply_to}`);
+  ok(n.references === "<r@client.co.uk> <q@spartancrew.co.uk>", "a references list is joined", String(n.references));
+  ok(JSON.stringify(n.cc) === JSON.stringify(["ann@client.co.uk", "ops@client.co.uk"]), "parsed Cc, lower-cased", JSON.stringify(n.cc));
+  ok(JSON.stringify(n.attachments) === JSON.stringify(["Purchase Order 5521.pdf"]), "parsed attachment name", JSON.stringify(n.attachments));
+
+  // Nothing readable: no keys at all, never an empty claim.
+  const bare = runNode({ nodes: { "Get a thread2": { id: "t13", messages: [{ id: "m13", text: "hello there", From: "a@b.co.uk" }] } }, json: {} });
+  const z = bare[0].json.messages[0];
+  ok(!("cc" in z) && !("attachments" in z) && !("in_reply_to" in z) && !("rfc_message_id" in z), "no header and no parts: none of the keys", JSON.stringify(Object.keys(z)));
+}
+
 
 console.log(fails ? `\n${fails} FAILED` : "\nall passed");
 process.exit(fails ? 1 : 0);

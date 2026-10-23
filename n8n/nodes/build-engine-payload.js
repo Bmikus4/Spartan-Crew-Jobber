@@ -176,10 +176,60 @@ const TRIAGE_HEADERS = [
   'x-original-sender', 'x-google-group-id',
 ];
 
+/**
+ * Every address in a header, whatever shape it arrives in: a wire string ("Smith, Jo"
+ * <jo@x.com>, b@y.com), a parsed {value:[{address}], text}, or a list. Read by pattern,
+ * not split on commas, because a display name may hold one.
+ */
+function emailsIn(v) {
+  if (!v) return [];
+  if (Array.isArray(v)) return [...new Set(v.flatMap(emailsIn))];
+  if (typeof v === 'object') {
+    if (Array.isArray(v.value)) return emailsIn(v.value.map((x) => (x && x.address) || '').join(','));
+    return emailsIn(v.address || v.email || v.text || '');
+  }
+  return [...new Set((String(v).match(/[^\s<>,;:"'()\[\]]+@[^\s<>,;:"'()\[\]]+\.[a-z]{2,}/gi) || []).map((s) => s.toLowerCase()))];
+}
+
+/** The names of the files on a message, or null when its parts could not be read at all. */
+function attachmentNames(msg) {
+  let readable = false;
+  const names = [];
+  const walk = (p) => {
+    if (!p) return;
+    readable = true;
+    if (p.filename) names.push(String(p.filename));
+    if (Array.isArray(p.parts)) p.parts.forEach(walk);
+  };
+  if (msg.payload) walk(msg.payload);
+  if (Array.isArray(msg.attachments)) {
+    readable = true;
+    for (const a of msg.attachments) if (a && (a.filename || a.fileName)) names.push(String(a.filename || a.fileName));
+  }
+  return readable ? [...new Set(names)] : null;
+}
+
 /** One Gmail message resource -> one engine ThreadMessage. */
 function toThreadMessage(msg) {
   const h = headerMap(msg);
   const from = addrOf(msg.from || h.from);
+
+  // The reply chain, the people copied in and the files attached, for the job matcher:
+  // In-Reply-To ties a reply to the email it answers across threads, a colleague on Cc is
+  // often the order's contact, and a PO arrives as "PO 1244.pdf". Each key only when the
+  // message let us read it: "not sent" and "the message had none" are different facts.
+  const extra = {};
+  const joined = (v) => (Array.isArray(v) ? v.join(' ') : String(v));
+  const rfc = h['message-id'] || msg.messageId;
+  if (rfc) extra.rfc_message_id = joined(rfc);
+  const irt = h['in-reply-to'] || msg.inReplyTo;
+  if (irt) extra.in_reply_to = joined(irt);
+  const refs = h['references'] || msg.references;
+  if (refs) extra.references = joined(refs);
+  const cc = msg.cc || h.cc;
+  if (cc) extra.cc = emailsIn(cc);
+  const files = attachmentNames(msg);
+  if (files) extra.attachments = files;
 
   // Only the ones present, so an absent header is absent rather than an empty string —
   // triage treats "no headers at all" differently from "headers that say nothing", and
@@ -203,6 +253,7 @@ function toThreadMessage(msg) {
     // usually be empty; the newly-arrived message, fetched with a message get, does
     // carry them. Triage only reads the latest message, which is the one that has them.
     ...(Object.keys(headers).length ? { headers } : {}),
+    ...extra,
   };
 }
 

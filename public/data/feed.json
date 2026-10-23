@@ -3988,5 +3988,23 @@
    "test/companyMatch.ts",
    ".tmp-v2/sender-match.mts"
   ]
+ },
+ {
+  "id": "S-0208",
+  "ts": "2026-10-23T01:43:59+00:00",
+  "kind": "decision",
+  "headline": "Intake stores reply chain, Cc and attachment names (matcher step 1)",
+  "subject": "Intake keeps each email's Message-ID, reply chain, Cc and attachment names",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 208,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  },
+  "sources": [
+   "app/lib/threadMessagesDb.ts",
+   "n8n/nodes/build-engine-payload.js"
+  ]
  }
 ]
