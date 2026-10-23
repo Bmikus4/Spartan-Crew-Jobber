@@ -4236,5 +4236,22 @@
    "scripts/gold/weights.mts",
    "app/lib/match/weights.json"
   ]
+ },
+ {
+  "id": "S-0211",
+  "ts": "2026-10-23T02:22:49+00:00",
+  "kind": "decision",
+  "headline": "n8n payload node installer that touches one field (matcher step 1)",
+  "subject": "One script puts the payload node live in n8n and proves nothing else moved",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 211,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  },
+  "sources": [
+   "scripts/install-payload-builder.mjs"
+  ]
  }
 ]
