@@ -4074,5 +4074,167 @@
    "scripts/gold/truth.mts",
    "scripts/gold/features.mts"
   ]
+ },
+ {
+  "id": "S-0210",
+  "ts": "2026-10-23T02:18:08+00:00",
+  "kind": "measurement",
+  "headline": "Matcher weights fitted from the gold set; score alone 90.3%, calibrated (matcher step 4)",
+  "subject": "The matcher scores candidates with fitted weights: 90.3% right on 1,540 gold emails",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 211,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  },
+  "measured": {
+   "matcher_score_alone": {
+    "dataset": "gold set v1 firm labels (strong or medium): 1540 emails (1107 link, 433 new job), 5-fold by thread",
+    "instrument": "scripts/gold/weights.mts",
+    "denominator": "firm-labelled emails; a link email is right when the top choice is an order staff acted on for it, a new-job email when it is none of these",
+    "lambda": 0.5,
+    "right": 1391,
+    "of": 1540,
+    "link_right": 1014,
+    "link_of": 1107,
+    "new_right": 377,
+    "new_of": 433,
+    "wrong_links": 90,
+    "coverage": [
+     {
+      "threshold": 0,
+      "coverage": 1,
+      "accuracy": 0.9032,
+      "lower95": 0.8875,
+      "wrong_links": 90
+     },
+     {
+      "threshold": 0.5,
+      "coverage": 0.947,
+      "accuracy": 0.9198,
+      "lower95": 0.9047,
+      "wrong_links": 72
+     },
+     {
+      "threshold": 0.7,
+      "coverage": 0.84,
+      "accuracy": 0.9536,
+      "lower95": 0.9407,
+      "wrong_links": 43
+     },
+     {
+      "threshold": 0.8,
+      "coverage": 0.777,
+      "accuracy": 0.9649,
+      "lower95": 0.9529,
+      "wrong_links": 35
+     },
+     {
+      "threshold": 0.9,
+      "coverage": 0.695,
+      "accuracy": 0.9748,
+      "lower95": 0.9636,
+      "wrong_links": 23
+     },
+     {
+      "threshold": 0.95,
+      "coverage": 0.581,
+      "accuracy": 0.981,
+      "lower95": 0.9698,
+      "wrong_links": 16
+     },
+     {
+      "threshold": 0.98,
+      "coverage": 0.423,
+      "accuracy": 0.9847,
+      "lower95": 0.972,
+      "wrong_links": 9
+     },
+     {
+      "threshold": 0.99,
+      "coverage": 0.33,
+      "accuracy": 0.9862,
+      "lower95": 0.9718,
+      "wrong_links": 7
+     }
+    ]
+   },
+   "matcher_score_alone_without_precedent_thread": {
+    "dataset": "gold set v1 firm labels (strong or medium): 1540 emails (1107 link, 433 new job), 5-fold by thread",
+    "instrument": "scripts/gold/weights.mts --without precedent,thread",
+    "denominator": "firm-labelled emails; a link email is right when the top choice is an order staff acted on for it, a new-job email when it is none of these",
+    "lambda": 0.5,
+    "right": 1343,
+    "of": 1540,
+    "link_right": 986,
+    "link_of": 1107,
+    "new_right": 357,
+    "new_of": 433,
+    "wrong_links": 129,
+    "coverage": [
+     {
+      "threshold": 0,
+      "coverage": 1,
+      "accuracy": 0.8721,
+      "lower95": 0.8545,
+      "wrong_links": 129
+     },
+     {
+      "threshold": 0.5,
+      "coverage": 0.915,
+      "accuracy": 0.9042,
+      "lower95": 0.8877,
+      "wrong_links": 82
+     },
+     {
+      "threshold": 0.7,
+      "coverage": 0.792,
+      "accuracy": 0.9475,
+      "lower95": 0.9336,
+      "wrong_links": 46
+     },
+     {
+      "threshold": 0.8,
+      "coverage": 0.732,
+      "accuracy": 0.961,
+      "lower95": 0.948,
+      "wrong_links": 32
+     },
+     {
+      "threshold": 0.9,
+      "coverage": 0.637,
+      "accuracy": 0.9735,
+      "lower95": 0.9614,
+      "wrong_links": 21
+     },
+     {
+      "threshold": 0.95,
+      "coverage": 0.515,
+      "accuracy": 0.9811,
+      "lower95": 0.969,
+      "wrong_links": 14
+     },
+     {
+      "threshold": 0.98,
+      "coverage": 0.362,
+      "accuracy": 0.982,
+      "lower95": 0.9673,
+      "wrong_links": 9
+     },
+     {
+      "threshold": 0.99,
+      "coverage": 0.277,
+      "accuracy": 0.993,
+      "lower95": 0.9795,
+      "wrong_links": 3
+     }
+    ]
+   }
+  },
+  "sources": [
+   "scripts/gold/weights.mts",
+   "app/lib/match/weights.json"
+  ]
  }
 ]

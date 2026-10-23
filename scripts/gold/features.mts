@@ -77,7 +77,8 @@ function asAtFor(at: number) {
       return x;
     };
     const job = ([] as any[]).concat(o.Job ?? []).map((j: any) => ({ ...j, SlotTeam: ([] as any[]).concat(j.SlotTeam ?? []).filter((t: any) => !gone.has(`SlotTeam:${t.id}`)).map((t: any) => ({ ...t, cancelled: t.cancelled === true && Date.parse(t.modified) > at ? false : t.cancelled, Slot: ([] as any[]).concat(t.Slot ?? []).filter((s: any) => !gone.has(`Slot:${s.id}`)).map(slot) })) }));
-    return { ...o, status: Number(o.status) === -1 && Date.parse(o.modified) > at ? 0 : o.status, Job: job };
+    // Cancelled (-1) or closed (-2, set once the job is over) after the email: live when it arrived.
+    return { ...o, status: [-1, -2].includes(Number(o.status)) && Date.parse(o.modified) > at ? 0 : o.status, Job: job };
   };
 }
 
