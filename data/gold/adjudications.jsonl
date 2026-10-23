@@ -1,0 +1,147 @@
+{"message_id":"19fae9bbae4213f3","answer":"new","knowable":true,"why":"label right: a new week of work, another event than the order picked","by":"claude, 2026-10-23"}
+{"message_id":"19fc882815b75641","answer":"link","orders":["R10495"],"knowable":true,"why":"label right: asks which PO is for this job, named in the subject","by":"claude, 2026-10-23"}
+{"message_id":"19fd60eb24c03f1e","answer":"new","knowable":true,"why":"label right: a new booking; its PO is shared with an older order of the client","by":"claude, 2026-10-23"}
+{"message_id":"1a000d6264840f6a","answer":"link","orders":["R10618"],"knowable":true,"why":"label wrong: confirms the quoted job; staff's later order is a separate job","by":"claude, 2026-10-23"}
+{"message_id":"1a010490164506a4","answer":"unsure","knowable":false,"why":"duplicate request: the same days were already quoted, staff made a second order and cancelled the first","by":"claude, 2026-10-23"}
+{"message_id":"1a01079d74ee858d","answer":"link","orders":["R10512"],"knowable":true,"why":"label right: a time change to the booked call","by":"claude, 2026-10-23"}
+{"message_id":"1a03e6d5c8bc4873","answer":"link","orders":["R10633","R10632","R10674","R10607"],"knowable":true,"why":"several jobs: the email answers four orders by number","by":"claude, 2026-10-23"}
+{"message_id":"1a047b753bdd11a2","answer":"link","orders":["R10732"],"knowable":true,"why":"label right: confirms the quoted job with a PO","by":"claude, 2026-10-23"}
+{"message_id":"1a0675eb05d4098f","answer":"link","orders":["R10830"],"knowable":true,"why":"label right: a crew change to the booked job","by":"claude, 2026-10-23"}
+{"message_id":"1a06d21605150c29","answer":"link","orders":["R10810"],"knowable":true,"why":"label right: adds crew to the booked job","by":"claude, 2026-10-23"}
+{"message_id":"1a08176473bffde6","answer":"new","knowable":true,"why":"label right: a new booking at another site the same day","by":"claude, 2026-10-23"}
+{"message_id":"1a08ab45cf5a5ed0","answer":"new","knowable":true,"why":"label right: a new request inside an old thread","by":"claude, 2026-10-23"}
+{"message_id":"1a08b8b331aca505","answer":"link","orders":["R10852"],"knowable":true,"why":"label right: confirms the booked day","by":"claude, 2026-10-23"}
+{"message_id":"1a08ba43293bf386","answer":"link","orders":["R10852","R10918"],"knowable":true,"why":"several jobs: a thread about two booked days","by":"claude, 2026-10-23"}
+{"message_id":"1a08bae5cb0d5bce","answer":"unsure","knowable":false,"why":"ambiguous: a time change refers to a job the words do not name","by":"claude, 2026-10-23"}
+{"message_id":"1a0aab9b546142f8","answer":"unsure","knowable":false,"why":"ambiguous: agrees to our proposal; which order depends on what we proposed","by":"claude, 2026-10-23"}
+{"message_id":"1a0aea1910504fc1","answer":"link","orders":["R11017"],"knowable":true,"why":"label right: cancels the booked shifts by day, time and crew","by":"claude, 2026-10-23"}
+{"message_id":"1a0b42cc3098c750","answer":"none","knowable":true,"why":"not a job: a marketing newsletter","by":"claude, 2026-10-23"}
+{"message_id":"1a0f8e4d5e1dae95","answer":"link","orders":["R11292"],"knowable":true,"why":"label wrong: PO and contacts for the job in the subject; staff's later order is another job","by":"claude, 2026-10-23"}
+{"message_id":"1a10b33b02eb997e","answer":"link","orders":["R11362"],"knowable":true,"why":"label right: changes the booked days","by":"claude, 2026-10-23"}
+{"message_id":"1a11138e06068722","answer":"none","knowable":true,"why":"not a job: a thank-you, nothing asked","by":"claude, 2026-10-23"}
+{"message_id":"1a11685963773978","answer":"link","orders":["R11292"],"knowable":true,"why":"label wrong: reply about the job in the subject","by":"claude, 2026-10-23"}
+{"message_id":"1a116ff51eb6959a","answer":"link","orders":["R11447"],"knowable":true,"why":"label wrong: updates the booking that holds both days","by":"claude, 2026-10-23"}
+{"message_id":"1a162e715892cb17","answer":"link","orders":["R11799"],"knowable":true,"why":"label right: confirms the quoted job","by":"claude, 2026-10-23"}
+{"message_id":"19fd6da435be4bd6","answer":"new","knowable":true,"why":"label right: books the same job again on a new day","by":"claude, 2026-10-23"}
+{"message_id":"19fdc5975fcc7015","answer":"link","orders":["R10572"],"knowable":true,"why":"label right: PO for the booked week","by":"claude, 2026-10-23"}
+{"message_id":"1a01e9f1838a86d2","answer":"unsure","knowable":false,"why":"ambiguous: a time preference with no day, two jobs on the thread","by":"claude, 2026-10-23"}
+{"message_id":"1a0333a9333a4aeb","answer":"link","orders":["R10665","R10670"],"knowable":true,"why":"several jobs: two orders for one event, one later cancelled","by":"claude, 2026-10-23"}
+{"message_id":"1a03ec3a67628841","answer":"new","knowable":true,"why":"label wrong: a new request at another site","by":"claude, 2026-10-23"}
+{"message_id":"1a043e23a9921078","answer":"unsure","knowable":false,"why":"ambiguous: an invoice question naming no job","by":"claude, 2026-10-23"}
+{"message_id":"1a06179be3c97a16","answer":"link","orders":["R10530"],"knowable":true,"why":"label right: updates and adds to the booked job","by":"claude, 2026-10-23"}
+{"message_id":"1a067dc9caab3233","answer":"link","orders":["R10643"],"knowable":true,"why":"label right: adds a derig to 'the same O2 job'","by":"claude, 2026-10-23"}
+{"message_id":"1a06b62109a696b8","answer":"link","orders":["R10689"],"knowable":true,"why":"thanks on the job's own thread","by":"claude, 2026-10-23"}
+{"message_id":"1a06c170f2016c34","answer":"new","knowable":true,"why":"label right: a new booking at another hotel","by":"claude, 2026-10-23"}
+{"message_id":"1a06cf83e428940f","answer":"link","orders":["R10840"],"knowable":true,"why":"label wrong: chases the job whose code is in the subject","by":"claude, 2026-10-23"}
+{"message_id":"1a06d36c978b9cc4","answer":"link","orders":["R10667"],"knowable":true,"why":"label right: PO for the booked call","by":"claude, 2026-10-23"}
+{"message_id":"1a08121b33615147","answer":"link","orders":["R10640"],"knowable":true,"why":"label right: booking detail for the booked week","by":"claude, 2026-10-23"}
+{"message_id":"1a08c58c319f3cb3","answer":"link","orders":["R10778"],"knowable":true,"why":"label right: the quoted job is going ahead","by":"claude, 2026-10-23"}
+{"message_id":"1a090667f437cee8","answer":"new","knowable":true,"why":"label right: a new request; the order picked is another event","by":"claude, 2026-10-23"}
+{"message_id":"1a090db07ff6792c","answer":"link","orders":["R10950"],"knowable":true,"why":"label wrong: books the quoted Christie's job","by":"claude, 2026-10-23"}
+{"message_id":"1a091cb4b76ef424","answer":"new","knowable":true,"why":"label right: a new call at another venue inside the thread","by":"claude, 2026-10-23"}
+{"message_id":"1a097373e90c62bd","answer":"link","orders":["R10950","R10970"],"knowable":true,"why":"several jobs: confirms 'both jobs'","by":"claude, 2026-10-23"}
+{"message_id":"1a0973ae45fc01c1","answer":"new","knowable":true,"why":"label right: a new call at the client's yard","by":"claude, 2026-10-23"}
+{"message_id":"1a09add36bd6fe33","answer":"unsure","knowable":false,"why":"ambiguous: 'yes please' to an offer the words do not name","by":"claude, 2026-10-23"}
+{"message_id":"1a09efd351490822","answer":"link","orders":["R10972"],"knowable":true,"why":"label wrong: about today's 11am call","by":"claude, 2026-10-23"}
+{"message_id":"1a0a56e6aa7b4d19","answer":"none","knowable":true,"why":"not a job: a payment notice","by":"claude, 2026-10-23"}
+{"message_id":"1a0a61ecc3a8b041","answer":"link","orders":["R10970"],"knowable":true,"why":"label wrong: meeting point for tomorrow at the Tate","by":"claude, 2026-10-23"}
+{"message_id":"1a0aa13065ff675e","answer":"link","orders":["R11025"],"knowable":true,"why":"label right: a time change to the booked call","by":"claude, 2026-10-23"}
+{"message_id":"1a0aa8059f5e85b4","answer":"link","orders":["R10940"],"knowable":true,"why":"label right: moves the booked derig to another day","by":"claude, 2026-10-23"}
+{"message_id":"1a0aa8c41f301da9","answer":"link","orders":["R11051"],"knowable":true,"why":"label right: PO and names for the booked job","by":"claude, 2026-10-23"}
+{"message_id":"1a0af23dee7e9aee","answer":"link","orders":["R10675"],"knowable":true,"why":"label wrong: PO and a time change for the job in the subject","by":"claude, 2026-10-23"}
+{"message_id":"1a0e8f6bab986a0f","answer":"link","orders":["R10696"],"knowable":true,"why":"thanks on the job's own thread","by":"claude, 2026-10-23"}
+{"message_id":"1a0ed373501c5c19","answer":"link","orders":["R10696"],"knowable":true,"why":"label right: agrees to a change on the job's thread","by":"claude, 2026-10-23"}
+{"message_id":"1a10b36b3a36d325","answer":"unsure","knowable":false,"why":"ambiguous: a week of calls; staff split them across orders","by":"claude, 2026-10-23"}
+{"message_id":"1a1118ae3454cde2","answer":"link","orders":["R10616"],"knowable":true,"why":"label wrong: amended PO for the named job, venue and days","by":"claude, 2026-10-23"}
+{"message_id":"1a116518d784a294","answer":"link","orders":["R10553"],"knowable":true,"why":"label right: adds a day to 'that quote'","by":"claude, 2026-10-23"}
+{"message_id":"1a116e2a883e4d73","answer":"new","knowable":true,"why":"label right: a new day at the same venue","by":"claude, 2026-10-23"}
+{"message_id":"1a120dfa4ee822fd","answer":"new","knowable":true,"why":"label right: a new booking at another venue the same day","by":"claude, 2026-10-23"}
+{"message_id":"1a121140d7ef2e2e","answer":"link","orders":["R11480"],"knowable":true,"why":"label right: reply on the week in the subject","by":"claude, 2026-10-23"}
+{"message_id":"1a1218126b1d210b","answer":"link","orders":["R11351"],"knowable":true,"why":"label right: adds tomorrow to this week's booking","by":"claude, 2026-10-23"}
+{"message_id":"1a125bc994d79806","answer":"unsure","knowable":false,"why":"ambiguous: agrees to go ahead; two jobs on the thread, which one is not written","by":"claude, 2026-10-23"}
+{"message_id":"1a1269476986d834","answer":"unsure","knowable":false,"why":"ambiguous: a cost question naming no job","by":"claude, 2026-10-23"}
+{"message_id":"1a12f577b851895d","answer":"link","orders":["R11509"],"knowable":true,"why":"label wrong: 'today' is the day the other order holds","by":"claude, 2026-10-23"}
+{"message_id":"1a134d78ed64a212","answer":"none","knowable":true,"why":"not a job: payment and receipts","by":"claude, 2026-10-23"}
+{"message_id":"1a13ad1788e8c98c","answer":"new","knowable":true,"why":"label right: a new booking at another venue","by":"claude, 2026-10-23"}
+{"message_id":"19fd2389f2151f0a","answer":"link","orders":["R10563"],"knowable":true,"why":"label wrong: about the Monday shift booked from this thread","by":"claude, 2026-10-23"}
+{"message_id":"19fd6cfbfb9d7311","answer":"link","orders":["R10577","R10578"],"knowable":true,"why":"several jobs: confirms both quotes","by":"claude, 2026-10-23"}
+{"message_id":"19fd6ef761bdd92c","answer":"link","orders":["R10577","R10578"],"knowable":true,"why":"several jobs: meeting points for both","by":"claude, 2026-10-23"}
+{"message_id":"1a01e9779a194a5d","answer":"link","orders":["R10648"],"knowable":true,"why":"label wrong: details for the named ExCel job; a second job in it is new","by":"claude, 2026-10-23"}
+{"message_id":"1a024eadddc9d597","answer":"link","orders":["R10656"],"knowable":true,"why":"label wrong: about the named stadium job","by":"claude, 2026-10-23"}
+{"message_id":"1a03e2acc8e81c3f","answer":"link","orders":["R10530"],"knowable":true,"why":"label right: asks about the crew currently booked","by":"claude, 2026-10-23"}
+{"message_id":"1a03e3e99d7d4be2","answer":"link","orders":["R10530"],"knowable":true,"why":"label right: extends the booked crew three days","by":"claude, 2026-10-23"}
+{"message_id":"1a0439fd64754c7e","answer":"none","knowable":true,"why":"not a job: a forwarded invoice with no words","by":"claude, 2026-10-23"}
+{"message_id":"1a0488cb9a069b78","answer":"new","knowable":true,"why":"label wrong: 'and this one please' is another event","by":"claude, 2026-10-23"}
+{"message_id":"1a0638189f4a2456","answer":"link","orders":["R10792"],"knowable":true,"why":"label wrong: confirms the quote sent that day","by":"claude, 2026-10-23"}
+{"message_id":"1a06c37d910e96d7","answer":"link","orders":["R10790"],"knowable":true,"why":"label right: updates the booked job","by":"claude, 2026-10-23"}
+{"message_id":"1a080518374f835c","answer":"link","orders":["R9101"],"knowable":true,"why":"label right: confirms the quoted days with new times","by":"claude, 2026-10-23"}
+{"message_id":"1a08606aded15b4c","answer":"link","orders":["R10907"],"knowable":true,"why":"label right: adds to the quoted job","by":"claude, 2026-10-23"}
+{"message_id":"1a08bf7cb213b72f","answer":"link","orders":["R10909"],"knowable":true,"why":"label right: the words name another job than the subject's R","by":"claude, 2026-10-23"}
+{"message_id":"1a08d4a4f9cd5b60","answer":"link","orders":["R10742"],"knowable":true,"why":"label right: adds a call to the booked job","by":"claude, 2026-10-23"}
+{"message_id":"1a09f34d0c04ec85","answer":"link","orders":["R10708"],"knowable":true,"why":"label wrong: the venue named is the other order's","by":"claude, 2026-10-23"}
+{"message_id":"1a09f4b31aab9756","answer":"link","orders":["R10708"],"knowable":true,"why":"label wrong: same thread, same job","by":"claude, 2026-10-23"}
+{"message_id":"1a0a5afb6aff1eef","answer":"new","knowable":true,"why":"label right: new warehouse calls","by":"claude, 2026-10-23"}
+{"message_id":"1a0afcf30ba07425","answer":"link","orders":["R10708"],"knowable":true,"why":"label right: confirms the booked dates","by":"claude, 2026-10-23"}
+{"message_id":"1a0b005058434748","answer":"link","orders":["R11043"],"knowable":true,"why":"label right: moves the booking a month","by":"claude, 2026-10-23"}
+{"message_id":"1a0b007d8195585d","answer":"link","orders":["R10708"],"knowable":true,"why":"label wrong: thanks on the same job's thread","by":"claude, 2026-10-23"}
+{"message_id":"1a0cae79cf15ee7d","answer":"link","orders":["R10792"],"knowable":true,"why":"label wrong: confirms the quoted job; the additions are a new quote","by":"claude, 2026-10-23"}
+{"message_id":"1a0d8968c0368033","answer":"none","knowable":true,"why":"not a job: payment","by":"claude, 2026-10-23"}
+{"message_id":"1a0ec8b7e9a864b0","answer":"unsure","knowable":false,"why":"ambiguous: PO for 'the local crew' on a day two orders hold","by":"claude, 2026-10-23"}
+{"message_id":"1a0f2da11be9cd7f","answer":"link","orders":["R11107"],"knowable":true,"why":"label wrong: confirms the quoted job; the extra day is new","by":"claude, 2026-10-23"}
+{"message_id":"1a0fcfca854b9469","answer":"none","knowable":true,"why":"not a job: thanks, nothing asked","by":"claude, 2026-10-23"}
+{"message_id":"1a11051862abe1f3","answer":"unsure","knowable":false,"why":"ambiguous: 'this one' on a thread with two jobs at the venue","by":"claude, 2026-10-23"}
+{"message_id":"1a1158348d4abd0c","answer":"link","orders":["R11352"],"knowable":true,"why":"label wrong: adds two to the booked 4 crew at 09:00 that day","by":"claude, 2026-10-23"}
+{"message_id":"1a11717370b94f91","answer":"link","orders":["R11195"],"knowable":true,"why":"several: a change to the named Serpentine job; the Corinthia calls are new","by":"claude, 2026-10-23"}
+{"message_id":"19fb28f5179372f6","answer":"link","orders":["R10549"],"knowable":true,"why":"label wrong: pencils in the quote sent that day","by":"claude, 2026-10-23"}
+{"message_id":"19fb75e4a318ecf3","answer":"link","orders":["R10555"],"knowable":true,"why":"label right: corrects the booked calls","by":"claude, 2026-10-23"}
+{"message_id":"19fdbb55bd617841","answer":"new","knowable":true,"why":"label right: a new call at another warehouse","by":"claude, 2026-10-23"}
+{"message_id":"19ff5f43fe243b71","answer":"link","orders":["R10592"],"knowable":true,"why":"label right: updates the quoted job","by":"claude, 2026-10-23"}
+{"message_id":"1a08597d0ebc563f","answer":"link","orders":["R10880"],"knowable":true,"why":"label wrong: 'add to this job' under the job's own quote","by":"claude, 2026-10-23"}
+{"message_id":"1a09f722b70b7d58","answer":"new","knowable":true,"why":"label wrong: next month's schedule, a new job","by":"claude, 2026-10-23"}
+{"message_id":"1a0a4716a8be72fe","answer":"none","knowable":true,"why":"not a job: waits for our reply, nothing asked","by":"claude, 2026-10-23"}
+{"message_id":"1a0a57f942873cf7","answer":"unsure","knowable":false,"why":"ambiguous: a PO for a venue no candidate holds","by":"claude, 2026-10-23"}
+{"message_id":"1a0a93962254850e","answer":"none","knowable":true,"why":"not a job: thanks","by":"claude, 2026-10-23"}
+{"message_id":"1a0af5f44ff0e792","answer":"link","orders":["R10954"],"knowable":true,"why":"label right: moves the booked call","by":"claude, 2026-10-23"}
+{"message_id":"1a0b3e8d7a319116","answer":"link","orders":["R9850"],"knowable":true,"why":"label wrong: the subject names the summit order","by":"claude, 2026-10-23"}
+{"message_id":"1a0b5947337b7506","answer":"link","orders":["R10973"],"knowable":true,"why":"label right: call sheet for the booked shoot","by":"claude, 2026-10-23"}
+{"message_id":"1a0cd577b8ea8475","answer":"link","orders":["R11191"],"knowable":true,"why":"label wrong: the job in the subject","by":"claude, 2026-10-23"}
+{"message_id":"1a0cdf10dc10a2a6","answer":"link","orders":["R10992"],"knowable":true,"why":"label right: changes the month's schedule","by":"claude, 2026-10-23"}
+{"message_id":"1a0d2f785feb9500","answer":"link","orders":["R10549"],"knowable":true,"why":"label wrong: about the quoted job, date still open","by":"claude, 2026-10-23"}
+{"message_id":"1a0e782694ad870d","answer":"link","orders":["R11191"],"knowable":true,"why":"label wrong: 'additional crew for this event'","by":"claude, 2026-10-23"}
+{"message_id":"1a0ee801421476c7","answer":"link","orders":["R11239"],"knowable":true,"why":"label right: PO for tomorrow's booked call; Friday is new","by":"claude, 2026-10-23"}
+{"message_id":"1a0f7393b4c1969c","answer":"new","knowable":true,"why":"label right: a quote request at another venue","by":"claude, 2026-10-23"}
+{"message_id":"1a0f7a680ef78fca","answer":"new","knowable":true,"why":"label right: Friday was not booked; staff made it its own order","by":"claude, 2026-10-23"}
+{"message_id":"1a11610475e81fde","answer":"link","orders":["R11353"],"knowable":true,"why":"label right: the client system's PO for the job","by":"claude, 2026-10-23"}
+{"message_id":"1a116d5f9f5b0449","answer":"link","orders":["R11439"],"knowable":true,"why":"label wrong: corrects the address of the job in the subject","by":"claude, 2026-10-23"}
+{"message_id":"1a11b93614a001a9","answer":"link","orders":["R11475"],"knowable":true,"why":"label right: books the quote and adds a call","by":"claude, 2026-10-23"}
+{"message_id":"1a120296df3a6061","answer":"link","orders":["R11459"],"knowable":true,"why":"label wrong: 'add to this booking', named","by":"claude, 2026-10-23"}
+{"message_id":"1a139f824146018a","answer":"new","knowable":true,"why":"label wrong: a new call at another venue","by":"claude, 2026-10-23"}
+{"message_id":"19fcbd4b07b9f95e","answer":"none","knowable":true,"why":"not a job: an automatic out-of-office reply","by":"claude, 2026-10-23"}
+{"message_id":"19fd16d082552fa2","answer":"new","knowable":true,"why":"label right: a new run of warehouse work","by":"claude, 2026-10-23"}
+{"message_id":"1a0341cedf75ef1e","answer":"new","knowable":true,"why":"label right: a new warehouse call","by":"claude, 2026-10-23"}
+{"message_id":"1a03449ac27f0620","answer":"new","knowable":true,"why":"label right: a new warehouse call","by":"claude, 2026-10-23"}
+{"message_id":"1a05c5bc872bf0cc","answer":"new","knowable":true,"why":"label right: a new job under the client's own reference","by":"claude, 2026-10-23"}
+{"message_id":"1a05d7635a2c734a","answer":"none","knowable":true,"why":"not a job: thanks, waits for our quote","by":"claude, 2026-10-23"}
+{"message_id":"1a068268dae7f63e","answer":"none","knowable":true,"why":"not a job: thanks, nothing asked","by":"claude, 2026-10-23"}
+{"message_id":"1a07b34e0fdc310b","answer":"link","orders":["R10748"],"knowable":true,"why":"label right: PO in answer to our quote of that order","by":"claude, 2026-10-23"}
+{"message_id":"1a07b9b40c5c3a55","answer":"link","orders":["R10628"],"knowable":true,"why":"label wrong: names the Science Museum job that day","by":"claude, 2026-10-23"}
+{"message_id":"1a081ed5b0e9938c","answer":"link","orders":["R10575"],"knowable":true,"why":"picks one day of the quoted job","by":"claude, 2026-10-23"}
+{"message_id":"1a0b3e69d5d74a17","answer":"link","orders":["R11055"],"knowable":true,"why":"label right: site contacts for the booked job","by":"claude, 2026-10-23"}
+{"message_id":"1a0b4254c3c3c76f","answer":"new","knowable":true,"why":"label right: a quote at another venue","by":"claude, 2026-10-23"}
+{"message_id":"1a0ca82b1f59d9bf","answer":"link","orders":["R11162"],"knowable":true,"why":"label right: changes the quoted crew","by":"claude, 2026-10-23"}
+{"message_id":"1a0e49f1efbdf81a","answer":"link","orders":["R11251"],"knowable":true,"why":"label wrong: amends tomorrow's urgent call","by":"claude, 2026-10-23"}
+{"message_id":"1a0e89b1fb120c7b","answer":"unsure","knowable":false,"why":"ambiguous: a site contact for one of several new jobs","by":"claude, 2026-10-23"}
+{"message_id":"1a0eda60c8dd35a0","answer":"link","orders":["R11225","R11142"],"knowable":true,"why":"several jobs: accreditation for the venue's three days","by":"claude, 2026-10-23"}
+{"message_id":"1a0f7942d5e3125b","answer":"link","orders":["R11334"],"knowable":true,"why":"label wrong: confirms the quoted job in the subject","by":"claude, 2026-10-23"}
+{"message_id":"1a0fd0294df204b7","answer":"link","orders":["R11334"],"knowable":true,"why":"label wrong: shift details for the same job","by":"claude, 2026-10-23"}
+{"message_id":"1a10cdfd48b83a35","answer":"link","orders":["R11382"],"knowable":true,"why":"label right: PO confirming the day","by":"claude, 2026-10-23"}
+{"message_id":"1a111452443a9ea4","answer":"link","orders":["R10616"],"knowable":true,"why":"label right: adds a day to the booked job","by":"claude, 2026-10-23"}
+{"message_id":"1a1125a841caf5e4","answer":"link","orders":["R11342"],"knowable":true,"why":"label right: adds to the booked call","by":"claude, 2026-10-23"}
+{"message_id":"1a11563809231f93","answer":"none","knowable":true,"why":"not a job: a marketing newsletter","by":"claude, 2026-10-23"}
+{"message_id":"1a116d058803c380","answer":"new","knowable":true,"why":"label right: a new call at another venue","by":"claude, 2026-10-23"}
+{"message_id":"1a11ff4c9fae8c98","answer":"link","orders":["R11081"],"knowable":true,"why":"adds to the booked Friday call; Thursday is new","by":"claude, 2026-10-23"}
+{"message_id":"1a12100d6b517c3e","answer":"unsure","knowable":false,"why":"ambiguous: PO for 'this' and a new quote request","by":"claude, 2026-10-23"}
+{"message_id":"1a12ff87da3b5276","answer":"new","knowable":true,"why":"label wrong: a new warehouse call","by":"claude, 2026-10-23"}
+{"message_id":"1a130a34df3bd1d4","answer":"link","orders":["R11382"],"knowable":true,"why":"label right: a time change at the named venue","by":"claude, 2026-10-23"}
+{"message_id":"1a135109bb809c79","answer":"new","knowable":true,"why":"label wrong: an availability request for a job abroad","by":"claude, 2026-10-23"}
+{"message_id":"1a15902b228e406e","answer":"link","orders":["R11772"],"knowable":true,"why":"confirms the job quoted the day before","by":"claude, 2026-10-23"}

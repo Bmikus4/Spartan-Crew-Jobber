@@ -4253,5 +4253,416 @@
   "sources": [
    "scripts/install-payload-builder.mjs"
   ]
+ },
+ {
+  "id": "S-0212",
+  "ts": "2026-10-23T03:57:07+00:00",
+  "kind": "measurement",
+  "headline": "Matcher reader fixed, 147 emails adjudicated: score alone 94.3%, 70.5% decided at 0.95 (lower bound 99.05%); 0 rules promotable",
+  "subject": "Quoted HTML and subject R numbers no longer read as the client's new words",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 211,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  },
+  "measured": {
+   "matcher_gold_set": {
+    "dataset": "production read-only snapshot 2026-10-23T01:45:22.758Z: every stored client email from 2026-07-29, OnSinch timeline over the same window",
+    "instrument": "scripts/gold/truth.mts",
+    "denominator": "client emails (not ours, not system mail) since the window start",
+    "emails": 3145,
+    "labelled_strong_medium_or_inherited": 1788,
+    "staff_actions": 14712,
+    "staff_actions_attributed": 8619,
+    "by_label": {
+     "no-order-signal/null": 819,
+     "existing/strong": 509,
+     "existing/medium": 443,
+     "existing/inherited": 383,
+     "new-job/strong": 349,
+     "existing/weak": 306,
+     "existing/adjudicated": 85,
+     "several/weak": 46,
+     "several/strong": 41,
+     "new-job/weak": 39,
+     "several/medium": 33,
+     "new-job/adjudicated": 28,
+     "new-job/inherited": 16,
+     "new-job/medium": 14,
+     "unsure/adjudicated": 14,
+     "not-a-job/adjudicated": 13,
+     "several/adjudicated": 7
+    }
+   },
+   "matcher_candidates": {
+    "dataset": "gold set v1: 3145 client emails 2026-07-29 to 2026-10-23, labels from staff actions (scripts/gold/truth.mts), OnSinch as at each email",
+    "instrument": "scripts/gold/features.mts",
+    "denominator": "labelled emails whose order existed before the email (strong, medium or inherited)",
+    "recall": 1486,
+    "of": 1486,
+    "new_job_order_offered": 0,
+    "candidates_median": 3,
+    "candidates_p90": 11,
+    "candidates_max": 36,
+    "availability": {
+     "reference": 0.982,
+     "person": 0.995,
+     "precedent": 0.911,
+     "company": 1,
+     "time": 0.555,
+     "coverage": 0.25,
+     "size": 0.03,
+     "place": 0.628,
+     "subject": 0.993,
+     "thread": 0.543,
+     "state": 1,
+     "age": 1
+    }
+   },
+   "matcher_score_alone": {
+    "dataset": "gold set v1 firm labels (strong, medium, adjudicated): 1522 emails (1103 link, 419 new job), 5-fold by thread",
+    "instrument": "scripts/gold/weights.mts",
+    "log_loss": 0.1844,
+    "denominator": "firm-labelled emails; a link email is right when the top choice is an order staff acted on for it, a new-job email when it is none of these",
+    "lambda": 0.5,
+    "right": 1435,
+    "of": 1522,
+    "link_right": 1049,
+    "link_of": 1103,
+    "new_right": 386,
+    "new_of": 419,
+    "wrong_links": 53,
+    "coverage": [
+     {
+      "threshold": 0,
+      "coverage": 1,
+      "accuracy": 0.9428,
+      "lower95": 0.93,
+      "wrong_links": 53
+     },
+     {
+      "threshold": 0.5,
+      "coverage": 0.961,
+      "accuracy": 0.9494,
+      "lower95": 0.937,
+      "wrong_links": 44
+     },
+     {
+      "threshold": 0.7,
+      "coverage": 0.88,
+      "accuracy": 0.9776,
+      "lower95": 0.9682,
+      "wrong_links": 22
+     },
+     {
+      "threshold": 0.8,
+      "coverage": 0.833,
+      "accuracy": 0.9858,
+      "lower95": 0.9777,
+      "wrong_links": 15
+     },
+     {
+      "threshold": 0.9,
+      "coverage": 0.775,
+      "accuracy": 0.9898,
+      "lower95": 0.9823,
+      "wrong_links": 10
+     },
+     {
+      "threshold": 0.95,
+      "coverage": 0.705,
+      "accuracy": 0.9963,
+      "lower95": 0.9905,
+      "wrong_links": 4
+     },
+     {
+      "threshold": 0.98,
+      "coverage": 0.597,
+      "accuracy": 0.9989,
+      "lower95": 0.9938,
+      "wrong_links": 1
+     },
+     {
+      "threshold": 0.99,
+      "coverage": 0.514,
+      "accuracy": 1,
+      "lower95": 0.9951,
+      "wrong_links": 0
+     }
+    ]
+   },
+   "matcher_score_alone_without_precedent_thread": {
+    "dataset": "gold set v1 firm labels (strong, medium, adjudicated): 1522 emails (1103 link, 419 new job), 5-fold by thread",
+    "instrument": "scripts/gold/weights.mts --without precedent,thread",
+    "log_loss": 0.2303,
+    "denominator": "firm-labelled emails; a link email is right when the top choice is an order staff acted on for it, a new-job email when it is none of these",
+    "lambda": 0.1,
+    "right": 1395,
+    "of": 1522,
+    "link_right": 1025,
+    "link_of": 1103,
+    "new_right": 370,
+    "new_of": 419,
+    "wrong_links": 82,
+    "coverage": [
+     {
+      "threshold": 0,
+      "coverage": 1,
+      "accuracy": 0.9166,
+      "lower95": 0.9016,
+      "wrong_links": 82
+     },
+     {
+      "threshold": 0.5,
+      "coverage": 0.955,
+      "accuracy": 0.9319,
+      "lower95": 0.9178,
+      "wrong_links": 58
+     },
+     {
+      "threshold": 0.7,
+      "coverage": 0.863,
+      "accuracy": 0.9688,
+      "lower95": 0.9579,
+      "wrong_links": 21
+     },
+     {
+      "threshold": 0.8,
+      "coverage": 0.815,
+      "accuracy": 0.9766,
+      "lower95": 0.9666,
+      "wrong_links": 15
+     },
+     {
+      "threshold": 0.9,
+      "coverage": 0.754,
+      "accuracy": 0.9869,
+      "lower95": 0.9786,
+      "wrong_links": 10
+     },
+     {
+      "threshold": 0.95,
+      "coverage": 0.691,
+      "accuracy": 0.9943,
+      "lower95": 0.9876,
+      "wrong_links": 4
+     },
+     {
+      "threshold": 0.98,
+      "coverage": 0.595,
+      "accuracy": 0.9956,
+      "lower95": 0.9887,
+      "wrong_links": 3
+     },
+     {
+      "threshold": 0.99,
+      "coverage": 0.529,
+      "accuracy": 0.9988,
+      "lower95": 0.993,
+      "wrong_links": 1
+     }
+    ]
+   },
+   "matcher_score_alone_with_pairs": {
+    "dataset": "gold set v1 firm labels (strong, medium, adjudicated): 1522 emails (1103 link, 419 new job), 5-fold by thread",
+    "instrument": "scripts/gold/weights.mts --keys pairs",
+    "log_loss": 0.1718,
+    "denominator": "firm-labelled emails; a link email is right when the top choice is an order staff acted on for it, a new-job email when it is none of these",
+    "lambda": 2,
+    "right": 1443,
+    "of": 1522,
+    "link_right": 1057,
+    "link_of": 1103,
+    "new_right": 386,
+    "new_of": 419,
+    "wrong_links": 49,
+    "coverage": [
+     {
+      "threshold": 0,
+      "coverage": 1,
+      "accuracy": 0.9481,
+      "lower95": 0.9358,
+      "wrong_links": 49
+     },
+     {
+      "threshold": 0.5,
+      "coverage": 0.968,
+      "accuracy": 0.9532,
+      "lower95": 0.9412,
+      "wrong_links": 44
+     },
+     {
+      "threshold": 0.7,
+      "coverage": 0.896,
+      "accuracy": 0.9743,
+      "lower95": 0.9645,
+      "wrong_links": 22
+     },
+     {
+      "threshold": 0.8,
+      "coverage": 0.85,
+      "accuracy": 0.983,
+      "lower95": 0.9744,
+      "wrong_links": 16
+     },
+     {
+      "threshold": 0.9,
+      "coverage": 0.797,
+      "accuracy": 0.9909,
+      "lower95": 0.9838,
+      "wrong_links": 10
+     },
+     {
+      "threshold": 0.95,
+      "coverage": 0.75,
+      "accuracy": 0.9956,
+      "lower95": 0.9898,
+      "wrong_links": 4
+     },
+     {
+      "threshold": 0.98,
+      "coverage": 0.648,
+      "accuracy": 0.999,
+      "lower95": 0.9943,
+      "wrong_links": 1
+     },
+     {
+      "threshold": 0.99,
+      "coverage": 0.54,
+      "accuracy": 0.9988,
+      "lower95": 0.9931,
+      "wrong_links": 1
+     }
+    ]
+   },
+   "matcher_rank_trees": {
+    "dataset": "gold set v1 firm labels: 1522 emails, 9485 options, 5-fold by thread",
+    "instrument": "scripts/gold/trees.py (sklearn HistGradientBoosting, scores normalised per email)",
+    "denominator": "as matcher_score_alone",
+    "runs": [
+     {
+      "learning_rate": 0.05,
+      "iters": 300,
+      "min_leaf": 20,
+      "log_loss": 0.2741,
+      "right": 1413,
+      "of": 1522,
+      "wrong_links": 73,
+      "coverage": [
+       {
+        "threshold": 0.9,
+        "coverage": 0.595,
+        "accuracy": 0.9834,
+        "lower95": 0.9728,
+        "wrong_links": 13
+       },
+       {
+        "threshold": 0.95,
+        "coverage": 0.377,
+        "accuracy": 0.9895,
+        "lower95": 0.9774,
+        "wrong_links": 5
+       },
+       {
+        "threshold": 0.99,
+        "coverage": 0.172,
+        "accuracy": 1,
+        "lower95": 0.9855,
+        "wrong_links": 0
+       }
+      ]
+     },
+     {
+      "learning_rate": 0.05,
+      "iters": 600,
+      "min_leaf": 20,
+      "log_loss": 0.2798,
+      "right": 1413,
+      "of": 1522,
+      "wrong_links": 73,
+      "coverage": [
+       {
+        "threshold": 0.9,
+        "coverage": 0.612,
+        "accuracy": 0.9807,
+        "lower95": 0.9697,
+        "wrong_links": 14
+       },
+       {
+        "threshold": 0.95,
+        "coverage": 0.451,
+        "accuracy": 0.9854,
+        "lower95": 0.9734,
+        "wrong_links": 7
+       },
+       {
+        "threshold": 0.99,
+        "coverage": 0.2,
+        "accuracy": 0.9934,
+        "lower95": 0.9764,
+        "wrong_links": 1
+       }
+      ]
+     },
+     {
+      "learning_rate": 0.03,
+      "iters": 600,
+      "min_leaf": 40,
+      "log_loss": 0.2752,
+      "right": 1419,
+      "of": 1522,
+      "wrong_links": 72,
+      "coverage": [
+       {
+        "threshold": 0.9,
+        "coverage": 0.586,
+        "accuracy": 0.9832,
+        "lower95": 0.9724,
+        "wrong_links": 12
+       },
+       {
+        "threshold": 0.95,
+        "coverage": 0.409,
+        "accuracy": 0.9888,
+        "lower95": 0.977,
+        "wrong_links": 6
+       },
+       {
+        "threshold": 0.99,
+        "coverage": 0.181,
+        "accuracy": 1,
+        "lower95": 0.9862,
+        "wrong_links": 0
+       }
+      ]
+     }
+    ]
+   },
+   "matcher_rule_search": {
+    "dataset": "gold set v1 firm labels incl. 147 adjudicated: 1522 emails, 7963 candidate rows",
+    "instrument": "scripts/gold/rules.mts",
+    "denominator": "candidate rows showing the rule's conditions; right = a gold order of the email",
+    "promote_bar": "300 cases, 0 wrong",
+    "promotable": 0,
+    "best": [],
+    "obvious": {
+     "reference=R or J in the newest words": "17 right, 2 wrong",
+     "reference=R or J in the newest words [only one]": "11 right, 0 wrong",
+     "reference=PO in the newest words [only one]": "106 right, 16 wrong",
+     "reference=R or J in the subject [only one]": "148 right, 1 wrong",
+     "person=sender is the contact [only one]": "216 right, 101 wrong",
+     "thread=linked": "12 right, 0 wrong",
+     "thread=an earlier email here was about it [only one]": "724 right, 22 wrong",
+     "the only candidate": "217 right, 62 wrong"
+    }
+   }
+  },
+  "sources": [
+   "scripts/gold/weights.mts",
+   "scripts/gold/rules.mts",
+   "data/gold/adjudications.jsonl"
+  ]
  }
 ]

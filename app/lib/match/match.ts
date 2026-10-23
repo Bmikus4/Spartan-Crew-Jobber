@@ -240,12 +240,14 @@ export function match(input: MatchInput, ix: MatchIndex, asAt: (o: any) => any =
     // reference
     let reference: string | null = null;
     if (newestRef.r.has(number) || jobs.some((j) => newestRef.j.has(j))) reference = "R or J in the newest words";
+    else if (facts.subjectR.includes(number) || jobs.some((j) => facts.subjectJ.includes(j))) reference = "R or J in the subject";
     else if (ourRefs.r.includes(number) || jobs.some((j) => ourRefs.j.includes(j))) reference = "R or J in our reply";
     else if (threadRefs.r.includes(number) || jobs.some((j) => threadRefs.j.includes(j))) reference = "R or J in the thread";
     else if (po.length >= 4 && (newestRef.codes.has(po) || codeKey(reading?.po) === po)) reference = "PO in the newest words";
     else if (po.length >= 4 && threadCodes.has(po)) reference = "PO in the thread";
     else if (nameCodes.some((c) => threadCodes.has(c))) reference = "reference in the order name";
     else if (facts.r.length || facts.j.length) reference = "names another order";
+    else if (facts.subjectR.length || facts.subjectJ.length) reference = "subject names another order";
     else if (anyRefs) reference = "none";
 
     // person

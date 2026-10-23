@@ -16,7 +16,7 @@
 //
 //   npx tsx scripts/gold/truth.mts [--dir .tmp-data/gold] [--out .tmp-data/gold/truth.jsonl]
 // ============================================================================
-import { readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { companiesOf } from "../../app/lib/v2/threadState";
 import { factsOf } from "../../app/lib/match/facts";
 
@@ -223,6 +223,25 @@ for (const e of emails.filter((x) => !x.readTogether)) {
     link_now: (linkNow.get(e.thread) ?? []).filter((l) => l.state === "linked" || l.state === "relinked").map((l) => Number(l.order_id)),
   });
 }
+// Adjudications (data/gold/adjudications.jsonl) replace the label they were judged against, before
+// inheritance, so a corrected email also corrects the later ones that inherit from it. A judgement
+// read case by case outranks every signal counted above; "unsure" marks an email no one could
+// settle from its own words, and fitting and scoring leave it out.
+const ADJ = "data/gold/adjudications.jsonl";
+let adjudicated = 0;
+if (existsSync(ADJ)) {
+  const adj = new Map(readFileSync(ADJ, "utf8").trim().split(/\r?\n/).filter(Boolean).map((l) => { const a = JSON.parse(l); return [a.message_id, a]; }));
+  for (const r of rows) {
+    const a = adj.get(r.message_id);
+    if (!a) continue;
+    adjudicated++;
+    const os = ((a.orders ?? []) as string[]).map((n) => byNumber.get(String(n).replace(/^R/, ""))).filter((o): o is O => !!o);
+    const kind = a.answer === "link" ? (os.length > 1 ? "several" : "existing") : a.answer === "new" ? "new-job" : a.answer === "none" ? "not-a-job" : "unsure";
+    const cands = os.length ? os.map((o) => ({ id: o.id, r: `R${o.number}`, new: o.created > Date.parse(r.at), sig: ["adjudicated"], strong: 0, n: 1 }))
+      : a.answer === "new" ? r.truth.candidates.filter((c: any) => c.new) : [];
+    r.truth = { kind, confidence: "adjudicated", orders: cands.map((c: any) => c.id), candidates: cands, knowable: a.knowable, why: a.why };
+  }
+}
 const firstBy = new Map<string, any>();
 for (const r of rows) {
   const prev = firstBy.get(r.thread_id);
@@ -236,7 +255,7 @@ writeFileSync(OUT, rows.map((r) => JSON.stringify(r)).join("\n") + "\n");
 
 const count = (f: (r: any) => string) => { const m: Record<string, number> = {}; for (const r of rows) { const k = f(r); m[k] = (m[k] ?? 0) + 1; } return Object.entries(m).sort((a, b) => b[1] - a[1]); };
 console.log(`snapshot ${meta.taken_at}; window from ${meta.from}`);
-console.log(`client emails: ${rows.length}; staff booking actions: ${acts.length}, attributed ${acts.length - unattributed}, unattributed ${unattributed}`);
+console.log(`client emails: ${rows.length}; staff booking actions: ${acts.length}, attributed ${acts.length - unattributed}, unattributed ${unattributed}; adjudicated ${adjudicated}`);
 console.log("label x confidence:", JSON.stringify(count((r) => `${r.truth.kind}/${r.truth.confidence}`)));
 console.log("days from:", JSON.stringify(count((r) => r.days_from)));
 console.log("by month:", JSON.stringify(count((r) => `${r.at.slice(0, 7)} ${r.truth.kind === "no-order-signal" ? "none" : "label"}`).sort()));

@@ -9,10 +9,17 @@ import { latestText, datesIn, timesIn, countsIn, parseDate } from "../v2/interpr
 export type Facts = {
   newest: string;
   subject: string;
-  /** R numbers ("R11549", "order 11549"), without the R. */
+  /** R numbers ("R11549", "order 11549") the client wrote in the newest words, without the R. */
   r: string[];
-  /** J numbers (OnSinch job ids), without the J. */
+  /** J numbers (OnSinch job ids) the client wrote in the newest words, without the J. */
   j: string[];
+  /**
+   * R and J numbers in the subject only. Kept apart: a subject is usually our own quote's ("Price
+   * quote - R10931 ...") carried on every reply, so it names the thread's first job, not
+   * necessarily this email's (Wall to Wall, 10 Sep: R10931 in the subject, R10909 in the words).
+   */
+  subjectR: string[];
+  subjectJ: string[];
   /** PO and job codes: tokens of 4 or more characters holding 3 or more digits, upper-cased. */
   codes: string[];
   /** UK postcodes, "SW1X 7LA". */
@@ -43,13 +50,29 @@ export function refsIn(text: string): Pick<Facts, "r" | "j" | "codes" | "postcod
 }
 
 /**
+ * An HTML body as text, cut at its first quoted part: Apple Mail's <blockquote>, Gmail's
+ * gmail_quote, Outlook's reply block. 131 of 3,514 client bodies are HTML (gold set, 23 Oct) and
+ * line-based quote cutting never sees inside them: Harbour Scenic's quoted R10950 read as new.
+ */
+export function htmlText(body: string): string {
+  if (!/<(html|body|div|br|p|table|span)[\s>/]/i.test(body.slice(0, 4000))) return body;
+  let h = body.replace(/<!--[\s\S]*?-->/g, "").replace(/<(style|script|head|title)[^>]*>[\s\S]*?<\/\1>/gi, "");
+  const cut = h.search(/<blockquote|<div[^>]*class=["']?[^"'>]*\b(gmail_quote|moz-cite-prefix|yahoo_quoted)|<div[^>]*id=["']?(appendonsend|divRplyFwdMsg)/i);
+  if (cut > 0) h = h.slice(0, cut);
+  return h.replace(/<br\s*\/?>/gi, "\n").replace(/<\/(p|div|tr|li|h[1-6])>/gi, "\n").replace(/<[^>]+>/g, "")
+    .replace(/&nbsp;/g, " ").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&#39;|&apos;/g, "'")
+    .replace(/&#(\d+);/g, (_, n) => String.fromCodePoint(Number(n))).replace(/&amp;/g, "&")
+    .replace(/[ \t]+/g, " ").replace(/\n\s*\n+/g, "\n").trim();
+}
+
+/**
  * The client's own newest words. latestText stops at a quote header written on one line; Gmail
  * often breaks "On Tue, 21 Jul 2026 at 15:16, Bookings Spartan Crew <" over two, and the whole
  * quoted email then read as new: its "Tue" and "21 Jul" became days the client asked for (We
  * Are Family, 3 Aug, gold set). The signature after a "--" line and links carry no request.
  */
 export function newestWords(body: unknown): string {
-  const lines = latestText(String(body ?? "")).split("\n");
+  const lines = latestText(htmlText(String(body ?? ""))).split("\n");
   const out: string[] = [];
   for (let i = 0; i < lines.length; i++) {
     const t = lines[i].trim().replace(/^\*+/, "");
@@ -87,10 +110,15 @@ export function factsOf(subject: unknown, body: unknown, sentIso: string): Facts
   const newest = newestWords(body);
   const subj = bareSubject(subject);
   const words = `${subj}\n${newest}`;
+  const inWords = refsIn(newest), head = refsIn(subj);
   return {
     newest,
     subject: subj,
     ...refsIn(words),
+    r: inWords.r,
+    j: inWords.j,
+    subjectR: head.r.filter((x) => !inWords.r.includes(x)),
+    subjectJ: head.j.filter((x) => !inWords.j.includes(x)),
     days: daysIn(words, sentIso),
     times: [...timesIn(newest)].sort(),
     counts: [...countsIn(newest)].sort((a, b) => a - b),

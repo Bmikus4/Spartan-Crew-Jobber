@@ -66,6 +66,10 @@ ok(JSON.stringify(daysIn("crew on 10th please", "2026-08-03T10:00:00Z")) === JSO
 ok(daysIn("build 11th-14th October", "2026-10-01T10:00:00Z").length === 4, "a range in one month gives each day", JSON.stringify(daysIn("build 11th-14th October", "2026-10-01T10:00:00Z")));
 const f = factsOf("Re: PO", "PO number is UKPO26-13426 for R11549 at SW1X 7LA", "2026-10-14T10:00:00Z");
 ok(f.r.includes("11549") && f.codes.includes("UKPO26-13426") && f.postcodes.includes("SW1X 7LA"), "R number, code and postcode read", JSON.stringify({ r: f.r, c: f.codes, p: f.postcodes }));
+const html = newestWords(`<html><body><div dir="ltr">Can we add 2 crew?</div><div class="gmail_quote"><div>On Mon wrote: crew for R10950 on 12th</div></div></body></html>`);
+ok(html === "Can we add 2 crew?", "an HTML body is cut at its quoted part (Harbour Scenic's quoted R10950)", JSON.stringify(html));
+const s = factsOf("Re: Price quote - R10931", "Please book R10909 as well", "2026-09-10T10:00:00Z");
+ok(s.r.join() === "10909" && s.subjectR.join() === "10931", "an R in the subject is kept apart from one in the words (Wall to Wall)", JSON.stringify({ r: s.r, subjectR: s.subjectR }));
 
 console.log(fails ? `\n${fails} FAILED\n` : "\nALL PASS\n");
 process.exit(fails ? 1 : 0);

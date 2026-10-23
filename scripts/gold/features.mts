@@ -76,7 +76,13 @@ function asAtFor(at: number) {
       }
       return x;
     };
-    const job = ([] as any[]).concat(o.Job ?? []).map((j: any) => ({ ...j, SlotTeam: ([] as any[]).concat(j.SlotTeam ?? []).filter((t: any) => !gone.has(`SlotTeam:${t.id}`)).map((t: any) => ({ ...t, cancelled: t.cancelled === true && Date.parse(t.modified) > at ? false : t.cancelled, Slot: ([] as any[]).concat(t.Slot ?? []).filter((s: any) => !gone.has(`Slot:${s.id}`)).map(slot) })) }));
+    // A shift is cancelled as at the email only if every position on it was: cancelling an order
+    // marks its shifts cancelled without moving their modified stamp (TSL R10660: stamped 13:13,
+    // cancelled at 15:29, email 13:33), so the stamp cannot date the shift's own flag.
+    const job = ([] as any[]).concat(o.Job ?? []).map((j: any) => ({ ...j, SlotTeam: ([] as any[]).concat(j.SlotTeam ?? []).filter((t: any) => !gone.has(`SlotTeam:${t.id}`)).map((t: any) => {
+      const slots = ([] as any[]).concat(t.Slot ?? []).filter((s: any) => !gone.has(`Slot:${s.id}`)).map(slot);
+      return { ...t, cancelled: t.cancelled === true && slots.length > 0 && slots.every((s: any) => s.cancelled === true), Slot: slots };
+    }) }));
     // Cancelled (-1) or closed (-2, set once the job is over) after the email: live when it arrived.
     return { ...o, status: [-1, -2].includes(Number(o.status)) && Date.parse(o.modified) > at ? 0 : o.status, Job: job };
   };

@@ -20,6 +20,9 @@ tsconfig.tsbuildinfo
 # could find it, so the study was nearly re-run from scratch for an answer already paid for.
 data/*
 !data/study/
+# The matcher's adjudicated gold labels: judgements read case by case, not regenerable from
+# any snapshot. Message ids, order numbers and a short reason only.
+!data/gold/
 
 # import-ready workflow with secret baked in (never commit)
 n8n/*.local.json
