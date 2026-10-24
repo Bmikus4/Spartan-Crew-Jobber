@@ -4664,5 +4664,27 @@
    "scripts/gold/rules.mts",
    "data/gold/adjudications.jsonl"
   ]
+ },
+ {
+  "id": "S-0213",
+  "ts": "2026-10-24T02:01:32+00:00",
+  "kind": "measurement",
+  "headline": "Suite on PGlite (addendum F7): 7 files stopped writing to production; bodyArchive no longer empties live bodies",
+  "subject": "The test suite runs on in-memory Postgres and can no longer touch production",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 214,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  },
+  "negative_control": {
+   "proven_at": "2026-10-24T01:55:43+00:00",
+   "method": "a test file exiting 1 was added to test/; npm run test:all returned non-zero"
+  },
+  "sources": [
+   "test/all.ts",
+   "test/fixtures/pg.ts"
+  ]
  }
 ]

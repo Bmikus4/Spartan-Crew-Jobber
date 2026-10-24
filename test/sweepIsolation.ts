@@ -44,6 +44,8 @@ const thread = (id: string, n: number) => ({
 });
 
 async function counts() {
+  // On the suite's in-memory database (test/all.ts) nothing has made these yet; only their counts are read.
+  for (const t of ["inbound_raw", "tickets", "conversation_state"]) await sql(`CREATE TABLE IF NOT EXISTS ${t} (id BIGSERIAL PRIMARY KEY)`);
   const [a] = (await sql`SELECT count(*)::int AS n FROM inbound_raw`) as any[];
   const [b] = (await sql`SELECT count(*)::int AS n FROM tickets`) as any[];
   const [c] = (await sql`SELECT count(*)::int AS n FROM conversation_state`) as any[];

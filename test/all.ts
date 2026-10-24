@@ -31,11 +31,20 @@ const files = readdirSync(HERE)
   .filter((f) => f.endsWith(".ts") && !NOT_A_TEST.has(f))
   .sort();
 
+/**
+ * EVERY FILE RUNS AGAINST PGLITE, NEVER THE DATABASE .env.local NAMES (addendum F7, 10-23).
+ * fixtures/pg.ts is loaded before each file and replaces the Neon driver in-process. Until then
+ * seven files wrote tagged rows to production on every gate run, and bodyArchive ran the body
+ * archiver with --apply there: it empties every body past 90 days, not only the test's, and
+ * the test deleted the file holding them.
+ */
+const PRELOAD = join(HERE, "fixtures", "pg.ts");
+
 const failed: string[] = [];
 for (const f of files) {
   console.log(`\n${"=".repeat(70)}\n== ${f}\n${"=".repeat(70)}`);
   // tsx via the local binary, so this works with no global install.
-  const r = spawnSync("npx", ["tsx", join(HERE, f)], { stdio: "inherit", shell: true });
+  const r = spawnSync("npx", ["tsx", "--require", PRELOAD, join(HERE, f)], { stdio: "inherit", shell: true });
   if (r.status !== 0) failed.push(f);
 }
 

@@ -6,18 +6,29 @@
 // headers must survive: the board, the sender ledger and the ops scripts read
 // them, and they are a few dozen bytes against a body's several kilobytes.
 //
-// Run: npx tsx test/bodyArchive.ts
+// THE ARCHIVER EMPTIES EVERY BODY PAST THE WINDOW IN THE DATABASE IT IS GIVEN, not only this
+// test's rows, and this test deletes the file it wrote them to. Until 10-23 it ran on .env.local's
+// DATABASE_URL, production, in every gate run: once the first stored mail (late July) passed 90
+// days, each run would have erased real client emails for good. It runs only on a database
+// named for it, a disposable one (a Neon branch), and in its own process, so the suite's
+// in-memory database (test/all.ts) cannot serve it: there it says it skipped.
+//
+// Run: ARCHIVE_TEST_DATABASE_URL=<a Neon branch, never production> npx tsx test/bodyArchive.ts
 // ============================================================================
 import { neon } from "@neondatabase/serverless";
 import { readFileSync, rmSync, existsSync } from "node:fs";
 import { execFileSync } from "node:child_process";
-import { loadEnv, requireEnv } from "../scripts/_env.mjs";
 // test/all.ts runs files alphabetically, so this one runs before threadMessages.ts and
 // cannot assume the table exists yet.
 import { ensureThreadMessages } from "../app/lib/threadMessagesDb";
 
-loadEnv();
-const sql = neon(requireEnv("DATABASE_URL"));
+const url = (process.env.ARCHIVE_TEST_DATABASE_URL || "").trim();
+if (!url || process.env.DATABASE_URL === "sim://pglite") {
+  console.log("skipped: the archiver runs in its own process on a real database; set ARCHIVE_TEST_DATABASE_URL to a disposable one");
+  process.exit(0);
+}
+process.env.DATABASE_URL = url;
+const sql = neon(url);
 const TAG = `archivetest-${process.pid}`;
 const OUT = `data/archive/${TAG}.jsonl`;
 
