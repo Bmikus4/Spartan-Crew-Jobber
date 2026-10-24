@@ -19,6 +19,7 @@ import { fillTimes, pastShifts } from "./assume";
 import { tradeOf, pickProfession, PROFESSION_NAME, type LiveProfession } from "./professions";
 import { matchCompanyBySender, rNumbersIn, normName } from "../../engine/resolve";
 import { evidenceMatch, wantOf, BOT_USER, type Found } from "../evidence";
+import { coded } from "../reasons";
 import { findOrder as findByEvidence, companiesOf, coveredBy, stampedSince, type ThreadIn, type ThreadMsg, type StateWorld, type Grounded } from "../threadState";
 
 export type World = {
@@ -36,8 +37,9 @@ export type World = {
 
 export type Message = { message_id: string; from: string; subject: string; sentIso: string; text: string };
 
-export type Decision =
-  | { kind: "write"; ops: { source: string; op: Op }[]; why: string[] }
+/** code: stamped when the decision is made (v2/reasons.ts), what the weekly numbers are counted by. */
+export type Decision = (
+  | { kind: "write"; ops: { source: string; op: Op }[]; why: string[]; defaults?: string[] }
   /**
    * reply: what a person must do is WRITE BACK, not touch an order: a quote, a question, or a
    * booking missing a detail only the client can give. The TV shows it as Needs Reply, never
@@ -45,7 +47,7 @@ export type Decision =
    */
   | { kind: "handoff"; reasons: string[]; reply?: boolean; order_id?: number }
   /** found: the orders that already hold what the email asks for; the thread is linked to one. */
-  | { kind: "none"; reason: string; found?: number[] };
+  | { kind: "none"; reason: string; found?: number[] }) & { code?: string };
 
 const handoff = (...reasons: string[]): Decision => ({ kind: "handoff", reasons });
 /** The bot creates an order only when its first day is more than this many days after the email; Settings can change it. */
@@ -416,18 +418,24 @@ export type PlanOpts = {
 export async function plan(msg: Message, i: Interpretation, world0: World, threadOrderId: number | null = null, opts: PlanOpts = {}): Promise<Decision> {
   const world = once(world0);
   const ev = await evidenceOf(msg, i, world, threadOrderId, opts).catch(() => null);
-  return settle(await decide(msg, i, world, threadOrderId, opts, ev), i, ev, !!opts.again);
+  return coded(settle(await decide(msg, i, world, threadOrderId, opts, ev), i, ev, !!opts.again));
 }
 
 /** Each OnSinch read once per email: the finder and the planner ask for the same orders. */
 function once(w: World): World {
   const memo = new Map<string, Promise<any>>();
   const m = <T,>(k: string, f: () => Promise<T>): Promise<T> => { if (!memo.has(k)) memo.set(k, f()); return memo.get(k)! as Promise<T>; };
+  // Every method named, never `...w`: a spread copies own properties only, so a World written as a
+  // class (the harness's FakeWorld) lost placesNamed, orderByNumber and orderById, and from 10-20
+  // to 10-24 every harness case that named a venue or an R number ended "could not plan".
   return {
-    ...w,
     companies: () => m("companies", () => w.companies()),
     companyOrders: (id) => m(`orders:${id}`, () => w.companyOrders(id)),
+    placesNamed: (name) => w.placesNamed(name),
+    orderByNumber: (n) => w.orderByNumber(n),
     ...(w.allPlaces ? { allPlaces: () => m("places", () => w.allPlaces!()) } : {}),
+    ...(w.orderById ? { orderById: (id: number) => w.orderById!(id) } : {}),
+    ...(w.professions ? { professions: () => w.professions!() } : {}),
   };
 }
 

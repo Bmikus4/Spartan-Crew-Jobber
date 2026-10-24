@@ -5,7 +5,7 @@
 //   npx tsx harness/run.ts --mode replay            rescore from recordings ($0)
 //   npx tsx harness/run.ts --mode mutant            control: every date read a day late must write nothing wrong ($0)
 //   npx tsx harness/run.ts --preflight-selftest     prove the preflight aborts on a production credential
-// Options: --set simple|create|update, --n 500 (cases), --seed, --concurrency 6, --model <OpenRouter slug>.
+// Options: --set simple|create|update|context, --n 500 (cases), --seed, --concurrency 6, --model <OpenRouter slug>.
 // Run it WITHOUT --env-file: the preflight refuses a process holding production credentials.
 // Only the model key is read from .env.local, and only in record mode.
 // ============================================================================
@@ -14,7 +14,7 @@ import { preflight, closeNetwork } from "./core/preflight";
 import { Recorder } from "./core/recorder";
 import { renderReport } from "./core/report";
 import type { CaseResult } from "./core/types";
-import { generate, type SpartanCase } from "./adapters/spartan/generate";
+import { generate, generateContext, type SpartanCase } from "./adapters/spartan/generate";
 import { generateCreate, generateUpdate } from "./adapters/spartan/generate-complex";
 import { runCase, oracleExtract, mutantExtract, recordedExtract } from "./adapters/spartan/adapter";
 import { FakeWorld } from "./adapters/spartan/world";
@@ -24,7 +24,7 @@ import { renderReview } from "./adapters/spartan/review";
 const arg = (name: string, dflt?: string) => { const i = process.argv.indexOf(`--${name}`); return i > 0 ? process.argv[i + 1] : dflt; };
 const mode = arg("mode", "oracle") as "oracle" | "mutant" | "record" | "replay";
 const N = Number(arg("n", "500")), SEED = Number(arg("seed", "20261010")), CAP = Number(arg("cap", "0")), CONC = Number(arg("concurrency", "6"));
-const SET = arg("set", "simple") as "simple" | "create" | "update";
+const SET = arg("set", "simple") as "simple" | "create" | "update" | "context";
 const OUT = "harness/runs";
 
 /** One line of .env.local, by name. The file holds production secrets; nothing else is read. */
@@ -51,7 +51,7 @@ async function main() {
     process.env.OPENROUTER_API_KEY = envLine("OPENROUTER_API_KEY");
     if (!(CAP > 0)) throw new Error("record mode needs --cap <USD>: no spend without a ceiling");
   }
-  const cases = SET === "create" ? generateCreate(N, Number(arg("seed", "20261011"))) : SET === "update" ? generateUpdate(N, Number(arg("seed", "20261012"))) : generate(N, SEED);
+  const cases = SET === "create" ? generateCreate(N, Number(arg("seed", "20261011"))) : SET === "update" ? generateUpdate(N, Number(arg("seed", "20261012"))) : SET === "context" ? generateContext(N, Number(arg("seed", "20261024"))) : generate(N, SEED);
   const pf = preflight({
     env: process.env, allowHosts,
     adapterChecks: [

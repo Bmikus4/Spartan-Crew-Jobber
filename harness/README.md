@@ -14,7 +14,7 @@ function live intake calls. Fakes stand in at every boundary.
 | `npx tsx harness/run.ts --mode record --cap 15` | The production model, every call recorded, stops at the cap | model calls |
 | `npx tsx harness/run.ts --mode replay` | Rescore from recordings, e.g. after a parser or planner change | $0 |
 | `npx tsx harness/run.ts --preflight-selftest` | Proves the preflight aborts on a planted production credential | $0 |
-| `npx tsx test/harnessScore.ts` | Each invariant fails when broken; the oracle run is pinned (part of the gate suite) | $0 |
+| `npx tsx test/harnessGate.ts` | Every set with the perfect reader, in the gate suite: every case decided and coded, the mutant writes nothing wrong, the context set needs the client's venues, and no set falls below its floor | $0 |
 
 Options: `--set simple|create|update` (the simple set, or 500 complex creates or updates), `--n 500`, `--seed`, `--concurrency 6`, `--model <OpenRouter slug>`. Outputs go to `runs/<set>-<mode>-*`.
 - **Without `--env-file`:** never run it with one. The preflight refuses any process holding a

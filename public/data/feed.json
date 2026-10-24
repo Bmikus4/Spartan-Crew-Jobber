@@ -4724,5 +4724,23 @@
    "app/lib/v2/bot/run.ts",
    "test/v2WrongBookingPaths.ts"
   ]
+ },
+ {
+  "id": "S-0216",
+  "ts": "2026-10-24T03:11:18+00:00",
+  "kind": "measurement",
+  "headline": "Review addendum Phase 3a (5.1): harness world fixed (simple 227->304, create 0->171, update 114->154 of 500), context forwarded, every decision coded, harnessGate in the suite",
+  "subject": "The harness measures the planner again, in the gate, with the reader's context",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 216,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  },
+  "sources": [
+   "test/harnessGate.ts",
+   "app/lib/v2/reasons.ts"
+  ]
  }
 ]

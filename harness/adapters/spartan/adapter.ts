@@ -33,9 +33,15 @@ export const mutantExtract = (c: SpartanCase): ExtractFn => async () => {
   return { x, meta: { model: "mutant: dates one day late", prompt_id: PROMPT_ID, input_tokens: 0, output_tokens: 0, cost_usd: 0, ms: 0 } };
 };
 
-/** The production model through the recorder: a known request replays, a new one is recorded within the cap. */
-export const recordedExtract = (rec: Recorder<Extracted>): ExtractFn => (sentIso, from, subject, newest) =>
-  rec.call(Recorder.key([interpretModel(), PROMPT_ID, userPrompt(sentIso, from, subject, newest)]), () => extractWithMeta(sentIso, from, subject, newest), (v) => v.meta.cost_usd ?? 0.03);
+/**
+ * The production model through the recorder: a known request replays, a new one is recorded within the cap.
+ * The reader is given the context decideMessage passes (the thread, the client's bookings and venues),
+ * as in production. Until 10-24 it was dropped here, so recorded readings never saw a booking or a
+ * venue id and every pick was the model's guess; the key is the whole prompt, so a reading recorded
+ * without context is not replayed for a case that has some.
+ */
+export const recordedExtract = (rec: Recorder<Extracted>): ExtractFn => (sentIso, from, subject, newest, context = "") =>
+  rec.call(Recorder.key([interpretModel(), PROMPT_ID, userPrompt(sentIso, from, subject, newest, context)]), () => extractWithMeta(sentIso, from, subject, newest, context), (v) => v.meta.cost_usd ?? 0.03);
 
 export async function runCase(c: SpartanCase, extract: ExtractFn): Promise<{ result: CaseResult; out: Outcome; trace: TraceEvent[] }> {
   const trace: TraceEvent[] = [];

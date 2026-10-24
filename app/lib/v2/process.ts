@@ -23,6 +23,7 @@ import { utcToLondon } from "./bot/ops";
 import { noTrace, type Tracer } from "./trace";
 import { automationPausedFlag, v2Writes } from "../paused";
 import { isTestId, isTestSender } from "../testData";
+import { coded } from "./reasons";
 
 /**
  * Whether the bot may create and update orders for real clients now: the Settings master switch
@@ -192,7 +193,7 @@ export async function decideDelivery(newIds: string[], decide: Decide = decideNe
   // Every inbound message ends in a recorded state, filtered mail too: bounces and system
   // mail had no row (10 on 10-09/10), so "was this email handled?" had no answer for them.
   for (const r of rows.filter((r) => !r.is_from_spartan && NOT_CLIENT.test(addr(r.from_address)))) {
-    const decision: Decision = { kind: "none", reason: "not a client's email" };
+    const decision: Decision = coded({ kind: "none", reason: "not a client's email" });
     await sql`
       INSERT INTO v2_decisions (message_id, thread_id, from_address, sent_at, kind, decision, code_version)
       VALUES (${r.message_id}, ${r.thread_id}, ${addr(r.from_address)}, ${r.date_iso}, 'none', ${JSON.stringify(decision)}::jsonb, ${codeVersion()})
@@ -212,7 +213,7 @@ export async function decideDelivery(newIds: string[], decide: Decide = decideNe
     const seen = (await sql`SELECT kind FROM v2_decisions WHERE message_id = ${newest.message_id}`) as any[];
     const done = seen.length ? { message_id: newest.message_id, skipped: `already decided (${seen[0].kind})` } : await decide(newest.message_id, earlier.map((r) => r.message_id));
     for (const r of earlier) {
-      const decision: Decision = { kind: "none", reason: `read together with the later email ${newest.message_id}` };
+      const decision: Decision = coded({ kind: "none", reason: `read together with the later email ${newest.message_id}` });
       await sql`
         INSERT INTO v2_decisions (message_id, thread_id, from_address, sent_at, kind, decision, code_version)
         VALUES (${r.message_id}, ${r.thread_id}, ${addr(r.from_address)}, ${r.date_iso}, 'none', ${JSON.stringify(decision)}::jsonb, ${codeVersion()})
@@ -272,7 +273,7 @@ export async function sweepUndecided(opts: { decide?: Decide; limit?: number } =
     VALUES (${r.message_id}, ${r.thread_id}, ${addr(r.from_address)}, ${r.date_iso}, ${kind}, ${JSON.stringify(decision)}::jsonb, ${codeVersion()})
     ON CONFLICT (message_id) DO NOTHING RETURNING message_id` as Promise<any[]>;
   for (const r of rows.filter((r) => NOT_CLIENT.test(addr(r.from_address)))) {
-    if ((await record(r, "none", { kind: "none", reason: "not a client's email" })).length) rep.filtered.push(r.message_id);
+    if ((await record(r, "none", coded({ kind: "none", reason: "not a client's email" }))).length) rep.filtered.push(r.message_id);
   }
   const byThread = new Map<string, any[]>();
   for (const r of rows.filter((r) => !NOT_CLIENT.test(addr(r.from_address)))) byThread.set(r.thread_id, [...(byThread.get(r.thread_id) ?? []), r]);
@@ -285,16 +286,16 @@ export async function sweepUndecided(opts: { decide?: Decide; limit?: number } =
       AND NOT (kind = 'none' AND decision->>'reason' = 'not a client''s email') LIMIT 1`) as any[]).length > 0;
     const reason = overtaken ? `${NOT_DECIDED}, and a later email on the thread was decided first: read it by hand` : `${NOT_DECIDED}; the system is reading it again`;
     const claimed = new Set<string>();
-    for (const m of list) if ((await record(m, "handoff", { kind: "handoff", reasons: [reason] })).length) claimed.add(m.message_id);
+    for (const m of list) if ((await record(m, "handoff", coded({ kind: "handoff", reasons: [reason] }))).length) claimed.add(m.message_id);
     if (overtaken || !claimed.has(newest.message_id)) { rep.carded.push(...claimed); continue; }
     const earlier = list.slice(0, -1).map((m) => m.message_id).filter((id) => claimed.has(id));
     try {
       await (opts.decide ?? decideNewest)(newest.message_id, earlier);
-      const settled: Decision = { kind: "none", reason: `read together with the later email ${newest.message_id}` };
+      const settled: Decision = coded({ kind: "none", reason: `read together with the later email ${newest.message_id}` });
       if (earlier.length) await sql`UPDATE v2_decisions SET kind = 'none', decision = ${JSON.stringify(settled)}::jsonb WHERE message_id = ANY(${earlier}) AND decision->'reasons'->>0 = ${reason}`;
       rep.decided.push(newest.message_id);
     } catch (e) {
-      const failed: Decision = { kind: "handoff", reasons: [`${NOT_DECIDED}, and reading it again failed (${String((e as Error)?.message ?? e).slice(0, 120)})`] };
+      const failed: Decision = coded({ kind: "handoff", reasons: [`${NOT_DECIDED}, and reading it again failed (${String((e as Error)?.message ?? e).slice(0, 120)})`] });
       await sql`UPDATE v2_decisions SET decision = ${JSON.stringify(failed)}::jsonb WHERE message_id = ANY(${[...claimed]}) AND decision->'reasons'->>0 = ${reason}`.catch(() => {});
       rep.carded.push(...claimed);
     }
@@ -358,7 +359,7 @@ export type DecideDeps = {
 export async function decideMessage(m: MessageIn, deps: DecideDeps): Promise<Recorded> {
   const from = addr(m.from_address);
   if (m.is_from_spartan || NOT_CLIENT.test(from)) {
-    const r: Recorded = { kind: "none", interpretation: null, decision: { kind: "none", reason: "not a client's email" }, executed: null, client: { id: null, name: null } };
+    const r: Recorded = { kind: "none", interpretation: null, decision: coded({ kind: "none", reason: "not a client's email" }), executed: null, client: { id: null, name: null } };
     deps.trace("filter", { client: false });
     await deps.record(r);
     deps.trace("final", { kind: r.kind });
@@ -375,6 +376,8 @@ export async function decideMessage(m: MessageIn, deps: DecideDeps): Promise<Rec
     deps.trace("plan", { error: reason });
     return { kind: "handoff", interpretation: null, decision: { kind: "handoff", reasons: [reason] }, executed: null, client: seen.client };
   });
+  // The plan's own decisions carry their code; a read or a decision that failed is coded here.
+  out.decision = coded(out.decision);
   await deps.record(out);
   const decision = out.decision;
   if (!out.interpretation) { deps.trace("final", { kind: out.kind }); return out; }

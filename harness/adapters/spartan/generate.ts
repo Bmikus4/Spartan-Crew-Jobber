@@ -464,6 +464,34 @@ const TEMPLATES: Template[] = [
 export const TEMPLATE_COUNT = TEMPLATES.reduce((a, t) => a + t.n, 0);
 
 /** The simulated set: `total` cases spread over the templates in proportion, from one seed. */
+/**
+ * CASES ONLY THE READER'S CONTEXT CAN ANSWER (addendum 5.1, 10-24). A venue the client has used
+ * before, written by a name OnSinch does not hold ("Ally Pally" for Alexandra Palace): it is
+ * resolved only through VENUES THIS CLIENT USES, which the recorded reader was never shown
+ * (adapter.ts dropped decideMessage's fifth argument). The first day is past the two-week rule,
+ * so the answer is a create, not a card.
+ */
+const CONTEXT: Template[] = [
+  {
+    name: "a venue the client uses, by its short name", branch: "K1", rules: ["P1.R1"], n: 1, build: (ctx) => {
+      const { r } = ctx;
+      const s = sender(r), place = PLACES.find((p) => p.id === 42)!, date = jobDay(ctx, 18, 40), t = shiftTimes(r), crew = pick(r, [2, 3, 4, 5, 6]);
+      const past = order(ctx, 0, s.c.id, [{ date: addDays(ctx.today, -int(r, 20, 60)), ...shiftTimes(r), crew: 3, place }]);
+      const day = dayWords(date, r), rg = rangeWords(t.start, t.end, r), cw = crewWords(crew, r), nick = "Ally Pally";
+      return {
+        template: "", branch: "", rules: [],
+        input: {
+          message: mail(ctx, s, `Crew at ${nick}`, `Could we please book ${cw} at ${nick} again on ${day}, ${rg.text}?`, false),
+          orders: [past], threadOrderId: null, company_id: s.c.id,
+          oracle: ex("booking", [req({ action: "new_shift", date: g(date, day), start: g(t.start, rg.a), end: g(t.end, rg.b), crew: g(crew, cw), venue: g(nick, nick), venue_id: g(place.id, nick) })]),
+        },
+        expected: write(["booking"], [{ kind: "create_order", company_id: String(s.c.id), company_name: s.c.name, client_email: s.addr, job_name: "", shifts: [{ name: "Crew", date, start: t.start, end: t.end, place_id: String(place.id), place_label: place.name, positions: positionsFor(crew)! }] }]),
+      };
+    },
+  },
+];
+export const generateContext = (total = 40, seed = 20261024): SpartanCase[] => generateFrom(CONTEXT, total, seed, "K");
+
 export function generate(total = 500, seed = 20261010): SpartanCase[] {
   return generateFrom(TEMPLATES, total, seed, "S");
 }
