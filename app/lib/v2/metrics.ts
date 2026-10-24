@@ -16,6 +16,7 @@ import type { TicketStateCounts } from "../ticketsDb";
 import { V2_FROM, liveFeedDeps } from "../feed/live";
 import { project, FEED_FROM } from "../feed/project";
 import { v2Sources } from "../feed/v2";
+import { fullyWritten } from "./score";
 
 export const V2_CUTOVER = V2_FROM;
 
@@ -33,7 +34,7 @@ export function eventsOf(r: Row): MetricEvent[] {
   if (r.kind === "handoff") return [...out, ev("needs_human")];
   const ops: any[] = r.decision?.ops ?? [];
   const runs: any[] = Array.isArray(r.executed) ? r.executed : [];
-  const verified = runs.length === ops.length && runs.length > 0 && runs.every((x) => x?.status === "verified");
+  const verified = fullyWritten(ops, runs);
   if (!runs.length) return [...out, ev("needs_human", { why: "planned, not written" })];
   if (!verified) return [...out, ev("order_error", { statuses: runs.map((x) => x?.status) }), ev("needs_human")];
   if (ops.some((o) => o?.op?.kind === "create_order")) out.push(ev("order_created"));

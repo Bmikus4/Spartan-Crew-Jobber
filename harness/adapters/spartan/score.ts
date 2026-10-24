@@ -4,24 +4,12 @@
 // ============================================================================
 import type { Observation } from "../../core/types";
 import type { Op } from "../../../app/lib/v2/bot/ops";
+import { canon, sameOps } from "../../../app/lib/v2/score";
 import type { Recorded } from "../../../app/lib/v2/process";
 import type { SpartanCase } from "./generate";
 
-/** The fields that change what crew turn up where and when; cosmetic labels are left out. */
-export function essentials(op: Op): Record<string, unknown> {
-  switch (op.kind) {
-    case "create_order": return { kind: op.kind, company_id: op.company_id, client_email: op.client_email, po: op.po ?? null,
-      shifts: op.shifts.map((s) => ({ date: s.date, start: s.start, end: s.end, place_id: s.place_id, positions: s.positions })).sort((a, b) => `${a.date}${a.start}`.localeCompare(`${b.date}${b.start}`)) };
-    case "set_position_times": return { kind: op.kind, order_id: op.order_id, slot_id: op.slot_id, date: op.date, start: op.start, end: op.end };
-    case "set_position_size": return { kind: op.kind, order_id: op.order_id, slot_id: op.slot_id, size: op.size };
-    case "set_po": return { kind: op.kind, order_id: op.order_id, po: op.po };
-    case "cancel_position": return { kind: op.kind, order_id: op.order_id, slot_id: op.slot_id };
-    case "add_shift": return { kind: op.kind, order_id: op.order_id, location_id: op.location_id, date: op.date, start: op.start, end: op.end, positions: op.positions };
-    case "add_position": return { kind: op.kind, order_id: op.order_id, shift_id: op.shift_id, date: op.date, start: op.start, end: op.end, position: op.position };
-  }
-}
-const canon = (ops: Op[]) => ops.map((o) => JSON.stringify(essentials(o))).sort();
-export const sameOps = (a: Op[], b: Op[]) => JSON.stringify(canon(a)) === JSON.stringify(canon(b));
+// What counts as the same operation is app/lib/v2/score.ts's, shared with the weekly scorers.
+export { essentials, sameOps } from "../../../app/lib/v2/score";
 
 const ALLOWED = new Set(["create_order", "set_position_size", "set_position_times", "set_po", "cancel_position", "add_shift", "add_position"]);
 const FORBIDDEN_KEY = /price|wage|rate|pricelist|publish|confirm|approve/i;

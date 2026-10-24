@@ -9,7 +9,10 @@
 // pays only for what changed; spend is appended to .tmp-v2/spend.json.
 // A failure is any email where ops created or updated an order and the system would not have,
 // or where the system would write and ops did nothing. The bar is 1 in 100 (Ben, 10-13).
-import { neon } from "@neondatabase/serverless";
+import { readOnlySql, proveReadOnly } from "./_readonly.mts";
+import { judge, truthKeys } from "../app/lib/v2/score";
+import { linkedOrderId } from "../app/lib/v2/threadOrder";
+import { assumeLinksTable } from "../app/lib/v2/links";
 import { appendFileSync, existsSync, readFileSync, writeFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { ground } from "../app/lib/v2/interpret/interpret";
@@ -24,7 +27,11 @@ const LIMIT = Number(arg("--limit", "0"));
 const PAID = process.argv.includes("--paid");
 const MAX_USD = Number(arg("--max-usd", "5"));
 const acts = JSON.parse(readFileSync(arg("--acts", ".tmp-data/ops-truth-acts.json"), "utf8")) as any[];
-const sql = neon((process.env.DATABASE_URL || "").trim());
+const sql: any = readOnlySql();
+console.log(`database read-only: ${(await proveReadOnly(sql)).slice(0, 80)}`);
+assumeLinksTable();
+const ORDERS = arg("--acts", ".tmp-data/ops-truth-acts.json").replace(/-acts[.]json$/, "-orders.json");
+const orderRec = new Map(((existsSync(ORDERS) ? JSON.parse(readFileSync(ORDERS, "utf8")) : []) as any[]).map((o) => [Number(o.id), o]));
 const live = onsinchWorld();
 const cache = new Map<number, any[]>();
 const orders = async (c: number) => { if (!cache.has(c)) cache.set(c, await live.companyOrders(c)); return cache.get(c)!; };
@@ -80,12 +87,13 @@ for (const [idx, { r, text }] of prep.entries()) {
   try {
     if (got[idx].error) throw new Error(got[idx].error);
     const { x, read } = got[idx];
-    const [b] = (await sql`SELECT onsinch_order_id FROM conversation_state WHERE thread_id = ${r.thread_id}`) as any[];
-    g = ground(x, `${r.subject}\n${text}`, r.date_iso, { subject: r.subject ?? "", prior: priorBy.get(r.thread_id) ?? [], read, linkedOrderId: b?.onsinch_order_id ? Number(b.onsinch_order_id) : null });
+    // The thread's link as production reads it (threadOrder.ts); conversation_state was retired 10-21.
+    const linked = await linkedOrderId(sql, r.thread_id).catch(() => null);
+    g = ground(x, `${r.subject}\n${text}`, r.date_iso, { subject: r.subject ?? "", prior: priorBy.get(r.thread_id) ?? [], read, linkedOrderId: linked });
     priorBy.set(r.thread_id, [...(priorBy.get(r.thread_id) ?? []), ...g.requests]);
-    d = await plan({ message_id: r.message_id, from: r.from_address, subject: r.subject, sentIso: r.date_iso, text }, g, worldAt(r.date_iso), b?.onsinch_order_id ? Number(b.onsinch_order_id) : null);
-  } catch (e) { d = { kind: "handoff", reasons: [`replay threw: ${String((e as Error).message).slice(0, 100)}`] }; }
-  out.push({ id: r.message_id, at: r.date_iso, company_id: Number(r.company_id), company: r.company, subject: r.subject, intent: g.intent, kind: d.kind, reply: !!d.reply, said: d.why ?? d.reasons ?? [d.reason], ops: d.ops?.map((o: any) => o.op) ?? [], staff: [] as any[] });
+    d = await plan({ message_id: r.message_id, from: r.from_address, subject: r.subject, sentIso: r.date_iso, text }, g, worldAt(r.date_iso), linked);
+  } catch (e) { d = { kind: "handoff", code: "system_failed", reasons: [`replay threw: ${String((e as Error).message).slice(0, 100)}`] }; }
+  out.push({ id: r.message_id, at: r.date_iso, company_id: Number(r.company_id), company: r.company, subject: r.subject, intent: g.intent, kind: d.kind, code: d.code, reply: !!d.reply, said: d.why ?? d.reasons ?? [d.reason], ops: d.ops?.map((o: any) => o.op) ?? [], staff: [] as any[] });
 }
 // Each staff action goes to an email: an order's later edits to the latest asking email on the
 // thread that order was created from (or that names it), else to the client's latest asking
@@ -102,30 +110,27 @@ for (const a of acts.filter((a) => a.by !== 2257).sort((x, y) => Date.parse(x.at
   e.staff.push(a);
   if (a.what === "create order" && !orderThread.has(a.order_id)) orderThread.set(a.order_id, threadOf.get(e.id)!);
 }
+// BY VALUE (addendum 5.1, 10-24): until then a "create" passed when any order was planned and an
+// "update" when any operation touched an order staff touched. Each staff action is now the
+// operation that would have done it (app/lib/v2/score.ts), and the plan must hold exactly those.
+// A replay reads OnSinch as it is NOW, after staff made the change: a plan that finds it already
+// made ("already booked", "already as asked") aimed at the right order but cannot be checked by
+// value, and is counted as that, never as right.
 for (const e of out) {
   e.truth = e.staff.some((a: any) => a.what === "create order") ? "create" : e.staff.length ? "update" : "none";
-  const creates = e.ops.some((o: any) => o.kind === "create_order");
-  const writes = e.kind === "write";
-  const touched = new Set(e.staff.map((a: any) => a.order_id));
-  if (e.truth === "none") {
-    // The system's create for a job ops created on a later email of the same client (within
-    // 36h) is the same booking, not a false one.
-    const later = creates && acts.some((a) => a.by !== 2257 && a.what === "create order" && a.company_id === e.company_id && Date.parse(a.at) >= Date.parse(e.at) && Date.parse(a.at) - Date.parse(e.at) <= 36 * 3600e3);
-    // A new order for a request ops then left alone is in To Confirm for ops to decline; a write
-    // to an existing order ops left alone is a change nobody asked for.
-    e.verdict = writes && !later ? (creates ? "CREATED, OPS DID NOT BOOK" : "FALSE WRITE") : "ok";
-  } else if (e.truth === "create") e.verdict = creates ? "ok" : writes ? "wrote, but ops created an order" : "MISSED CREATE";
-  // The replay reads OnSinch as it is NOW, after ops made the change, so a plan that finds the
-  // change already in place on the very order ops touched ("already booked: R11498", "R11224
-  // shift 41613: times to ..." with nothing left to send) aimed right and is counted so.
-  else if (!writes && e.kind === "none" && /already|times to|crew in all|add a shift/.test(e.said.join(" ")) && e.staff.some((a: any) => e.said.join(" ").includes(`R${a.number}`))) e.verdict = "ok";
-  else e.verdict = writes && e.ops.some((o: any) => touched.has(Number(o.order_id))) ? "ok" : writes && creates ? "created, but ops updated an order" : writes ? "wrote another order" : "MISSED UPDATE";
+  const want = truthKeys(e.staff, (id) => orderRec.get(id));
+  const j = judge(e.kind === "write" ? e.ops : [], want);
+  e.extra = j.extra; e.lacking = j.lacking;
+  const later = e.truth === "none" && e.ops.some((o: any) => o.kind === "create_order") && acts.some((a) => a.by !== 2257 && a.what === "create order" && a.company_id === e.company_id && Date.parse(a.at) >= Date.parse(e.at) && Date.parse(a.at) - Date.parse(e.at) <= 36 * 3600e3);
+  e.verdict = e.kind === "none" && /^none_already/.test(e.code ?? "") && e.staff.length ? "unverifiable in replay"
+    : later ? "create, ops created on a later email"
+    : j.verdict === "completed" || j.verdict === "nothing to do" ? "ok" : j.verdict === "missed" && e.kind === "handoff" ? "handed off" : j.verdict;
 }
 // Failures read one by one and found not to be the system's (a staff edit after a "thanks", a
 // change made before the window, OnSinch already changed by ops in the replay) are labelled in
 // .tmp-data/truth-labels.json with the reason; a full request ops chose not to book is right.
 const LABELS = existsSync(".tmp-data/truth-labels.json") ? JSON.parse(readFileSync(".tmp-data/truth-labels.json", "utf8")) : {};
-for (const e of out) { const l = LABELS[e.id]; if (!l || e.verdict === "ok") continue; e.label = l.label; if (l.label === "to_confirm") e.verdict = "ok"; }
+for (const e of out) { const l = LABELS[e.id]; if (!l || e.verdict === "ok") continue; e.label = l.label; }
 const work = out.filter((e) => (e.truth !== "none" || e.kind === "write") && e.label !== "noise");
 const noise = out.filter((e) => e.label === "noise").length;
 const bad = work.filter((e) => e.verdict !== "ok");

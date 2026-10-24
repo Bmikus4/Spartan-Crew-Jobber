@@ -4742,5 +4742,67 @@
    "test/harnessGate.ts",
    "app/lib/v2/reasons.ts"
   ]
+ },
+ {
+  "id": "S-0217",
+  "ts": "2026-10-24T03:25:23+00:00",
+  "kind": "measurement",
+  "headline": "Review addendum Phase 3b (5.1): strict scorer; live week 10-14..10-21: wrong writes 2, coverage 7/108, missed changes 32, lost emails 0",
+  "subject": "Weekly scores judge operations by value and report four numbers apart",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 217,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  },
+  "measured": {
+   "week_review": {
+    "dataset": "live v2_decisions, client emails 2026-10-14T00:00:00.000Z to 2026-10-21T02:00:00.000Z",
+    "emails": 400,
+    "wrong_writes": 2,
+    "completed": 7,
+    "bookable_work": 108,
+    "missed_changes": 32,
+    "lost_emails": 0,
+    "policy_handoffs": 9,
+    "replies": 18,
+    "writes_with_defaults": 2,
+    "cut_short": 0,
+    "write_failed": 17,
+    "verdicts": {
+     "write failed": 17,
+     "nothing to do": 246,
+     "partial: staff did more": 14,
+     "missed change": 32,
+     "handed off": 45,
+     "handed off, staff booked": 37,
+     "wrong write": 2,
+     "completed": 7
+    },
+    "codes": {
+     "none_nothing_to_do": 219,
+     "reply_detail_missing": 12,
+     "reading_unproven": 34,
+     "booking_link_unreadable": 3,
+     "none_not_client": 38,
+     "none_already_booked": 17,
+     "request_unsupported": 6,
+     "venue_not_identified": 1,
+     "reply_unclear": 4,
+     "request_inconsistent": 2,
+     "client_unknown": 6,
+     "other": 3,
+     "none_already_as_asked": 2,
+     "policy_lead_days": 9,
+     "reply_quote": 2,
+     "system_failed": 2
+    }
+   }
+  },
+  "sources": [
+   "scripts/week-review.mts",
+   "app/lib/v2/score.ts"
+  ]
  }
 ]

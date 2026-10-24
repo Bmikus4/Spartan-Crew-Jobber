@@ -26,6 +26,12 @@ export const HOLD_TV_MINUTES = 30;
 const rowsOf = (r: any): any[] => (Array.isArray(r?.data?.data) ? r.data.data : Array.isArray(r?.data) ? r.data : []);
 
 let ready = false;
+/**
+ * For a caller that may only read (scripts/_readonly.mts): the table exists in production, and
+ * Postgres refuses CREATE in a read-only transaction even with IF NOT EXISTS.
+ */
+export function assumeLinksTable(): void { ready = true; }
+
 export async function ensureLinks(sql: Sql): Promise<void> {
   if (ready) return;
   await sql`CREATE TABLE IF NOT EXISTS job_links (
