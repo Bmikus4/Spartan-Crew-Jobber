@@ -4705,5 +4705,24 @@
    "app/lib/feed/v2.ts",
    "test/everyEmailDecided.ts"
   ]
+ },
+ {
+  "id": "S-0215",
+  "ts": "2026-10-24T02:37:49+00:00",
+  "kind": "measurement",
+  "headline": "Review addendum Phase 2 (F22 F23 F28): a length beside an end sets the start, a change's pick needs its day and one more fact, a create reads back its venue",
+  "subject": "Day-alone picks, dropped lengths and unchecked create venues no longer write",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 215,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  },
+  "sources": [
+   "app/lib/v2/interpret/interpret.ts",
+   "app/lib/v2/bot/run.ts",
+   "test/v2WrongBookingPaths.ts"
+  ]
  }
 ]

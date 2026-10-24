@@ -567,7 +567,8 @@ async function decide(msg: Message, i: Interpretation, world: World, threadOrder
       // the client means, so it must be that shift's size or this is another shift.
       const size = shift.slots.reduce((a, s) => a + Number(s.size), 0);
       if (r.crew && r.crew !== size) return (`R${order.number} shift ${shift.id}: the email says ${r.crew} crew, the shift has ${size}`);
-      const start = r.start ?? utcToLondon(first.beginning).time;
+      // A length beside an end sets the start: "six hours ending 18:00" is 12:00 (addendum F22).
+      const start = r.start ?? (r.end && r.duration ? addMinutes(r.end, -r.duration) : utcToLondon(first.beginning).time);
       // "Increase hours to 8 (currently 6)": the client gave a length, not a time. The
       // shift keeps its start and the end moves (Ben, 10-09). A new start alone moves the
       // whole call and keeps its length: "arrive for 17:00 instead of 14:00" on 14:00-17:00

@@ -87,10 +87,12 @@ ok(unexpectedChanges([["data[Slot][end][date]", "1.12.2027"], ["data[Slot][end][
 ok(unexpectedChanges([["data[Slot][end][date]", "1.12.2027"]], [["data[Slot][end][date]", "2.12.2027"]], {}, []).length === 1, "a date that really moved is a change");
 
 console.log("read-back");
-// R11464 (#16515) as the API returned it after the wizard bench, 10-08.
+// R11464 (#16515) as the API returned it after the wizard bench, 10-08. Its venue was not kept
+// here; the read-back asks for SlotLocation, and all 11,971 positions in the 10-23 gold snapshot
+// carry it (the bot's 32 among them), so place 5 is what that read held.
 const r11464 = { company_id: 515, intern_name: "BENCH-2001", Job: [{ SlotTeam: [
-  { Slot: [{ id: 59385, beginning: "2027-12-03T22:00:00+00:00", end: "2027-12-04T02:00:00+00:00", size: 2, profession_id: 1, hidden: true }] },
-  { Slot: [{ id: 59384, beginning: "2027-12-02T07:30:00+00:00", end: "2027-12-02T15:00:00+00:00", size: 3, profession_id: 1, hidden: true }] },
+  { Slot: [{ id: 59385, beginning: "2027-12-03T22:00:00+00:00", end: "2027-12-04T02:00:00+00:00", size: 2, profession_id: 1, hidden: true, SlotLocation: { place_id: 5 } }] },
+  { Slot: [{ id: 59384, beginning: "2027-12-02T07:30:00+00:00", end: "2027-12-02T15:00:00+00:00", size: 3, profession_id: 1, hidden: true, SlotLocation: { place_id: 5 } }] },
 ] }] };
 const create: Extract<Op, { kind: "create_order" }> = { kind: "create_order", company_id: "515", company_name: "TEST - Eventz", client_email: "accounts@spartancrew.co.uk", job_name: "x", po: "BENCH-2001", shifts: [
   { name: "Install", date: "2027-12-02", start: "07:30", end: "15:00", place_id: "5", place_label: "Spartan Crew", positions: [{ size: 3, profession_id: "1" }] },

@@ -129,12 +129,15 @@ function createMismatches(op: Extract<Op, { kind: "create_order" }>, order: any)
   if (teams.length !== op.shifts.length) return [...bad, `${teams.length} shifts, expected ${op.shifts.length}`];
   const want = op.shifts.flatMap((s) => s.positions.map((p) => ({ ...shiftWindow(s.date, s.start, s.end), size: p.size, place: s.place_id, prof: p.profession_id, role: apiRole(p) })));
   const got = slotsOf(order).filter((s) => s.cancelled !== true);
-  const key = (b: string, e: string, size: number, prof: string, role: number) => `${Date.parse(b)}|${Date.parse(e)}|${size}|${prof}|${role}`;
+  // THE VENUE IS PART OF WHAT MUST READ BACK (addendum F28, 10-24): it was asked for and never
+  // compared, so a create at the wrong venue read back as verified. A position with no venue
+  // read back does not match: readOrder asks for SlotLocation, so its absence is not "the same".
+  const key = (b: string, e: string, size: number, prof: string, role: number, place: string) => `${Date.parse(b)}|${Date.parse(e)}|${size}|${prof}|${role}|${place}`;
   const have = new Map<string, number>();
-  for (const s of got) { const k = key(s.beginning, s.end, Number(s.size), String(s.profession_id), Number(s.role ?? 0)); have.set(k, (have.get(k) ?? 0) + 1); }
+  for (const s of got) { const k = key(s.beginning, s.end, Number(s.size), String(s.profession_id), Number(s.role ?? 0), String(s.SlotLocation?.place_id ?? "none")); have.set(k, (have.get(k) ?? 0) + 1); }
   for (const w of want) {
-    const k = key(w.beginning, w.end, w.size, w.prof, w.role);
-    if (!have.get(k)) bad.push(`no position ${w.beginning}..${w.end} x${w.size}`); else have.set(k, have.get(k)! - 1);
+    const k = key(w.beginning, w.end, w.size, w.prof, w.role, String(w.place));
+    if (!have.get(k)) bad.push(`no position ${w.beginning}..${w.end} x${w.size} at place ${w.place}`); else have.set(k, have.get(k)! - 1);
   }
   if (got.length !== want.length) bad.push(`${got.length} positions, expected ${want.length}`);
   if (got.some((s) => s.hidden !== true)) bad.push("a position is visible to staff");

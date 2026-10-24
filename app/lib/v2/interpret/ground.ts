@@ -67,11 +67,18 @@ export function parseTime(raw: string): string | null {
 // --- durations -------------------------------------------------------------------
 
 /** "3hr call", "4hrs", "2-hour", "6 hours", "2.5 hrs" -> minutes. */
+/**
+ * A length in hours, in figures or words: "six hours ending 18:00" read as no length at all and the
+ * email was handed off (addendum F22, 10-24). A word needs its own start ("phone hours" is not
+ * one hour); figures do not ("6x2hr" is two hours, Event Concept).
+ */
+const HOURS = /(\d+(?:\.\d+)?|\b(?:one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve))\s*-?\s*(?:hours?|hrs?|h)\b/;
+const hoursIn = (n: string) => (/^\d/.test(n) ? Number(n) : WORDS[n]);
 export function parseDuration(raw: string): number | null {
   // Booking forms put the label first: "Call hours: 4" (EMS, measured 10-09).
-  const m = /(\d+(?:\.\d+)?)\s*-?\s*(?:hours?|hrs?|h)\b/.exec(norm(raw)) ?? /\b(?:call\s+)?(?:hours|hrs)\s*[:\-]\s*(\d+(?:\.\d+)?)\b/.exec(norm(raw));
+  const m = HOURS.exec(norm(raw)) ?? /\b(?:call\s+)?(?:hours|hrs)\s*[:\-]\s*(\d+(?:\.\d+)?)\b/.exec(norm(raw));
   if (!m) return null;
-  const mins = Math.round(Number(m[1]) * 60);
+  const mins = Math.round(hoursIn(m[1]) * 60);
   return mins > 0 && mins <= 24 * 60 ? mins : null;
 }
 
@@ -345,7 +352,7 @@ export function durationsIn(raw: string): Set<number> {
   const out = new Set<number>();
   const one = parseDuration(raw);
   if (one) out.add(one);
-  for (const m of q.matchAll(/(\d+(?:\.\d+)?)\s*-?\s*(?:hours?|hrs?|h)\b/g)) { const n = Math.round(Number(m[1]) * 60); if (n > 0 && n <= 1440) out.add(n); }
+  for (const m of q.matchAll(new RegExp(HOURS.source, "g"))) { const n = Math.round(hoursIn(m[1]) * 60); if (n > 0 && n <= 1440) out.add(n); }
   // A range is a length too: "3:30pm - 4:30pm" is an hour, "0600 - 1000" four (10-12/13).
   const ts = [...timesIn(raw)];
   if (ts.length === 2) { const [a, b] = ts.map((x) => Number(x.slice(0, 2)) * 60 + Number(x.slice(3))); const d = (b - a + 1440) % 1440; if (d > 0) out.add(d); }

@@ -5,7 +5,31 @@
 // ============================================================================
 import type { Extraction, Grounded, RawRequest } from "./extract";
 import { addMinutes, amountIn, countsIn, datesIn, durationsIn, londonDay, norm, oneIn, parseCount, parseDate, parseDuration, parseNewDate, parseTime, poAfterLabel, quoteIn, subjectDate, timesIn } from "./ground";
-import { quotable, type ReadContext } from "./context";
+import { quotable, type Booking, type BookingShift, type ReadContext } from "./context";
+
+/** What the client's own words say about which booked shift is meant. */
+type PickWords = { days: Set<string>; starts: Set<string>; crew?: number; venueIn: (venue: string) => boolean };
+const sizeOf = (positions: string) => positions.split("+").reduce((a, p) => a + (Number(/\d+/.exec(p)?.[0]) || 0), 0);
+/** The facts beyond its day the words share with a booked shift (start, venue, crew count), or null when its day is not named. */
+function factsFor(s: BookingShift, w: PickWords): number | null {
+  if (!w.days.has(s.date)) return null;
+  return (w.starts.has(s.start) ? 1 : 0) + (w.venueIn(s.venue) ? 1 : 0) + (w.crew && sizeOf(s.positions) === w.crew ? 1 : 0);
+}
+/**
+ * Whether the reader's pick (a booking, or one of its shifts) is the one the words single out:
+ * its day named, at least one more fact, and no other booked shift that day with as many (the
+ * evidence finder's rule, evidence.ts). "drop": the words name none of its days. Otherwise the
+ * bookings that day, for the card.
+ */
+function pickOnDay(b: Booking, sh: BookingShift | undefined, all: Booking[], w: PickWords): "ok" | "drop" | { day: string; rivals: string[] } {
+  const scored = (sh ? [sh] : b.shifts).map((s) => ({ s, n: factsFor(s, w) })).filter((x): x is { s: BookingShift; n: number } => x.n !== null);
+  if (!scored.length) return "drop";
+  const best = scored.reduce((a, x) => (x.n > a.n ? x : a));
+  const rival = all.some((o) => o.shifts.some((s) => (sh ? s.shift_id !== sh.shift_id : o.order_id !== b.order_id) && (factsFor(s, w) ?? -1) >= best.n));
+  if (best.n >= 1 && !rival) return "ok";
+  const day = best.s.date;
+  return { day, rivals: all.flatMap((o) => o.shifts.filter((s) => s.date === day).map((s) => `${o.order} ${s.start}-${s.end}${s.venue ? ` at ${s.venue}` : ""}`)) };
+}
 
 export type Request = {
   action: RawRequest["action"];
@@ -139,6 +163,9 @@ export function ground(x: Extraction, newest: string, sentIso: string, ctx: Grou
     const endQuoted = !!r.end && typeof r.end === "object" && typeof r.end.quote === "string";
     let end = endQuoted || !(start && dur) ? check(`${tag} end`, r.end, parseTime, endAmong, where) : undefined;
     if (!end && start && dur) end = addMinutes(start, dur);
+    // "Six hours ending 18:00" starts at 12:00 (addendum F22, 10-24). The length was dropped once
+    // an end was written, so a new shift took the assumed 08:00 start and a change kept the old one.
+    if (!start && end && dur) start = addMinutes(end, -dur);
     let crew = check(`${tag} crew`, r.crew, parseCount, countsIn, where);
     // An increase must SAY it is one ("add 2", "2 more"): a bare "2 crew" is a total.
     const add = check(`${tag} crew increase`, r.crew_add, (q) => (/\b(add|extra|more|another|additional|plus)\b/i.test(q) ? amountIn(q) : null), undefined, where);
@@ -175,6 +202,9 @@ export function ground(x: Extraction, newest: string, sentIso: string, ctx: Grou
     if (b) {
       const sh = sid ? b.shifts.find((s) => s.shift_id === sid) : undefined;
       const day = target?.date ?? (r.action !== "new_shift" ? date : undefined);
+      const venueIn = (v: string) => !!v && bare(mine).includes(bare(v).slice(0, 12));
+      const byRef = (k: Booking) => ctx.linkedOrderId === k.order_id || new RegExp(String.raw`\b${k.order.slice(1)}\b`).test(mine);
+      const pickWords: PickWords = { days: new Set([...datesIn(mine, sentIso), ...(day ? [day] : [])]), starts: timesIn(mine), crew, venueIn };
       if (sid && !sh) notes.push(`${tag}: shift ${sid} is not on ${b.order}; the pick is dropped`);
       else if (sh && day && day !== sh.date && !(date && target?.date)) notes.push(`${tag}: ${b.order} shift ${sh.shift_id} is on ${sh.date}, the email says ${day}; the pick is dropped`);
       // A new day on a picked shift is a move only when the client says so: "We need 2 x Crew
@@ -185,12 +215,17 @@ export function ground(x: Extraction, newest: string, sentIso: string, ctx: Grou
       // being about that order. "Please can I extend the below booking to 4x4hr at 18:00" (Event
       // Concept 10-12) named a booking pasted as an image; the reader guessed R11195 and the
       // change would have gone on the wrong job. Code and model must agree (Ben, 10-03).
-      else if (!(ctx.linkedOrderId === b.order_id
-        || new RegExp(String.raw`\b${b.order.slice(1)}\b`).test(mine)
-        || (sh && ((day && day === sh.date) || datesIn(mine, sentIso).has(sh.date) || timesIn(mine).has(sh.start) || (sh.venue && bare(mine).includes(bare(sh.venue).slice(0, 12)))))
-        || (!sh && b.shifts.some((s) => datesIn(mine, sentIso).has(s.date) || (s.venue && bare(mine).includes(bare(s.venue).slice(0, 12)))))))
+      else if (!(byRef(b) || (r.action === "new_shift" && !sh ? b.shifts.some((s) => datesIn(mine, sentIso).has(s.date) || venueIn(s.venue)) : true)))
         notes.push(`${tag}: nothing in the client's words or the thread's link bears out ${b.order}; the pick is dropped`);
-      else {
+      // A CHANGE'S PICK STANDS ON ITS DAY AND ONE MORE FACT, WITH NO RIVAL AS WELL BORNE OUT
+      // (addendum F23, 10-24). It stood on the day alone, so with two bookings that day the
+      // reader's wrong pick was written to; the finder never takes the day alone (Ben 10-03,
+      // 10-15). A new shift added to a booking edits nothing booked and keeps the rule above.
+      else if (!byRef(b) && !(r.action === "new_shift" && !sh) && pickOnDay(b, sh, bookings, pickWords) !== "ok") {
+        const v = pickOnDay(b, sh, bookings, pickWords);
+        if (v === "drop") notes.push(`${tag}: nothing in the client's words or the thread's link bears out ${b.order}; the pick is dropped`);
+        else if (v !== "ok") problems.push(`${tag}: the email's day, ${v.day}, and nothing more does not single out ${b.order}${sh ? ` shift ${sh.shift_id}` : ""}: that day the client has ${v.rivals.join("; ")}`);
+      } else {
         order_id = b.order_id; order = b.order;
         if (sh) {
           shift_id = sh.shift_id;
@@ -293,7 +328,7 @@ export function ground(x: Extraction, newest: string, sentIso: string, ctx: Grou
       .map((g) => (g && typeof g === "object" && typeof (g as { quote?: unknown }).quote === "string" ? (g as { quote: string }).quote : null))
       .filter((x): x is string => !!x && !!x.trim());
     const history = quotes.length > 0 && !quotes.some((x) => quoteIn(ownWords, x)) && !(call && quoteIn(ownWords, call[0]));
-    return { action, date, start, end, duration: start || end ? undefined : dur, crew, crew_add: add, crew_remove: less, venue, crew_chief: chief, trade, target, order_id, order, shift_id, place_id, ...(history ? { history: true } : {}), problems: own };
+    return { action, date, start, end, duration: dur, crew, crew_add: add, crew_remove: less, venue, crew_chief: chief, trade, target, order_id, order, shift_id, place_id, ...(history ? { history: true } : {}), problems: own };
   });
 
   // "Can I also add 3 people for the load out on Sunday 25th, this would be the same timings"
