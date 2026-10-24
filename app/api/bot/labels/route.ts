@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { neon } from "@neondatabase/serverless";
 import { authorizeMachineCall } from "../../../lib/apiAuth";
+import { automationPausedFlag } from "../../../lib/paused";
 import { serveFeed } from "../../../lib/feed/serve";
 import { liveFeedDeps } from "../../../lib/feed/live";
 import type { FeedCard } from "../../../lib/feed/project";
@@ -22,6 +23,8 @@ const PER_RUN = 150;
  */
 export async function POST(request: Request): Promise<Response> {
   if (!authorizeMachineCall(request).ok) return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
+  // Paused, n8n is told what it is told when the feed cannot be read: change nothing this minute.
+  if (automationPausedFlag()) return NextResponse.json({ ok: false, paused: true, error: "automation paused (SPARTAN_PAUSED=1); no labels change this minute" }, { status: 503 });
   const body = (await request.json().catch(() => ({}))) as { mode?: string; full?: boolean; failed?: unknown };
   const live = body.mode === "live";
   const now = Date.now();

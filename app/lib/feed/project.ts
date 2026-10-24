@@ -248,6 +248,8 @@ export interface FeedSource {
   item: (Omit<FeedItem, "green"> & { order_id: number | null }) | null;
   /** The thread's bound order, for a need remembered after the thread stopped yielding it. */
   order_id: number | null;
+  /** Older needs on the thread that no later email answered (v2.ts rowsOnCard): items on the same card. */
+  also?: FeedSource[];
   r_number: string | null;
   j_number: string | null;
   company_id: number | null;
@@ -403,35 +405,49 @@ export function project(
     if (k) jobActivity.set(k, Math.max(jobActivity.get(k) ?? 0, activityOf(s)));
   }
 
-  for (const s of sources.values()) {
-    if (dismissed.has(s.thread_id)) continue;
-    const days = s.days;
-    if (days.length && days[days.length - 1] < today) continue; // the job is over
+  for (const source of sources.values()) {
+    if (dismissed.has(source.thread_id)) continue;
+    // EVERY NEED THE THREAD STILL HOLDS IS AN ITEM ON ITS CARD (addendum F2, 10-23): the source's
+    // own, and each older need no later email answered (v2.ts rowsOnCard). Each is filtered on its
+    // own below, so our reply clears a Needs Reply and leaves a booking beside it standing.
+    const carried = new Set((source.also ?? []).map((a) => a.item?.item_key));
+    const entries: Array<{ s: FeedSource; it: NonNullable<FeedSource["item"]>; g: FeedItem["green"] }> = [];
+    for (const s of [source, ...(source.also ?? [])]) {
+      const days = s.days;
+      if (days.length && days[days.length - 1] < today) continue; // the job is over
 
-    let it = s.item;
-    /**
-     * A need the TV showed, which the thread no longer yields, resolved without an engine
-     * write. So does one whose thread now yields only a write OLDER than the need: that is
-     * the order the need was about, not an answer to it.
-     */
-    const was = lastOpen.get(s.thread_id);
-    if (was && (!it || ((it.kind === "created-check" || it.kind === "updated-check") && it.at < was.at))) {
-      if (!byKey.has(was.item_key)) {
-        // Shown once stored: serveFeed writes this and projects again, so its time is the first sighting.
-        remember.push({ item_key: was.item_key, thread_id: s.thread_id, mark: "resolved", by: null, evidence: { text: s.resolvedText } });
-        continue;
+      let it = s.item;
+      /**
+       * A need the TV showed, which the thread no longer yields, resolved without an engine
+       * write. So does one whose thread now yields only a write OLDER than the need: that is
+       * the order the need was about, not an answer to it.
+       */
+      const was = s === source ? lastOpen.get(s.thread_id) : undefined;
+      if (was && !carried.has(was.item_key) && (!it || ((it.kind === "created-check" || it.kind === "updated-check") && it.at < was.at))) {
+        if (!byKey.has(was.item_key)) {
+          // Shown once stored: serveFeed writes this and projects again, so its time is the first sighting.
+          remember.push({ item_key: was.item_key, thread_id: s.thread_id, mark: "resolved", by: null, evidence: { text: s.resolvedText } });
+          continue;
+        }
+        const kind = was.item_key.split(":")[0] as FeedKind;
+        it = { item_key: was.item_key, kind, status: STATUS_TEXT[kind], at: was.at, order_id: s.order_id };
       }
-      const kind = was.item_key.split(":")[0] as FeedKind;
-      it = { item_key: was.item_key, kind, status: STATUS_TEXT[kind], at: was.at, order_id: s.order_id };
+      if (!it || it.at < from) continue;
+      // A question, a quote or a missing detail is answered by writing back: once an email of
+      // ours is on the thread after it, it is done (a draft is not an email: only sent mail is
+      // in lastOutbound). Our email answers that and nothing else on the card.
+      if (it.kind === "needs-reply" && (lastOutbound.get(s.thread_id) ?? 0) >= it.at) continue;
+      const g = green(it);
+      if (g && now - g.at > DONE_DWELL_MS) continue;
+      if (!g && !days.length && now - it.at > STALE_UNDATED_MS) { counts.older++; continue; }
+      entries.push({ s, it, g });
     }
-    if (!it || it.at < from) continue;
-    // A question, a quote or a missing detail is answered by writing back: once an email of
-    // ours is on the thread after it, it is done (a draft is not an email: only sent mail is
-    // in lastOutbound).
-    if (it.kind === "needs-reply" && (lastOutbound.get(s.thread_id) ?? 0) >= it.at) continue;
-    const g = green(it);
-    if (g && now - g.at > DONE_DWELL_MS) continue;
-    if (!g && !days.length && now - it.at > STALE_UNDATED_MS) { counts.older++; continue; }
+    // An open need leads the card: the source's own when it is one, else the newest carried one.
+    const openNeed = (e: (typeof entries)[number]) => !e.g && (e.it.kind === "needs-created" || e.it.kind === "needs-updated");
+    const lead = entries.find(openNeed) ?? entries.find((e) => !e.g) ?? entries[0];
+    if (!lead) continue;
+    const { s, it, g } = lead;
+    const days = s.days;
 
     if (g) counts.done++;
     else if (it.kind === "needs-created") counts.needs_created++;
@@ -463,8 +479,8 @@ export function project(
       // update the engine never bound read "Order needs updated" in red, against the key.
       colour: item.kind === "needs-reply" ? "neutral" : item.kind === "needs-created" || item.kind === "created-check" ? "red" : "blue",
       lane: g ? "done" : item.kind === "needs-reply" ? "reply" : "need",
-      items: [{ ...item, green: g }],
-      green: !!g,
+      items: [lead, ...entries.filter((e) => e !== lead)].map((e) => { const { order_id: _o, ...rest } = e.it; return { ...rest, green: e.g }; }),
+      green: entries.every((e) => !!e.g),
       at: it.at,
       order_id,
       company_id: s.company_id,
@@ -485,8 +501,8 @@ export function project(
     if (!g) wants.set(s.thread_id, s.want);
     // Needs only: a check's key is its write, and a remembered check would read as resolved
     // on the next refresh, the write being older than the moment it was first seen.
-    if (!g && (it.kind === "needs-created" || it.kind === "needs-updated") && !openKeys.has(it.item_key)) {
-      remember.push({ item_key: it.item_key, thread_id: s.thread_id, mark: "open", by: null, evidence: null });
+    for (const e of entries.filter(openNeed)) {
+      if (!openKeys.has(e.it.item_key)) remember.push({ item_key: e.it.item_key, thread_id: s.thread_id, mark: "open", by: null, evidence: null });
     }
   }
 

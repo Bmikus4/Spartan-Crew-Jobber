@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { authorizeMachineCall } from "../../../lib/apiAuth";
 import { backfillBoardLinks, backfillLinks, sweepLinks } from "../../../lib/v2/links";
-import { retryStopped } from "../../../lib/v2/process";
+import { botWrites, retryStopped, sweepUndecided } from "../../../lib/v2/process";
 import { replanOpen } from "../../../lib/v2/replan";
 import { neon } from "@neondatabase/serverless";
 import { httpTransport } from "../../../lib/engine/onsinch";
@@ -16,8 +16,10 @@ export const dynamic = "force-dynamic";
  * The bridge's minute (Ben, 10-13: "Everything should always be synced every minute"), called by
  * the n8n workflow "Spartan Sync" (scripts/install-sync-workflow.mjs): every order the bot made or
  * changed is followed by its J number, the unlinked are looked for, and writes that stopped
- * before anything was sent are tried again. Every 15 minutes, with the Settings switch on, test
- * data is cleared (lib/testData.ts). It is in the middleware SKIP list under /api/bot, so
+ * before anything was sent are tried again. Every 15 minutes, with the Settings switch and both
+ * write keys on, test data is cleared (lib/testData.ts). SPARTAN_PAUSED=1 stops the retries, the
+ * undecided sweep and the clear; the link sweeps and the re-plan only read OnSinch and keep the
+ * TV true, so they run. It is in the middleware SKIP list under /api/bot, so
  * the machine secret here is its only gate (test/machineRouteAuth.ts).
  */
 export async function POST(request: Request): Promise<Response> {
@@ -28,12 +30,14 @@ export async function POST(request: Request): Promise<Response> {
   const board = await backfillBoardLinks(sql).catch((e) => ({ error: String(e?.message ?? e).slice(0, 160) }));
   const sweep = await sweepLinks(sql).catch((e) => ({ error: String(e?.message ?? e).slice(0, 160) }));
   const retry = await retryStopped().catch((e) => ({ error: String(e?.message ?? e).slice(0, 160) }));
+  // A stored client email with no decision is decided, or becomes a card (process.ts sweepUndecided).
+  const undecided = await sweepUndecided().catch((e) => ({ error: String(e?.message ?? e).slice(0, 160) }));
   // The planner again on every open card, against OnSinch now (Ben approved 10-20): reads only, never a write.
   const replan = await replanOpen(sql).catch((e) => ({ error: String(e?.message ?? e).slice(0, 160) }));
   const t = httpTransport({ baseUrl: process.env.ONSINCH_BASE_URL || "https://spartancrew.onsinch.com/api/v1", apiKey: process.env.ONSINCH_API_KEY || "" }) as unknown as OnsinchCall;
   const testData = await getSettings()
-    .then((s) => maybeSweep(sql, t, !!s.test_data_autoclear))
+    .then(async (s) => maybeSweep(sql, t, !!s.test_data_autoclear, { writes: await botWrites() }))
     .then((r) => (typeof r === "string" ? r : { orders: r.orders.length, companies: r.companies.length, rows: Object.values(r.rows).reduce((a, b) => a + b, 0), refused: r.refused ?? null, failed: r.failed.length }))
     .catch((e) => ({ error: String(e?.message ?? e).slice(0, 160) }));
-  return NextResponse.json({ ok: true, ms: Date.now() - t0, backfilled, board, sweep, retry, replan, testData });
+  return NextResponse.json({ ok: true, ms: Date.now() - t0, backfilled, board, sweep, retry, undecided, replan, testData });
 }

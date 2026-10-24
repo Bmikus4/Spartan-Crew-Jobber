@@ -21,7 +21,7 @@ import { linkedOrderId } from "./threadOrder";
 import { linkFound } from "./links";
 import { noTrace } from "./trace";
 import { getSettings } from "../settingsDb";
-import { cardRow, type V2Row } from "../feed/v2";
+import { rowsOnCard, type V2Row } from "../feed/v2";
 import { V2_FROM } from "../feed/live";
 import { FEED_FROM } from "../feed/project";
 import { utcToLondon } from "./bot/ops";
@@ -80,7 +80,8 @@ export async function replanOpen(sql: Sql, opts: { limit?: number; budgetMs?: nu
     WHERE d.kind IN ('write', 'handoff') AND coalesce(d.code_version, '') <> 'local' AND d.created_at >= ${V2_FROM}`) as any[];
   const byThread = new Map<string, any[]>();
   for (const r of rows) byThread.set(r.thread_id, [...(byThread.get(r.thread_id) ?? []), r]);
-  const cards = [...byThread.values()].map((list) => cardRow(list) as any).filter((r) => open(r, today))
+  // Every need a card holds, not only its lead: an older need staff have since booked turns green too.
+  const cards = [...byThread.values()].flatMap((list) => rowsOnCard(list) as any[]).filter((r) => open(r, today))
     .sort((a, b) => (Date.parse(a.replanned_at ?? "") || 0) - (Date.parse(b.replanned_at ?? "") || 0));
   const rep: ReplanReport = { cards: cards.length, planned: 0, changed: 0, linked: 0, notes: [] };
   const world = opts.world ?? cached(onsinchWorld());

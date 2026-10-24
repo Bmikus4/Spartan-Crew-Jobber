@@ -22,6 +22,7 @@
 // ============================================================================
 import type { NeonQueryFunction } from "@neondatabase/serverless";
 import { readRows } from "./v2/read";
+import { automationPausedFlag } from "./paused";
 
 export const AUTOMATION_USER = 2257;
 /**
@@ -278,9 +279,17 @@ export const SWEEP_MINUTES = 15;
 /** What the sweep leaves for its next pass: long enough for any test or harness run to finish. */
 export const SWEEP_GRACE_MINUTES = 30;
 
-/** The quarter-hourly clear: runs only with the setting on, and only when the last one is 15 minutes old. */
-export async function maybeSweep(sql: Sql, t: OnsinchCall, enabled: boolean, now = Date.now()): Promise<ClearResult | string> {
+/**
+ * The quarter-hourly clear: runs only with the setting on, and only when the last one is 15 minutes old.
+ * IT DELETES IN THE LIVE TENANT, SO IT NEEDS WHAT A WRITE NEEDS (addendum F15, 10-23): both
+ * write keys (`writes`, process.ts botWrites) and no SPARTAN_PAUSED. Until then one Settings
+ * switch drove it, paused or not, and the creator-2257 check was the only fence.
+ */
+export async function maybeSweep(sql: Sql, t: OnsinchCall, enabled: boolean, opts: { now?: number; writes?: boolean } = {}): Promise<ClearResult | string> {
+  const now = opts.now ?? Date.now();
   if (!enabled) return "off";
+  if (automationPausedFlag()) return "paused";
+  if (!opts.writes) return "writes off";
   const last = (await sql`SELECT max(at) AS at FROM test_data_clears WHERE trigger = 'sweep'`.catch(() => [{ at: null }])) as any[];
   if (last[0]?.at && now - new Date(last[0].at).getTime() < SWEEP_MINUTES * 60e3 - 30e3) return "not due";
   try {

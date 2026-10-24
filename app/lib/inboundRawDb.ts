@@ -108,7 +108,9 @@ export async function captureInboundRaw(payload: unknown, source = "n8n"): Promi
     // mail would vanish, which is precisely the case this route's "store it so the contract
     // can be aligned" branch exists to catch. When nothing was extracted, the whole payload
     // is kept verbatim instead. Rare by construction, so it costs nothing in the normal case.
-    const unparsed = extracted.length === 0 && payload != null;
+    // A delivery whose messages did not all store is kept whole too: the ones that failed exist
+    // nowhere else.
+    const unparsed = (extracted.length === 0 || !msgs.ok) && payload != null;
     const rows = (await sql`
       INSERT INTO inbound_raw (dedup_key, source, thread_id, message_id, message_ids, envelope, payload)
       VALUES (${dedup_key}, ${source}, ${thread_id}, ${message_id},
@@ -117,7 +119,9 @@ export async function captureInboundRaw(payload: unknown, source = "n8n"): Promi
               ${unparsed ? JSON.stringify(payload) : null})
       ON CONFLICT (dedup_key) DO NOTHING
       RETURNING id`) as { id: number }[];
-    return { ok: true, captured: rows.length > 0, dedup_key, thread_id, message_id,
+    // ok:false makes intake alarm and decide nothing; what did store is decided by the undecided
+    // sweep (v2/process.ts), which reads a thread's undecided emails together.
+    return { ok: msgs.ok, captured: rows.length > 0, dedup_key, thread_id, message_id,
              messages_stored: msgs.inserted, new_message_ids: msgs.ids };
   } catch (err) {
     console.error("[inbound_raw] capture failed", err);

@@ -43,7 +43,7 @@ void (async () => {
   const t: any = async () => { touched++; return { status: 200, data: [] }; };
   ok((await maybeSweep(sql, t, false)) === "off" && touched === 0, "switched off, the sweep reads and removes nothing");
   const recent: any = Object.assign(() => Promise.resolve([{ at: new Date(Date.now() - 5 * 60e3).toISOString() }]), {});
-  ok((await maybeSweep(recent, t, true)) === "not due", "switched on, a sweep 5 minutes after the last waits");
+  ok((await maybeSweep(recent, t, true, { writes: true })) === "not due", "switched on, a sweep 5 minutes after the last waits");
   ok(coerceSettings({ test_data_autoclear: true }).test_data_autoclear === true && coerceSettings({ test_data_autoclear: "yes" }).test_data_autoclear === undefined, "the switch saves, and only as a boolean");
   console.log(fails ? `\n${fails} FAILED` : "\nall passed");
   process.exit(fails ? 1 : 0);

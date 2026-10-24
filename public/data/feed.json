@@ -4686,5 +4686,24 @@
    "test/all.ts",
    "test/fixtures/pg.ts"
   ]
+ },
+ {
+  "id": "S-0214",
+  "ts": "2026-10-24T02:07:56+00:00",
+  "kind": "measurement",
+  "headline": "Review addendum Phase 1 (F1 F2 F3 F15): undecided emails swept to a decision or card, every open need kept on its card, pause stops sync retries, clears and labels",
+  "subject": "Every stored client email ends in a decision or a card; pause stops the sync",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 214,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  },
+  "sources": [
+   "app/lib/v2/process.ts",
+   "app/lib/feed/v2.ts",
+   "test/everyEmailDecided.ts"
+  ]
  }
 ]

@@ -21,7 +21,8 @@ import { runOp, type RunResult } from "./bot/run";
 import type { Op } from "./bot/ops";
 import { utcToLondon } from "./bot/ops";
 import { noTrace, type Tracer } from "./trace";
-import { v2Writes } from "../paused";
+import { automationPausedFlag, v2Writes } from "../paused";
+import { isTestId, isTestSender } from "../testData";
 
 /**
  * Whether the bot may create and update orders for real clients now: the Settings master switch
@@ -119,7 +120,8 @@ export async function readContext(world: World, companyId: number | null, sentIs
  * "busy" are retried: nothing left the browser. "unknown" may have landed and is never re-sent.
  */
 const TRANSIENT = /bot error before submit|another operation holds the bot|audit log unreadable|Timeout|page raised|order read 5\d\d|net::|ECONNRESET|fetch failed/i;
-export async function retryStopped(): Promise<{ retried: number; results: string[] }> {
+export async function retryStopped(): Promise<{ retried: number; results: string[]; paused?: true }> {
+  if (automationPausedFlag()) return { retried: 0, results: [], paused: true };
   const sql = await db();
   // Only a decision this build made is retried: an older build's plan is not re-run on its
   // authority (10-13: ec938be had planned a Lux Technical shift on 1 October, already past).
@@ -181,7 +183,7 @@ async function clientOf(from: string, world: World): Promise<{ id: number | null
  * person, on the TV. Read apart, "4 crew" then "make it 5" would be acted on twice. Each message is decided once:
  * a re-post buys no second model call.
  */
-export async function decideDelivery(newIds: string[]): Promise<Processed[]> {
+export async function decideDelivery(newIds: string[], decide: Decide = decideNewest): Promise<Processed[]> {
   if (!newIds.length) return [];
   const sql = await db();
   const rows = (await sql`SELECT message_id, thread_id, from_address, date_iso, is_from_spartan FROM thread_messages WHERE message_id = ANY(${newIds}) ORDER BY date_iso, first_seen_at`) as any[];
@@ -204,19 +206,100 @@ export async function decideDelivery(newIds: string[]): Promise<Processed[]> {
   // card (21 such hand-offs, 10-09..10-11). Read together, "4 crew" then "make it 5" is one
   // request for 5, so nothing is acted on twice.
   const earlier = newest ? client.slice(0, -1) : [];
-  for (const r of earlier) {
-    const decision: Decision = { kind: "none", reason: `read together with the later email ${newest.message_id}` };
-    await sql`
-      INSERT INTO v2_decisions (message_id, thread_id, from_address, sent_at, kind, decision, code_version)
-      VALUES (${r.message_id}, ${r.thread_id}, ${addr(r.from_address)}, ${r.date_iso}, 'none', ${JSON.stringify(decision)}::jsonb, ${codeVersion()})
-      ON CONFLICT (message_id) DO NOTHING`;
-    out.push({ message_id: r.message_id, decision });
-  }
+  // THE EARLIER ONES ARE SETTLED ONLY ONCE THE NEWEST IS DECIDED (addendum F1, 10-23). Marked
+  // "read together" first, a throw on the newest left every one of them settled and none decided.
   if (newest) {
     const seen = (await sql`SELECT kind FROM v2_decisions WHERE message_id = ${newest.message_id}`) as any[];
-    out.push(seen.length ? { message_id: newest.message_id, skipped: `already decided (${seen[0].kind})` } : await processMessage(newest.message_id, { execute: await botWrites(), with: earlier.map((r) => r.message_id) }));
+    const done = seen.length ? { message_id: newest.message_id, skipped: `already decided (${seen[0].kind})` } : await decide(newest.message_id, earlier.map((r) => r.message_id));
+    for (const r of earlier) {
+      const decision: Decision = { kind: "none", reason: `read together with the later email ${newest.message_id}` };
+      await sql`
+        INSERT INTO v2_decisions (message_id, thread_id, from_address, sent_at, kind, decision, code_version)
+        VALUES (${r.message_id}, ${r.thread_id}, ${addr(r.from_address)}, ${r.date_iso}, 'none', ${JSON.stringify(decision)}::jsonb, ${codeVersion()})
+        ON CONFLICT (message_id) DO NOTHING`;
+      out.push({ message_id: r.message_id, decision });
+    }
+    out.push(done);
   }
   return out;
+}
+
+/** How the newest of a thread's new emails is decided, the earlier ones read with it. */
+export type Decide = (newest: string, earlier: string[]) => Promise<Processed>;
+const decideNewest: Decide = async (newest, earlier) => processMessage(newest, { execute: await botWrites(), with: earlier });
+
+/** An email intake stored this long ago and never decided is the sweep's; anything younger may still be in intake's hands (maxDuration 300s). */
+export const UNDECIDED_AFTER_MINUTES = 10;
+/** How far back the sweep looks: mail older than this was the paused engine's, or a person's by now. */
+export const UNDECIDED_WITHIN_HOURS = 24;
+/** And how recently it was sent: older mail first stored now is history. */
+export const UNDECIDED_SENT_WITHIN_DAYS = 7;
+const NOT_DECIDED = "this email was not decided when it arrived";
+
+export type SweepReport = { paused?: true; threads: number; decided: string[]; carded: string[]; filtered: string[] };
+
+/**
+ * EVERY STORED CLIENT EMAIL ENDS IN A DECISION OR A CARD (addendum F1, 10-23). Intake decides on
+ * what a delivery stored for the first time, so an email stored by a capture that then failed,
+ * or whose decision threw before it was recorded, was never offered again: nothing read
+ * thread_messages for rows with no v2_decisions row. Run every minute by /api/bot/sync.
+ *
+ * A thread's undecided emails are claimed by recording each as a card first, then decided
+ * together on the newest exactly as intake would. The claim IS the outcome if deciding fails
+ * again, so there is no state in which a crash leaves an email undecided and unseen, and a
+ * second sweep a minute later finds the claim and leaves the thread alone. An email a later
+ * decision on its thread already overtook is never read now: acting on "4 crew" after "make it
+ * 5" was done would undo the newer request, so a person reads it.
+ */
+export async function sweepUndecided(opts: { decide?: Decide; limit?: number } = {}): Promise<SweepReport> {
+  if (automationPausedFlag()) return { paused: true, threads: 0, decided: [], carded: [], filtered: [] };
+  const sql = await db();
+  const rows = ((await sql`
+    SELECT m.message_id, m.thread_id, m.from_address, m.date_iso FROM thread_messages m
+    WHERE NOT m.is_from_spartan
+      AND m.first_seen_at < now() - (${UNDECIDED_AFTER_MINUTES} || ' minutes')::interval
+      AND m.first_seen_at > now() - (${UNDECIDED_WITHIN_HOURS} || ' hours')::interval
+      AND NOT EXISTS (SELECT 1 FROM v2_decisions d WHERE d.message_id = m.message_id)
+    ORDER BY m.date_iso, m.first_seen_at`) as any[])
+    // Test mail is the test-data sweep's (testData.ts), never a model call. So is history: an email
+    // sent weeks ago and stored only now came from a backfill (scripts/backfill-thread-messages.mjs
+    // decomposes old payloads), not from a delivery whose decision was lost.
+    .filter((r) => !isTestSender(addr(r.from_address)) && !isTestId(r.message_id) && !isTestId(r.thread_id))
+    .filter((r) => !(Date.parse(r.date_iso) < Date.now() - UNDECIDED_SENT_WITHIN_DAYS * 86_400_000));
+  const rep: SweepReport = { threads: 0, decided: [], carded: [], filtered: [] };
+  const record = (r: any, kind: "none" | "handoff", decision: Decision) => sql`
+    INSERT INTO v2_decisions (message_id, thread_id, from_address, sent_at, kind, decision, code_version)
+    VALUES (${r.message_id}, ${r.thread_id}, ${addr(r.from_address)}, ${r.date_iso}, ${kind}, ${JSON.stringify(decision)}::jsonb, ${codeVersion()})
+    ON CONFLICT (message_id) DO NOTHING RETURNING message_id` as Promise<any[]>;
+  for (const r of rows.filter((r) => NOT_CLIENT.test(addr(r.from_address)))) {
+    if ((await record(r, "none", { kind: "none", reason: "not a client's email" })).length) rep.filtered.push(r.message_id);
+  }
+  const byThread = new Map<string, any[]>();
+  for (const r of rows.filter((r) => !NOT_CLIENT.test(addr(r.from_address)))) byThread.set(r.thread_id, [...(byThread.get(r.thread_id) ?? []), r]);
+  // Two threads a minute: one decision can wait two minutes for the bot (runWhenFree), and the
+  // minute sync has 300 seconds for this, the retries and the re-plan together.
+  for (const list of [...byThread.values()].slice(0, opts.limit ?? 2)) {
+    rep.threads++;
+    const newest = list[list.length - 1];
+    const overtaken = ((await sql`SELECT 1 FROM v2_decisions WHERE thread_id = ${newest.thread_id} AND sent_at > ${newest.date_iso}
+      AND NOT (kind = 'none' AND decision->>'reason' = 'not a client''s email') LIMIT 1`) as any[]).length > 0;
+    const reason = overtaken ? `${NOT_DECIDED}, and a later email on the thread was decided first: read it by hand` : `${NOT_DECIDED}; the system is reading it again`;
+    const claimed = new Set<string>();
+    for (const m of list) if ((await record(m, "handoff", { kind: "handoff", reasons: [reason] })).length) claimed.add(m.message_id);
+    if (overtaken || !claimed.has(newest.message_id)) { rep.carded.push(...claimed); continue; }
+    const earlier = list.slice(0, -1).map((m) => m.message_id).filter((id) => claimed.has(id));
+    try {
+      await (opts.decide ?? decideNewest)(newest.message_id, earlier);
+      const settled: Decision = { kind: "none", reason: `read together with the later email ${newest.message_id}` };
+      if (earlier.length) await sql`UPDATE v2_decisions SET kind = 'none', decision = ${JSON.stringify(settled)}::jsonb WHERE message_id = ANY(${earlier}) AND decision->'reasons'->>0 = ${reason}`;
+      rep.decided.push(newest.message_id);
+    } catch (e) {
+      const failed: Decision = { kind: "handoff", reasons: [`${NOT_DECIDED}, and reading it again failed (${String((e as Error)?.message ?? e).slice(0, 120)})`] };
+      await sql`UPDATE v2_decisions SET decision = ${JSON.stringify(failed)}::jsonb WHERE message_id = ANY(${[...claimed]}) AND decision->'reasons'->>0 = ${reason}`.catch(() => {});
+      rep.carded.push(...claimed);
+    }
+  }
+  return rep;
 }
 
 /**
@@ -282,55 +365,19 @@ export async function decideMessage(m: MessageIn, deps: DecideDeps): Promise<Rec
     return r;
   }
   deps.trace("filter", { client: true });
-  let client = await clientOf(from, deps.world);
-  // A sender OnSinch has no contact for, on a thread already linked to an order: that order's
-  // company is the client (the planner applies the same rule).
-  if (!client.id && deps.world.orderById) {
-    const tid = await deps.threadOrderId().catch(() => null);
-    const o = tid ? await deps.world.orderById(tid).catch(() => null) : null;
-    if (o && Number(o.company_id) > 0) {
-      const c = (await deps.world.companies()).find((x) => Number(x.id) === Number(o.company_id));
-      client = { id: Number(o.company_id), name: c ? String(c.name ?? "").trim() || null : null };
-    }
-  }
-  const newest = latestText(String(m.body ?? ""));
-  // What the reader is shown besides the newest message (context.ts says why).
-  const read = await readContext(deps.world, client.id, m.date_iso, deps.thread ? await deps.thread().catch(() => []) : []).catch(() => undefined);
-  // A READ THAT FAILS IS A CARD FOR A PERSON, NEVER A SILENT DROP. n8n passes each message
-  // once, so an email whose model call threw (OpenRouter 402 when the account ran dry, 10-11;
-  // a timeout) had no decision and nothing would ever look at it again.
-  let got: Awaited<ReturnType<DecideDeps["extract"]>>;
-  try {
-    got = await deps.extract(m.date_iso, from, String(m.subject ?? ""), newest, read ? contextText(read) : "");
-  } catch (e) {
-    const reason = `the system could not read this email (${String((e as Error)?.message ?? e).slice(0, 120)})`;
-    const out: Recorded = { kind: "handoff", interpretation: null, decision: { kind: "handoff", reasons: [reason] }, executed: null, client };
-    deps.trace("extract", { error: reason });
-    await deps.record(out);
-    deps.trace("final", { kind: out.kind });
-    return out;
-  }
-  // The model, prompt, tokens and cost of the reading are kept with the decision: until 10-11
-  // they were traced and dropped, so no decision could say which model made it or what it cost.
-  const { x, meta } = got;
-  deps.trace("extract", { ...meta, intent: x.intent, requests: x.requests?.length ?? 0 }, meta.ms);
-  const t1 = Date.now();
-  const prior = deps.prior ? await deps.prior().catch(() => [] as Request[]) : [];
-  const interpretation = ground(x, `${m.subject ?? ""}\n${newest}`, m.date_iso, { subject: String(m.subject ?? ""), prior, read, linkedOrderId: await deps.threadOrderId().catch(() => null) });
-  deps.trace("ground", { problems: interpretation.problems.length + interpretation.requests.reduce((a, q) => a + q.problems.length, 0), notes: interpretation.notes ?? [] }, Date.now() - t1);
-  const t2 = Date.now();
-  const leadDays = deps.leadDays ? await deps.leadDays().catch(() => undefined) : undefined;
-  // A PLAN THAT THROWS IS A CARD FOR A PERSON, like a read that fails: a time London's clock
-  // skips, a window with no length or an OnSinch read that failed would otherwise lose the email.
-  const decision: Decision = await plan({ message_id: m.message_id, from, subject: String(m.subject ?? ""), sentIso: m.date_iso, text: newest }, interpretation, deps.world, await deps.threadOrderId(),
-    { leadDays, now: deps.now?.(), again: deps.again, thread: deps.threadMessages ? await deps.threadMessages().catch(() => undefined) : undefined,
-      // The thread's earlier requests name its days too: SN ExCeL's 17th, 18th, 20th and 21st single out R10522.
-      raw: [...rawRequests(x), ...prior.map((r) => ({ date: r.date ?? r.target?.date, start: r.start, crew: r.crew, place_id: r.place_id, venue: r.venue, target: r.target })),
-        ...(deps.asked ? await deps.asked().catch(() => []) : [])] })
-    .catch((e) => ({ kind: "handoff" as const, reasons: [`the system could not plan this email (${String((e as Error)?.message ?? e).slice(0, 120)})`] }));
-  deps.trace("plan", { kind: decision.kind, ops: decision.kind === "write" ? decision.ops.map((o) => o.op.kind) : [], said: decision.kind === "write" ? decision.why : decision.kind === "handoff" ? decision.reasons : [decision.reason] }, Date.now() - t2);
-  const out: Recorded = { kind: decision.kind, interpretation: { extraction: x, grounded: interpretation, meta }, decision, executed: null, client };
+  // ANY THROW BEFORE THE DECISION IS RECORDED IS A CARD FOR A PERSON (addendum F1, 10-23). The
+  // read and the plan already were; the thread's order passed to the planner, the company list
+  // read to name a client from that order, and the grounding were not, and a throw in any of
+  // them reached intake with no v2_decisions row, so nothing ever looked at the email again.
+  const seen: { client: Client } = { client: { id: null, name: null } };
+  const out = await understand(m, from, deps, seen).catch((e): Recorded => {
+    const reason = `the system could not decide on this email (${String((e as Error)?.message ?? e).slice(0, 120)})`;
+    deps.trace("plan", { error: reason });
+    return { kind: "handoff", interpretation: null, decision: { kind: "handoff", reasons: [reason] }, executed: null, client: seen.client };
+  });
   await deps.record(out);
+  const decision = out.decision;
+  if (!out.interpretation) { deps.trace("final", { kind: out.kind }); return out; }
   // AN ORDER THE PLANNER FOUND IS THE THREAD'S ORDER. "already booked: R11599" was decided and
   // not kept, so the TV card for that thread showed no R number and the label sync had
   // nothing to say. One order found is linked; several are left for a person.
@@ -357,6 +404,57 @@ export async function decideMessage(m: MessageIn, deps: DecideDeps): Promise<Rec
   }
   deps.trace("final", { kind: out.kind, executed: executed.map((e) => e.status) });
   return out;
+}
+
+/** The reading and the plan for one client email, not yet recorded. */
+async function understand(m: MessageIn, from: string, deps: DecideDeps, seen: { client: Client }): Promise<Recorded> {
+  let client = await clientOf(from, deps.world);
+  seen.client = client;
+  // A sender OnSinch has no contact for, on a thread already linked to an order: that order's
+  // company is the client (the planner applies the same rule).
+  if (!client.id && deps.world.orderById) {
+    const tid = await deps.threadOrderId().catch(() => null);
+    const o = tid ? await deps.world.orderById(tid).catch(() => null) : null;
+    if (o && Number(o.company_id) > 0) {
+      const c = (await deps.world.companies()).find((x) => Number(x.id) === Number(o.company_id));
+      client = { id: Number(o.company_id), name: c ? String(c.name ?? "").trim() || null : null };
+      seen.client = client;
+    }
+  }
+  const newest = latestText(String(m.body ?? ""));
+  // What the reader is shown besides the newest message (context.ts says why).
+  const read = await readContext(deps.world, client.id, m.date_iso, deps.thread ? await deps.thread().catch(() => []) : []).catch(() => undefined);
+  // A READ THAT FAILS IS A CARD FOR A PERSON, NEVER A SILENT DROP. n8n passes each message
+  // once, so an email whose model call threw (OpenRouter 402 when the account ran dry, 10-11;
+  // a timeout) had no decision and nothing would ever look at it again.
+  let got: Awaited<ReturnType<DecideDeps["extract"]>>;
+  try {
+    got = await deps.extract(m.date_iso, from, String(m.subject ?? ""), newest, read ? contextText(read) : "");
+  } catch (e) {
+    const reason = `the system could not read this email (${String((e as Error)?.message ?? e).slice(0, 120)})`;
+    deps.trace("extract", { error: reason });
+    return { kind: "handoff", interpretation: null, decision: { kind: "handoff", reasons: [reason] }, executed: null, client };
+  }
+  // The model, prompt, tokens and cost of the reading are kept with the decision: until 10-11
+  // they were traced and dropped, so no decision could say which model made it or what it cost.
+  const { x, meta } = got;
+  deps.trace("extract", { ...meta, intent: x.intent, requests: x.requests?.length ?? 0 }, meta.ms);
+  const t1 = Date.now();
+  const prior = deps.prior ? await deps.prior().catch(() => [] as Request[]) : [];
+  const interpretation = ground(x, `${m.subject ?? ""}\n${newest}`, m.date_iso, { subject: String(m.subject ?? ""), prior, read, linkedOrderId: await deps.threadOrderId().catch(() => null) });
+  deps.trace("ground", { problems: interpretation.problems.length + interpretation.requests.reduce((a, q) => a + q.problems.length, 0), notes: interpretation.notes ?? [] }, Date.now() - t1);
+  const t2 = Date.now();
+  const leadDays = deps.leadDays ? await deps.leadDays().catch(() => undefined) : undefined;
+  // A PLAN THAT THROWS IS A CARD FOR A PERSON, like a read that fails: a time London's clock
+  // skips, a window with no length or an OnSinch read that failed would otherwise lose the email.
+  const decision: Decision = await plan({ message_id: m.message_id, from, subject: String(m.subject ?? ""), sentIso: m.date_iso, text: newest }, interpretation, deps.world, await deps.threadOrderId(),
+    { leadDays, now: deps.now?.(), again: deps.again, thread: deps.threadMessages ? await deps.threadMessages().catch(() => undefined) : undefined,
+      // The thread's earlier requests name its days too: SN ExCeL's 17th, 18th, 20th and 21st single out R10522.
+      raw: [...rawRequests(x), ...prior.map((r) => ({ date: r.date ?? r.target?.date, start: r.start, crew: r.crew, place_id: r.place_id, venue: r.venue, target: r.target })),
+        ...(deps.asked ? await deps.asked().catch(() => []) : [])] })
+    .catch((e) => ({ kind: "handoff" as const, reasons: [`the system could not plan this email (${String((e as Error)?.message ?? e).slice(0, 120)})`] }));
+  deps.trace("plan", { kind: decision.kind, ops: decision.kind === "write" ? decision.ops.map((o) => o.op.kind) : [], said: decision.kind === "write" ? decision.why : decision.kind === "handoff" ? decision.reasons : [decision.reason] }, Date.now() - t2);
+  return { kind: decision.kind, interpretation: { extraction: x, grounded: interpretation, meta }, decision, executed: null, client };
 }
 
 /** The reader's own values, for finding an order only: a day grounding refused still names it. */

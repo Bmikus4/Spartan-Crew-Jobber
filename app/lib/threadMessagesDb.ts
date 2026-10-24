@@ -270,9 +270,11 @@ export async function storeThreadMessages(payload: unknown):
   if (!msgs.length) return { ok: true, inserted: 0, seen: 0, ids: [] };
   const sql = db();
   if (!sql) return { ok: false, inserted: 0, seen: msgs.length, ids: [] };
+  // Rows go in one at a time, so a failure part way has already stored some: those ids are
+  // returned with ok:false. Reported as none, they were never "new" again and never decided.
+  const ids: string[] = [];
   try {
     await ensure(sql);
-    const ids: string[] = [];
     for (const m of msgs) {
       const rows = (await sql`
         INSERT INTO thread_messages
@@ -291,7 +293,7 @@ export async function storeThreadMessages(payload: unknown):
     return { ok: true, inserted: ids.length, seen: msgs.length, ids };
   } catch (err) {
     console.error("[thread_messages] store failed", err);
-    return { ok: false, inserted: 0, seen: msgs.length, ids: [] };
+    return { ok: false, inserted: ids.length, seen: msgs.length, ids };
   }
 }
 

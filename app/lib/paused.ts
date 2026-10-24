@@ -32,7 +32,17 @@ export function v2Writes(flag: string | undefined = process.env.SPARTAN_WRITES, 
   return v2Engine(engine) && (flag || "").trim().toLowerCase() === "live";
 }
 
+/**
+ * SPARTAN_PAUSED=1, read where the automation acts as well as at the routes above: /api/bot/*
+ * is not among them (middleware skips it to reach each route's own machine gate), so until
+ * 10-23 the minute sync kept retrying writes, clearing test data and handing labels out while
+ * paused (addendum F3). retryStopped, maybeSweep, sweepUndecided and the labels route check it.
+ */
+export function automationPausedFlag(flag: string | undefined = process.env.SPARTAN_PAUSED): boolean {
+  return (flag || "").trim() === "1";
+}
+
 export function automationPaused(pathname: string, flag: string | undefined = process.env.SPARTAN_PAUSED, engine: string | undefined = process.env.SPARTAN_ENGINE): boolean {
-  const shut = (flag || "").trim() === "1" ? AUTOMATION_ROUTES : v2Engine(engine) ? OLD_ENGINE_ROUTES : [];
+  const shut = automationPausedFlag(flag) ? AUTOMATION_ROUTES : v2Engine(engine) ? OLD_ENGINE_ROUTES : [];
   return shut.some((p) => pathname === p || pathname.startsWith(p + "/"));
 }

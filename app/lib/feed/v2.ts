@@ -160,11 +160,53 @@ export function v2Source(row: V2Row, now: number): FeedSource {
   };
 }
 
-/** Each thread's newest decision that needs a person or made a change. */
+/** Each thread's card: its newest decision that needs a person or made a change, carrying every older need still open. */
 export function v2Sources(rows: V2Row[], now: number): FeedSource[] {
   const byThread = new Map<string, V2Row[]>();
   for (const r of rows) byThread.set(r.thread_id, [...(byThread.get(r.thread_id) ?? []), r]);
-  return [...byThread.values()].map((list) => v2Source(cardRow(list), now));
+  return [...byThread.values()].map((list) => {
+    const [lead, ...older] = rowsOnCard(list);
+    const s = v2Source(lead, now);
+    const also = older.map((r) => v2Source(r, now)).filter((o) => o.item?.kind === "needs-created" || o.item?.kind === "needs-updated");
+    return also.length ? { ...s, also } : s;
+  });
+}
+
+/**
+ * THE CARD'S ROW, THEN EVERY OLDER NEED NO LATER EMAIL ANSWERED (addendum F2, 10-23). A card that
+ * was only the thread's newest decision lost an older need to anything after it: "book Tuesday"
+ * handed off, then "what's the rate?" became a Needs Reply the TV does not list, and our answer
+ * to the question cleared the thread with the booking never made. A later decision answers a
+ * need only when it is about one of the need's days or the order it names (openNeedUnder's
+ * rule, for every later decision rather than a newest write); a question answers none. The
+ * re-plan (v2/replan.ts) reads every row returned, so a need staff since booked turns green.
+ */
+export function rowsOnCard<T extends V2Row>(list: T[]): T[] {
+  const lead = cardRow(list);
+  const sorted = [...list].sort((a, b) => Date.parse(a.sent_at) - Date.parse(b.sent_at));
+  const open = sorted.filter((r, i) => r !== lead && needsWork(r) && !sorted.slice(i + 1).some((later) => answers(later, r)));
+  return [lead, ...open.reverse()];
+}
+
+/** The planner's current answer on a row: re-planned, or as decided. */
+const answerOf = (r: V2Row): Decision => r.replan ?? r.decision;
+function needsWork(r: V2Row): boolean {
+  const d = answerOf(r);
+  if (d.kind === "none") return false;
+  const k = classify(r, d).kind;
+  return k === "needs-created" || k === "needs-updated";
+}
+function answers(later: V2Row, need: V2Row): boolean {
+  const d = answerOf(later), n = answerOf(need);
+  if (d.kind === "none" || n.kind === "none" || classify(later, d).kind === "needs-reply") return false;
+  const daysOf = (r: V2Row, x: Decision) => [...(r.grounded?.requests ?? []).map((q) => q.target?.date ?? q.date),
+    ...(x.kind === "write" ? x.ops.flatMap((o) => opDays(o.op)).map((o) => o.date) : [])].filter((v): v is string => !!v);
+  const needDays = daysOf(need, n);
+  const sameDay = daysOf(later, d).some((v) => needDays.includes(v));
+  // The need's subject counts, the later one's does not: every reply on a thread repeats it.
+  const needOrders = rNumbersIn(`${need.subject ?? ""}\n${(n.kind === "write" ? n.why : n.reasons).join("\n")}`);
+  const sameOrder = needOrders.length > 0 && rNumbersIn((d.kind === "write" ? d.why : d.reasons).join("\n")).some((v) => needOrders.includes(v));
+  return sameDay || sameOrder;
 }
 
 /** The decision a thread's card is: its newest, or an older need a newer write left open. v2/replan.ts plans the same row again. */
