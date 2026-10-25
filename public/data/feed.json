@@ -4891,5 +4891,22 @@
   "sources": [
    "eval/live-week-reads.md"
   ]
+ },
+ {
+  "id": "S-0223",
+  "ts": "2026-10-25T22:02:13+00:00",
+  "kind": "decision",
+  "headline": "W4-W11: card anatomy, \u00a710 proposals, owner's audit and 99% plans read, stage gaps filled; awaiting checkpoint",
+  "subject": "Checkpoint A re-presented with every OPERATING Phase 0 requirement closed",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 217,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  },
+  "sources": [
+   "audit/alignment.md"
+  ]
  }
 ]

@@ -1,62 +1,56 @@
-# Alignment statement (Checkpoint A)
+# Alignment statement (Checkpoint A, revised 2026-10-25)
 
-The orchestrator wrote this on 2026-10-25, after Phase 0 and red team A. It rests on `audit/reconstruction.md`. The proposals and the red-team responses are in `audit/checkpoint-A.md`.
+Files: `audit/reconstruction.md` (evidence), `audit/checkpoint-A.md` (proposals, §17, red team), `eval/live-week-reads.md`, `audit/display-proposals.md`, `audit/red-team-A.md`, `audit/spec-compliance.md`, `decisions/`.
 
 ## What the system is for
 
-Clients email Spartan Crew to book crew, change a booking or cancel one. The system reads every client email, works out which client sent it and which of that client's bookings it concerns, and then does one of three things:
-- makes the change in OnSinch;
-- puts it on the TV for a person;
-- records that nothing is needed.
+Clients email to book crew, or to change or cancel a booking. The system finds the client and the booking, then makes the change in OnSinch (new orders wait in To Confirm), puts it on the TV for a person, or records that nothing is needed.
 
 ## What correct means
 
-Every email that asks for something ends with the right thing in OnSinch, done by the system or by a person the TV pointed at it, and the system never writes anything the client did not ask for. In §4's order, worst first:
-1. a real request that nobody acts on;
-2. an item or write that is wrong;
-3. noise;
-4. a flagged decision.
+Every request ends with the right thing in OnSinch, done by the system or by the person the TV pointed to. Nothing is written that the client did not ask for. Worst first: a request nobody acts on; a wrong item; noise; a flagged decision.
 
-## What is actually broken, and why
+## What is broken
 
-1. **Nothing measured so far can show the worst case, or progress toward 99%.**
-   - 227/500 and 114/500 are one harness bit on two generated sets, taken with a perfect reader on a broken fake OnSinch. 71 of the 227 were crashes.
-   - The live scoreboard credits each staff act to the client's latest email within 36 h. 31 of its 32 "missed changes" were emails a reader judges to ask for nothing, though 6 of those 31 have a staff act on a day the email names.
-   - The silent-miss count is measured only on emails staff acted on. A request that neither the system nor staff acted on cannot appear in it: 246 "nothing to do" emails and 45 no-work handoffs of the live week were never read.
-2. **What the system wrote was right too rarely to be used, and staff did not use it.**
-   - On the live week (writes on), 84 inquiries had staff work, and 3 ended completed by the system and stayed completed.
-   - New bookings: 0 lasting completions. Staff rebuilt 14 of the 16 bot creates within about an hour. Only 9 of them were equal to staff's order by day, times and crew, and only 7 by trade as well.
-   - Gmail labels did not change that: all 6 creates made after labels went live (10-16) were rebuilt or deleted.
-3. **The reader and parser hand to staff work the client wrote clearly enough.** 23 of the 67 system misses failed at grounding, and at most 15 of those are parser-side: crew in words, "Duration: N", a day plus a time read as the year, ordinal months, ranges. Another 7 had no client: production resolved 85.9% of the week's senders (82.2% over the snapshot), against 89.1% in a replay of today's rule.
-4. **"Confirm" means three things, and none of them is §3's.**
-   - The TV tick only records who and when.
-   - Creates wait in To Confirm, where staff confirmed 1 of 21 and deleted 11.
-   - Edits go live with no confirm.
-   - The owner's rulings conflict on whether a person must confirm.
-5. **Production misreported its own intake until 10-25.** `intake_paused=true` had been left on from the 10-21 pause, so the TV showed "Intake Paused" and its intake alarm was off. On the owner's word ("the only thing that should be paused are job and order update and creates"), the flag was cleared and the Intake Watchdog switched back on. Creates and updates stay paused.
+Live week, 10-14 to 10-21: all 400 client emails, two blind readers.
 
-**What holds and should be kept:**
-- the deterministic spine: client first, candidate pools with a median of 2, 0 of 92 hand links in disagreement;
-- the write safeguards;
-- shadow production, with writes off and the TV up. Every planned write shows there as a needs-created or needs-updated card, and staff work the inbox: our mailbox answered all 18 of the week's questions, at a median of 0.2 h.
+1. **16 of 90 outstanding requests produced nothing on any screen.** inquiry_recall is 82% (CI 73-90), against a target of 99.5%.
+   - 8 the model read as "nothing to do", and staff then did 4 of them by hand.
+   - 8 were needs-reply items, which no screen shows.
+2. **Writes that ran were right 18 times in 23 (78%).** Staff still rebuilt 11 of the 12 correct creates. A TV card proposes no change, so over all 104 items shown only 17% were correct and complete.
+3. **99 of 122 items ended with a person.** review_rate is 81%, against a target of 5%. The largest causes: unproven readings (34, of which at most 15 are the parser's), and 11 writes blocked by a rule removed on 10-15.
+4. **The TV mostly shows real work: 96 of 104 items.** But 8 of the 81 listed cards are the system's own failures, which staff should never see. Every card looks the same, with no candidates and no evidence.
+5. **Client:** right on 115 of 123. 5 got no client and 3 got the wrong one.
+6. **Measurement:** 227/500 is a harness score on generated mail, and the readers' labels are not yet adjudicated.
 
-There is no known-good version to revert to.
+**What holds:** the client-first design, the write safeguards, shadow production with the TV up, and intake (fixed 10-25). There is no known-good version to revert to.
 
 ## What I propose
 
-1. **No revert.** Add a Gmail-side count to the health check, so that mail which never reached the store is seen. 10-21, the pause day, holds 19 client emails against 54-103 on other weekdays.
-2. **Highest-leverage move: a real-mail eval set that sees every client email, not only those staff acted on.**
-   - For each email: what it asked for, and the right outcome. The labelling is independent of staff timing, done by two readers, with disagreements settled by the owner or Paz.
-   - The 117 + 100 rows bucketed in Phase 0 are the seed. The 291 unread emails of the live week come first, because that is where real silent misses would hide.
-   - It changes no metric's value. What it changes is that inquiry_recall and item_correctness become measurable at all, which every later move needs. §6.5 makes it the first Phase 1 task.
-3. **Then, measured on that set: the parser (at most 15), client resolution (7), and a needs-reply fix.** At present our reply clears a booking the client still wants (`project.ts:439`; 12 of 33 Needs Reply threads in the PDF's p6 #6 were later booked by staff).
-   - Listing bot creates on the TV is **not** proposed. It would reverse the owner's 10-13 rule ("only those cases", the ones the system cannot do, reach the TV).
-   - The labels experiment says visibility was not why staff rebuilt.
+1. **No revert.** Add a Gmail-side count of incoming mail to the health check, and keep writes off.
+2. **The highest-leverage move: finish the real-mail eval set.**
+   - Settle the 37 rows in `eval/reads/adjudicate.csv`, rule on quotes, then read the earlier weeks the same way.
+   - Every later fix is measured on it.
+3. **Then the fixes, largest group of misses first:**
+   - the reader's "nothing to do" on acceptances (8);
+   - needs-reply shown (8; a display change);
+   - the parser (at most 15);
+   - system failures kept off the TV (8);
+   - client resolution (8).
+4. **§10, proposed and not built:**
+   - Every way a card leaves writes a mark, and an open need whose day passes counts as a miss.
+   - A chip on each card says "your decision", "ready, writes paused" or "system problem".
+   - Cards show how their order was found, and up to 3 candidates.
 
-**Decisions I need from the owner:**
-- Who labels, and who settles disagreements?
-- Q1: may the system book directly, and what should "confirm" do?
-- Q3: are crew notified on each edit?
-- Does "client" count as the second fact beside the day?
-- Ask staff, through Paz, why they rebuilt the bot's orders.
-- Q4: the display_precision floor.
+## Decisions I need
+
+1. Is a quote that names a day, times and crew a booking? Ruling yes turns 16 of 90 into 24 of 113.
+2. Who settles the 37 rows: you or Paz?
+3. Q1: your 10-13 and 10-16 words put new orders in To Confirm and updates live. Does that stand? Should the TV tick confirm the To Confirm order?
+4. Q3: does OnSinch notify crew on an edit, a new position, or a time change?
+5. Q4: the display_precision floor. Today it is about 92%.
+6. Does "client" count as the second fact beside the day?
+7. Are §2's placeholders the 10-03 Spartan Audit and the harness plan? Do your 10-03 rulings stand: an AI step on every dedup, and several orders per enquiry?
+8. Should staff be asked, through Paz, why they rebuild correct bot orders?
+
+Q2, Q5 and Q6 are answered in `checkpoint-A.md` §7.

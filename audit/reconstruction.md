@@ -159,6 +159,15 @@ every minute: Gmail labels derived from the same cards
   - A cut below the number of workers is refused (`run.ts:72-84`).
   - Every write is idempotent by message and content (`ops.ts:40`) and is read back.
 
+**Per-stage failure modes and logging for the stages pipeline-trace left open** (S3, S5, S9, S10, S12-S17) are in `audit/pipeline-trace-addendum.md` (stage-gaps d279ecf8; 35 of 353 citations re-opened, all hold). Those that bear on §4 and §15:
+- **No stage from the sender filter onward reports a failure to a person.** `app/lib/v2` and `app/api/bot` make no `reportError` call. The trace sink in production is `noTrace` (process.ts:519). The minute sync answers `ok: true` whatever its parts did (sync/route.ts:29-42).
+- **New silent ends:**
+  - client mail first stored more than 24 h before the undecided sweep reaches it is never decided (process.ts:235, 262);
+  - a passed job day strips the card and its Gmail labels (project.ts:417; threadLabels.ts:67-70);
+  - a `create_order` that made an order but did not verify stays red with nothing to close it (3 of 27 in the snapshot).
+- **Re-deciding a message through `POST /api/bot/process` erases its write record.** That is the route the intake alarm names. `executed` is upserted as jsonb `null`, which `coalesce` keeps (process.ts:514-517). Recorded for Phase 1, not fixed.
+- **Marks are insert-once.** A wrong `order-found` or `resolved` keeps a need green even if it returns (marksDb.ts:62-76).
+
 ## 6.3 History
 
 From `audit/history-and-assumptions.md`:
@@ -180,7 +189,19 @@ From `audit/history-and-assumptions.md`:
   - threads already bound to staff orders;
   - labels derived offline.
 
-  The assumptions that real mail contradicts are that the model is the only node that can miss, and that generated cases stand in for real ones. On unrelabelled real mail, figures run from 2/22 to 81%.
+  The assumptions that real mail contradicts are that the model is the only node that can miss, and that generated cases stand in for real ones. On unrelabelled real mail, end-to-end figures run from 2/22 to 81%. Single-mechanism figures run higher: the link check reached 84% on hand labels (S-0120).
+
+**The three documents the history could not read offline were read on 10-25** (`audit/plans-read.md`, plans-reader 65fcb127; 7 quotes re-opened at their source, all exact).
+- **"The owner's audit" is best fitted by the 10-03 "Spartan Audit".** That audit found 3 live incidents and 9 defects, intake down about 53 h with no alarm, and every engine order since 09-30 deleted by staff.
+- **"The previous 99% plan" is best fitted by the harness plan** (`harness/reports/01-discovery.md` §2.5). It is the only candidate whose 99% was reported met and whose own set later read 227/500, about 45%.
+- **The 10-15 V1 plan says itself "1 in 100 not met (this plan)".** It also found staff rebuilding bot orders identical to their own ("Staff simply did not use the bot's order"), and it named the value checker as the main cause of misses.
+- **The matcher plan counts "Unsure" as a miss.** By that rule, about 70% of its answers are right today.
+- **Two owner rulings of 10-03 are missing from the history's list:**
+  - "every single deduplication should get an AI step, with reinforced deterministic steps";
+  - "split it, (multiple orders CAN be attatched to a single enquiry)".
+
+  Their status in v2 is not yet assessed: v2 plans exactly one order per change (`plan.ts:190-239`).
+- The reader went live on a 22-email check (S-0189). The V1 plan's settled table required 100.
 
 ## 6.4 Metrics
 

@@ -1,6 +1,33 @@
 # Checkpoint A: proposals (OPERATING.md §7 items 4-7) and the red team's hits
 
-This file holds the proposals the owner needs to rule on. The one-page message is `audit/alignment.md`. Every figure here was revised after red team A (`audit/red-team-A.md`); the hits and my responses are in the last section.
+This file holds the proposals the owner needs to rule on. The one-page message is `audit/alignment.md`. Every figure here was revised after red team A (`audit/red-team-A.md`), and again on 10-25 after the spec review (`audit/spec-compliance.md`). The hits and my responses are in the last section.
+
+## Summary
+
+**§4 Stabilization: no revert, because there is no known-good version.**
+- Production stays in shadow: writes off, intake on, the TV up. The owner ruled this on 10-24 and 10-25.
+- Health means four checks: no writes; a Gmail-side count of incoming mail against the store; the intake alarm live; no need dropping silently.
+
+**§5 Highest-leverage move: the real-mail eval set.**
+- Its method was tested on the live week. Two blind readers read all 400 client emails and agree on 394; a third matches them on 38 of 40.
+- The first figures: inquiry_recall 74/90 = 82.2%, writes right 18/23, review_rate 81.1%, display_precision 96/104.
+- What is left: adjudicate 37 rows, get the owner's ruling on quote requests, then read the earlier weeks.
+- After that come the fixes, largest group of misses first.
+
+**§6 Risk tiers and metrics.**
+- Four tiers: T1 internal (a PO), T2 waits for a person (a create), T3 a live edit crew may be told about, T4 drops workers (refused as built).
+- §4 / A.3 metrics replace the harness's 227/114. There is one meaning of "item", and the reason_code backlog is reported with them.
+
+**§7 §17 questions.**
+- Answered: Q2, Q5 and Q6.
+- Q1: the owner's own 10-13 and 10-16 words settle it for creates; one question about the tick remains.
+- Q3 needs the owner or Paz: does OnSinch notify crew?
+- Q4 is the owner's: the display_precision floor.
+
+**§10 (`audit/display-proposals.md`): two proposals, nothing built.**
+- Every way a card leaves writes a mark, and an open need whose day passes is counted as a miss.
+- A chip on each card separates "your decision", "ready, writes paused" and "system problem".
+- A card about an existing order shows how its order was found, and up to 3 candidates.
 
 ## 4. Stabilization: should production revert?
 
@@ -154,7 +181,11 @@ Snapshot-wide over 847 decisions: `audit/glossary.md:148-163`. Script: `eval/rea
   - OpenRouter ran out of credit (HTTP 402) on 10-11 (`process.ts:431`). It was the account balance, not a rate.
   - Current volume: 3 to 103 decisions a day carry a model call (`interpretation.meta`).
   - Cost: $0.031-0.033 each on Opus 4.8 (10-14, 10-15) and $0.005-0.010 on gpt-6.1-sol since 10-16. That is $0.02-3.42 a day.
-- **New: what do OPERATING §2's unfilled placeholders refer to?** Candidates are in `audit/history-and-assumptions.md` §6. None of them names a known-good version.
+- **New: what do OPERATING §2's unfilled placeholders refer to?** All candidates have now been read (`audit/plans-read.md`), including the three Claude Docs.
+  - "The owner's audit" is best fitted by the 10-03 Spartan Audit.
+  - "The previous 99% plan" is best fitted by the harness plan: its 99% was reported met, and its own set later read 227/500.
+  - No document names a known-good version.
+  - Two 10-03 owner rulings need a yes or no: an AI step on every dedup, and several orders per enquiry. v2 plans one order per change.
 - **New: does "client" count as the second fact beside the day (`evidence.ts:2-3`)?** It decides 426 of the generated labels, and how strict "never the day alone" is on real mail.
 - **Glossary (§3) against code and data** (`audit/glossary.md` §1). These four would change how a §3 sentence is read:
   - **Order** is the booking at every stage, not a draft stage. Draft is a flag on the same record (`provisional`, `quote`, `request_approval`).

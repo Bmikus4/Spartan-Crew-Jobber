@@ -3,7 +3,7 @@
 Updated: 2026-10-25   Session: 2
 
 ## Phase and section
-Phase: 0   Current section: §7 Checkpoint A (revision)   Status: in progress
+Phase: 0   Current section: §7 Checkpoint A (re-presented 10-25)   Status: awaiting checkpoint
 
 Checkpoint A was presented on 10-25. The owner then asked "review the original spec and continue with your audit one by one"
 (decisions/2026-10-25-spec-review-reopens-checkpoint-a.md). That is read as: close the spec gaps one by one, then present
@@ -23,8 +23,10 @@ Checkpoint A again. It is not read as confirmation; Phase 1 does not start.
       26 "requests" are OnSinch portal notices, rightly suppressed; display_precision 96/104; noise 5/104. ACCEPTED: verifier V
       re-read a 10% sample blind and matches the consensus on 38/40 (both misses on the PO and quote boundaries), days 10/10. 34 rows for the owner/Paz: eval/reads/adjudicate.csv
       (S67-9, S4-2, S67-1, S4-5, S17-4)
-- [ ] W4 What a card shows today (card-anatomy, a4ae517a, running), then §10's aging policy and minimal flagged-item display
-      change, proposed only (S10-6, S10-4, S4-10, S99-2, S10-3, S10-7, S10-8)
+- [x] W4 audit/card-anatomy.md (accepted: 22 of 222 citations re-opened, all hold); audit/display-proposals.md: aging policy
+      (every exit marked, a passed day with an open need counted as a miss) and the minimal flagged-item change (kind chip,
+      how the order was found, up to 3 candidates), proposed only; §10 status model mapped (S10-6, S10-4, S4-10, S99-2,
+      S10-3, S10-7, S10-8)
 - [x] W5 Glossary discrepancies raised (checkpoint-A.md §7); Q1 re-asked in OnSinch's terms (S3-3)
 - [x] W6 One meaning of item (reconstruction.md §6.4): review_rate 99/122 = 81.1% on the live week (S4-4, A3-3)
 - [x] W7 Spot-checks topped up (RB3-e1, RB3-e2, RB3-e4, S6-2):
@@ -36,11 +38,15 @@ Checkpoint A again. It is not read as confirmation; Phase 1 does not start.
 - [x] W8 checkpoint-A.md: reason_code distribution of the 99 flagged items; client_resolution_accuracy 115/123 (gold, strong +
       adjudicated); NONE precision 12/19 creates; Q3 crew notices rest only on run.ts:11-14, unmeasurable offline; Q1 settled
       by the owner's own 10-13/10-16 words for creates (S99-6, S4-7, S4-8, S17-3)
-- [ ] W9 The owner's audit and candidate 99% plans, incl. the three Claude Docs docs (plans-reader, 65fcb127, running) (S2-8, S2-9)
-- [ ] W10 Operational failures on the TV: 8 of 81 listed cards; no curve because the gate has no thresholds (reconstruction.md
-      §6.7) (S2-6, S4-13 done). Failure modes and logging for the missing stages (stage-gaps, d279ecf8, running) (S62-5, S62-6)
-- [ ] W11 Re-present: alignment.md at one page (about 600 words) with §17 evidence and every file path; checkpoint-A.md
-      gets a summary (S7-3, RB6-1, RB6-4, RB6-5, RB6-8, S121-5)
+- [x] W9 audit/plans-read.md (accepted: 7 quotes re-opened at source, all exact). Best fits: owner's audit = Spartan Audit
+      10-03 (Claude Doc 3159313d); previous 99% plan = harness/reports/01-discovery.md §2.5. Two 10-03 owner rulings missing
+      from the history (dedup AI step; several orders per enquiry). Folded into reconstruction.md §6.3 (S2-8, S2-9)
+- [x] W10 Operational failures on the TV: 8 of 81 listed cards; no curve because the gate has no thresholds (reconstruction.md
+      §6.7) (S2-6, S4-13). audit/pipeline-trace-addendum.md (accepted: 35 of 353 citations re-opened, all hold): failure
+      modes and logging for S3, S5, S9, S10, S12-S17, top findings in reconstruction.md §6.2 (S62-5, S62-6)
+- [x] W11 alignment.md rewritten (669 words in short bullets, every file path, 8 decisions with their evidence);
+      checkpoint-A.md has a summary; the subagents' own summaries are left as returned (S7-3, RB6-1, RB6-4, RB6-5, RB6-8,
+      S121-5)
 
 ## Section checklist
 - [x] §6.1 Purpose: self: audit/reconstruction.md §6.1
@@ -58,19 +64,20 @@ Checkpoint A again. It is not read as confirmation; Phase 1 does not start.
 - [x] §7.5 Highest-leverage move: self: audit/checkpoint-A.md §5
 - [x] §7.6 Risk tiers and metric replacements: self: audit/checkpoint-A.md §6
 - [x] §7.7 §17 answers: self: audit/checkpoint-A.md §7
-- [ ] §10 aging policy, proposed at Checkpoint A: self: W4
-- [ ] §10 minimal display change for flagged items, proposed: self: W4
-- [ ] §9.9 reason_code distribution, reported at the checkpoint: self: W8
+- [x] §10 aging policy, proposed at Checkpoint A: self: audit/display-proposals.md §A
+- [x] §10 minimal display change for flagged items, proposed: self: audit/display-proposals.md §B
+- [x] §9.9 reason_code distribution, reported at the checkpoint: self: checkpoint-A.md §6
 - [x] Spec compliance review: spec-compliance (056ac5ff, accepted): audit/spec-compliance.md
 
 ## Active subagents
 | agent | brief hash | dispatched | expected output | status |
 |---|---|---|---|---|
-| card-anatomy | a4ae517a | 2026-10-25 S2 | audit/card-anatomy.md | running |
-| plans-reader | 65fcb127 | 2026-10-25 S2 | audit/plans-read.md | running |
-| stage-gaps | d279ecf8 | 2026-10-25 S2 | audit/pipeline-trace-addendum.md | running |
+| (none) | | | | |
 
 Accepted on 10-25: readers A1, A2, B1, B2 (baffb5cd), checked by a third blind reader V on a 10% sample, 38/40 + days 10/10.
+Accepted on 10-25: card-anatomy a4ae517a (22 of 222 citations re-opened, all hold).
+Accepted on 10-25: plans-reader 65fcb127 (7 quotes re-opened at source, all exact).
+Accepted on 10-25: stage-gaps d279ecf8 (35 of 353 citations re-opened, all hold).
 Accepted on 10-25: spec-compliance 056ac5ff. About 25 of 218 rows re-opened at their cited lines, all as stated: every §6.5,
 §6.7 and SUPERSEDED row (label-audit.md:11-22, failure-taxonomy.md:331-382, data-map.md:238-261), glossary.md:148-163,
 review_rate 100% vs 207/275, no aging policy anywhere in the package, alignment.md 966 words, and every RB2 row against
@@ -115,7 +122,8 @@ this file as it stood.
 | Q4 | display_precision floor? | Unmeasured over all mail; 59 of 62 on a staff-worked set (checkpoint-A.md:71). W3 measures it. | owner, after W3 |
 | Q5 | Outbound and headers retained? Ids in subjects? | Outbound kept 3,775 rows; headers since 10-23 (159/169 Message-ID); R/J in 4.9% of our subjects | answered |
 | Q6 | Which usage limit was hit? | OpenRouter credit (402) on 10-11, balance not rate; 3-103 model calls a day, $0.02-3.42 a day | answered |
-| N1 | What do OPERATING §2's placeholders name? | Candidates in history-and-assumptions.md §6; none is a known-good version. W9 reads them. | owner |
+| N1 | What do OPERATING §2's placeholders name? | Best fits (plans-read.md): owner's audit = Spartan Audit 10-03; 99% plan = the harness plan (99% reported met, its set later 227/500). No known-good version anywhere. | owner to confirm |
+| N5 | Do the owner's 10-03 rulings still hold: an AI step on every dedup, and several orders per enquiry? | A .28403, .43260; v2 plans one order per change (plan.ts:190-239); not yet assessed | owner |
 | N2 | Does "client" count as the second fact beside the day (evidence.ts:2-3)? | Decides 426 generated labels | owner |
 | N3 | Who labels the eval set, and who settles disagreements? | checkpoint-A.md §5 | owner |
 | N4 | Why did staff rebuild the bot's orders? Ask through Paz. | 14 of 16 rebuilt, 9 equal by day, times and crew | owner |
@@ -153,7 +161,6 @@ this file as it stood.
 none
 
 ## Next action
-W7: re-open archaeologist citations (34 + one stage re-traced), historian rulings (12) and data-cartographer figures (7) until
-each return is checked on at least 10%; then W3 scoring when the four readers return. Separately, on or after
-2026-10-28 16:06Z: `npx tsx --env-file=.env.local scripts/backfill-pause-window.mts store`, then confirm 40/40 stored and
-0/40 decided.
+Await the owner's response to the re-presented Checkpoint A (audit/alignment.md, audit/checkpoint-A.md). Do not begin
+Phase 1. Separately, on or after 2026-10-28 16:06Z: `npx tsx --env-file=.env.local scripts/backfill-pause-window.mts store`,
+then confirm 40/40 stored and 0/40 decided.
