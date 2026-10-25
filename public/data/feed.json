@@ -4804,5 +4804,23 @@
    "scripts/week-review.mts",
    "app/lib/v2/score.ts"
   ]
+ },
+ {
+  "id": "S-0218",
+  "ts": "2026-10-25T01:58:47+00:00",
+  "kind": "measurement",
+  "headline": "Phase 0 audit committed; Checkpoint A awaits the owner",
+  "subject": "Phase 0 audit: 227/114 are generated mail and real-mail recall is unmeasured",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 217,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  },
+  "sources": [
+   "audit/reconstruction.md",
+   "audit/checkpoint-A.md"
+  ]
  }
 ]
