@@ -4840,5 +4840,22 @@
    "audit/STATE.md",
    "audit/checkpoint-A.md"
   ]
+ },
+ {
+  "id": "S-0220",
+  "ts": "2026-10-25T13:40:37+00:00",
+  "kind": "measurement",
+  "headline": "Gmail vs store for the pause window: 40 client emails never stored",
+  "subject": "40 client emails from the 10-21 pause are in Gmail but not in the store",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 217,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  },
+  "sources": [
+   "audit/live-state-2026-10-24.md"
+  ]
  }
 ]

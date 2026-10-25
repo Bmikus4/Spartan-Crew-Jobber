@@ -68,6 +68,11 @@ re-dispatch, write handoffs.
   the TV read "Intake Paused"; intake itself resumed 10-22 00:25 UTC), and n8n Intake Watchdog
   baVlgOkVMCpvj1N7 activated (off since 10-21). bot_writes_enabled stays false: creates and
   updates remain paused. Intake, Spartan Sync and Spartan Alarms were already active.
+- 2026-10-25, owner: "check gmail for the 10-21 emails that never got stored". Done read-only
+  (a temporary n8n list-only workflow, then deleted): 40 client emails from the pause window are
+  in Gmail and not in thread_messages (19 threads, 13 of them one burst); 35 got an in-thread
+  reply from our mailbox. Ids in audit/live-state-2026-10-24.md. Nothing ingested: whether to
+  backfill them (store only, or through intake) is the owner's call.
 
 ## Memory (OPERATING §5: do not act)
 - The owner will email Paz about system login and confirming the display shows only real,

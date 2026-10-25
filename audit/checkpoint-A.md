@@ -28,7 +28,11 @@ This file holds the proposals the owner needs to rule on. The one-page message i
 1. **No writes.** 0 executed writes while `bot_writes_enabled=false`. Today: 0/22.
 2. **No lost email, seen from Gmail's side.** Compare Gmail's own count of client messages per day against `thread_messages`.
    - The store cannot see mail that never reached it. That is the 08-26 failure mode (`app/lib/intakeHealth.ts:1-8`).
-   - The 10-21 pause day holds 19 client emails in the store, against 54-103 on the other weekdays (snapshot, by message date). Whether those emails reached the store later is the first thing to check.
+   - Checked against Gmail on 10-25 (`audit/live-state-2026-10-24.md`):
+    - 40 client emails from the pause window (10-21 01:05Z .. 10-22 00:25Z) were never stored.
+    - 27 others were stored later and decided.
+    - Our mailbox replied in-thread to 35 of the 40 during the window.
+    - The built-in catch-up reaches back 72 h only, so it can no longer recover them.
 3. **The alarm is live.** `intake_paused=false` and the Intake Watchdog is active (both true since 10-25). The TV's intake-stale flag fires when no email arrives in working hours.
 4. **No dropped need.** Every needs-created or needs-updated decision reaches the TV list (`test/feedKeepsEveryNeed.ts`).
 
