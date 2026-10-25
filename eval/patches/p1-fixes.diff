@@ -1,0 +1,857 @@
+diff --git a/app/components/LiveFeedScreen.tsx b/app/components/LiveFeedScreen.tsx
+index c79d602..c5f4ce6 100644
+--- a/app/components/LiveFeedScreen.tsx
++++ b/app/components/LiveFeedScreen.tsx
+@@ -308,6 +308,9 @@ const JobTile = memo(function JobTile({ card, now, s, phase, onTick }: { card: F
+             {card.company || (card.subject ? `“${card.subject}”` : "Unknown client")}
+           </span>
+           <Badge s={s} text={label.text} ok={label.ok} />
++          {/* What kind of need it is, so a person's decision is told from the system's own failure (§10). */}
++          {!done && lead.cls === "system" && <Badge s={s} text="System Problem" ok={false} />}
++          {!done && lead.cls === "paused" && <Badge s={s} text="Ready, Writes Paused" ok={false} />}
+           {hasReply(card) && it && <Badge s={s} text="Needs Reply" ok={false} />}
+           {card.follow_up && <Badge s={s} text="Needs Follow Up" ok={false} />}
+         </div>
+@@ -319,7 +322,13 @@ const JobTile = memo(function JobTile({ card, now, s, phase, onTick }: { card: F
+       </div>
+ 
+       {/* The numbers find the job in OnSinch. */}
+-      <div style={cell(false)}>{num(card.r_number)}</div>
++      <div style={cell(false)}>
++        {num(card.r_number)}
++        {/* How this order was found, so a wrong match is visible before anyone acts on it (§10). */}
++        {card.found_by && card.r_number && <div style={{ fontSize: 13 * s, fontWeight: 500, color: "var(--text-muted)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{card.found_by}</div>}
++        {/* No single order: the ones to pick between (§9.9 top-3). */}
++        {!card.r_number && card.candidates?.length ? <div style={{ fontSize: 15 * s, fontWeight: 600, color: "var(--text-secondary)" }}>{card.candidates.join(" or ")}</div> : null}
++      </div>
+       <div style={cell(true)}>{num(card.j_number)}</div>
+       <div style={cell(true)}><When card={card} it={it} lead={lead} now={now} s={s} /></div>
+ 
+diff --git a/app/lib/errorReport.ts b/app/lib/errorReport.ts
+index 21ed012..f14b8f4 100644
+--- a/app/lib/errorReport.ts
++++ b/app/lib/errorReport.ts
+@@ -37,7 +37,7 @@ export type Severity = "alert" | "log";
+  * not running cannot report that it is not running. It is asked from outside on a schedule —
+  * see app/api/health/intake. The other three are the engine reporting on itself.
+  */
+-export type Route = "booking-lost" | "write-unconfirmed" | "engine-threw" | "intake-quiet" | "mail-undeliverable" | "mail-pull-failed" | "label-failed" | "help-report";
++export type Route = "booking-lost" | "write-unconfirmed" | "engine-threw" | "intake-quiet" | "mail-undeliverable" | "mail-pull-failed" | "label-failed" | "help-report" | "system-failed";
+ 
+ const ROUTE_TITLE: Record<Route, string> = {
+   "booking-lost": "A BOOKING WAS LOST",
+@@ -59,6 +59,10 @@ const ROUTE_TITLE: Record<Route, string> = {
+   // A person pressed Report an issue in the help panel. Not a failure the system found: the one
+   // route a human raises, sent to the same inbox because that is where SamurAI reads alarms.
+   "help-report": "SOMEBODY REPORTED AN ISSUE FROM THE HELP PANEL",
++  // The decision was recorded, so nothing is lost, but the reason a person must act is the
++  // system's own failure (OnSinch unreadable, a write stopped part-way), not the client's
++  // request. Staff see it as a need; until this route, the owner never heard of it.
++  "system-failed": "THE SYSTEM FAILED ON ITS OWN PART OF AN EMAIL",
+ };
+ 
+ /** Default gap between emails about the same thing. Long enough to stop a flood, short enough
+diff --git a/app/lib/feed/check.ts b/app/lib/feed/check.ts
+index 9392408..b69d504 100644
+--- a/app/lib/feed/check.ts
++++ b/app/lib/feed/check.ts
+@@ -12,7 +12,8 @@ export interface CheckStore {
+   removeCheck(item_key: string): Promise<void>;
+ }
+ 
+-const TICKABLE = /^(needs-created|needs-updated|created-check|updated-check):/;
++// needs-reply too: a reply card that asks for crew is listed, and a person who books it must be able to tick it.
++const TICKABLE = /^(needs-created|needs-updated|created-check|updated-check|needs-reply):/;
+ 
+ /**
+  * `actor` is the audit identity (the email) and goes in `by`; `name` is the signer's display
+diff --git a/app/lib/feed/live.ts b/app/lib/feed/live.ts
+index ebb4998..20c4836 100644
+--- a/app/lib/feed/live.ts
++++ b/app/lib/feed/live.ts
+@@ -80,9 +80,9 @@ async function v2(): Promise<V2Row[]> {
+     WHERE d.kind IN ('write', 'handoff') AND coalesce(d.code_version, '') <> 'local' AND d.created_at >= ${V2_FROM}`) as any[];
+   // A thread linked to one live order shows it; a thread linked to several shows none of them
+   // rather than a guess.
+-  const links = l?.t ? ((await db()`SELECT thread_id, min(order_id) AS order_id, min(r_number) AS r_number, min(job_id) AS job_id
++  const links = l?.t ? ((await db()`SELECT thread_id, min(order_id) AS order_id, min(r_number) AS r_number, min(job_id) AS job_id, min(source) AS source
+     FROM job_links WHERE state IN ('linked', 'relinked') GROUP BY thread_id HAVING count(DISTINCT order_id) = 1`) as any[]) : [];
+-  const byThread = new Map(links.map((x) => [String(x.thread_id), { order_id: Number(x.order_id), r_number: x.r_number == null ? null : String(x.r_number), job_id: x.job_id == null ? null : Number(x.job_id) }]));
++  const byThread = new Map(links.map((x) => [String(x.thread_id), { order_id: Number(x.order_id), r_number: x.r_number == null ? null : String(x.r_number), job_id: x.job_id == null ? null : Number(x.job_id), source: x.source == null ? null : String(x.source) }]));
+   return rows.map((r) => ({ ...r, company_id: r.company_id == null ? null : Number(r.company_id), link: byThread.get(String(r.thread_id)) ?? null }));
+ }
+ 
+diff --git a/app/lib/feed/project.ts b/app/lib/feed/project.ts
+index 2600087..b4924ad 100644
+--- a/app/lib/feed/project.ts
++++ b/app/lib/feed/project.ts
+@@ -91,6 +91,10 @@ export interface FeedItem {
+   /** When the event this item is keyed to happened, ms. */
+   at: number;
+   green: { mark: MarkKind; by: string | null; evidence: Record<string, unknown> | null; at: number } | null;
++  /** A reply card whose email asks for crew: listed like a need, and not cleared by our reply alone. */
++  work?: boolean;
++  /** "system": the system's own failure; "paused": a write ready but not run while writes are off. Absent: a person's decision. */
++  cls?: "system" | "paused";
+ }
+ 
+ export interface FeedCard {
+@@ -115,6 +119,10 @@ export interface FeedCard {
+   venue: string | null;
+   r_number: string | null;
+   j_number: string | null;
++  /** How the R and J were found, so a wrong match can be seen (§10). */
++  found_by?: string | null;
++  /** The orders to pick between when there was no single one (§9.9 top-3). */
++  candidates?: string[];
+   subject: string;
+   /** Open, with nothing done on it by anyone for QUIET_MS: listed below the fresh ones. */
+   quiet: boolean;
+@@ -252,6 +260,10 @@ export interface FeedSource {
+   also?: FeedSource[];
+   r_number: string | null;
+   j_number: string | null;
++  /** How the R and J were found (job_links.source, in words). */
++  found_by?: string | null;
++  /** The orders a person must pick between (at most 3), when the planner found several. */
++  candidates?: string[];
+   company_id: number | null;
+   company: string | null;
+   contact: string | null;
+@@ -436,7 +448,10 @@ export function project(
+       // A question, a quote or a missing detail is answered by writing back: once an email of
+       // ours is on the thread after it, it is done (a draft is not an email: only sent mail is
+       // in lastOutbound). Our email answers that and nothing else on the card.
+-      if (it.kind === "needs-reply" && (lastOutbound.get(s.thread_id) ?? 0) >= it.at) continue;
++      // Not when the email asks for crew: answering the question does not book the job, and a
++      // booking the client still wanted left the TV on our reply (12 of 33 Needs Reply threads in
++      // the owner's p6 #6 were later booked by staff).
++      if (it.kind === "needs-reply" && !it.work && (lastOutbound.get(s.thread_id) ?? 0) >= it.at) continue;
+       const g = green(it);
+       if (g && now - g.at > DONE_DWELL_MS) continue;
+       if (!g && !days.length && now - it.at > STALE_UNDATED_MS) { counts.older++; continue; }
+@@ -493,6 +508,8 @@ export function project(
+       venue: s.venue,
+       r_number,
+       j_number,
++      found_by: r_number || j_number ? s.found_by ?? null : null,
++      ...(s.candidates?.length && !r_number ? { candidates: s.candidates } : {}),
+       subject: s.subject,
+       quiet: !g && now - lastActivity > QUIET_MS,
+       follow_up: followUp,
+diff --git a/app/lib/feed/serve.ts b/app/lib/feed/serve.ts
+index c69370e..131a64a 100644
+--- a/app/lib/feed/serve.ts
++++ b/app/lib/feed/serve.ts
+@@ -106,7 +106,8 @@ export async function serveFeed(deps: FeedDeps, now: number): Promise<{ status:
+   // dealt with stays for its dwell, as before.
+   // A need, open or just dealt with. Until 10-15 any green card counted, so an order the bot made
+   // showed on the list the moment someone ticked it: a success on the failures list.
+-  const isFailure = (c: (typeof p.cards)[number]) => c.items.some((i) => i.kind === "needs-created" || i.kind === "needs-updated");
++  // A reply card that asks for crew is a booking the system could not make, so it is listed too.
++  const isFailure = (c: (typeof p.cards)[number]) => c.items.some((i) => i.kind === "needs-created" || i.kind === "needs-updated" || (i.kind === "needs-reply" && i.work));
+   // EVERY JOB IS LISTED, AND EVERY JOB'S R AND J ARE ITS ORDER'S OWN (Ben, 10-21: "its not that
+   // only jobs with an R and J should be listed, its that every job should HAVE its proper R and J
+   // number, and they should always be the correct R and J numbers"). The numbers come only from
+diff --git a/app/lib/feed/v2.ts b/app/lib/feed/v2.ts
+index 19e38ee..d3b5f21 100644
+--- a/app/lib/feed/v2.ts
++++ b/app/lib/feed/v2.ts
+@@ -19,6 +19,7 @@ import type { Op } from "../v2/bot/ops";
+ import { londonToUtc, shiftWindow } from "../v2/bot/ops";
+ import { rNumbersIn } from "../engine/resolve";
+ import { cardNote } from "./cardNote";
++import { coded } from "../v2/reasons";
+ 
+ /** One v2_decisions row of kind write or handoff, with its message's subject. */
+ export interface V2Row {
+@@ -34,7 +35,7 @@ export interface V2Row {
+   from_address: string;
+   subject: string | null;
+   /** The thread's link (job_links): the order it is about, whoever made it. */
+-  link?: { order_id: number; r_number: string | null; job_id: number | null } | null;
++  link?: { order_id: number; r_number: string | null; job_id: number | null; source?: string | null } | null;
+   /** The planner's answer on this email now (v2/replan.ts), when it has been planned again. */
+   replan?: Decision | null;
+ }
+@@ -64,6 +65,23 @@ function startOf(date: string, start?: string): number {
+   try { return Date.parse(londonToUtc(date, start ?? "00:00")); } catch { return NaN; }
+ }
+ 
++/** job_links.source, in the words a person checks it by. */
++const FOUND_BY: Record<string, string> = {
++  "bot write": "the system's own order",
++  "staff copy": "staff's copy of the system's order",
++  finder: "the day and one more fact in the email",
++  "planner find": "the day and one more fact in the email",
++  planner: "the order the email names",
++  "jobs board": "the jobs board",
++  backfill: "an earlier record",
++};
++
++/** The system failed on its own part: a read or plan that failed, or a write stopped part-way (process.ts systemFailureOf). */
++function isSystemFailure(d: Decision, executed: RunResult[] | null): boolean {
++  if (executed?.some((r) => r.status === "verified") && executed.some((r) => r.status !== "verified")) return true;
++  return (coded(d) as { code?: string }).code === "system_failed";
++}
++
+ /** What a decision says about its card: the kind, the order it is about, what the bot did for it. */
+ function classify(row: V2Row, d: Decision) {
+   const g = row.grounded;
+@@ -109,6 +127,14 @@ export function v2Source(row: V2Row, now: number): FeedSource {
+   const item: (Omit<FeedItem, "green"> & { order_id: number | null }) | null = d.kind === "none" ? null : {
+     item_key: `${first.kind}:${row.thread_id}:${first.order_id ?? 0}:${row.message_id}`,
+     kind: c.kind, status: STATUS_TEXT[c.kind], at, order_id: c.order_id,
++    // A missing detail on a request for crew is still a booking to make: 8 of the live week's 16
++    // silent misses were reply cards the TV never listed (eval/live-week-reads.md).
++    // So is one the reader found unclear: OPERATING §4, "uncertain whether an email is an inquiry ->
++    // treat as inquiry, show it". A quote with no shifts stays a reply (the owner's B42).
++    ...(c.kind === "needs-reply" && (g?.requests.some((r) => r.action !== "other") || g?.intent === "unclear") ? { work: true } : {}),
++    // What kind of need it is (audit/display-proposals.md B1): the system's own failure, or a
++    // write that is ready but not run while writes are off. Absent: a decision only a person can make.
++    ...(isSystemFailure(d, c.executed) ? { cls: "system" as const } : d.kind === "write" && !c.executed?.length ? { cls: "paused" as const } : {}),
+   };
+ 
+   // A day the planner says is already over is the card's day too, so the card leaves with its job
+@@ -146,6 +172,10 @@ export function v2Source(row: V2Row, now: number): FeedSource {
+     // card after the order was deleted. The bot's own orders are linked (links.ts backfillLinks).
+     r_number: row.link?.r_number ? `R${String(row.link.r_number).replace(/^R/i, "")}` : null,
+     j_number: row.link?.job_id ? `J${row.link.job_id}` : null,
++    // How the order was found, from the link's own source (audit/display-proposals.md B2): a card
++    // showed an R and J with nothing to say why that order, so a wrong match could not be seen.
++    found_by: row.link?.source ? FOUND_BY[row.link.source] ?? null : null,
++    candidates: d.kind === "handoff" && d.candidates?.length ? d.candidates.filter((c) => c.r).map((c) => `R${c.r}`) : undefined,
+     company_id: row.company_id,
+     company: row.company,
+     contact: null,
+diff --git a/app/lib/v2/acceptance.ts b/app/lib/v2/acceptance.ts
+new file mode 100644
+index 0000000..749ba41
+--- /dev/null
++++ b/app/lib/v2/acceptance.ts
+@@ -0,0 +1,54 @@
++// ============================================================================
++// A client accepting Spartan's quote is work, even though nothing new is asked for.
++// ----------------------------------------------------------------------------
++// eval/acceptance-study.md (10-25, 799 client emails read by two blind readers): 73 emails
++// accept a quote or offer Spartan sent. The system decided `none` for 49 of them: "no change
++// asked for" (the reader saw no request), "already booked" or "already as asked" (the quote is
++// already an order: for 54 of the 73, OnSinch held one for that day before the acceptance). Staff
++// then completed and confirmed that order by hand: team description, contacts, slot status.
++// Decided `none`, the acceptance reached no screen.
++//
++// The rule is the study's, measured on those 799 emails: it fires on 88, both readers call 70 of
++// them booking work, it catches 68 of the 73, and both readers call 1 of the 88 "nothing". It
++// was tuned on those same emails, so expect less on new mail. It never builds shifts: Spartan's
++// quotes carry them in an attached PDF the system does not read (0 of 73 fully readable). It
++// only turns the `none` into a card for a person to confirm the order.
++// ============================================================================
++import { latestText, norm } from "./interpret/ground";
++import type { ThreadMsg } from "./threadState";
++
++/** Spartan's own terms: a quote is valid 14 days. */
++const VALID_MS = 14 * 24 * 3_600_000;
++/** Spartan's signature blocks, cut so that their boilerplate never reads as a quote. */
++const own = (body: string) => latestText(body).split(/\*{3} We now|\*Please note, all quotes/)[0];
++
++const QUOTE_WORD = /\bquot(e|es|ed|ation)\b|\bpro ?forma\b/i;
++const ASKS = /\b(chas(e|ing)|follow(ing)? up|provisional(ly)?|pencil(led)?|any (word|update)|ready to (confirm|move ahead|go ahead)|(moving|move|go(ing)?) ahead|confirm|proceed)\b|\b(see|find)\b.{0,30}\battached\b/i;
++
++const ACCEPT = new RegExp([
++  /\bgo(ing)? ahead\b/, /\bproceed\b/,
++  /\b(can|could|may|shall) (we|i) (please )?confirm\b/, /\bplease (could i |can we )?confirm (this|it|the (booking|order|job|crew|shifts?))\b/,
++  /\b(happy|good|ok|okay|fine) to confirm\b/,
++  /\b(this|that|it|order|job|jobs|booking|one|all|everything)('s| is| are| has been| have been)? (all |now )?confirmed\b/, /^(yes,? )?(all )?confirmed\b/,
++  /\b(like|want|wish) to (confirm|book)\b/, /\bbook (this|it|that|them|these|the crew)( one)?\b/, /\bplease book\b/, /\bmay this be booked\b/,
++  /\block (it |this |that |the \w+ )?in\b/, /\b(looks|sounds) good\b/, /\b(as|for) confirmation\b/,
++  /\bp\.?o\.?( number| no\.?)?\s*(is|:|-|#)?\s*[a-z_\-]*\d{3,}/, /\b(attached|find|see) (the |our )?(p\.?o|purchase order)\b/, /\bpurchase order\b/,
++  /\b(send|get|raise|sort)( over| you| out)? (a |the |our )?(p\.?o|purchase order)\b/, /\bp\.?o\.? (to follow|will follow)\b/,
++].map((r) => r.source).join("|"), "i");
++const NOT = /\b(cancel(led|ling)?|no longer|not (be )?(go(ing)?|proceed(ing)?) ahead|won'?t (be )?(go(ing)?|proceed(ing)?) ahead|won'?t be (needed|required)|stand down|decline|still (go(ing)? ahead|on|happening))\b|\bconfirm (if|whether|availability|that you|you)\b|\b(can|could) you (please )?confirm\b/i;
++
++/** Did Spartan's latest message before this email, within 14 days, quote or ask to confirm? */
++function spartanQuoted(sentMs: number, subject: string, fullBody: string, thread: ThreadMsg[]): boolean {
++  const last = thread.filter((x) => x.ours && x.at < sentMs).sort((a, b) => a.at - b.at).at(-1);
++  if (last && sentMs - last.at <= VALID_MS && (QUOTE_WORD.test(own(last.body)) || ASKS.test(own(last.body)))) return true;
++  // OnSinch sends the quote itself; its notice survives only in the client's quoted history.
++  return /^(re|fw|fwd)\s*:\s*price quote - r\d+/i.test(norm(subject)) && /new order approved[\s\S]{0,300}quote attached/i.test(norm(fullBody));
++}
++
++/** The client's newest words accept Spartan's quote or offer. */
++export function acceptsQuote(e: { newest: string; subject: string; fullBody: string; sentIso: string }, thread: ThreadMsg[]): boolean {
++  const head = norm(e.newest.replace(/<[^>]+>/g, " ").replace(/&nbsp;/g, " ")).slice(0, 600);
++  return ACCEPT.test(head) && !NOT.test(head) && spartanQuoted(Date.parse(e.sentIso), e.subject, e.fullBody, thread);
++}
++
++export const QUOTE_ACCEPTED = "the client accepted Spartan's quote: confirm the order in OnSinch";
+diff --git a/app/lib/v2/interpret/ground.ts b/app/lib/v2/interpret/ground.ts
+index b374433..6b06fd9 100644
+--- a/app/lib/v2/interpret/ground.ts
++++ b/app/lib/v2/interpret/ground.ts
+@@ -76,7 +76,7 @@ const HOURS = /(\d+(?:\.\d+)?|\b(?:one|two|three|four|five|six|seven|eight|nine|
+ const hoursIn = (n: string) => (/^\d/.test(n) ? Number(n) : WORDS[n]);
+ export function parseDuration(raw: string): number | null {
+   // Booking forms put the label first: "Call hours: 4" (EMS, measured 10-09).
+-  const m = HOURS.exec(norm(raw)) ?? /\b(?:call\s+)?(?:hours|hrs)\s*[:\-]\s*(\d+(?:\.\d+)?)\b/.exec(norm(raw));
++  const m = HOURS.exec(norm(raw)) ?? /\b(?:call\s+)?(?:hours|hrs|duration)\s*[:\-]\s*(\d+(?:\.\d+)?)\b/.exec(norm(raw));
+   if (!m) return null;
+   const mins = Math.round(hoursIn(m[1]) * 60);
+   return mins > 0 && mins <= 24 * 60 ? mins : null;
+@@ -256,7 +256,8 @@ export function parseDate(raw: string, sentIso: string): string | null {
+   if (m) {
+     d = Number(m[1]); mo = Number(m[2]) - 1; if (m[3]) y = Number(m[3].length === 2 ? `20${m[3]}` : m[3]);
+   } else {
+-    m = /\b(\d{1,2})(?:st|nd|rd|th)?\s+(?:of\s+)?([a-z]{3,9})\b(?:\s+'?(\d{2}(?![:.]\d)|20[2-9]\d)\b)?/.exec(q);
++    // "28-Nov" (a booking table, 10-12) as well as "28 Nov": the month may follow a hyphen.
++    m = /\b(\d{1,2})(?:st|nd|rd|th)?(?:\s+|-)(?:of\s+)?([a-z]{3,9})\b(?:[\s-]+'?(\d{2}(?![:.]\d)|20[2-9]\d)\b)?/.exec(q);
+     let mi = m ? MONTHS.indexOf(m[2].slice(0, 3)) : -1;
+     // "November 4th", "October 8 2026": month first. Read before the bare "4th" fallback,
+     // which would otherwise take the day and put it in the sent month (measured 10-08).
+@@ -337,7 +338,7 @@ export function countsIn(raw: string): Set<number> {
+   for (const m of q.matchAll(/\b(\d{1,3})\s*x\b|\bx\s*(\d{1,3})\b|\b(\d{1,3})\s*x(?=\s*\d)/g)) out.add(Number(m[1] ?? m[2] ?? m[3]));
+   // "Could we up this call to 4 too please" (RG Jones, 10-15): a total after its verb, a few
+   // words between, anywhere in the quote.
+-  for (const m of q.matchAll(/\b(?:up|increase|bump|raise|take|make|go)\s+(?:[a-z]+\s+){0,3}to\s+(\d{1,3})\b/g)) out.add(Number(m[1]));
++  for (const m of q.matchAll(/\b(?:up|increase|bump|raise|take|make|go|change|reduce|drop|cut|bring|lower|decrease|amend)\s+(?:[a-z]+\s+){0,3}to\s+(\d{1,3})\b/g)) out.add(Number(m[1]));
+   const who = "(?:crew|staff|people|persons?|bodies|hands|guys|men|lads|helpers|labourers|stagehands|riggers|carpenters?|drivers?|techs?|technicians?|stewards?|workers?)";
+   for (const m of q.matchAll(new RegExp(String.raw`\b(\d{1,3}|${WORD_N})\s+(?:x\s+)?(?:more\s+|extra\s+|additional\s+)?(?:local\s+|general\s+)?${who}\b`, "g"))) out.add(/\d/.test(m[1]) ? Number(m[1]) : WORDS[m[1]]);
+   for (const m of q.matchAll(new RegExp(String.raw`\bat least\s+(\d{1,3}|${WORD_N})\b`, "g"))) out.add(/\d/.test(m[1]) ? Number(m[1]) : WORDS[m[1]]);
+@@ -371,5 +372,12 @@ export function datesIn(raw: string, sentIso: string): Set<string> {
+   const q = norm(raw);
+   for (const m of q.matchAll(/\b(mon|tues?|wed(?:nes)?|thur?s?|fri|sat(?:ur)?|sun)(?:day)?\b(?:\s+(?:the\s+)?\d{1,2}(?:st|nd|rd|th)?(?:\s+[a-z]{3,9})?)?/g)) { const d = parseDate(m[0], sentIso); if (d) out.add(d); }
+   for (const m of q.matchAll(/\b\d{1,2}(?:st|nd|rd|th)?(?:[/.]\d{1,2}(?:[/.]\d{2,4})?|\s+(?:of\s+)?[a-z]{3,9}(?:\s+\d{2,4})?)\b/g)) { const d = parseDate(m[0].replace(/\bof\s+/, ""), sentIso); if (d) out.add(d); }
++  // "24th & 25th October", "29-31 October 2026": every day of a list or a range under one month.
++  // A range longer than two weeks is not read as days.
++  for (const m of q.matchAll(/\b(\d{1,2})(?:st|nd|rd|th)?\s*(&|and|,|-|to)\s*(\d{1,2})(?:st|nd|rd|th)?\s+(?:of\s+)?([a-z]{3,9})\b(?:\s+(20[2-9]\d))?/g)) {
++    const a = Number(m[1]), b = Number(m[3]), tail = `${m[4]}${m[5] ? ` ${m[5]}` : ""}`;
++    const days = /&|and|,/.test(m[2]) ? [a, b] : b >= a && b - a <= 14 ? Array.from({ length: b - a + 1 }, (_, i) => a + i) : [];
++    for (const d of days) { const iso = parseDate(`${d} ${tail}`, sentIso); if (iso) out.add(iso); }
++  }
+   return out;
+ }
+diff --git a/app/lib/v2/interpret/plan.ts b/app/lib/v2/interpret/plan.ts
+index 4b4b10e..f3f6f1a 100644
+--- a/app/lib/v2/interpret/plan.ts
++++ b/app/lib/v2/interpret/plan.ts
+@@ -17,7 +17,7 @@ import { confirms, type Interpretation, type Request } from "./interpret";
+ import { addMinutes } from "./ground";
+ import { fillTimes, pastShifts } from "./assume";
+ import { tradeOf, pickProfession, PROFESSION_NAME, type LiveProfession } from "./professions";
+-import { matchCompanyBySender, rNumbersIn, normName } from "../../engine/resolve";
++import { matchCompanyBySender, rNumbersIn, normName, domainOfEmail } from "../../engine/resolve";
+ import { evidenceMatch, wantOf, BOT_USER, type Found } from "../evidence";
+ import { coded } from "../reasons";
+ import { findOrder as findByEvidence, companiesOf, coveredBy, stampedSince, type ThreadIn, type ThreadMsg, type StateWorld, type Grounded } from "../threadState";
+@@ -45,7 +45,9 @@ export type Decision = (
+    * booking missing a detail only the client can give. The TV shows it as Needs Reply, never
+    * as an order that failed (Ben, 10-11: 1 failed order in 100 is the bar; a question is not one).
+    */
+-  | { kind: "handoff"; reasons: string[]; reply?: boolean; order_id?: number }
++  | { kind: "handoff"; reasons: string[]; reply?: boolean; order_id?: number;
++      /** The orders a person must pick between, at most 3 (OPERATING §9.9: a flagged item carries its top-3). */
++      candidates?: { order_id: number; r: string }[] }
+   /** found: the orders that already hold what the email asks for; the thread is linked to one. */
+   | { kind: "none"; reason: string; found?: number[] }) & { code?: string };
+ 
+@@ -495,8 +497,20 @@ async function decide(msg: Message, i: Interpretation, world: World, threadOrder
+   // person to place. OnSinch's API cannot delete a company, so the bar is high on purpose.
+   const STOP = new Set(["ltd", "limited", "uk", "the", "and", "group", "events", "event", "solutions", "services", "productions", "production", "media", "live", "co", "company", "plc", "llp", "&"]);
+   const words = (t: string) => normName(t).split(" ").filter((w) => w.length > 2 && !STOP.has(w));
++  // A DOMAIN SEVERAL COMPANIES SHARE is settled by the company the email names, when exactly one of
++  // them matches it (OPERATING §9.3: one sender for several clients is resolved by content, never by
++  // the most frequent). 3 of the live week's 7 emails with no client were on such a domain, and the
++  // model was shown no bookings for them. Two to three companies only: a wider domain is a mail host.
++  // A domain OnSinch already holds is never a new client either: a name matching none of its
++  // companies is for a person to place, not a reason to create one more.
++  const senderDomain = domainOfEmail(msg.from);
++  const onDomain = !companyId && senderDomain ? (await world.companies()).filter((c) => (c.Client ?? []).some((cl: { email?: string }) => domainOfEmail(cl.email) === senderDomain)) : [];
++  if (!companyId && i.company_name) {
++    const named = onDomain.length >= 2 && onDomain.length <= 3 ? onDomain.filter((c) => words(String(c.name ?? "")).some((w) => words(i.company_name!).includes(w))) : [];
++    if (named.length === 1) companyId = Number(named[0].id);
++  }
+   const nameClash = i.company_name ? (await world.companies()).some((c) => words(String(c.name ?? "")).some((w) => words(i.company_name!).includes(w))) : false;
+-  const newClient = !companyId && i.company_name && !nameClash && (i.intent === "booking" || i.intent === "quote_request") && i.requests.length && i.requests.every((r) => r.action === "new_shift") ? i.company_name : null;
++  const newClient = !companyId && i.company_name && !nameClash && !onDomain.length &&(i.intent === "booking" || i.intent === "quote_request") && i.requests.length && i.requests.every((r) => r.action === "new_shift") ? i.company_name : null;
+   if (!companyId && !newClient) return handoff(`no single client company for ${msg.from}`);
+   const clientOrders = await world.companyOrders(companyId);
+   const live = reqs.some((r) => tradeOf(r.trade)?.named) && world.professions ? await world.professions() : [];
+@@ -731,7 +745,8 @@ async function decide(msg: Message, i: Interpretation, world: World, threadOrder
+       if (hits.length > 1) {
+         // Booked as asked in every one of them is still booked; anything else needs a person to pick.
+         if (each.every((v) => typeof v === "object" && !v.synth.length)) { verdicts.push({ w, order: hits[0], synth: [] }); continue; }
+-        return handoff(`${hits.length} of the client's orders have a shift on ${w.date} at ${w.start}`);
++        // The candidates go with it: the card said only "2 orders that day, pick one" (audit/card-anatomy.md §1.2).
++        return { kind: "handoff", reasons: [`${hits.length} of the client's orders have a shift on ${w.date} at ${w.start}`], candidates: hits.slice(0, 3).map((o) => ({ order_id: Number(o.id), r: String(o.number ?? "") })) };
+       }
+       const v = each[0];
+       if (v === "fresh") verdicts.push({ w, order: null, synth: [] });
+diff --git a/app/lib/v2/process.ts b/app/lib/v2/process.ts
+index 72fbcd1..0cc00b8 100644
+--- a/app/lib/v2/process.ts
++++ b/app/lib/v2/process.ts
+@@ -24,6 +24,8 @@ import { noTrace, type Tracer } from "./trace";
+ import { automationPausedFlag, v2Writes } from "../paused";
+ import { isTestId, isTestSender } from "../testData";
+ import { coded } from "./reasons";
++import { reportError } from "../errorReport";
++import { acceptsQuote, QUOTE_ACCEPTED } from "./acceptance";
+ 
+ /**
+  * Whether the bot may create and update orders for real clients now: the Settings master switch
+@@ -450,12 +452,19 @@ async function understand(m: MessageIn, from: string, deps: DecideDeps, seen: {
+   const leadDays = deps.leadDays ? await deps.leadDays().catch(() => undefined) : undefined;
+   // A PLAN THAT THROWS IS A CARD FOR A PERSON, like a read that fails: a time London's clock
+   // skips, a window with no length or an OnSinch read that failed would otherwise lose the email.
+-  const decision: Decision = await plan({ message_id: m.message_id, from, subject: String(m.subject ?? ""), sentIso: m.date_iso, text: newest }, interpretation, deps.world, await deps.threadOrderId(),
+-    { leadDays, now: deps.now?.(), again: deps.again, thread: deps.threadMessages ? await deps.threadMessages().catch(() => undefined) : undefined,
++  const threadMsgs = deps.threadMessages ? await deps.threadMessages().catch(() => undefined) : undefined;
++  const planned: Decision = await plan({ message_id: m.message_id, from, subject: String(m.subject ?? ""), sentIso: m.date_iso, text: newest }, interpretation, deps.world, await deps.threadOrderId(),
++    { leadDays, now: deps.now?.(), again: deps.again, thread: threadMsgs,
+       // The thread's earlier requests name its days too: SN ExCeL's 17th, 18th, 20th and 21st single out R10522.
+       raw: [...rawRequests(x), ...prior.map((r) => ({ date: r.date ?? r.target?.date, start: r.start, crew: r.crew, place_id: r.place_id, venue: r.venue, target: r.target })),
+         ...(deps.asked ? await deps.asked().catch(() => []) : [])] })
+     .catch((e) => ({ kind: "handoff" as const, reasons: [`the system could not plan this email (${String((e as Error)?.message ?? e).slice(0, 120)})`] }));
++  // A CLIENT ACCEPTING SPARTAN'S QUOTE is a card, never `none`: the quote is already an order, and
++  // staff confirm it by hand (acceptance.ts; 49 of 73 acceptances were `none`, on no screen).
++  const decision: Decision = planned.kind === "none" && /^(no change asked for|already booked|already as asked)/.test(planned.reason) && threadMsgs
++    && acceptsQuote({ newest, subject: String(m.subject ?? ""), fullBody: String(m.body ?? ""), sentIso: m.date_iso }, threadMsgs)
++    ? { kind: "handoff", reasons: [QUOTE_ACCEPTED], ...(planned.found?.length === 1 ? { order_id: planned.found[0] } : {}) }
++    : planned;
+   deps.trace("plan", { kind: decision.kind, ops: decision.kind === "write" ? decision.ops.map((o) => o.op.kind) : [], said: decision.kind === "write" ? decision.why : decision.kind === "handoff" ? decision.reasons : [decision.reason] }, Date.now() - t2);
+   return { kind: decision.kind, interpretation: { extraction: x, grounded: interpretation, meta }, decision, executed: null, client };
+ }
+@@ -485,8 +494,22 @@ export function threadReads(sql: NeonQueryFunction<false, false>, m0: MessageIn,
+   };
+ }
+ 
++/** Why a recorded decision is the system's own failure rather than the client's request, or null. */
++export function systemFailureOf(decision: Decision, executed: RunResult[] | null | undefined): string | null {
++  if (executed?.some((x) => x.status === "verified") && executed.some((x) => x.status !== "verified")) return "a write stopped part-way";
++  // Not booking_link_unreadable: a linked order the system cannot read is a booking gone (reasons.ts:27).
++  return (coded(decision) as { code?: string }).code === "system_failed" ? "the system could not read, plan or decide an email" : null;
++}
++
+ export async function processMessage(message_id: string, opts: { execute: boolean; world?: World; with?: string[] } = { execute: false }): Promise<Processed> {
+   const sql = await db();
++  // WHAT WAS SENT FOR AN EMAIL IS ITS RECORD, so such an email is never decided again here. The
++  // upsert below writes `executed` as JSON null, which `coalesce` keeps, so a replay through
++  // /api/bot/process (the route intake's alarm names) erased the only account of what reached
++  // OnSinch (audit/pipeline-trace-addendum.md R4, 10-25). The replan refuses these rows too (replan.ts:63).
++  // `<> '[]'`, not jsonb_array_length: Postgres need not short-circuit AND, and the length of a scalar throws.
++  const sent = (await sql`SELECT 1 FROM v2_decisions WHERE message_id = ${message_id} AND jsonb_typeof(executed) = 'array' AND executed <> '[]'::jsonb`) as any[];
++  if (sent.length) return { message_id, skipped: "something was sent for this email: its record stands" };
+   const rows = (await sql`SELECT message_id, thread_id, from_address, date_iso, subject, body, is_from_spartan FROM thread_messages WHERE message_id = ${message_id}`) as any[];
+   const m0 = rows[0] as MessageIn | undefined;
+   if (!m0) return { message_id, skipped: "message not captured" };
+@@ -515,6 +538,12 @@ export async function processMessage(message_id: string, opts: { execute: boolea
+         ON CONFLICT (message_id) DO UPDATE SET kind = EXCLUDED.kind, interpretation = EXCLUDED.interpretation, decision = EXCLUDED.decision,
+           executed = coalesce(EXCLUDED.executed, v2_decisions.executed), code_version = EXCLUDED.code_version,
+           company_id = EXCLUDED.company_id, company = EXCLUDED.company`;
++      // THE SYSTEM'S OWN FAILURES GO TO THE OWNER (OPERATING §2, §15): 8 of the live week's 81
++      // listed cards were the system failing, shown to staff as ordinary needs and reported to
++      // nobody (audit/reconstruction.md §6.7). errorReport collapses repeats inside its window,
++      // so recording after each op cannot flood.
++      const failed = systemFailureOf(d.decision, d.executed);
++      if (failed) void reportError({ route: "system-failed", where: "v2/process", what: failed, detail: `message ${message_id}, thread ${m.thread_id}` });
+     },
+     trace: noTrace,
+   });
+diff --git a/app/lib/v2/reasons.ts b/app/lib/v2/reasons.ts
+index b8c1d91..455f233 100644
+--- a/app/lib/v2/reasons.ts
++++ b/app/lib/v2/reasons.ts
+@@ -17,6 +17,7 @@ import type { Decision } from "./interpret/plan";
+ 
+ /** First match wins. */
+ export const REASON_CODES: ReadonlyArray<readonly [string, RegExp]> = [
++  ["quote_accepted", /the client accepted Spartan's quote/],
+   ["reply_quote", /the client asked for a quote/],
+   ["reply_unclear", /the request is unclear/],
+   ["reply_detail_missing", /: no (day|start time|end time or duration|crew count|new time or length|venue) the client wrote$|^no venue in the email$/],
+@@ -39,7 +40,10 @@ export const REASON_CODES: ReadonlyArray<readonly [string, RegExp]> = [
+   ["none_read_together", /read together with the later email/],
+   ["none_already_booked", /already booked/],
+   // A change whose ops are all already true: the reason is the line that would have been written.
+-  ["none_already_as_asked", /shift \d+: (times to \d\d:\d\d-\d\d:\d\d|\d+ crew in all)/],
++  // The bare "already as asked" too (plan.ts:749, :851): 7 of the 799 read emails carried it and were tallied "other".
++  ["none_already_as_asked", /shift \d+: (times to \d\d:\d\d-\d\d:\d\d|\d+ crew in all)|^already as asked/],
++  // The newest email repeats requests an earlier email of the thread made (eval/iterations.md, iteration 2).
++  ["none_thread_history", /nothing new asked for/],
+   ["none_nothing_to_do", /nothing is booked on|no change asked for|left off: no order is named|nothing to/],
+ ];
+ 
+diff --git a/test/feedNeedKind.ts b/test/feedNeedKind.ts
+new file mode 100644
+index 0000000..7ae76fb
+--- /dev/null
++++ b/test/feedNeedKind.ts
+@@ -0,0 +1,65 @@
++// ============================================================================
++// Every listed card says what kind of need it is: a person's decision, a write that is ready but
++// not run while writes are off, or the system's own failure.
++// ----------------------------------------------------------------------------
++// audit/card-anatomy.md (10-25): the three looked identical, with the same red edge, amber badge
++// and Confirm button, and only the note told them apart. 5 of the live week's 81 listed cards
++// were the system failing. A linked order that cannot be read is a booking gone, a person's to
++// place (reasons.ts:27), so it is a decision.
++// npx tsx test/feedNeedKind.ts
++// ============================================================================
++import { v2Sources, type V2Row } from "../app/lib/feed/v2";
++/* eslint-disable @typescript-eslint/no-require-imports */
++
++let fails = 0;
++const ok = (c: boolean, m: string, d?: unknown) => { console.log(`  ${c ? "PASS" : "FAIL"}  ${m}${c ? "" : "  " + JSON.stringify(d)}`); if (!c) fails++; };
++
++const NOW = Date.parse("2026-10-03T12:00:00Z");
++const row = (id: string, over: Partial<V2Row>): V2Row => ({
++  thread_id: `T${id}`, message_id: id, sent_at: new Date(NOW - 3_600_000).toISOString(), kind: "handoff",
++  grounded: { intent: "booking", requests: [{ action: "new_shift", date: "2026-10-14", crew: 4, problems: [] }], problems: [] },
++  decision: { kind: "handoff", reasons: ["2026-10-14 is within 14 days of the email: a person creates it"] },
++  executed: null, company_id: 343, company: "Client", from_address: "sam@client.example", subject: "Crew", ...over,
++});
++const op = { source: "plan", op: { kind: "set_po", order_id: 5, po: "77" } } as any;
++const cls = (r: V2Row) => v2Sources([r], NOW)[0]?.item?.cls;
++
++ok(cls(row("a", {})) === undefined, "a policy hand-off is a person's decision: no chip");
++ok(cls(row("b", { decision: { kind: "handoff", reasons: ["the system could not plan this email (GET /orders answered 503, so what it holds is unknown)"] } })) === "system", "a planner that could not read OnSinch is a system problem");
++ok(cls(row("c", { decision: { kind: "handoff", reasons: ["this thread is linked to order 16614, which the system could not read: no order is named"] } })) === undefined, "a linked order that is gone is a person's decision, not a system problem");
++ok(cls(row("d", { kind: "write", decision: { kind: "write", ops: [op], why: [] } as any })) === "paused", "a write that never ran is ready, waiting on the switch");
++ok(cls(row("e", { kind: "write", decision: { kind: "write", ops: [op, op], why: [] } as any, executed: [{ status: "verified" }, { status: "mismatch" }] as any })) === "system", "a write that stopped part-way is a system problem");
++
++console.log("\nhow the order was found is on the card");
++{
++  const { project } = require("../app/lib/feed/project");
++  const linked = row("f", { link: { order_id: 16388, r_number: "11352", job_id: 46464, source: "planner find" } });
++  const card = project([], new Map(), [], null, NOW, new Map(), v2Sources([linked], NOW)).cards[0];
++  ok(card?.r_number === "R11352" && card?.found_by === "the day and one more fact in the email", "a finder's link says it was found by the day and one more fact", card?.found_by);
++  const bare = project([], new Map(), [], null, NOW, new Map(), v2Sources([row("g", {})], NOW)).cards[0];
++  ok(bare?.found_by == null, "a card with no order says nothing about finding one", bare?.found_by);
++}
++
++(async () => {
++console.log("\nseveral orders: the candidates are on the card and in the planner's decision");
++{
++  const { project } = require("../app/lib/feed/project");
++  const pick = row("h", { decision: { kind: "handoff", reasons: ["2 of the client's orders have a shift on 2026-10-14 at 08:00"], candidates: [{ order_id: 1, r: "11501" }, { order_id: 2, r: "11502" }] } as any });
++  const card = project([], new Map(), [], null, NOW, new Map(), v2Sources([pick], NOW)).cards[0];
++  ok(JSON.stringify(card?.candidates) === JSON.stringify(["R11501", "R11502"]), "the card names both orders to pick between", card?.candidates);
++
++  const { plan } = require("../app/lib/v2/interpret/plan");
++  const slot = (id: number) => ({ id, beginning: "2026-11-20T08:00:00+00:00", end: "2026-11-20T16:00:00+00:00", size: 2, profession_id: 1, role: 0, slotlocation_id: 900 });
++  const order = (id: number, number: string) => ({ id, number, company_id: 137, status: 0, intern_name: "", Job: [{ SlotTeam: [{ id, name: "Crew", Slot: [slot(id * 10)] }] }] });
++  const world = {
++    companies: async () => [{ id: 137, name: "Client Ltd", Client: [{ id: 1, email: "sam@client.example" }] }],
++    placesNamed: async () => [], companyOrders: async () => [order(1, "11501"), order(2, "11502")], orderByNumber: async () => null,
++  };
++  const d = await plan({ message_id: "p", from: "sam@client.example", subject: "Crew", sentIso: "2026-10-01T09:00:00Z", text: "4 crew on 20 Nov 8am-4pm please" },
++    { intent: "booking", problems: [], requests: [{ action: "new_shift", date: "2026-11-20", start: "08:00", end: "16:00", crew: 4, problems: [] }] }, world);
++  ok(d.kind === "handoff" && d.candidates?.length === 2, "the planner's hand-off carries the two orders it could not choose between", d);
++}
++
++if (fails) { console.log(`\n${fails} FAILED`); process.exit(1); }
++console.log("\nall passed");
++})();
+diff --git a/test/feedReplyWithWork.ts b/test/feedReplyWithWork.ts
+new file mode 100644
+index 0000000..e3ff5ab
+--- /dev/null
++++ b/test/feedReplyWithWork.ts
+@@ -0,0 +1,50 @@
++// ============================================================================
++// A reply card whose email asks for crew is listed, and our reply alone does not clear it.
++// ----------------------------------------------------------------------------
++// 8 of the live week's 16 silent misses (10-14..10-21, two blind readers, eval/live-week-reads.md)
++// were reply hand-offs on emails asking for crew: "book 2 crew, times TBC". The TV lists only
++// needs-created and needs-updated cards, and our reply cleared the item, so the booking was on
++// no screen. A plain question (a quote with no shifts, a rate) still leaves when we answer it.
++// npx tsx test/feedReplyWithWork.ts
++// ============================================================================
++import { project } from "../app/lib/feed/project";
++import { v2Sources, type V2Row } from "../app/lib/feed/v2";
++
++let fails = 0;
++const ok = (c: boolean, m: string, d?: unknown) => { console.log(`  ${c ? "PASS" : "FAIL"}  ${m}${c ? "" : "  " + JSON.stringify(d)}`); if (!c) fails++; };
++
++const NOW = Date.parse("2026-10-03T12:00:00Z");
++const H = 3_600_000;
++const row = (thread: string, over: Partial<V2Row>): V2Row => ({
++  thread_id: thread, message_id: `${thread}-m`, sent_at: new Date(NOW - 3 * H).toISOString(), kind: "handoff",
++  grounded: { intent: "booking", requests: [], problems: [] }, decision: { kind: "handoff", reasons: ["x"] },
++  executed: null, company_id: 343, company: "Client", from_address: "sam@client.example", subject: "Crew", ...over,
++});
++// A booking with no times: the planner asks the client, so the card is a reply card.
++const work = row("W", { grounded: { intent: "booking", requests: [{ action: "new_shift", date: "2026-10-14", crew: 2, problems: [] }], problems: [] }, decision: { kind: "handoff", reasons: ["request 1: no start time the client wrote"] } });
++const plain = row("Q", { grounded: { intent: "quote_request", requests: [], problems: [] }, decision: { kind: "handoff", reasons: ["the client asked for a quote"] } });
++// The reader could not tell what it asks: §4 says show it.
++const unclear = row("U", { grounded: { intent: "unclear", requests: [], problems: [] }, decision: { kind: "handoff", reasons: ["the request is unclear"] } });
++const cards = (out = new Map<string, number>()) => project([], new Map(), [], null, NOW, out, v2Sources([work, plain, unclear], NOW)).cards;
++const listed = (c: { items: Array<{ kind: string; work?: boolean }> }) => c.items.some((i) => i.kind === "needs-created" || i.kind === "needs-updated" || (i.kind === "needs-reply" && !!i.work));
++
++console.log("\nbefore we reply");
++{
++  const cs = cards();
++  const w = cs.find((c) => c.thread_id === "W"), q = cs.find((c) => c.thread_id === "Q");
++  ok(!!w && w.items[0].kind === "needs-reply" && !!w.items[0].work, "the crew request is a reply card marked as work", w?.items);
++  ok(!!w && listed(w), "and it is listed", w?.items);
++  ok(!!q && !q.items[0].work && !listed(q), "a plain quote question is not listed", q?.items);
++  const u = cs.find((c) => c.thread_id === "U");
++  ok(!!u && listed(u), "an email the reader found unclear is listed: uncertain is shown (§4)", u?.items);
++}
++
++console.log("\nafter our reply");
++{
++  const cs = cards(new Map([["W", NOW - H], ["Q", NOW - H]]));
++  ok(!!cs.find((c) => c.thread_id === "W"), "the crew request stays: answering its question does not book it");
++  ok(!cs.find((c) => c.thread_id === "Q"), "the quote question leaves, as before");
++}
++
++if (fails) { console.log(`\n${fails} FAILED`); process.exit(1); }
++console.log("\nall passed");
+diff --git a/test/replayKeepsWriteRecord.ts b/test/replayKeepsWriteRecord.ts
+new file mode 100644
+index 0000000..c4cf1a9
+--- /dev/null
++++ b/test/replayKeepsWriteRecord.ts
+@@ -0,0 +1,43 @@
++// ============================================================================
++// Deciding an email again never erases what the bot sent for it.
++// ----------------------------------------------------------------------------
++// The decision upsert writes `executed` as JSON null, and `coalesce` keeps a jsonb null, so a
++// replay through POST /api/bot/process replaced a write's executed statuses with nothing: the
++// only record of what reached OnSinch (audit/pipeline-trace-addendum.md R4, 2026-10-25). The
++// intake alarm names that route. An email with something sent is refused there instead, as the
++// replan already refuses it (replan.ts:63). An email that sent nothing still decides again.
++// Against PGlite (fixtures/pg.ts): nothing here reaches the production database.
++// npx tsx test/replayKeepsWriteRecord.ts
++// ============================================================================
++import { sql } from "./fixtures/pg";
++/* eslint-disable @typescript-eslint/no-require-imports */
++process.env.VERCEL_GIT_COMMIT_SHA = "test";
++const { processMessage, decideDelivery } = require("../app/lib/v2/process.ts");
++const { captureInboundRaw } = require("../app/lib/inboundRawDb.ts");
++
++let fails = 0;
++const ok = (c: boolean, m: string, d?: unknown) => { console.log(`  ${c ? "PASS" : "FAIL"}  ${m}${c ? "" : "  " + JSON.stringify(d)}`); if (!c) fails++; };
++
++(async () => {
++  // The message store and the decisions table exist, as in production; nothing is decided.
++  await captureInboundRaw({ thread_id: "t0", messages: [{ message_id: "m0", from: "Sam <sam@client.co.uk>", to: ["bookings@spartancrew.co.uk"], date: "2026-11-02T08:00:00Z", subject: "Crew", body: "thanks" }] });
++  await decideDelivery([]);
++  await processMessage("warm-up", { execute: false }).catch(() => {});
++  const executed = [{ status: "verified", op: "set_po" }];
++  await sql`INSERT INTO v2_decisions (message_id, thread_id, from_address, sent_at, kind, decision, executed, code_version)
++    VALUES ('w1', 't1', 'sam@client.co.uk', '2026-11-02T09:00:00Z', 'write', ${JSON.stringify({ kind: "write", ops: [], why: [] })}::jsonb, ${JSON.stringify(executed)}::jsonb, 'test'),
++           ('h1', 't2', 'sam@client.co.uk', '2026-11-02T09:00:00Z', 'handoff', ${JSON.stringify({ kind: "handoff", reasons: ["x"] })}::jsonb, 'null'::jsonb, 'test')`;
++
++  console.log("\nan email with a write that ran");
++  const r = await processMessage("w1", { execute: false });
++  ok(/record stands/.test(String(r.skipped)), "is refused, with the reason", r);
++  const [row] = (await sql`SELECT executed FROM v2_decisions WHERE message_id = 'w1'`) as any[];
++  ok(row?.executed?.length === 1 && row.executed[0].status === "verified" && row.executed[0].op === "set_po", "and keeps its executed statuses", row?.executed);
++
++  console.log("\nan email that sent nothing");
++  const h = await processMessage("h1", { execute: false });
++  ok(!/record stands/.test(String(h.skipped ?? "")), "is not refused by the guard (it goes on to read the message)", h);
++
++  if (fails) { console.log(`\n${fails} FAILED`); process.exit(1); }
++  console.log("\nall passed");
++})().catch((e) => { console.error(e); process.exit(1); });
+diff --git a/test/systemFailureToOwner.ts b/test/systemFailureToOwner.ts
+new file mode 100644
+index 0000000..21e489f
+--- /dev/null
++++ b/test/systemFailureToOwner.ts
+@@ -0,0 +1,27 @@
++// ============================================================================
++// The system's own failures are reported to the owner, not left only as cards for staff.
++// ----------------------------------------------------------------------------
++// OPERATING §2: operational failures must never be visible to the team; §15: alerts go to the
++// owner. In the live week 10-14..10-21, 5 of the 81 listed cards were the system failing (two
++// "could not plan" reads of OnSinch, three writes stopped part-way), and nobody was told.
++// A linked order that cannot be read is a booking gone (reasons.ts:27), not a fault, and a
++// policy or a client's missing detail is the client's need: neither is reported.
++// npx tsx test/systemFailureToOwner.ts
++// ============================================================================
++import { systemFailureOf } from "../app/lib/v2/process";
++
++let fails = 0;
++const ok = (c: boolean, m: string, d?: unknown) => { console.log(`  ${c ? "PASS" : "FAIL"}  ${m}${c ? "" : "  " + JSON.stringify(d)}`); if (!c) fails++; };
++const handoff = (reason: string) => ({ kind: "handoff", reasons: [reason] }) as any;
++const write = { kind: "write", ops: [], why: [] } as any;
++
++ok(!!systemFailureOf(handoff("the system could not plan this email (GET /orders answered 503, so what it holds is unknown)"), null), "a planner that could not read OnSinch is reported");
++ok(!!systemFailureOf(handoff("this email was not decided when it arrived; the system is reading it again"), null), "an email the intake failed to decide is reported");
++ok(!!systemFailureOf(write, [{ status: "verified" }, { status: "mismatch" }] as any), "a write that stopped part-way is reported");
++ok(systemFailureOf(handoff("this thread is linked to order 16614, which the system could not read: no order is named"), null) === null, "a linked order that is gone is not a fault");
++ok(systemFailureOf(handoff("2026-10-20 is within 7 days of the email: a person creates it"), null) === null, "a policy hand-off is the client's need, not a fault");
++ok(systemFailureOf(write, [{ status: "verified" }, { status: "verified" }] as any) === null, "a write that landed is not reported");
++ok(systemFailureOf(write, [{ status: "blocked" }] as any) === null, "a write refused before anything was sent is a rule, not a part-way failure");
++
++if (fails) { console.log(`\n${fails} FAILED`); process.exit(1); }
++console.log("\nall passed");
+diff --git a/test/v2Ground.ts b/test/v2Ground.ts
+index 194bbb8..0c432f9 100644
+--- a/test/v2Ground.ts
++++ b/test/v2Ground.ts
+@@ -4,7 +4,7 @@
+ //
+ // Offline.  npx tsx test/v2Ground.ts
+ // ============================================================================
+-import { latestText, quoteIn, parseTime, parseDuration, parseCount, parseDate, addMinutes, poAfterLabel, oneIn, timesIn, countsIn } from "../app/lib/v2/interpret/ground";
++import { latestText, quoteIn, parseTime, parseDuration, parseCount, parseDate, addMinutes, poAfterLabel, oneIn, timesIn, countsIn, datesIn } from "../app/lib/v2/interpret/ground";
+ import { ground } from "../app/lib/v2/interpret/interpret";
+ 
+ let fails = 0;
+@@ -166,5 +166,20 @@ console.log("a decrease must say it is one (crew_remove, 10-11)");
+   eq(ground(req({ value: 3, quote: "3 crew" }), email, sent).requests[0]?.crew_remove, undefined, "a bare 3 crew is a total, never a decrease");
+ }
+ 
++console.log("shapes HEAD still refused on 10-25 (eval/iterations.md, iteration 1)");
++{
++  const sent = "2026-11-10T09:00:00Z";
++  eq(parseDate("28-Nov", sent), "2026-11-28", "28-Nov: a hyphen before the month name (booking tables, 7 grounding refusals)");
++  eq(parseDate("2-day", sent), null, "2-day is not a date: the word after the hyphen must be a month");
++  eq(parseDuration("Duration: 4"), 240, "Duration: 4 is four hours, as Call hours: 4 already was");
++  ok(countsIn("can you reduce this crew to 5").has(5), "reduce this crew to 5 holds a total of 5");
++  const oct = "2026-10-20T09:00:00Z";
++  const both = datesIn("24th & 25th October", oct);
++  ok(both.has("2026-10-24") && both.has("2026-10-25"), "24th & 25th October holds both days", [...both].join(","));
++  const range = datesIn("29-31 October 2026", oct);
++  ok(["2026-10-29", "2026-10-30", "2026-10-31"].every((d) => range.has(d)), "29-31 October 2026 holds every day of the range", [...range].join(","));
++  ok(datesIn("1-30 November", oct).size <= 2, "a range over two weeks is not read as days");
++}
++
+ if (fails) { console.log(`\n${fails} FAILED`); process.exit(1); }
+ console.log("\nall passed");
+diff --git a/test/v2QuoteAccepted.ts b/test/v2QuoteAccepted.ts
+new file mode 100644
+index 0000000..692e9e8
+--- /dev/null
++++ b/test/v2QuoteAccepted.ts
+@@ -0,0 +1,50 @@
++// ============================================================================
++// A client accepting Spartan's quote becomes a card to confirm the order, never `none`.
++// ----------------------------------------------------------------------------
++// eval/acceptance-study.md (10-25): 73 of 799 client emails accept a quote or offer Spartan
++// sent, and 49 of them were decided `none` ("no change asked for", "already booked", "already as
++// asked"), so they reached no screen while staff confirmed the order by hand.
++// Offline, on PGlite (fixtures/pg.ts) for the decideMessage half.  npx tsx test/v2QuoteAccepted.ts
++// ============================================================================
++import "./fixtures/pg";
++import { acceptsQuote, QUOTE_ACCEPTED } from "../app/lib/v2/acceptance";
++import type { ThreadMsg } from "../app/lib/v2/threadState";
++/* eslint-disable @typescript-eslint/no-require-imports */
++process.env.VERCEL_GIT_COMMIT_SHA = "test";
++const { decideMessage } = require("../app/lib/v2/process.ts");
++
++let fails = 0;
++const ok = (c: boolean, m: string, d?: unknown) => { console.log(`  ${c ? "PASS" : "FAIL"}  ${m}${c ? "" : "  " + JSON.stringify(d)}`); if (!c) fails++; };
++
++const SENT = "2026-11-02T09:00:00Z";
++const ours = (daysBefore: number, body: string): ThreadMsg => ({ message_id: `o${daysBefore}`, from: "bookings@spartancrew.co.uk", to: ["sam@client.example"], at: Date.parse(SENT) - daysBefore * 864e5, subject: "Crew", body, ours: true });
++const quoted = [ours(2, "Hi Sam, please find attached our quote for the install. Let us know if you would like to go ahead.")];
++const e = (newest: string) => ({ newest, subject: "Re: Crew", fullBody: newest, sentIso: SENT });
++
++console.log("the rule");
++ok(acceptsQuote(e("Thanks, happy to go ahead. PO number is 45512."), quoted), "go ahead with a PO, after our quote, accepts it");
++ok(acceptsQuote(e("Great, please book it in."), quoted), "please book it in accepts it");
++ok(!acceptsQuote(e("Could you confirm availability for Friday?"), quoted), "asking us to confirm availability is not an acceptance");
++ok(!acceptsQuote(e("We will no longer be going ahead, sorry."), quoted), "withdrawing is not an acceptance");
++ok(!acceptsQuote(e("Happy to go ahead."), []), "with no message of ours in the thread, there is no quote to accept");
++ok(!acceptsQuote(e("Happy to go ahead."), [ours(20, "please find attached our quote")]), "a quote older than 14 days has lapsed");
++
++(async () => {
++  console.log("\nthrough decideMessage: the reader saw no change, and the email accepts our quote");
++  const m = { message_id: "q1", thread_id: "tq", from_address: "sam@client.example", date_iso: SENT, subject: "Re: Crew", body: "Thanks, happy to go ahead. PO number is 45512.", is_from_spartan: false };
++  const world = {
++    companies: async () => [{ id: 137, name: "Client Ltd", Client: [{ id: 1, email: "sam@client.example" }] }],
++    placesNamed: async () => [], companyOrders: async () => [], orderByNumber: async () => null, orderById: async () => null,
++  };
++  const deps = (thread: ThreadMsg[]) => ({
++    extract: async () => ({ x: { intent: "info_only", po: null, note: "", requests: [] }, meta: { model: "recorded", prompt_id: "t", input_tokens: 0, output_tokens: 0, cost_usd: 0, ms: 0 } }),
++    world, threadOrderId: async () => null, run: null, record: async () => {}, trace: () => {}, threadMessages: async () => thread,
++  });
++  const after = await decideMessage(m, deps(quoted));
++  ok(after.decision.kind === "handoff" && after.decision.reasons[0] === QUOTE_ACCEPTED, "it is a card to confirm the order", after.decision);
++  const plain = await decideMessage(m, deps([]));
++  ok(plain.decision.kind === "none", "the same words with no quote of ours stay `none` (control)", plain.decision);
++
++  if (fails) { console.log(`\n${fails} FAILED`); process.exit(1); }
++  console.log("\nall passed");
++})().catch((err) => { console.error(err); process.exit(1); });
+diff --git a/test/v2ReasonCodes.ts b/test/v2ReasonCodes.ts
+new file mode 100644
+index 0000000..03a638b
+--- /dev/null
++++ b/test/v2ReasonCodes.ts
+@@ -0,0 +1,18 @@
++// ============================================================================
++// Every "none" the planner gives has its own code, so the backlog counts it under its name.
++// ----------------------------------------------------------------------------
++// Two none reasons fell to "other" (10-25): the bare "already as asked" (7 of 799 read emails)
++// and "nothing new asked for: the requests are the thread's earlier ones" (6 of 400 in replay).
++// npx tsx test/v2ReasonCodes.ts
++// ============================================================================
++import { codeOfReason } from "../app/lib/v2/reasons";
++
++let fails = 0;
++const eq = (got: string, want: string, m: string) => { const c = got === want; console.log(`  ${c ? "PASS" : "FAIL"}  ${m}${c ? "" : `  got ${got}`}`); if (!c) fails++; };
++eq(codeOfReason("already as asked"), "none_already_as_asked", "the bare already as asked");
++eq(codeOfReason("already as asked; PO \"see attached PO\" left off: not a single reference after a PO label"), "none_already_as_asked", "already as asked with a PO note");
++eq(codeOfReason("nothing new asked for: the requests are the thread's earlier ones"), "none_thread_history", "a repeat of the thread's earlier requests");
++eq(codeOfReason("no change asked for"), "none_nothing_to_do", "no change asked for is unchanged");
++eq(codeOfReason("the client accepted Spartan's quote: confirm the order in OnSinch"), "quote_accepted", "a quote acceptance");
++if (fails) { console.log(`\n${fails} FAILED`); process.exit(1); }
++console.log("\nall passed");
+diff --git a/test/v2SharedDomain.ts b/test/v2SharedDomain.ts
+new file mode 100644
+index 0000000..48343ed
+--- /dev/null
++++ b/test/v2SharedDomain.ts
+@@ -0,0 +1,46 @@
++// ============================================================================
++// A sender whose domain several clients share is placed by the company the email names.
++// ----------------------------------------------------------------------------
++// OPERATING §9.3: one sender for several clients is settled by content, never by the most
++// frequent. matchCompanyByDomain abstains when a domain sits on more than one company, and 3 of
++// the live week's 7 emails with no client were on such a domain: each went to a person as "no
++// single client company" (audit/reconstruction.md §6.7, eval/iterations.md P5d).
++// Offline.  npx tsx test/v2SharedDomain.ts
++// ============================================================================
++import { plan, type World, type Message } from "../app/lib/v2/interpret/plan";
++import type { Interpretation, Request } from "../app/lib/v2/interpret/interpret";
++
++let fails = 0;
++const ok = (c: boolean, m: string, d = "") => { console.log(`  ${c ? "PASS" : "FAIL"}  ${m}${c ? "" : `  ${d}`}`); if (!c) fails++; };
++
++const world = (companies: Array<{ id: number; name: string; Client: Array<{ id: number; email: string }> }>): World => ({
++  companies: async () => companies,
++  placesNamed: async () => [],
++  companyOrders: async () => [],
++  orderByNumber: async () => null,
++});
++const two = [
++  { id: 501, name: "Harbour Staging Ltd", Client: [{ id: 1, email: "ops@agency.example" }] },
++  { id: 635, name: "Lantern Events", Client: [{ id: 2, email: "bookings@agency.example" }] },
++];
++const msg = (from: string): Message => ({ message_id: "m1", from, subject: "Crew", sentIso: "2026-10-01T09:00:00Z", text: "Please book 4 crew" });
++const booking = (company_name?: string): Interpretation => ({
++  intent: "booking", problems: [], ...(company_name ? { company_name } : {}),
++  requests: [{ action: "new_shift", problems: [], date: "2026-11-20", start: "08:00", end: "16:00", crew: 4 } as Request],
++});
++const noClient = (d: any) => d.kind === "handoff" && /no single client company/.test((d.reasons ?? []).join());
++
++(async () => {
++  console.log("a domain two companies share");
++  ok(!noClient(await plan(msg("tom@agency.example"), booking("Lantern Events"), world(two))), "the company the email names, among the domain's, is the client");
++  ok(noClient(await plan(msg("tom@agency.example"), booking(), world(two))), "with no name written, it still goes to a person");
++  ok(noClient(await plan(msg("tom@agency.example"), booking("Some Other Co"), world(two))), "a name that matches neither goes to a person");
++  const both = [...two, { id: 777, name: "Lantern Harbour Hire", Client: [{ id: 3, email: "x@agency.example" }] }];
++  ok(noClient(await plan(msg("tom@agency.example"), booking("Lantern Harbour"), world(both))), "a name that matches two of them goes to a person");
++  console.log("a domain many companies share (a mail host)");
++  const many = [1, 2, 3, 4].map((n) => ({ id: 900 + n, name: `Client ${n} Lantern`, Client: [{ id: n, email: `p${n}@host.example` }] }));
++  ok(noClient(await plan(msg("tom@host.example"), booking("Lantern"), world(many))), "four or more companies on a domain are never chosen between by name");
++
++  if (fails) { console.log(`\n${fails} FAILED`); process.exit(1); }
++  console.log("\nall passed");
++})();

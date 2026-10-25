@@ -4908,5 +4908,22 @@
   "sources": [
    "audit/alignment.md"
   ]
+ },
+ {
+  "id": "S-0224",
+  "ts": "2026-10-25T23:09:58+00:00",
+  "kind": "measurement",
+  "headline": "P1-P5: harness + isolation; dev recall 71.2% -> 88.6% with eval/patches/p1-fixes.diff (not deployed); test 87.0% -> 95.7%",
+  "subject": "Real-mail harness scores 799 labelled emails; a held patch lifts recall to 88.6%",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 218,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  },
+  "sources": [
+   "eval/iterations.md"
+  ]
  }
 ]

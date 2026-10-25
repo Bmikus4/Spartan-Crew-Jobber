@@ -36,7 +36,7 @@ Every exit writes a `resolved` or `missed` mark with its reason (marksDb.ts:27-3
 1. **One chip that says what kind of item it is**, taken from the decision's reason code. The code is stamped on every decision but is read nowhere in the feed today (card-anatomy §1.5):
    - **Your decision:** policy rules, several candidate orders, an unclear request. These keep today's look.
    - **Ready, writes paused:** a planned write that did not run because `bot_writes_enabled` is off. It reads "Not written, do it by hand" today.
-   - **System problem:** `system_failed`, a booking link that cannot be read, or a write that stopped part-way. That was 8 of the live week's 81 listed cards. Under §2 and §15 these should go to the owner's alerts and be retried, not shown to staff. Until that path exists, they at least carry this chip.
+   - **System problem:** `system_failed`, or a write that stopped part-way. That was 5 of the live week's 81 listed cards. A booking link that cannot be read is a booking gone, not a fault (reasons.ts:27). Under §2 and §15 these should go to the owner's alerts and be retried, not shown to staff. Until that path exists, they at least carry this chip.
 2. **Top-3 and evidence, for a need about an existing order:**
    - **Under the R/J:** one line saying how the order was found. The link's `source` is already stored, for example "R number in the email", "the thread's earlier order" or "day + venue".
    - **When the planner found several orders**, their R numbers (up to 3), each with the fact that matched: day, venue or start.

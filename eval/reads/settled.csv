@@ -1,0 +1,15 @@
+message_id,asks,days,crew,source
+1a13f5601780e57f,po_only,2026-10-19,,A+V
+1a140936e8627133,nothing,2026-11-02;2026-11-03,,B+V
+1a1537f6f674abca,cancel,,,A+V
+1a153c3baf30122a,question,,,B+V
+1a1596b0abbb0a66,cancel,2026-10-21,,A+V
+1a159f0b5b42bf65,cancel,2026-10-22,,A+V
+1a1208931db0f772,new_booking,2026-10-10,4,B+V
+1a130a97919faa70,new_booking,2026-10-13,2,A+V
+1a130b076cfc037b,new_booking,2026-10-13,,B+V
+1a130cbded49f14a,nothing,,,A+V
+1a134bc0808ae334,new_booking+quote_or_availability,2026-10-16,6,A+V
+1a13522d3d67b485,question,,,A+V
+1a13560df44be6f6,cancel,,,A+V
+1a163363d4931a51,cancel,,,A+V

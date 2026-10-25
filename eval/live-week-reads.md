@@ -34,7 +34,8 @@
   - 1a13fd94ac637812 is one of the taxonomist's label_wrong rows. Both readers read it as a booking, and staff created an order on its day. So the label_wrong call is wrong.
   - The other 4 are three quote acceptances and one site-contact change, with no staff act visible in the fetched actions.
 - **8 were needs-reply items, which neither the TV nor Gmail shows.** Staff acted on the named day for 4. Our first reply came within 2 h for 7; one waited 61 h (1a14638ee5140233).
-- The staff-acted count was 4/84. Over all mail it is 16/90. Counting quote requests as inquiries, it is 24 of 113 (78.8%, CI 70.1-85.9).
+- The staff-acted count was 4/84. Over all mail it is 16/90. Counting every quote request as an inquiry, it is 24 of 113 (78.8%, CI 70.1-85.9).
+- **Under the owner's own rule B42 (10-15)**, "Quotes that list shifts become orders", a quote is an inquiry when a reader recorded a day and a crew count for it. That adds 15 inquiries and 2 silent misses: **18 of 105, inquiry_recall 82.9% (CI 74.3-89.5)**. This is the working figure. A quote with no shifts is a reply (scripts/b42.mts).
 
 **Quotes are the boundary that moves the numbers.**
 - The taxonomist's other 3 silent misses are quote requests, according to both readers, and staff turned them into orders.

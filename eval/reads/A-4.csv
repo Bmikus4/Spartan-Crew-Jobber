@@ -1,0 +1,200 @@
+message_id,asks,target_ref,days,crew,sure,note
+1a1305d0dd1dd07c,nothing,,,,sure,thanks for being told the short-notice request cannot be covered
+1a13064ac353c86b,nothing,,,,sure,says the invoice has been submitted for payment
+1a130662446cf469,nothing,,,,unsure,"declines the quote, sorted internally; nothing booked"
+1a13066d1a39485c,new_booking,,2026-10-13,2,sure,"books 2 crew tomorrow, two short furniture-moving calls"
+1a1307d078cecadc,question,,,,unsure,automated request to review and sign an event safety document
+1a1307f87ab752b3,new_booking,,2026-10-14,10,unsure,"accepts the quote for 4 morning and 6 evening crew, sends PO and contact"
+1a13083767cf9c0d,nothing,,2026-10-10,,unsure,says extra day will be added to a later PO; info only
+1a1308567c26e478,new_booking,,2026-10-21;2026-10-22;2026-10-25;2026-10-26,4,sure,accepts the quote and asks for pro forma to pay deposit
+1a13085cfeb51075,nothing,,,,sure,delivery failure bounce
+1a1308b99b2eaf9b,new_booking,,2026-10-15;2026-10-16,,unsure,"books quoted job, changes one call to 6h, adds 4 crew unload shift"
+1a1309f20ddc4045,quote_or_availability,,,4,unsure,"asks for the quote to be resent for 4 crew 6h, PO to follow"
+1a1309f7f0000dee,nothing,,2026-10-13,,unsure,clarifies the first day still goes ahead as planned
+1a130a2fa22d6538,nothing,,,,unsure,gives site contact for the confirmed job; no new request
+1a130a34df3bd1d4,change,day,2026-10-16,,sure,moves shift start 5pm to 4pm; asks crew reminded to bring ID
+1a130a6723ced540,po_only,day,2026-10-08,,sure,supplies PO number for the past job
+1a130a97919faa70,new_booking,,2026-10-13,2,unsure,"insists on at least 2 crew for tomorrow, asks availability"
+1a130b076cfc037b,po_only,day,2026-10-13,,unsure,sends PO and onsite contact for tomorrow's agreed warehouse cover
+1a130b29a1dd3cdc,nothing,,,,sure,short thanks after being told job kept on system
+1a130b2babb5e27b,nothing,,,,sure,thanks colleague for submitting invoice
+1a130b4e27c044e7,new_booking,,2026-10-13,2,sure,goes ahead with afternoon move only; drops late return shift
+1a130b547c747778,nothing,,,,sure,asks own colleague to update their PO; nothing for the supplier
+1a130bd24a00682e,nothing,,,,sure,delivery failure bounce
+1a130c1ead8e20f2,nothing,,,,sure,"thanks, waits to hear back tomorrow"
+1a130c6628dd4973,nothing,,,,sure,thanks for updating the shift time
+1a130c72f7c42deb,nothing,,,,sure,thanks
+1a130c816a792ddb,po_only,thread,,,sure,asks that the booking reference match a given project number
+1a130c9740330432,new_booking,,2026-10-14,1,sure,confirms the quoted single-crew derig by sending a PO
+1a130c9c433633d5,nothing,,,,sure,"notes a crew member's dietary need, thanks"
+1a130cbded49f14a,nothing,,,,unsure,"says deposit paid, gives site contact and meeting point"
+1a130d2f1bd4b587,new_booking,,2026-10-13;2026-10-15,2,sure,urgent request: 2 crew 4h on two days at one site
+1a130d65daad2a3a,nothing,,,,sure,delivery failure bounce
+1a130e4cfafe71fd,nothing,,,,unsure,acknowledges first day cannot be covered; no reply on second
+1a130eccc197a972,nothing,,,,unsure,answers per diem and airport travel allowance question
+1a130ed2dc8564c1,nothing,,,,sure,thanks
+1a130f191b1ec7ba,po_only,day,2026-10-16,,sure,sends PO for the named day's job
+1a1310dca1cfb037,nothing,,,,sure,gives onsite contacts; asks colleague to do forms and payment
+1a131a77a85ae6c0,change,day,2026-10-14,,unsure,says the day's call starts 12:00; the 08:00 call not needed
+1a132ebc495af6ac,nothing,,,,sure,job applicant sends CV
+1a133f956c0c7d50,question,,,,sure,asks for crew chief's phone number for the derig
+1a133ffc4062442c,po_only,day,2026-10-09,,sure,supplies PO number for past job
+1a13437faea595ec,nothing,,,,sure,thanks for the crew chief's number
+1a13438a3dd67400,quote_or_availability,,2026-11-13,6,sure,"asks quote for 6 crew load-in and 6 crew de-rig, 4h each"
+1a1344a080edb10d,quote_or_availability,,2026-10-14,1,unsure,asks if a van and driver is free tomorrow evening for pickup and unload
+1a134597bd825855,nothing,,,,sure,marketing email about awards sponsorship
+1a1345c6d25b4669,change,day,2026-10-13,,sure,moves today's call to 18:45-00:45
+1a1346130e776e0a,question,,,,unsure,"asks that all crew bring hi-vis, hard hats and steel toecaps"
+1a1346d2955de2f7,nothing,,,,sure,automatic out-of-office reply
+1a1347346c4f46c7,nothing,,,,sure,remarks the time move is only 15 minutes
+1a1347b94eecdacf,nothing,,,,sure,invitation to exhibit at a careers fair
+1a1347e6882abf19,nothing,,,,sure,gives the meeting location asked for
+1a1348bfad822751,nothing,,,,sure,gives this evening's site contact
+1a1348ed049e0dc6,question,,,,sure,asks overtime hours be split into a separate quote for a third party
+1a134990c712db28,change,day,2026-10-15,2,sure,adds 2 crew on Thursday 16:15-18:15 to the existing job
+1a134a4324d240f6,new_booking,,2026-10-14;2026-10-16;2026-10-18,10,sure,"books 2 crew Wed night, 4 crew Fri, 4 crew Sun"
+1a134a6d63f9f41b,new_booking,,2026-10-14,4,sure,"asks 4 crew tomorrow 6am-10am, wants confirmation they can help"
+1a134a77c6b3fe71,nothing,,,,sure,automatic onsite delayed-response reply
+1a134a7797abc687,nothing,,,,sure,automatic onsite delayed-response reply
+1a134a907e8154cc,question,,,,sure,asks whether a crew name change is for the imminent shift
+1a134bc0808ae334,new_booking+quote_or_availability,,2026-10-16,6,sure,"urgent: wants to book and get quote, 4 crew 6h plus 2 crew 8h"
+1a134bd72a3badb7,nothing,,,,sure,says flight details and crew pack will follow
+1a134c23b14e1ca5,nothing,,,,sure,automatic out-of-office reply
+1a134c3dedbb2d2f,question,,2026-10-13,,sure,asks whether a named crew member is due today at 12
+1a134c495b1271d6,po_only+question,thread,,,sure,sends PO for the job and asks for crew names
+1a134c5ffcdf19e8,nothing,,,,sure,automatic out-of-office reply
+1a134c6084086bc5,nothing,,,,sure,automatic out-of-office reply
+1a134c7062516c4c,nothing,,,,sure,thanks for the help
+1a134cd95768b9bb,question,,2026-10-13,,unsure,corrects which crew member they asked about for today
+1a134d056bd20d35,nothing,,,,unsure,describes the work to set expectations; no new request
+1a134d4601dc07f2,change,day,2026-10-13,,unsure,confirms adding the late 23:00 call now that crew are free
+1a134d78ed64a212,question,,,,sure,"says both invoices paid, asks for VAT invoice receipts"
+1a134d846cab863b,change,day,2026-10-20;2026-10-21,,sure,"adds a second forklift ticket on two derig shifts, asks cost"
+1a134e78be0cac0c,new_booking,,2026-10-14,2,sure,books 2 crew Wednesday 06:00-10:00 at warehouse
+1a134e84acb0750e,nothing,,,,sure,"thanks, will raise the PO"
+1a134f169f7ba6cc,question,,2026-10-13;2026-10-14,,sure,asks crew contact numbers for tonight and tomorrow
+1a1350a4379bc802,new_booking,,2026-10-27,2,sure,confirms the quoted job with PO and onsite contact
+1a135109bb809c79,quote_or_availability,,2026-10-17;2026-10-18;2026-10-22;2026-10-23,15,sure,asks availability of 15 LED engineer positions abroad
+1a13522d3d67b485,question,,,,unsure,gives site contact; asks if late PO is ok or card payment possible
+1a1352b78f7f7632,nothing,,,,sure,"thanks, waits for update"
+1a1352eb400586cf,po_only,day,2026-10-13,,sure,sends PO for the named day's job
+1a1352f5e4f4c520,po_only,day,2026-10-14,,sure,gives PO number to be referenced on invoice
+1a1353d267620c42,change+question,thread,,,sure,adjusts stage-hand timings per attached planner; asks when crew names
+1a13559076383e5a,nothing,,,,unsure,answers PPE query: wants hi-vis jackets
+1a13560df44be6f6,cancel,thread,,,unsure,"withdraws the availability request for LED engineers, may be sorted"
+1a1357bc83414e00,new_booking,,2026-10-14,2,sure,sends PO confirming the quoted 2-crew warehouse shift
+1a135804661c1cf4,nothing,,,,sure,gives onsite contact and meeting point details
+1a13580663254fe5,question,,,,sure,asks the invoice be raised to a third-party company
+1a13580f2ec6d160,question,,,,sure,says late crew is making up time; asks if meeting location still needed
+1a1358092800e193,nothing,,,,sure,automatic out-of-office reply
+1a13585d743572a8,change,day,2026-10-18,,sure,moves crew chief and forklift calls forward an hour on load-in day
+1a13589904a89363,nothing,,,,unsure,cannot answer meeting point; colleague will reply tomorrow
+1a13595a58625348,change,thread,2026-10-18,,sure,"extends crew chief call by 1h, forklift calls still moved forward"
+1a1359beb7cb35ed,nothing,,,,sure,thanks for the update
+1a135c5ab4d484fd,question,,,,sure,supplier form phone field too short; asks how to proceed
+1a135cfb0b4e6f97,nothing,,,,sure,passes on good feedback about crew
+1a135d12439df374,new_booking+change,thread,2026-10-14;2026-10-15;2026-10-16;2026-10-19;2026-10-20;2026-10-21;2026-10-22;2026-10-23,,unsure,asks 6 locals rest of this week and 10 locals next week Mon-Fri
+1a135decfa245b7a,nothing,,,,sure,thanks
+1a135e08ed0fd0a2,nothing,,,,sure,will complete the supplier form shortly
+1a135e5b01310d1a,quote_or_availability,,2026-10-14;2026-10-15;2026-10-16,,unsure,asks for the quote for the rest of this week; PO on Friday
+1a135f42f66840c4,nothing,,,,sure,confirms crew contacts match their sheet
+1a135f8526b98e80,question,,,,sure,venue asks for an overview of right-to-work check procedures
+1a135fb28440cdfe,question,,,,sure,"says payment made, asks for the receipt"
+1a1360525afb230c,nothing,,,,sure,thanks
+1a1362cc9126dca1,nothing,,,,unsure,"confirms van job, PO to follow, names a different site contact"
+1a1364f06e29d589,question,,,,unsure,automated request to review and sign an event safety document
+1a136c970e92aebb,po_only,thread,,,sure,raised a second PO for the uplift; reference both on invoice
+1a15d9d417da137e,question,,,,sure,"post-event feedback: attire and sign-in issues, asks better communication"
+1a15dbaf5bb1451c,change,day,2026-10-23,3,sure,changes the confirmed booking to three crew
+1a15e2c6ed940618,po_only+question,R11662,2026-10-23,,sure,sends PO and onsite contact; asks crew names and numbers
+1a15e48d5030449d,question,,,,sure,asks whether listed crew have dietary requirements
+1a15e5fdfbbca74c,nothing,,,,sure,thanks for quick reply
+1a15e7dd2a875da9,quote_or_availability,,,,unsure,asks the unconfirmed quote amended to a 10:15pm time
+1a15ea17d46c8b5f,quote_or_availability,,2026-10-23,1,unsure,asks if 1 crew is free 8am-11am on the named day
+1a15ea782b0a303e,quote_or_availability,,2026-11-02;2026-11-03,1,sure,asks if a certified forklift driver is free on two days
+1a15ec8e086220fc,new_booking,,2026-10-23,1,sure,books 1 crew Friday 11:30-14:00
+1a15eca19d0839c8,po_only,day,2026-10-22,,sure,"sends the PO asked for, as an attachment"
+1a15ee2f54d7674e,new_booking,,2026-10-23,1,sure,confirms the quoted single-crew Friday shift; contact to follow
+1a15ef35c4230de4,new_booking,,,,sure,confirms the amended quote; asks colleague to raise PO
+1a15efb943b1bda0,po_only,R11765,,,sure,sends PO matching the named quote
+1a15f2f4c78351f4,nothing,,,,sure,sends proof of invoice payment
+1a15f559d23a2c6b,nothing,,,,sure,automated event registration confirmation
+1a15fa1d8cbdbb91,change,R11029,2026-10-22,,sure,moves tomorrow's de-rig to 12:00-17:00; replace crew if unmotivated
+1a15fb80f5389c39,question,,2026-10-22,,unsure,booking looks fine; asks a named crew member is fit for heavy work
+1a15fd746057a6e7,nothing,,,,unsure,unreadable
+1a1602358072be94,question,,2026-10-22,,unsure,venue bans shorts; asks crew wear trousers
+1a160ff570aae84d,nothing,,,,sure,automated event registration confirmation
+1a16122586babb59,nothing,,,,sure,still no update on the quoted job; will reply later
+1a162466418c36cc,new_booking,,2026-10-23,2,unsure,confirms the quoted shift and asks to add a second crew
+1a16248edfeb57ba,nothing,,,,sure,automated event registration confirmation
+1a1626f3336c7406,change,J16931,2026-10-22,2,unsure,portal notice: client edited a 2-crew de-rig shift
+1a1627ea9bcab6d2,cancel,J16944,,,sure,portal notice: client cancelled the named job
+1a1627ebd6d0beed,cancel,J16944,,,sure,duplicate portal notice: client cancelled the named job
+1a1627f3895c9a29,po_only,day,2026-10-23,,sure,gives PO number and a contact for the Friday shift
+1a1627f9e477a068,cancel,R11801,2026-11-04;2026-11-05,,sure,"cancels the whole order, no longer going ahead"
+1a1628d1ab464612,change,unclear,,6,sure,changes a call to 6 crew 7h at 09:00; venue and contact update
+1a162b51d1fe1d5e,new_booking,,2026-11-02;2026-11-03,2,sure,adds a new job: 2 crew 3h and 2 crew 2h on two days
+1a162b9f813f2fa4,new_booking,,2026-11-16;2026-11-18,1,sure,asks 1 approved local on two evenings
+1a162bdeb5fab998,new_booking,,2026-11-20,1,sure,asks 1 approved local 18:00-21:00
+1a162bf537dd1df6,nothing,,,,sure,emoji reaction to a message
+1a162cc00a9707b0,nothing,,,,sure,unrelated login code email
+1a162cc306abcdac,nothing,,,,sure,unrelated new-login security notice
+1a162e715892cb17,new_booking+change,thread,2026-11-02;2026-11-03,1,unsure,"confirms the forklift driver booking, asks hours moved to 2pm-6pm"
+1a162e992ce75a1f,nothing,,,,sure,automatic out-of-office reply
+1a162e9bfde3aad3,nothing,,,,sure,automatic onsite delayed-response reply
+1a162ee6be44f3ac,question,,2026-10-22,,unsure,says a third crew position on today's job was never requested
+1a162fab1c12309e,question,,,,sure,"says payments made, asks for receipts"
+1a162fea853159a9,question,,,,sure,asks whether the replaced crew member is the one with a clash
+1a163048943640bf,nothing,,,,unsure,corrects the site contact's phone number
+1a1630f6715a22a0,nothing,,,,sure,"fine, asks to hear if a replacement is found"
+1a163209f016cd2d,new_booking,,2026-10-26,4,sure,confirms the quoted two-call job with PO and site contact
+1a163233ee548c4b,question,,2026-10-23,,sure,asks crew names and contacts for tomorrow's event
+1a163313ae8685ed,question,,2026-10-26,,sure,asks for the crew list asap for security
+1a163363d4931a51,cancel,thread,,,unsure,says stand down on the quoted shifts
+1a163417b8d27d62,nothing,,,,sure,pleased with the named crew contact
+1a16354665c665fd,question,,,,sure,asks for copies of invoices for two October bookings
+1a1635a1c1b1b941,new_booking,,2026-10-23,2,sure,confirms the updated 2-crew quote; contact details to follow
+1a1637f32d75fe09,new_booking,,2026-10-26,6,unsure,"confirms the quoted job goes ahead; sends PO, contact, site map"
+1a163781e670632f,quote_or_availability,,2026-11-02;2026-11-04;2026-11-05,10,sure,asks quote for 10 crew on three days
+1a1637c7279be534,new_booking,,2026-11-21,1,sure,asks 1 approved crew member 17:30-20:30
+1a1637eeed35ce33,quote_or_availability,,2026-10-27;2026-10-28,6,unsure,asks the unconfirmed quote revised to 6 crew on two days
+1a16381631f0b879,nothing,,,,sure,gives point of contact
+1a1638b9560e9150,nothing,,,,sure,job applicant offers to join as crew
+1a1638d02e685f31,change,day,2026-10-26,2,unsure,asks if 2 more crew can be added to the derig shift
+1a163a317d8f7476,new_booking+po_only,day,2026-09-29;2026-10-23;2026-10-24,4,sure,says PO is for an earlier job; books 4 crew 1h tomorrow or Saturday
+1a163b198663b88e,quote_or_availability,,2026-10-28,6,unsure,asks the revised quote's derig cut from 11 to 6 crew
+1a163b46e0a7df1f,new_booking,,2026-10-23,4,sure,picks tomorrow 8am for the sofa move
+1a163c3dc28721c4,question,,,,sure,asks for a pro forma invoice for the new job
+1a163dd1e345c607,change,thread,,2,sure,cuts the confirmed order from four crew to two
+1a163e76489c8b70,question,,2026-10-29;2026-11-01,6,sure,"checks the confirmed 6-crew install and derig, asks crew names"
+1a163e89a46a528e,quote_or_availability,,2026-10-29;2026-10-30;2026-10-31,,sure,"asks quote and availability for an installation assistant, three days"
+1a163f2b904d3714,nothing,,,,sure,automated event registration confirmation
+1a163f4c10e4b756,nothing,,,,sure,thanks for confirming
+1a163fc5755a93c1,change,day,2026-10-23,1,sure,adds one more local crew for two hours tomorrow
+1a164016b65293aa,question,,,,unsure,crew member's flight rebooked; asks it be passed on
+1a16405018e55dc8,change,day,2026-10-23,,sure,gives 8pm-10pm timing for the added crew tomorrow
+1a1640509f8105b2,nothing,,,,sure,supplier newsletter on cyber security
+1a1640b67c2aad97,nothing,,,,sure,gives the location code asked for
+1a1640d3f416f457,nothing,,,,sure,"thanks, will chase payment"
+1a16414e865a317c,quote_or_availability,,2026-10-29;2026-10-30;2026-10-31,1,sure,asks quote for 1 installation assistant over three days
+1a16419dab416c03,nothing,,,,unsure,thanks for adding the extra crew; updated PO to follow
+1a164208de49d140,change,day,2026-10-23,,sure,moves the confirmed shift to 7am-10am
+1a164246ecc89899,question,,,,sure,payment coming; asks for credit account forms
+1a1642b5519f9f23,cancel,day,2026-10-23,,sure,"cancels tomorrow's booking, will reschedule"
+1a1642c32e796917,po_only,day,2026-10-23,,sure,sends new PO; says its 4h call should read 2h
+1a1642f00fa3f425,new_booking,,2026-11-04;2026-11-18;2026-11-24;2026-11-26,114,sure,books several new jobs across four days with POs and contacts
+1a1643e6e8ccf501,question,,2026-10-31,,sure,asks if the last day could be cancelled on 24 hours' notice
+1a164455efcd40af,question,,,,sure,says the crew sheet is missing the added crew member; asks new one
+1a1644e314a0281c,question,,2026-10-23,,sure,says the timesheet shows wrong date and name
+1a16451b368c3297,nothing,,,,sure,admits misreading the timesheet
+1a1645967256bfa7,question,,,,sure,asks for an invoice reflecting the new timings
+1a1645bfdfef8578,nothing,,,,sure,automated event registration confirmation
+1a1645fb681fb9f7,question,,,,sure,asks whether payment is upfront or 30 days
+1a164676d98f1a6e,nothing,,,,sure,will confirm tomorrow
+1a16468ed98f8c11,cancel,J16905,,,sure,portal notice: client cancelled a setup shift on the named job
+1a1646ec2547bb1b,question,,,,sure,asks the updated quote resent to adjust the existing PO
+1a164706c6e7746d,change,J16905,,4,sure,portal notice: client added a 4-person shift to an existing job
+1a164788327208b7,quote_or_availability,,2026-10-31,4,sure,"asks price for 4 crew, 4h call starting 00:30"
+1a1647c7ed0c3128,question,,2026-10-23,,sure,says paid; asks confirmation the time change was received
+1a16499ed1835bce,nothing,,,,sure,withdraws the reduction; keeps all four booked crew
+1a165385f29b8b9d,question,,,,sure,asks for crew details

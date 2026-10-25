@@ -363,10 +363,10 @@ The data are the 40 write decisions of the 400 client emails, each checked again
   - On that reading item_correctness is 18/104 = 17%. W4 checks what a card actually shows.
 - **Correct writes were still rebuilt.** 12 of the 18 correct writes are creates, and staff rebuilt or deleted 11 of them. The second-worst outcome (§4), confirming the wrong thing, happened on 3 of 23 writes. The more common failure was doing the right thing and being redone.
 
-**Operational failures shown to staff (§2: "must never be visible to the team"), live week: 8 of 81 listed cards (9.9%).**
+**Operational failures shown to staff (§2: "must never be visible to the team"), live week: 5 of 81 listed cards (6.2%).**
 - 2 `system_failed`: "the system could not plan this email (GET /orders answered N)", an OnSinch read error.
-- 3 `booking_link_unreadable`: the thread's linked order could not be read.
 - 3 writes that stopped part-way at the crew-chief position.
+- Not counted: 3 `booking_link_unreadable` cards. A linked order the system cannot read is a booking gone, not a fault (`reasons.ts:27`). Corrected on 10-25: the first count said 8.
 - Held-link cards ("Order not found in OnSinch", `serve.ts:121-127`) come on top of these. The snapshot holds 2 held links.
 
 Each of these reaches the TV as an ordinary needs-created or needs-updated card, with nothing marking it as the system's own failure.

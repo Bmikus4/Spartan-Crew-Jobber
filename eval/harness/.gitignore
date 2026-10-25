@@ -1,0 +1,3 @@
+# Every run rewrites these. The committed record of a measurement is baseline-live-week.md
+# (and, from Phase 1 on, the ticket feed), never a directory of run files.
+runs/

@@ -3,17 +3,60 @@
 Updated: 2026-10-25   Session: 2
 
 ## Phase and section
-Phase: 0   Current section: §7 Checkpoint A (re-presented 10-25)   Status: awaiting checkpoint
+Phase: 1   Current section: §8 Sandbox + §13.1 step 1 (harness, isolation)   Status: in progress
 
-Checkpoint A was presented on 10-25. The owner then asked "review the original spec and continue with your audit one by one"
-(decisions/2026-10-25-spec-review-reopens-checkpoint-a.md). That is read as: close the spec gaps one by one, then present
-Checkpoint A again. It is not read as confirmation; Phase 1 does not start.
+Checkpoint A passed on 10-25: the owner, "bro the alignment is for you wtf" (decisions/2026-10-25-alignment-is-the-orchestrators.md).
+The eight questions were settled from the owner's own rulings or held without blocking (same file).
 
-## Session 2 plan
-1. spec-compliance (fresh agent, read-only) lists every Phase 0 / Checkpoint A requirement as MET / PARTIAL / MISSING /
-   SUPERSEDED: done, audit/spec-compliance.md, accepted.
-2. Close its 60 PARTIAL and MISSING rows as the work units W1-W11 below, in that order, each committed through the gate.
-3. Present Checkpoint A again (W11) and stop.
+## Session 3 plan (Phase 1, OPERATING §13): the owner, 10-25: "keep going one by one, finish and build phase 1"
+Each step starts only when the one before it is verified. Each build agent works in new files or its own sandbox paths,
+and I gate every merge. Nothing is deployed: shipping waits for Checkpoint B (§14).
+
+- [x] P1 Harness (harness-engineer, bd19ffb1) ACCEPTED: score-production 48/48 reproduced on my re-run; test/harnessReal.ts
+      11/11; replay dev at HEAD 16 silent of 79. Extension to all 799 running (same agent, resumed). score-production reproduces eval/live-week-reads.md exactly; replay gives
+      HEAD's baseline on stored readings ($0). Deviation, recorded: the agent works in the main checkout, but only in new
+      paths, because .tmp-data/ and node_modules/ are not in a worktree.
+- [x] P2 Isolation ACCEPTED (isolation-verifier e102bf03): ISOLATED, no leak. Gaps G1-G3 closed by me and re-verified
+      (audit/isolation-report.md addendum): score-production runs the preflight; credential names refused by shape; the lock covers
+      http/https, sockets, child processes. Was: P2 Isolation (isolation-verifier, a different agent). It tries to make the harness reach production, OnSinch or mail.
+      A leak halts everything (§8.4).
+- [ ] P3 Eval set (§13.1 step 2):
+      - read the 399 other snapshot emails with two readers (A3, B3, A4 running; B4 queued);
+      - a third blind reader settles disagreements;
+      - apply the B42 rule;
+      - make a chronological dev/test split with test locked.
+      The target is about 500 outstanding inquiries, so the interval is about ±4 (§8.9).
+- [ ] P4 §11.3 diagnostic: inject the correct order into the planner's candidates on dev. It decides whether retrieval or
+      selection is the bottleneck.
+- [ ] P5 Fixes, largest bucket first, each measured on dev in replay ($0) and logged in eval/iterations.md (§13.2):
+      a. grounding and parser (reading_unproven 34 listed; at most 15 parser-side: crew in words, "Duration: N", a day
+         plus a time read as the year, ordinal months, ranges);
+      b. "nothing to do" on acceptances and confirmations of quotes or bookings (8 silent; info_only gives none, plan.ts:476);
+      c. operational failures reported to the owner (5 of 81 listed; the first count of 8 wrongly included 3 gone bookings);
+      d. client resolution (8: 5 none, 3 wrong);
+      e. needs-reply that carries a booking need (8 silent): built in the sandbox only, because it is a display change;
+      f. the replay that erases the write record (process.ts:514-517);
+      g. the §10 display proposals: sandbox only; shown to the owner at Checkpoint B.
+      A fix that needs a model call to measure waits for the owner's yes on a capped paid run (P01).
+      BUILT, not yet measured, in the sandbox worktree C:/Users/thera/spartan-v2-p1 (branch sandbox/p1-fixes):
+      - a. the parser change (ground.ts), with 7 new cases in test/v2Ground.ts; all pass. 1,336 stored quotes: +13 grounded, 0 lost.
+      - c. `systemFailureOf` plus the `system-failed` alert route (process.ts, errorReport.ts); test/systemFailureToOwner.ts 7/7.
+      - f. processMessage refuses to re-decide an email with something sent; test/replayKeepsWriteRecord.ts passes, and goes red
+           without the guard.
+      - d. shared-domain client resolution; a known domain never becomes a new client (plan.ts); test/v2SharedDomain.ts 5/5;
+           planner suites and harnessGate pass.
+      - e. needs-reply cards that ask for crew are listed and survive our reply (v2.ts, project.ts, serve.ts, check.ts);
+           test/feedReplyWithWork.ts 5/5. A display change: shipped only with the owner's and Paz's authorization (Checkpoint B).
+      - b. quote acceptances become hand-offs to confirm the order (acceptance.ts, from eval/acceptance-study.md, accepted:
+           the rule reproduced at 88 fires / 1 false positive); test/v2QuoteAccepted.ts 8/8.
+      - g. §10 B: a kind chip (System Problem / Ready, Writes Paused), found-by under the R, up to 3 candidates on a
+           several-orders hand-off (plan.ts candidates); test/feedNeedKind.ts passes. Display: ships only with authorization.
+      tsc is clean. To merge: measure a, b and d on dev with the harness (wrong writes must stay 0), then run the gate.
+- [x] P3 (labels) 799 emails labelled by two readers; 14 disagreements settled by a third (eval/reads/settled.csv); verifiers
+      match the consensus on 38/40 and 39/39. Split and lock: harness-engineer.
+- [x] P5 MEASURED (eval/iterations.md, iterations 1-2): dev silent 16 -> 5 of 79, recall 79.7% -> 93.7%, display 94.3%;
+      patch eval/patches/p1-fixes.diff (20 files, applies cleanly; NOT deployed: pushing app code to v2 deploys production).
+- [ ] P6 After each iteration, check the exit conditions (§14). When one holds: red-team-B, audit/final-state.md, Checkpoint B.
 
 ## Work units (from audit/spec-compliance.md "Order of work"; row ids in brackets)
 - [x] W1 Ledger and decisions: this file rewritten; decisions/ holds the five dated entries (RB2-*, RB3-g, S16-2, S16-3, A2-13)
@@ -41,7 +84,7 @@ Checkpoint A again. It is not read as confirmation; Phase 1 does not start.
 - [x] W9 audit/plans-read.md (accepted: 7 quotes re-opened at source, all exact). Best fits: owner's audit = Spartan Audit
       10-03 (Claude Doc 3159313d); previous 99% plan = harness/reports/01-discovery.md §2.5. Two 10-03 owner rulings missing
       from the history (dedup AI step; several orders per enquiry). Folded into reconstruction.md §6.3 (S2-8, S2-9)
-- [x] W10 Operational failures on the TV: 8 of 81 listed cards; no curve because the gate has no thresholds (reconstruction.md
+- [x] W10 Operational failures on the TV: 5 of 81 listed cards (corrected from 8); no curve because the gate has no thresholds (reconstruction.md
       §6.7) (S2-6, S4-13). audit/pipeline-trace-addendum.md (accepted: 35 of 353 citations re-opened, all hold): failure
       modes and logging for S3, S5, S9, S10, S12-S17, top findings in reconstruction.md §6.2 (S62-5, S62-6)
 - [x] W11 alignment.md rewritten (669 words in short bullets, every file path, 8 decisions with their evidence);
@@ -72,11 +115,15 @@ Checkpoint A again. It is not read as confirmation; Phase 1 does not start.
 ## Active subagents
 | agent | brief hash | dispatched | expected output | status |
 |---|---|---|---|---|
-| (none) | | | | |
+| diagnostic-11-3 | 7b8bd993 | 2026-10-25 S3 | eval/diagnostic-11-3.md | running |
 
+Returned 10-25: readers A3, B3, A4, B4 (all 399; strict agreement 785/799 across both batches).
 Accepted on 10-25: readers A1, A2, B1, B2 (baffb5cd), checked by a third blind reader V on a 10% sample, 38/40 + days 10/10.
 Accepted on 10-25: card-anatomy a4ae517a (22 of 222 citations re-opened, all hold).
+Accepted on 10-25: isolation-verifier e102bf03 (attempts 1 and 5 re-run by me after closing G1-G3).
+Accepted on 10-25: harness extension to 799 (dev 561 / test 238, test hash d2790450e2c9ae4f; harnessReal 18 checks green).
 Accepted on 10-25: plans-reader 65fcb127 (7 quotes re-opened at source, all exact).
+Accepted on 10-25: acceptance-study 49f7e423 (rule re-run through acceptance.ts: 88 fires, 1 false positive, as reported).
 Accepted on 10-25: stage-gaps d279ecf8 (35 of 353 citations re-opened, all hold).
 Accepted on 10-25: spec-compliance 056ac5ff. About 25 of 218 rows re-opened at their cited lines, all as stated: every §6.5,
 §6.7 and SUPERSEDED row (label-audit.md:11-22, failure-taxonomy.md:331-382, data-map.md:238-261), glossary.md:148-163,
@@ -161,6 +208,6 @@ this file as it stood.
 none
 
 ## Next action
-Await the owner's response to the re-presented Checkpoint A (audit/alignment.md, audit/checkpoint-A.md). Do not begin
-Phase 1. Separately, on or after 2026-10-28 16:06Z: `npx tsx --env-file=.env.local scripts/backfill-pause-window.mts store`,
-then confirm 40/40 stored and 0/40 decided.
+On the three returns: accept isolation (re-run attempts 1 and 5), re-measure the patch on all 799 dev, fold the diagnostic into
+audit/final-state.md, then dispatch red-team-B (brief 668a4048) and present Checkpoint B. Commit through the gate: harness,
+labels, reports, the patch file (not the app changes themselves). On or after 2026-10-28 16:06Z: the pause-window store.

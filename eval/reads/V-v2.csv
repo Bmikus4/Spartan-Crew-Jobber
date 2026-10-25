@@ -1,0 +1,48 @@
+message_id,asks,target_ref,days,crew,sure,note
+1a0fbbdc780e9ccc,question,,,,sure,asks for a first crew list and the same crew chief on all days
+1a11b38c4dccb611,question,,,,unsure,job may not proceed; asks to keep crew pencilled until end of day
+1a11bcaca08fd2f9,po_only,thread,,,unsure,sends PO for the amended quote already asked to be booked
+1a11c236f8504b37,quote_or_availability,,2026-10-22;2026-10-23,1,sure,quote for 1 local crew 4 hours on two dates; same person both
+1a11fde9b93f8ab4,cancel+po_only,day,2026-10-13,,sure,stands down second crew member on Tuesday; gives PO for other worker's 2 days
+1a1205fa1a1b2cc2,nothing,,,,sure,reports payment made and confirms they are the on-day contact
+1a1208931db0f772,new_booking,,2026-10-10,4,unsure,sends PO after quote for 4 crew next day; reads as confirming booking
+1a12093913c81661,change,day,2026-10-11,2,sure,asks quote amended to 2 crew for 10 hours on named date; quote shows 8
+1a120c460eaecaab,change,day,2026-10-11;2026-10-12;2026-10-15,14,sure,revises times/numbers on two dates; adds two 2-crew shifts to another booking
+1a120f535857bf19,po_only,thread,,,unsure,supplies PO reference and billing office for pencilled job; may imply confirmation
+1a1211bf201cfa87,nothing,,,,sure,found crew elsewhere for Sunday; no longer needs extra help
+1a1213583238c22f,quote_or_availability,,2026-10-19;2026-10-20,1,sure,quote for 1 local crew 2 hours on each of two dates
+1a1216280e46b574,nothing,,,,sure,client-internal note weighing a freelancer against the quote; nothing asked of us
+1a121b56f076c475,nothing,,,,unsure,says no PO needed and names the on-day contact
+1a1269476986d834,question,,2026-10-11,,sure,asks if the extended hour costs extra; asks to resend payment link
+1a12bd9dc18077e0,question,,,,unsure,automated request to review and sign event documents
+1a12f19db16de614,cancel,day,2026-10-20,,sure,cancels the booked shift on the named date
+1a12f73cd20dfb4e,quote_or_availability,,2026-10-13,1,sure,quote for 1 carpenter crew overnight shift on named Tuesday
+1a12fba6cf817941,new_booking,,2026-10-13,4,unsure,thanks for quote for 4 crew next day; PO to follow (implied go-ahead)
+1a12fee824311ba1,nothing,,,,sure,thanks for confirming the booking
+1a130439924ae26f,nothing,,,,sure,thanks only
+1a1307d078cecadc,question,,,,unsure,automated request to review and sign event documents
+1a130a6723ced540,po_only,thread,,,sure,supplies PO number for the job in thread
+1a130a97919faa70,new_booking,,2026-10-13,2,unsure,insists on at least 2 crew for next-day job; asks availability
+1a130b076cfc037b,new_booking,,2026-10-13,4,unsure,sends PO and site contact for next-day quoted job; confirms booking
+1a130c9740330432,new_booking,,2026-10-14,1,sure,sends PO as confirmation of quoted 1-crew derig on Wednesday
+1a130cbded49f14a,nothing,,,,sure,reports payment made; gives site contact and meeting point
+1a132ebc495af6ac,nothing,,,,sure,job seeker sends CV; not a client request
+1a1347346c4f46c7,nothing,,,,sure,remarks the call time move is only 15 minutes; no new request
+1a134a907e8154cc,question,,,,sure,asks if crew name change is for the imminent shift; fine if punctual
+1a134bc0808ae334,new_booking+quote_or_availability,,2026-10-16,6,sure,urgent booking and quote: 4 crew 6h plus 2 crew 8h same date
+1a134d4601dc07f2,change,thread,2026-10-13,,unsure,accepts offered late-evening call; adds return shift to the booked job
+1a13522d3d67b485,question,,2026-10-14,,unsure,gives site contact; asks if late PO is acceptable or card payment
+1a1352f5e4f4c520,po_only,thread,2026-10-14,,sure,supplies PO number to be quoted on the invoice
+1a13560df44be6f6,cancel,thread,,,unsure,withdraws pending crew availability request for now
+1a13595a58625348,change,thread,2026-10-18,,sure,extends morning crew chief call by 1 hour; forklift calls still move earlier
+1a135fb28440cdfe,question,,,,unsure,reports payment made; asks for a receipt
+1a15e7dd2a875da9,quote_or_availability,,2026-10-23,4,unsure,asks quoted call time corrected to 10:15pm; quote not yet booked
+1a15fa1d8cbdbb91,change,R11029,2026-10-22,,sure,moves next-day de-rig to 12:00-17:00; asks replacement crew if unmotivated
+1a1627ebd6d0beed,cancel,J16944,,,unsure,system notice that the client cancelled a job via portal
+1a162e715892cb17,new_booking+change,thread,2026-11-02;2026-11-03,1,unsure,confirms quoted forklift driver on two days; asks hours 2pm-6pm instead
+1a163313ae8685ed,question,,2026-10-26,,sure,asks for crew list as soon as possible for security
+1a163363d4931a51,cancel,thread,,,unsure,stands down the quoted shifts; crew can be released
+1a1638d02e685f31,change+quote_or_availability,thread,2026-10-26,2,sure,asks availability for 2 more crew on the booked derig shift
+1a163fc5755a93c1,change,thread,2026-10-23,1,sure,adds 1 more local crew next day for 2 hours at same timings
+1a1642b5519f9f23,cancel,thread,2026-10-23,,sure,cancels next-day booking to reschedule later
+1a164676d98f1a6e,nothing,,,,sure,will confirm the quote tomorrow
