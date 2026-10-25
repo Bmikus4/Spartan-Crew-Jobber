@@ -4857,5 +4857,22 @@
   "sources": [
    "audit/live-state-2026-10-24.md"
   ]
+ },
+ {
+  "id": "S-0221",
+  "ts": "2026-10-25T21:27:31+00:00",
+  "kind": "decision",
+  "headline": "spec check: 155 met, 55 partial, 5 missing; ledger current; store-only backfill waits for 10-28",
+  "subject": "Phase 0 has a requirement-by-requirement check against OPERATING.md",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 217,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  },
+  "sources": [
+   "audit/spec-compliance.md"
+  ]
  }
 ]
