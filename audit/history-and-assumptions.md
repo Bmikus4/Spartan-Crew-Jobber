@@ -208,7 +208,7 @@ the appendices in `~/fleet/resume/Spartan-Handoff-2026-10-21/`. `H21` =
 | B28 | 10-12 | B-items `:33` (B7) | A trade that cannot be verified, security included, books as standard Crew | enforced | `professions.ts:14-19` |
 | B29 | 10-12 | B-items `:34` (B8) | Bot creates must not be blank drafts | enforced | API create into To Confirm with `request_approval` (`apiCreate.ts:1-8,92`; 3735d41) |
 | B30 | 10-13 | B-items `:35` (B9) | Core spec. Parts: (1) every new order in To Confirm, fully filled; (2) update by R, or by J for a job; (3) sync every minute; (4) thread dedup is the foundation; (5) per-type, data-trained dedup protocols; (6) what cannot be done stays <=1/100 and only that reaches the TV | enforced (in part) | (1) `apiCreate.ts:92`; (3) `app/api/bot/sync/route.ts:16-24`; (6) only failures reach the TV (`serve.ts:103-109`); (5) not wired (`app/lib/match/` is imported only by `scripts/gold/*` and `test/match*.ts`); the 1/100 is not met (S-0217) |
-| B31 | 10-13 | B-items `:36` (B10) | "No publish" and the contact block were the agent's rules, not the owner's | enforced | contact fallback in `apiCreate.ts:16-17`; standing rule "present no rule as the owner's that he did not make" (PDF p3, line 237) |
+| B31 | 10-13 | B-items `:36` (B10) | "No publish" and the contact block were the agent's rules, not the owner's | enforced | contact fallback in `apiCreate.ts:16-17`; standing rule "present no rule as the owner's that the owner did not make" (PDF p3, line 237) |
 | B32 | 10-13 | `serve.ts:103-106`; S-0171 | The TV shows only what the system could not do | enforced | `serve.ts:103-109` |
 | B33 | 10-14 | B-items `:40` (B14) | Clear test data every 15 minutes when the setting is on; never when it is off | enforced (narrowed) | `app/api/bot/sync/route.ts:38-40` also requires both write keys and no pause (S-0214) |
 | B34 | 10-15 | B-items `:44` (B18); `plan.ts:770-776` | Create only orders more than two weeks out; all updates stay enabled | enforced | `plan.ts:770-776`; switchable (`settingsDb.ts:41-43`, d280dac). Which clock counts (email date or decision time) was never ruled (Addendum `:117-127`) |
@@ -222,7 +222,7 @@ the appendices in `~/fleet/resume/Spartan-Handoff-2026-10-21/`. `H21` =
 | B42 | 10-15 | B-items `:52`; C-items `:63-64` | Quotes that list shifts become orders ("better it exists than not") | enforced | `plan.ts:472-474` plans a quote with its shifts as an order (a quote without shifts becomes a reply card), subject to B34 |
 | B43 | 10-15 | B-items `:55`; `apiCreate.ts:73` | Rate card: the newest staff card, else 355, "flagged assumed until 95% match" | enforced (the flag never lifts) | `apiCreate.ts:16-20,73-81,95`; `cardCheck` flags whenever a card is assumed, and no code lifts it at a 95% match |
 | B44 | 10-15 | `threadLabels.ts:2-3,34-35` | Labels set from the TV's state by n8n each minute; strip HIGH/MEDIUM/LOW/SamurAI/TEST | enforced | `threadLabels.ts:34-35`; labels live 10-16 (S-0191) |
-| B45 | 10-15 | B-items `:58` | Vercel only; user 2257 is "automation only" | enforced (in part) | 2257 is still the owner's own login, so his hand edits count as the bot's (B-items `:110,216`) |
+| B45 | 10-15 | B-items `:58` | Vercel only; user 2257 is "automation only" | enforced (in part) | 2257 is still the owner's own login, so the owner's hand edits count as the bot's (B-items `:110,216`) |
 | B46 | 10-15 | B-items `:61` | Drafting and deleting the old engine are parked | enforced | `draft.ts` has no caller; `app/lib/engine/` still present |
 | B47 | 10-16 01:29 | C-items `:20-23` | "all jobs that can be created get created, even if some info is missing" | enforced (in part) | assumptions and No Location (B40, B41); B34 and the refusals (B08) still hand creatable jobs to staff |
 | B48 | 10-16 01:29 | C-items `:24-26` | "we drifted from the original extraction and job detection step. The accuracy and shape of that system should have been preserved" | contradicted | v2 reads with its own prompt and model (`extract.ts:96-103`), not the old engine's (`app/lib/engine/prompts.ts`); no old-vs-new detection measurement was found in the inputs |
@@ -415,7 +415,7 @@ B30, B35, B45, B47. Each row's own status cell is authoritative.
   - **The recorded reader never saw its live context.** The adapter took four arguments where
     production passes five, so every recorded reading was made blind; and the fake runner returns
     "verified" without a writer (83e4972 body; Addendum `:261`).
-  - **The expected answers were not the owner's.** They predate four of his rulings (10-13 quotes
+  - **The expected answers were not the owner's.** They predate four of the owner's rulings (10-13 quotes
     with shifts; 10-15 two-week rule, never the day alone, the chief count): "329 creates now
     meet the two-week rule, 339 updates name their booking by the day alone" (83e4972 body).
   - **Tuned and scored on the same set.** The complex updates went from 260/500 with 40 wrong

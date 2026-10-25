@@ -17,30 +17,38 @@ Checkpoint A again. It is not read as confirmation; Phase 1 does not start.
 
 ## Work units (from audit/spec-compliance.md "Order of work"; row ids in brackets)
 - [x] W1 Ledger and decisions: this file rewritten; decisions/ holds the five dated entries (RB2-*, RB3-g, S16-2, S16-3, A2-13)
-- [ ] W2 item_correctness baseline from the taxonomy's rows, with its denominator stated (S4-3, S10-2)
-- [ ] W3 The live week's 291 unread emails (246 `none`, 45 no-work handoffs) read by two readers: silent misses over ALL
-      client mail, not-an-inquiry, display_precision (S67-9, S4-2, S67-1, S4-5, S17-4)
-- [ ] W4 What a card shows today, then §10's aging policy and minimal flagged-item display change, proposed only
-      (S10-6, S10-4, S4-10, S99-2, S10-3, S10-7, S10-8)
-- [ ] W5 Glossary discrepancies raised at the checkpoint; Q1 re-asked in the glossary's terms (S3-3)
-- [ ] W6 One review_rate definition across the package (S4-4, A3-3)
-- [ ] W7 Spot-checks topped up to 10%: archaeologist (34 citations + one stage re-traced), historian (12 rulings),
-      data-cartographer (7 figures) (RB3-e1, RB3-e2, RB3-e4, S6-2)
-- [ ] W8 Checkpoint report gains: reason_code distribution, client_resolution_accuracy, none_precision, Q3 crew-notice
-      evidence (S99-6, S4-7, S4-8, S17-3)
-- [ ] W9 The owner's audit and the two candidate 99% plans read (S2-8, S2-9)
-- [ ] W10 Failure modes and logging for the 9 + 9 unlisted stages; operational failures staff saw, counted; why there is
-      no precision-vs-coverage curve (S62-5, S62-6, S2-6, S4-13)
+- [x] W2 item_correctness: 18/23 writes that ran, 28/40 write proposals, 18/104 over all items shown (reconstruction.md §6.7); cards re-judged after W4 (S4-3, S10-2)
+- [x] W3 All 400 live-week client emails read blind by two readers (brief baffb5cd): eval/live-week-reads.md. Readers agree
+      394/400 on booking work (kappa 0.97). Silent misses over all mail 16 of 90 outstanding requests (inquiry_recall 82.2%);
+      26 "requests" are OnSinch portal notices, rightly suppressed; display_precision 96/104; noise 5/104. ACCEPTED: verifier V
+      re-read a 10% sample blind and matches the consensus on 38/40 (both misses on the PO and quote boundaries), days 10/10. 34 rows for the owner/Paz: eval/reads/adjudicate.csv
+      (S67-9, S4-2, S67-1, S4-5, S17-4)
+- [ ] W4 What a card shows today (card-anatomy, a4ae517a, running), then §10's aging policy and minimal flagged-item display
+      change, proposed only (S10-6, S10-4, S4-10, S99-2, S10-3, S10-7, S10-8)
+- [x] W5 Glossary discrepancies raised (checkpoint-A.md §7); Q1 re-asked in OnSinch's terms (S3-3)
+- [x] W6 One meaning of item (reconstruction.md §6.4): review_rate 99/122 = 81.1% on the live week (S4-4, A3-3)
+- [x] W7 Spot-checks topped up (RB3-e1, RB3-e2, RB3-e4, S6-2):
+      archaeologist 34 of 340 citations (every 10th) re-opened, 34 hold; TV admission re-traced (serve.ts:103-128, v2.ts:68-91);
+      historian 15 of 113 rulings (A05 A15 A35 B08 B28 B38 B58 P01 added), all statuses hold; B28 cites professions.ts:14-19,
+      the rule is at :227-241 (citation off, conclusion right);
+      data-cartographer 15 figures (11 added: outbound 3,775, 994/1,279 threads, R/J 184 = 4.9%, 3,500 orders, statuses
+      2,815/557/128, provisional 500, quote 88, 847 decisions, 653 with company, links 249/178/6/2, 1,355 first seen 08-23), all exact
+- [x] W8 checkpoint-A.md: reason_code distribution of the 99 flagged items; client_resolution_accuracy 115/123 (gold, strong +
+      adjudicated); NONE precision 12/19 creates; Q3 crew notices rest only on run.ts:11-14, unmeasurable offline; Q1 settled
+      by the owner's own 10-13/10-16 words for creates (S99-6, S4-7, S4-8, S17-3)
+- [ ] W9 The owner's audit and candidate 99% plans, incl. the three Claude Docs docs (plans-reader, 65fcb127, running) (S2-8, S2-9)
+- [ ] W10 Operational failures on the TV: 8 of 81 listed cards; no curve because the gate has no thresholds (reconstruction.md
+      §6.7) (S2-6, S4-13 done). Failure modes and logging for the missing stages (stage-gaps, d279ecf8, running) (S62-5, S62-6)
 - [ ] W11 Re-present: alignment.md at one page (about 600 words) with §17 evidence and every file path; checkpoint-A.md
       gets a summary (S7-3, RB6-1, RB6-4, RB6-5, RB6-8, S121-5)
 
 ## Section checklist
 - [x] §6.1 Purpose: self: audit/reconstruction.md §6.1
-- [x] §6.2 Anatomy: archaeologist (b6c84053, accepted; spot-check below 10%, W7): audit/pipeline-trace.md
-- [x] §6.3 History: historian (70667283, accepted; 7 of 113, W7): audit/history-and-assumptions.md
+- [x] §6.2 Anatomy: archaeologist (b6c84053, accepted; 34 of 340 citations + one stage re-traced, W7): audit/pipeline-trace.md
+- [x] §6.3 History: historian (70667283, accepted; 15 of 113, W7): audit/history-and-assumptions.md
 - [x] §6.4 Metrics: metric-definer (844d70d1, accepted): eval/metrics.md
 - [x] §6.5 Ground truth: label-auditor (37c65576, accepted, 10 of 98): eval/label-audit.csv + eval/label-audit.md
-- [x] §6.6 Data map: data-cartographer (9b5d88d5, accepted; 4 figures, W7): audit/data-map.md
+- [x] §6.6 Data map: data-cartographer (9b5d88d5, accepted; 15 figures, W7): audit/data-map.md
 - [x] §3 Glossary and Q1: glossary-verifier (bb818e87, accepted): audit/glossary.md
 - [x] §6.7 Failure taxonomy: taxonomist (fb98f168, accepted, 14 of 117): eval/failure-taxonomy.md
 - [x] Reconstruction §6.1-6.7: self: audit/reconstruction.md (revised after red team A)
@@ -58,8 +66,11 @@ Checkpoint A again. It is not read as confirmation; Phase 1 does not start.
 ## Active subagents
 | agent | brief hash | dispatched | expected output | status |
 |---|---|---|---|---|
-| (none) | | | | |
+| card-anatomy | a4ae517a | 2026-10-25 S2 | audit/card-anatomy.md | running |
+| plans-reader | 65fcb127 | 2026-10-25 S2 | audit/plans-read.md | running |
+| stage-gaps | d279ecf8 | 2026-10-25 S2 | audit/pipeline-trace-addendum.md | running |
 
+Accepted on 10-25: readers A1, A2, B1, B2 (baffb5cd), checked by a third blind reader V on a 10% sample, 38/40 + days 10/10.
 Accepted on 10-25: spec-compliance 056ac5ff. About 25 of 218 rows re-opened at their cited lines, all as stated: every §6.5,
 §6.7 and SUPERSEDED row (label-audit.md:11-22, failure-taxonomy.md:331-382, data-map.md:238-261), glossary.md:148-163,
 review_rate 100% vs 207/275, no aging policy anywhere in the package, alignment.md 966 words, and every RB2 row against
@@ -142,7 +153,7 @@ this file as it stood.
 none
 
 ## Next action
-W2: compute item_correctness over the live week's items from eval/failure-taxonomy.md's rows and add it to reconstruction.md
-§6.7 with its denominator. Separately, on or after 2026-10-28 16:06Z (and before the n8n key expires 10-31, though the store
-needs no n8n key): `npx tsx --env-file=.env.local scripts/backfill-pause-window.mts store`, then confirm 40/40 stored and
+W7: re-open archaeologist citations (34 + one stage re-traced), historian rulings (12) and data-cartographer figures (7) until
+each return is checked on at least 10%; then W3 scoring when the four readers return. Separately, on or after
+2026-10-28 16:06Z: `npx tsx --env-file=.env.local scripts/backfill-pause-window.mts store`, then confirm 40/40 stored and
 0/40 decided.

@@ -4874,5 +4874,22 @@
   "sources": [
    "audit/spec-compliance.md"
   ]
+ },
+ {
+  "id": "S-0222",
+  "ts": "2026-10-25T21:49:00+00:00",
+  "kind": "measurement",
+  "headline": "W2-W8: inquiry_recall 82.2% over all mail; item_correctness 18/23 writes; review_rate 81.1%; client 115/123",
+  "subject": "Silent misses over all live-week client mail are 16 of 90, not 4 of 84",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 217,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  },
+  "sources": [
+   "eval/live-week-reads.md"
+  ]
  }
 ]

@@ -200,6 +200,13 @@ From `eval/metrics.md`; I reproduced both numbers from my own pre-fix run.
   - silent misses 104;
   - review_rate 207/275;
   - client agreement 186/189.
+- **One meaning of "item" for the whole package.** Applied to today's system, A.3's terms mean the following.
+  - An **item** is any decision other than `none`.
+  - A write is the system's **confirm-ready** answer.
+  - A handoff, or a write that did not run, is **flagged**.
+  - **Shown** means listed on the TV or labelled in Gmail. Needs-reply items are neither, which is why they count as silent misses.
+
+  Live week: 122 items. Of these, 23 writes ran; 81 items were listed cards, 17 of them writes that did not run; 18 were needs-reply. So review_rate = 99/122 = 81.1%. The figure 207/275 above is the first cut's on gold, and "100% by construction" counted listed cards only. Both are replaced by this one.
 
 ## 6.5 Ground truth
 
@@ -262,7 +269,15 @@ Replaying the week at HEAD ($0, `scripts/score-vs-ops.mts` without `--paid`) wou
 
 **Silent misses first.** The denominator is 84 real inquiries with staff work. 4 got no item, so inquiry_recall is 80/84 = 95.2% (exact 95% CI 88.3-98.7%), against a target of 99.5%. It is 79/84 = 94.0% if the ambiguous `none` 1a13eb94f0ccb389 counts as a miss.
 
-**This denominator holds only emails staff acted on.** A request that neither side acted on is excluded by construction. 246 `none` emails and 45 no-work handoffs of the week were never read (red team H5), so the §4 worst case is unmeasured.
+**This denominator holds only emails staff acted on.** A request that neither side acted on is excluded by construction (red team H5).
+
+**Over all client mail it is 16 of 90 (W3, `eval/live-week-reads.md`).** All 400 emails of the week were read blind by two readers, who agree on 394 of 400 about whether an email asks for booking work.
+- 26 of the requests are OnSinch's own portal notices, for orders already in OnSinch, and are rightly suppressed by rule.
+- 20 were already done when decided.
+- Of the 90 outstanding requests, 16 got no shown item. inquiry_recall is 74/90 = 82.2% (CI 72.7-89.5):
+  - 8 were `none` because the model read no change. Staff built or changed the order on the named day for 4 of them.
+  - 8 were needs-reply items that nothing shows.
+- Counting quote requests as inquiries, it is 24 of 113. Whether a quote that names a day, times and crew is a booking is for the owner to rule.
 - **1a1399db710f7409:** a quote naming the day, times and crew was read by the model as `info_only`, which gives `none`. Staff built the order 17 minutes later.
 - **1a13f8312ae75c73, 1a140632ce4d5e99, 1a144c619a140ea6:** these are **needs-reply** cards.
   - The TV lists only needs-created and needs-updated cards (`app/lib/feed/serve.ts:109`).
@@ -311,6 +326,36 @@ That leaves 67 system misses.
 - about 59 were handed to staff on the TV;
 - 2 were ambiguous.
 
+**item_correctness (§4; A.3 "items with correct opp-or-NONE and correct change ÷ items shown"), live week.**
+
+The data are the 40 write decisions of the 400 client emails, each checked against the taxonomist's verified row or against week-review's completion. Correct means the right order (or NONE, a new order) and the same day, times and crew as the email and staff's own order.
+
+| items | correct | wrong | other |
+|---|---|---|---|
+| 23 writes that ran (verified) | **18** | 3: a shift added to an order when a new order was right; three 1-hour windows; a shift staff had already booked | 1 equal to the email, but staff booked other days and crew; 1 ambiguous (midnight or noon) |
+| 17 writes that did not run (refused or stopped, so listed) | 10 by value: 4 staffed refusals (rule removed 10-15), 2 crew-chief stops, 3 cuts below workers that a rule sends to ops, 1 cancel the client reversed later | 5 start-only time changes that kept the end (fixed at HEAD, plan.ts:578-583) | 1 ambiguous; 1 with no staff work, not judged (1a139a998169549f) |
+
+- **When the system acts, it is right on 18 of 23**: 78%, exact 95% CI 56-92%. Of its 40 proposals, executed or not, it is right on 28: 70%, CI 53-83%. The target is 99%.
+  - The 18 include one create whose order is now missing from the snapshot, and one where staff used other trades (1a15984719fbd60e). Leave both out and the count is 16 of 23.
+- **Literally, A.3 counts every item shown.** That is 104 items: 23 writes and 81 listed cards.
+  - A listed card carries no change that a confirm would carry out. The TV tick writes nothing to OnSinch (glossary.md §2), so staff do the work themselves.
+  - On that reading item_correctness is 18/104 = 17%. W4 checks what a card actually shows.
+- **Correct writes were still rebuilt.** 12 of the 18 correct writes are creates, and staff rebuilt or deleted 11 of them. The second-worst outcome (§4), confirming the wrong thing, happened on 3 of 23 writes. The more common failure was doing the right thing and being redone.
+
+**Operational failures shown to staff (§2: "must never be visible to the team"), live week: 8 of 81 listed cards (9.9%).**
+- 2 `system_failed`: "the system could not plan this email (GET /orders answered N)", an OnSinch read error.
+- 3 `booking_link_unreadable`: the thread's linked order could not be read.
+- 3 writes that stopped part-way at the crew-chief position.
+- Held-link cards ("Order not found in OnSinch", `serve.ts:121-127`) come on top of these. The snapshot holds 2 held links.
+
+Each of these reaches the TV as an ordinary needs-created or needs-updated card, with nothing marking it as the system's own failure.
+
+**No precision-vs-coverage curve can be drawn yet (§4).**
+- The current gate has no tunable confidence threshold. A grep of `app/lib/v2` for threshold, margin and confidence cut-offs finds none.
+- Every route to a person is a binary rule: the policies of §6.1, grounding, and a link that cannot be read.
+- The only setting is lead days, which is a policy and not a confidence.
+- The curve becomes possible once the selector computes the evidence-based confidence of §9.6.
+
 **Slices** (from the taxonomist; the near-total ones):
 - **New bookings:** 0 durable completions out of 59 rows.
   - Staff rebuilt 14 of 16 verified bot creates within about an hour, and 10 carry a staff delete row.
@@ -323,5 +368,5 @@ That leaves 67 system misses.
 **NONE and not-an-inquiry.**
 - **NONE:** 43 emails needed a new order. The system said so for 38: 17 creates and 21 "needs created" handoffs. It did not for 5. NONE exists only as an op kind or a card kind, never as a decision kind.
 - **Not an inquiry:** 31 emails were judged not to be inquiries, and all 31 had `none`. That is true by construction.
-  - Non-inquiries that did get an item, the noise case, were not tested.
+  - Non-inquiries that did get an item, the noise case: both readers call 5 of the 104 items shown "nothing" (4.8%), all of them listed cards (W3).
   - The system cannot say "not an inquiry", and the sender regex is the only rule-based suppression. All 21 auto-reply or newsletter-like emails were suppressed by the model reading them as `info_only`, never by a rule. §4 requires suppression by deterministic rule.

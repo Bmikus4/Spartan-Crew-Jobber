@@ -36,7 +36,7 @@ cover 496 of the 532:
 - **The two-week rule (Ben 10-15; plan.ts:54, plan.ts:770-775): 70 cases.** A new order whose
   first shift is 14 days or fewer after the email is for staff to create.
 
-**The biggest sensitivity is a question for Ben.** His 10-15 words, quoted at evidence.ts:2-3,
+**The biggest sensitivity is a question for Ben.** Ben's 10-15 words, quoted at evidence.ts:2-3,
 are: "Date plus other evidence (client, venue, times, crew) may link". If "client" alone counts as
 the extra evidence, the 426 day-alone labels are right and the system is too strict. Even then,
 106/1000 labels are wrong (893/1000, 89.3%, clean), which is still below 99.5%. The finding does not

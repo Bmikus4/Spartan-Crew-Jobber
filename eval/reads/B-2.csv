@@ -1,0 +1,201 @@
+message_id,asks,target_ref,days,crew,sure,note
+1a1440fd8f796b8c,nothing,,,,sure,marketing newsletter about an industry summit
+1a144162f62a2ff9,nothing,,,,sure,remittance advice for payments made
+1a1441d02031b765,nothing,,,,sure,out-of-office auto-reply
+1a1442b60b5d07ee,nothing,,,,sure,emoji reaction to our reply
+1a1441e6b4a92f90,nothing,,2026-10-17,,unsure,gives onsite contact meeting point H&S briefing and PPE rules for tomorrow
+1a14426c56f7f067,change,J16788,,1,sure,platform notice: client added 1 new shift with 1 staff to existing job
+1a14428c55c83cef,change,J16788,2026-10-21,2,sure,platform notice: client edited de-rig shift to 2 crew 22:00-00:00
+1a144326333c82b1,quote_or_availability,,2026-10-28,4,sure,asks quote for 4 crew overnight 23:00-05:00 de-rig and load out
+1a14438a498394f0,nothing,,2026-10-19;2026-10-20;2026-10-21;2026-10-22,,sure,sends job info pack and mandatory site induction details for crew
+1a1443b884fab971,po_only,thread,2026-10-15,,sure,supplies PO number we asked for
+1a1444323f1ac8c6,new_booking+quote_or_availability,,2026-10-19,6,sure,asks if we can supply 6 crew for 4 hour call from 10:00
+1a144464c616f496,nothing,,,,sure,agrees our office staff can be added to security list today
+1a1445e617f4b0b2,new_booking,,2026-10-28,4,sure,accepts quote and books the overnight crew under a PO
+1a144942ca8851d1,quote_or_availability,,2026-11-20;2026-11-21;2026-11-28;2026-11-29,,sure,asks quote for two jobs over four days with crew options
+1a1449b87f1f53ba,new_booking,,2026-10-19,6,sure,confirms quoted 6 crew booking for Monday PO to follow
+1a144a8d3a03a407,new_booking+quote_or_availability,,2026-10-26,4,sure,asks availability for two 2-crew calls one crew a carpenter
+1a144c450d555487,nothing,,,,sure,thanks for our acknowledgement
+1a144c619a140ea6,quote_or_availability,,,,sure,asks quote for attached job spec 8 hour call time TBC
+1a144c9861ea3c8b,new_booking+quote_or_availability,,2026-10-17,1,sure,asks if we can supply one audio tech tomorrow 14:30-02:00
+1a144e3303705836,nothing,,,,sure,acknowledges our crew name changes
+1a144e96b784be2b,nothing,,,,sure,thanks us for promising info next week
+1a144eb14f29143f,nothing,,,,sure,gives onsite contact number and acknowledges our update
+1a144f6e5d963223,nothing,,,,sure,out-of-office auto-reply
+1a144f983605bc19,new_booking+quote_or_availability,,2026-11-04,10,sure,asks if available for 4 crew morning call and 6 crew 23:00 call
+1a14506bcabaaa3a,new_booking,,,,sure,confirms go-ahead on quoted booking PO to follow
+1a1450987b1f19ab,po_only,day,2026-10-18,,sure,sends PO for the 20:00-04:00 job on named day
+1a1450b8dc7c1e6c,new_booking,,2026-10-17,,unsure,widens tech request to 08:00-02:00 possibly split between two people
+1a14511a688115b4,quote_or_availability,,2026-10-12;2026-10-13;2026-10-14;2026-10-15;2026-10-16,,unsure,asks for final quote for this week's warehouse crew to raise PO
+1a1451f6f70ff876,question,,2026-10-10,,unsure,says one Saturday is missing from the PO paperwork asks us to amend
+1a14525aaa127364,nothing,,,,sure,thanks for explaining the day was already included
+1a145260c7422772,nothing,,,,sure,bounce notice from a mail group
+1a145267a80a97c8,nothing,,2026-10-17,,sure,supplier confirms the extra subcontract crew we asked for and sends details
+1a1452caa50103c9,nothing,,,,sure,supplier says my pleasure have a good weekend
+1a14531a92b261d0,nothing,,,,sure,out-of-office auto-reply
+1a145323e82ee3b6,change,J16717,2026-10-19,3,sure,platform notice: client edited setup shift to 3 crew 16:00-20:00
+1a145325ea92fa62,change,J16717,2026-10-20,1,sure,platform notice: client edited de-rig shift to 1 crew 17:00-20:00
+1a14539d35697ee9,new_booking+change,thread,,4,unsure,confirms job with PO after changing to 3 build crew and 1 de-rig
+1a1453ad2be0aa98,new_booking,,,,sure,confirms the provisionally held job and gives PO
+1a145429cbdfd32a,change,R11663,2026-10-21,5,sure,asks to reduce crew on quoted job to 5
+1a1454cfcd09dab8,nothing,,,,sure,acknowledges we could not find a tech
+1a145583d37f41bc,po_only,R11480,2026-10-10;2026-10-12;2026-10-13;2026-10-14;2026-10-15;2026-10-16,,sure,sends PO for named quote covering warehouse crew days
+1a1456a614874008,new_booking,,,,unsure,sends next month's schedule of events as attachment more to follow
+1a14570503edfac7,nothing,,,,sure,bounce notice from a mail group
+1a145862177507f9,nothing,,,,sure,passes on positive feedback about crew
+1a1459cc404e04e9,nothing,,,,sure,answers our request with the onsite contact name and number
+1a14638ee5140233,new_booking,,,,sure,accepts quote and asks to book it in call times TBC
+1a146744e3eb2a41,nothing,,,,sure,software marketing newsletter
+1a146abc65b6623e,po_only,thread,2026-10-19,,sure,sends PO for the confirmed booking
+1a148e305d0b66d4,new_booking,,2026-10-17,2,sure,platform notice: client created new de-rig order 2 staff today 16:00
+1a1493bc7c314c28,change+quote_or_availability,R11093,2026-10-17,,unsure,asks if extra crew can be added today also confirms meeting point
+1a1494c6245abfaf,nothing,,,,sure,gives onsite contact mobile number we asked for
+1a14954ba17d53f8,nothing,,,,sure,replies no upcoming crew needs right now
+1a1497d7b3445d5f,change,R11093,2026-10-17,1,unsure,accepts the one extra crew we found for today's de-rig and unload
+1a149879a33be60b,nothing,,,,sure,answers our request with venue access induction and contact details
+1a149cd8d832fa22,nothing,,,,sure,acknowledges our crew name change
+1a14ee4a66bb4781,nothing,,,,sure,cold sales pitch for cleaning services
+1a14f44606b18293,nothing,,,,sure,job seeker asking about part-time work
+1a14fe9ed6a5d2be,nothing,,,,sure,supplier invoice notification
+1a1532205ffb58ff,nothing,,,,sure,supplies onsite contact we chased for
+1a1532573d9754df,question,,2026-10-19,,sure,asks whether a crew member was booked for this morning as none arrived
+1a153335a92bb41f,nothing,,,,sure,bounce notice from a mail group
+1a15337c695a772b,cancel,thread,2026-10-22,,sure,cancels the crew for the booked job as less kit needed
+1a1533b5bd8afd4a,cancel,thread,2026-10-30,,unsure,says the quoted call is no longer needed
+1a15341341999221,nothing,,,,sure,auto-reply: contact has left and lists other contacts
+1a153425d8feed3a,nothing,,,,sure,confirms the missing crew member has now arrived
+1a153439926175f5,nothing,,,,sure,marketing newsletter about summit sponsorship
+1a15344a323ab432,new_booking,,2026-11-04,10,sure,accepts quote and books both calls with PO contact to follow
+1a153513951a512c,nothing,,,,sure,replies no future needs known yet will let us know
+1a15359bba0e6d8d,nothing,,,,sure,out-of-office auto-reply
+1a1535bcd03728a2,nothing,,,,sure,bounce: address not found
+1a1535bd003557ac,nothing,,,,sure,bounce: address not found
+1a153606f48e6bd3,nothing,,,,sure,says already has a quote will be in touch if more needed
+1a15360df453c1e3,nothing,,,,sure,auto-reply: this address no longer in use
+1a153628f5100fc7,nothing,,,,sure,out-of-office auto-reply
+1a1536850270ff6d,nothing,,,,sure,former trainee asking about work for self and relative
+1a1536b83856fb30,nothing,,,,sure,says next month's needs will follow after an internal meeting
+1a1537f6f674abca,nothing,,,,unsure,declines quote as going with another crew company
+1a1538563dea24d0,nothing,,,,sure,says will be in touch if something comes up
+1a1538bd0998cd25,question,,,,sure,no current needs but asks for a rate card by crew type
+1a1538ce9fac7a51,nothing,,,,sure,account security sign-in alert
+1a15390a0a9a20fe,nothing,,,,unsure,unreadable
+1a153a91445367b2,nothing,,,,sure,out-of-office auto-reply
+1a153ab93d000fa2,nothing,,,,sure,says team will check upcoming needs and get in touch
+1a153bcb54f7f266,new_booking+question,,,,unsure,sends PO for quoted job asks for names early and 3 reserve names
+1a153bf89fdecbba,nothing,,,,sure,emoji reaction to our name change notice
+1a153c29a8d9e4c5,nothing,,,,sure,bounce: address not found
+1a153c2a0441ba71,nothing,,,,sure,auto-reply: contact no longer works there
+1a153c3baf30122a,question,,,,unsure,asks for a preferred crew chief and crew experienced with LED screens
+1a153c4c82faaae8,nothing,,,,sure,says nothing needed right now will reach out
+1a153c535c41ca01,nothing,,,,sure,auto-reply: contact has left lists department addresses
+1a153c6ae7df98a2,po_only,R11093,2026-10-17,,sure,sends PO for the extra crew plus feedback on individual crew
+1a153c6bb75a77d7,nothing,,,,sure,emoji reaction to our reply
+1a153c8290d0aad3,new_booking+quote_or_availability,,2026-10-23;2026-10-25;2026-10-29;2026-11-01;2026-11-05;2026-11-08,6,sure,asks for 6 crew on each of six show days at an arena
+1a153c829d7300b1,nothing,,,,sure,acknowledges our crew name change
+1a153cc09e439537,nothing,,,,sure,names who will handle invoice payment
+1a153d58a0cf3f42,question,,,,unsure,asks us to reissue the invoice with different billing details
+1a153db071f581ef,nothing,,,,sure,says no crew needs next month will be in touch
+1a153de0975f53b6,nothing,,,,unsure,automated request to sign event safety documents online
+1a153e0e6edf7808,nothing,,,,sure,re-sends an attachment for the invoice thread
+1a153e512dae2620,new_booking,,2026-11-18,2,sure,requests 2 crew for setup take-down and collection
+1a153f99b61947c3,quote_or_availability,,2026-11-08;2026-11-15,1,sure,asks quote for 1 crew install day and 1 crew de-rig day
+1a153fd7592e2239,new_booking,,2026-10-22,1,unsure,adds last-minute 1 staff 08:00-10:00 booking to the venue schedule
+1a154002a01e1c3e,new_booking,,2026-11-18,2,sure,confirms the quoted 2 crew with a PO
+1a1540528d5a2d27,new_booking+question,,2026-10-29,,unsure,says bar staff order confirmed asks for staff full name and email
+1a15413ef4ca50b6,nothing,,,,sure,thanks us for confirming crew chief and names
+1a1541784eae8484,nothing,,,,sure,bounce notice from a mail group
+1a1541de84b036b8,quote_or_availability,,2026-12-15;2026-12-17,2,sure,asks quote for 2 crew load-in and 2 crew load-out on two days
+1a15424965812f5e,nothing,,,,sure,thanks for our reply
+1a154281bdb98ca3,change,thread,2026-12-15,2,unsure,corrects load-in time on the quote request to 08:00-10:00
+1a1542bc2e010633,nothing,,,,sure,job seeker asking about event assistant work
+1a154311db2eed89,nothing,,,,sure,says no crew needed next month yet
+1a154364f064193a,question,,,,sure,thanks for the weekend job and asks us to send the invoice
+1a154494f331ef3e,nothing,,,,sure,gives onsite contact and asks crew bring photo ID
+1a15453a142ec766,nothing,,,,sure,remittance advice for a payment
+1a1545cf89ecbca5,nothing,,2026-11-18;2026-11-19;2026-11-20;2026-11-21;2026-11-22;2026-11-23,,unsure,says requirements for a six-day job coming with placeholders later
+1a15473eb1c90e8a,new_booking,,2026-11-08;2026-11-15,1,sure,accepts quote and confirms with PO number
+1a1547abfda7a68f,nothing,,,,sure,gives onsite contacts says start times may change later
+1a1547e58fba69f8,nothing,,,,sure,sends site map and note on where machine keys are
+1a1547e5ac397a7b,change,thread,,,sure,asks to move the call to 1am later the same night
+1a15483a30b6ff65,new_booking,,2026-11-03,,sure,platform notice: client created new order 2 shifts starting 17:00
+1a1548e752b0368c,nothing,,,,sure,thanks for crew contact details
+1a154921f050fe6d,nothing,,,,sure,thanks for quote will confirm once their client decides
+1a154940f2d60bea,po_only,thread,2026-11-08,,sure,sends the PO document for the confirmed job
+1a1549f1e722e8c1,nothing,,,,sure,emoji reaction to our crew details
+1a154a4644f09a4f,nothing,,,,sure,explains the site note went to everyone on site
+1a154acae85ad3bb,nothing,,,,sure,says will confirm meeting point as soon as possible
+1a154c2212954db2,question,,2026-10-18,,sure,supplier asks name of the no-show to amend their quote
+1a154c88ea677d43,po_only,day,2026-10-16,,sure,sends amended PO reflecting a no-show and lateness deduction
+1a154d45b553b3fe,nothing,,,,sure,out-of-office auto-reply
+1a154d69fc48ba38,change,thread,2026-10-22,2,sure,adds 2 crew 22:00-01:00 to the booked job
+1a154da7094c9e11,nothing,,,,sure,supplier acknowledges all crew turned up
+1a154dd8d105fba1,po_only,day,2026-11-03;2026-11-04,,sure,sends PO for the two-day job
+1a1550810accdf9e,nothing,,,,sure,thanks for clarifying arrival asks driver to call on arrival
+1a15531c2b38fbda,nothing,,,,sure,supplier acknowledges we no longer need their crew
+1a1581dac891607d,nothing,,,,sure,sends production pack for next week's job
+1a1585a58a1cc4a1,nothing,,,,sure,supplier marketing offer attachment
+1a1585c9e814aa96,nothing,,,,sure,marketing newsletter about a summit
+1a1585eb068373b7,nothing,,,,sure,out-of-office auto-reply
+1a158632aed55e9a,quote_or_availability,,2026-11-08,8,sure,asks quote for 4 crew morning call and 4 crew evening call
+1a158731358a59fa,quote_or_availability,,2026-10-23,,sure,asks quote for a 4 hour night call crew number not given
+1a1587b3ab412493,nothing,,,,sure,marketing invite to a trade show
+1a1587d82ff43dd4,quote_or_availability,,2026-10-23,4,sure,answers our question: quote request is for 4 crew
+1a15884b2b340cbe,new_booking,,2026-10-22;2026-10-23,2,sure,books 2 crew for a 1 hour call and next morning return
+1a1588e0e23ce5ef,new_booking+change,R11663,2026-10-21,4,sure,reduces quoted crew to 4 and confirms the job with PO
+1a158a03729adc9a,nothing,,,,sure,forwards our quote to a colleague asking them to approve
+1a158a0c76b4a7d1,nothing,,,,sure,supplier explains no-show and sends updated quote we asked for
+1a158a1bf953e5fc,new_booking,,2026-10-20,2,sure,asks to book 2 breakdown crew for 4 hours tonight
+1a158a5e6bd47095,change,thread,2026-10-23,3,sure,asks to add 3 more crew to the confirmed booking
+1a158ba2b8c735d6,new_booking,,2026-10-22;2026-10-23,2,unsure,colleague confirms the quoted 2 crew booking on their side
+1a158c05c7b4e6b0,new_booking,,2026-10-20,2,sure,accepts quote books with PO and asks for crew names
+1a158c5ac15f6fdc,new_booking,,2026-10-22,,unsure,confirms the Thursday shift of the quote Sunday hours to follow
+1a158d46e8b7e00d,change,J16788,2026-10-21,1,sure,platform notice: client edited de-rig shift to 1 crew 22:00-00:00
+1a158d668f0d1334,new_booking+change,R11664,2026-10-21;2026-10-22,1,sure,cuts every shift to 1 crew and confirms the job with PO
+1a158da709007222,change,J16791,2026-10-22,1,sure,platform notice: client edited setup shift to 1 crew 08:00-11:00
+1a158dab4e4a8b23,change,J16791,2026-10-22,1,sure,platform notice: client edited de-rig shift to 1 crew 17:30-19:30
+1a158e8f9dfbfca1,nothing,,,,sure,supplier explains how their quote lines are counted
+1a158e8d726f305b,nothing,,,,sure,says will pay proforma this week and confirm call times later
+1a158ecdfce3c07a,nothing,,,,sure,supplier says no problem thanks
+1a158f6e68c65504,nothing,,,,sure,thanks for crew contact details
+1a158f7fc201f6ef,nothing,,,,unsure,sends job brief site rules and contact says treat as confirmed PO later
+1a158fb5c03d300b,new_booking,,2026-10-21,1,sure,asks for 1 crew tomorrow 11:15-14:15 at their store
+1a158fd30b691861,nothing,,,,sure,says PO coming today and gives onsite contact for Thursday
+1a15902b228e406e,new_booking,,2026-10-21,1,sure,accepts quote and asks us to confirm the 1 crew booking
+1a159118872d9ab5,new_booking,,2026-11-04;2026-11-05,1,sure,requests 1 client-approved crew member on two evenings 19:00-23:00
+1a1591aed13456d4,question,,2026-10-19,,sure,asks whether to revise their PO for one fewer crew after a no-show
+1a159376628160f2,new_booking,,2026-11-04;2026-11-05,1,unsure,answers our question: one crew per call on the requested evenings
+1a1593b40014b31a,new_booking,,2026-10-27,4,sure,platform notice: client created new order 2 shifts from 07:00
+1a15940ea5e40e87,new_booking,,2026-10-28,4,sure,platform notice: client created new order 2 shifts from 06:00
+1a15945a7bbc329b,new_booking,,2026-10-29,3,sure,platform notice: client created new order 2 shifts from 11:00
+1a1594ac514ed055,new_booking,,2026-11-03,4,sure,platform notice: client created new order 2 shifts from 15:00
+1a1594d88093637a,new_booking,,2026-11-04,2,sure,platform notice: client created new order 2 shifts from 14:00
+1a15951e9259b5a7,change,day,2026-11-05,10,sure,splits install shift into 6 crew to 19:00 and 4 crew to 20:00
+1a1595762baef502,new_booking,,2026-11-03,1,sure,platform notice: client created new order 2 shifts from 10:00
+1a15964e51f38a75,new_booking,,2026-11-18,6,sure,platform notice: client created new order 2 shifts from 22:30
+1a159672064dc788,nothing,,,,sure,reports crew arrived 20 minutes late without calling
+1a159694a04a15ec,new_booking,,2026-11-26,2,sure,platform notice: client created new order 2 shifts from 16:30
+1a1596b0abbb0a66,nothing,,2026-10-21,,unsure,declines the quoted job as booked elsewhere
+1a1597836ca9af3a,new_booking,,2026-11-04;2026-11-05,1,sure,accepts quote and confirms the two evening calls contact to follow
+1a15984719fbd60e,quote_or_availability,,2026-12-05,22,sure,asks quote for four crew groups day and overnight at a wedding
+1a15984f57ab3251,new_booking,,2026-11-04;2026-11-05,1,unsure,requests 1 crew on two days; subject and body dates disagree
+1a1598e6aaaba9d0,change,thread,2026-10-23,3,unsure,confirms the updated quote with 3 extra crew PO to follow
+1a1599ee50247795,nothing,,,,sure,thanks us for noting the shift changes
+1a159ada72d2d92c,new_booking+quote_or_availability,,2026-10-24;2026-10-25,1,sure,asks if 1 crew available for de-rig on two days
+1a159c377a25725b,new_booking+quote_or_availability,,2026-10-24;2026-10-25,1,unsure,gives 09:00-17:00 call times and confirms same venue for the request
+1a159cd5eefd359d,nothing,,,,sure,says deposit coming shortly and gives crew meeting point
+1a159d9967b3a6ea,new_booking,,2026-10-22,,sure,platform notice: client created new order 2 shifts from 15:30
+1a159db7529bdff0,quote_or_availability,,2026-10-31;2026-12-17,2,sure,asks quote for 2 crew 2-hour calls on two dates
+1a159e472ec3754f,nothing,,,,sure,thanks for crew contact all good
+1a159e4c31d0440e,po_only,thread,2026-11-04;2026-11-05,,sure,supplies PO number we asked for
+1a159e6d33e42e58,new_booking,,2026-11-04;2026-11-07,1,unsure,accepts quote with PO and gives contacts for the two dates
+1a159f0b5b42bf65,nothing,,2026-10-22,,unsure,declines to proceed with the quoted job
+1a159f2b548dfdf2,new_booking,,2026-10-31;2026-12-17,2,sure,accepts quote and confirms with PO contact to follow
+1a159f467b58a93a,nothing,,,,sure,answers our dress code question still reviewing quote
+1a159fa99594e4e4,cancel,thread,,,unsure,says the quoted event is cancelled and we can stand down
+1a15a09f403c8ccd,quote_or_availability,,2026-12-05,,unsure,asks for a reduction on travel costs and the quote overall
+1a15a1464f7fd83e,nothing,,,,sure,thanks for crew list and backup names
+1a15a27ec78f4c74,nothing,,,,sure,explains invoice payment delayed until tomorrow
+1a15a50a313eaebb,question,,,,sure,cannot see our attachment asks us to resend it
+1a15a6583c83e5ba,new_booking+quote_or_availability,,2026-10-26;2026-10-27;2026-10-29;2026-11-09;2026-11-10;2026-11-17,4,sure,pencils in two 2-crew calls on six days and asks for a quote
+1a15b191db90039c,nothing,,,,sure,newsletter asking for auction donations

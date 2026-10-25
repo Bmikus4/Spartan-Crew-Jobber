@@ -1,0 +1,37 @@
+message_id,why_listed,system,asks_A,asks_B,sure_A,sure_B,staff_acts_on_named_day,first_reply_from_us_h
+1a1399db710f7409,quote request, none,none,quote_or_availability,quote_or_availability,sure,sure,,
+1a139a32371af418,quote request, needs-reply,needs-reply,quote_or_availability,quote_or_availability,sure,sure,,
+1a139d57839581af,already booked per system, order absent from snapshot,none,new_booking+quote_or_availability,quote_or_availability+new_booking,unsure,unsure,,
+1a139f0f10a9d1c9,silent: needs-reply, shown nowhere,needs-reply,change,change,sure,sure,0,0.3
+1a139f824146018a,silent: needs-reply, shown nowhere,needs-reply,new_booking,new_booking,sure,sure,0,0.2
+1a13a5149fcd9455,silent: needs-reply, shown nowhere,needs-reply,new_booking+quote_or_availability,quote_or_availability+new_booking,unsure,unsure,4,0.1
+1a13aaf92b3b564e,silent: none, model read no change,none,change,change,unsure,unsure,0,20.2
+1a13ecba7aedacb2,quote request, needs-reply,needs-reply,quote_or_availability,quote_or_availability,sure,sure,,
+1a13f5601780e57f,readers disagree on booking work,none,po_only,po_only+change,unsure,unsure,0,0.6
+1a13f6fc5782f7c3,already booked per system, order absent from snapshot,none,new_booking,new_booking,unsure,unsure,,
+1a13f8312ae75c73,silent: needs-reply, shown nowhere,needs-reply,change,change,unsure,unsure,9,1.6
+1a13fc34f09bf745,silent: none, model read no change,none,new_booking,new_booking,unsure,unsure,0,0.7
+1a13fd80597e6e43,silent: none, model read no change,none,new_booking,new_booking+po_only,unsure,unsure,10,1.6
+1a13fd94ac637812,silent: none, model read no change,none,new_booking,new_booking+po_only,unsure,unsure,11,1.3
+1a1401fd187dd300,already booked per system, order absent from snapshot,none,new_booking,new_booking,unsure,unsure,,
+1a140632ce4d5e99,quote request, needs-reply,needs-reply,quote_or_availability,quote_or_availability,sure,sure,,
+1a140936e8627133,readers disagree on booking work,none,new_booking,nothing,unsure,unsure,0,16.8
+1a14105b82e3493e,silent: none, model read no change,none,new_booking+question,question+new_booking,unsure,unsure,1,0.9
+1a144c619a140ea6,quote request, needs-reply,needs-reply,quote_or_availability,quote_or_availability,sure,sure,,
+1a14511a688115b4,quote request, needs-reply,needs-reply,quote_or_availability,quote_or_availability,unsure,unsure,,
+1a1456a614874008,silent: needs-reply, shown nowhere,needs-reply,new_booking,new_booking,unsure,unsure,0,0.1
+1a14638ee5140233,silent: needs-reply, shown nowhere,needs-reply,new_booking,new_booking,sure,sure,0,61.3
+1a1493bc7c314c28,silent: needs-reply, shown nowhere,needs-reply,change+quote_or_availability,change+quote_or_availability,unsure,unsure,1,0.1
+1a15344a323ab432,already booked per system, order absent from snapshot,none,new_booking,new_booking,sure,sure,,
+1a1537f6f674abca,readers disagree on booking work,listed,cancel,nothing,unsure,unsure,0,0.3
+1a153bcb54f7f266,silent: none, model read no change,none,new_booking+question,new_booking+question,unsure,unsure,0,1.6
+1a153c3baf30122a,readers disagree on booking work,listed,change,question,unsure,unsure,0,1.4
+1a1540528d5a2d27,silent: none, model read no change,none,new_booking,new_booking+question,unsure,unsure,0,2.7
+1a158731358a59fa,quote request, needs-reply,needs-reply,quote_or_availability,quote_or_availability,sure,sure,,
+1a158c5ac15f6fdc,silent: needs-reply, shown nowhere,needs-reply,new_booking,new_booking,unsure,unsure,5,0.4
+1a159376628160f2,silent: none, model read no change,none,new_booking,new_booking,unsure,unsure,12,0.6
+1a1596b0abbb0a66,readers disagree on booking work,listed,cancel,nothing,unsure,unsure,2,1.2
+1a159f0b5b42bf65,readers disagree on booking work,listed,cancel,nothing,unsure,unsure,6,0.2
+1a15a09f403c8ccd,quote request, none,none,quote_or_availability,quote_or_availability,unsure,unsure,,
+1a13a408e18d3802,third reader V read po_only,listed,new_booking,new_booking+po_only,unsure,unsure,,
+1a144a8d3a03a407,third reader V read quote_or_availability,listed,new_booking+quote_or_availability,new_booking+quote_or_availability,sure,sure,,

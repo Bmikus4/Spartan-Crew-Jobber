@@ -65,12 +65,12 @@ Silent misses are **not** on this list. They cannot be measured yet; see §5.
 
 | metric | today | with the set |
 |---|---|---|
-| silent_miss_count / inquiry_recall | 4 of 84 among staff-acted emails, 95.2% (79/84 = 94.0% if the ambiguous `none` counts). Requests nobody acted on are unmeasured | measured over all client emails |
-| item_correctness | not measurable: no labels for listed items | measured |
-| review_rate | 100% by construction (the TV lists only what the system could not do) | measured once Q1 defines a confirm-ready state |
-| display_precision | 59 of 62 listed rows in the bucketed set; the rest unaudited | measured |
-| client_resolution_accuracy | 85.9% resolved by production on the week (311/362), 89.1% in a replay. Accuracy is unknown beyond 92 hand links | measured, including wrong-company cases (2 seen in gold) |
-| none_precision / none_recall | 38 of 43 new-order emails said so (one reader) | measured |
+| silent_miss_count / inquiry_recall | **16 of 90 outstanding requests over all 400 client emails: 82.2% (CI 72.7-89.5)**, two blind readers, not yet adjudicated (`eval/live-week-reads.md`). It is 24 of 113 if quote requests count. It was 4 of 84 when counted only over emails staff acted on | measured on the adjudicated set |
+| item_correctness | live week: right on 18 of 23 writes that ran (78%, CI 56-92%) and 28 of 40 write proposals (70%). Over all 104 items shown it is 18/104 = 17%, because a listed card carries no change a confirm would make (reconstruction.md §6.7) | measured on every item |
+| review_rate | live week: 99 of 122 items ended with a person (81.1%): 81 listed cards and 18 needs-reply. The other 23 were writes that ran. "Item" here means every decision other than `none`, and that definition is used everywhere in this package | measured; the target is 5% |
+| display_precision | 96 of 104 items shown are a request of some kind (92.3%), 74 are booking work (71.2%), and 5 are nothing (4.8%), per both readers | measured on the adjudicated set; floor is Q4 |
+| client_resolution_accuracy | correct client on 115 of 123 gold emails with a strong or adjudicated order label (93.5%, CI 87.6-97.2): 5 left with no client, 3 given the wrong one (179 of 193 with medium labels). Coverage: 85.9% resolved by production on the week, 89.1% in a replay | measured, including wrong-company cases |
+| none_precision / none_recall | recall: 38 of 43 new-order emails said so (taxonomist). Precision: 12 of 19 `create_order` writes were on emails both readers call a new booking, and the other 7 on quote requests (W3) | measured |
 
 **Then, measured on that set, in this order:**
 1. **The parser: at most 15 of the 23 grounding misses.** 13 are "reads as null" plus 2 cancellation phrasings. The other 8 are the model's quote or reading, not the parser.
@@ -81,7 +81,7 @@ Silent misses are **not** on this list. They cannot be measured yet; see §5.
 
 **Withdrawn after the red team:** "close the hand-over" by listing bot creates on the TV.
 - It counted hidden creates that do not exist while writes are off.
-- It reverses the owner's 10-13 rule. His words: "Everything that cant be created by the system which includes both orders and updates should be less than or equal to 1/100. Only those cases should be moved to the display TV" (B30(6), B32).
+- It reverses the owner's 10-13 rule. The owner's words: "Everything that cant be created by the system which includes both orders and updates should be less than or equal to 1/100. Only those cases should be moved to the display TV" (B30(6), B32).
 - Visibility did not stop rebuilds: all 6 creates made after Gmail labels went live (S-0191, 10-16 04:37Z) were rebuilt or deleted.
 - The question that remains is for staff, through Paz: why did they rebuild the bot's orders?
   - 9 of the 14 were equal to theirs by day, times and crew, and 7 by trade as well.
@@ -109,15 +109,41 @@ Within every tier the rule is recall first: when in doubt, it goes to the TV, fl
 - `ops-truth` and `week-review` stay as evidence for the labellers, never as labels: they skip company-null emails and attribute by timing.
 - Quote exact intervals with every figure. At n = 84 the interval is about ±5 points.
 
+**reason_code distribution (§9.9), the live week's 99 flagged items.** This is the deterministic layer's backlog.
+- **64 listed handoffs:**
+  - reading_unproven 34
+  - policy_lead_days 9
+  - request_unsupported 6
+  - client_unknown 6
+  - booking_link_unreadable 3
+  - system_failed 2
+  - request_inconsistent 2
+  - venue_not_identified 1
+  - other 1
+- **17 writes that did not run:**
+  - blocked on signed-on crew 11 (that rule was removed 10-15)
+  - crew-chief stop 3
+  - cut or cancel below the workers 3
+- **18 needs-reply:**
+  - reply_detail_missing 12
+  - reply_unclear 4
+  - reply_quote 2
+
+Snapshot-wide over 847 decisions: `audit/glossary.md:148-163`. Script: `eval/reads/scripts/codes.mts`, which applies `coded()` (reasons.ts:59).
+
 ## 7. §17 questions, with evidence
 
-- **Q1: must a person confirm every order?**
+- **Q1, in OnSinch's terms: may the bot's new orders skip To Confirm, and should the TV tick do anything in OnSinch?** §3 asks whether an order must be confirmed before it becomes a job. In OnSinch, a Job exists from the moment its order is created (3,435 of 3,500 orders have exactly one). "Booked" is the provisional flag clearing on the same order (`order_confirm_provisional`). So the real question is whether To Confirm stays a human gate for the bot's creates.
   - As built, yes for creates (`request_approval: true`, `apiCreate.ts:92`). Edits have no confirm.
-  - The rulings conflict: 08-18 "To Confirm is a human gate", 09-13 "no step may require a human", 09-29 "no orders awaiting a confirm click".
+  - The earlier rulings conflict: 08-18 "To Confirm is a human gate", 09-13 "no step may require a human", 09-29 "no orders awaiting a confirm click".
+  - **The owner's latest words settle creates.** 10-13: "every new order in To Confirm" (B30(1)). 10-16: "A orders to confirm, if its a new order. if it is an update, it gets added to its later stage" (`C-items-1016.md:51-52`). So new orders wait in To Confirm and updates are written live, which is what the code does.
   - In practice 1 of 21 bot creates was confirmed and 11 were deleted.
-  - Open for the owner: may the system book directly when confident, and should the TV tick do anything in OnSinch?
+  - Left for the owner: is 10-16 still the rule, now that 1 of 21 bot creates was confirmed? And should the TV tick confirm the To Confirm order, given that today it writes nothing (`feed/check.ts:1-6`)?
 - **Q2: what are metrics A and B?** One harness metric (`e2e`) on two generated sets, on a broken fake world. They are 304/154 at HEAD. They are not real mail and not a baseline (`eval/metrics.md`).
-- **Q3: which actions are reversible?** See §6. Open: does an edit notify crew, as the 10-15 comment says? Does a new open position go out to crew at once? Does a time change re-notify confirmed workers?
+- **Q3: which actions are reversible?** See §6.
+  - Open: does an edit notify crew? Does a new open position go out to crew at once? Does a time change re-notify confirmed workers?
+  - Only the code comment `run.ts:11-14` says "OnSinch tells them". The owner's 10-15 words ask for every change to be made and for dropped crew to be logged (`C-items-1016.md:57-60`), but say nothing about notices.
+  - The snapshot's 8 audit actions include no notification rows, so this cannot be measured offline. The owner or Paz knows it from OnSinch.
 - **Q4: what display_precision floor?** The owner's call. It is not yet measured; see §5.
 - **Q5: are outbound mail and headers retained?**
   - Outbound is kept: 3,775 rows in 994 of 1,279 threads. Whether any row is an unsent draft is blocked offline.
@@ -130,6 +156,13 @@ Within every tier the rule is recall first: when in doubt, it goes to the TV, fl
   - Cost: $0.031-0.033 each on Opus 4.8 (10-14, 10-15) and $0.005-0.010 on gpt-6.1-sol since 10-16. That is $0.02-3.42 a day.
 - **New: what do OPERATING §2's unfilled placeholders refer to?** Candidates are in `audit/history-and-assumptions.md` §6. None of them names a known-good version.
 - **New: does "client" count as the second fact beside the day (`evidence.ts:2-3`)?** It decides 426 of the generated labels, and how strict "never the day alone" is on real mail.
+- **Glossary (§3) against code and data** (`audit/glossary.md` §1). These four would change how a §3 sentence is read:
+  - **Order** is the booking at every stage, not a draft stage. Draft is a flag on the same record (`provisional`, `quote`, `request_approval`).
+  - **Job** is a child of the order, created with it, not a later stage (above).
+  - **Opportunity** means orders only. Cancelled orders are outside the candidate set (`plan.ts:235, :454, :728`), but §9.4 asks for all statuses.
+  - **Senders who act for several clients are not served.** The resolver works by domain and abstains when a domain or address belongs to more than one company (`resolve.ts:92, :122`), and the result is a handoff with no client. That covers 25 of 749 business domains; §9.3 asks for resolution by content.
+
+  Client, Sender (one client with many senders), Change and Display match. Inquiry and Item match in spirit, but no step outputs "not an inquiry", and no item waits in a confirm-ready state.
 - **Settled 10-25: `intake_paused` is false, and the Intake Watchdog is on.** See §4.
 - **New: who labels the eval set, and who settles disagreements?** See §5.
 
@@ -140,7 +173,7 @@ I re-ran 6 of its hits (H1, H2, H3, H4, H6, N1) from code and data. All 6 hold.
 | hit | severity | response |
 |---|---|---|
 | H1: the move's gain needs writes on, but writes stay off | decision | **accepted.** The move is withdrawn (§5) |
-| H2: listing creates and questions reverses the owner's 10-13 rule | decision | **accepted.** My "not an owner ruling" was wrong for creates. For questions, his words cover orders and updates the system cannot make, and the code applies them by hiding needs-reply cards. The clearing rule in §5 item 2 is proposed as an owner decision, not a leak fix |
+| H2: listing creates and questions reverses the owner's 10-13 rule | decision | **accepted.** My "not an owner ruling" was wrong for creates. For questions, the owner's words cover orders and updates the system cannot make, and the code applies them by hiding needs-reply cards. The clearing rule in §5 item 2 is proposed as an owner decision, not a leak fix |
 | H3: the 4 strict silent misses reached staff; our mailbox answered all 18 questions (median 0.2 h) | decision | **accepted.** "Reached nobody" is withdrawn. They had no TV item, but staff caught all 4 from the inbox within an hour |
 | H4: labels went live 10-16, and all 6 later creates were rebuilt | decision | **accepted.** Visibility is not shown to be the cause of rebuilds |
 | H5: the silent-miss count cannot see a request nobody acted on | decision | **accepted.** This is now the reason for the highest-leverage move (§5) |

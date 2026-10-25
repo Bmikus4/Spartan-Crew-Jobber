@@ -59,7 +59,7 @@ The no-revert conclusion survives, and so do most of the headline numbers. I rep
   - `serve.ts:103-106` quotes the owner on 10-13: "Only those cases should be moved to the display TV". It then states that "an order the bot made or changed is the system's own work and a question is answered from the inbox; both are counted, not shown".
   - The historian's register records B32 (10-13), "The TV shows only what the system could not do", as **enforced** (`history-and-assumptions.md:212`). It also records B30(6), "only that reaches the TV" (`:210`).
   - Commit 1f3ae9a's body says: "Needs Reply is still counted, not listed: [the owner's] 10-13 rule is that the TV shows only what the system could not do."
-  - The move therefore asks the owner to reverse two of his own enforced rulings. It also runs against his standing direction that the display show only real, actionable inquiries (`audit/STATE.md:66-67`). He is told it is a leak and not his rule. B31 (`history-and-assumptions.md:211`) records the mirror-image error, a rule presented as the owner's that was not his.
+  - The move therefore asks the owner to reverse two of the owner's own enforced rulings. It also runs against the owner's standing direction that the display show only real, actionable inquiries (`audit/STATE.md:66-67`). He is told it is a leak and not his rule. B31 (`history-and-assumptions.md:211`) records the mirror-image error, a rule presented as the owner's that was not his.
 - **Evidence.** `app/lib/feed/serve.ts:103-106`, `audit/history-and-assumptions.md:210,212`, and `git show -s 1f3ae9a`.
 - **Severity.** changes-the-decision.
 
