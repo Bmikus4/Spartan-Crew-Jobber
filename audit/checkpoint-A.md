@@ -18,18 +18,18 @@ This file holds the proposals the owner needs to rule on. The one-page message i
   - Staff do every booking.
 
   A revert would put back writes with weaker defences (F1-F3 and F22/F23 were fixed at 6a98170), and it would buy nothing while writes stay off. The owner, 10-24: "nothing is supposed to be stopped right now, the dashboard is staying up".
-- **It is not yet healthy, for one reason that needs the owner's yes.**
-  - Settings `intake_paused=true` is still set from the 10-21 pause, although intake is live.
-  - The TV therefore reads "Intake Paused" (`LiveFeedScreen.tsx:259`). The Help assistant tells staff "new emails are not being read" (`app/lib/help/liveState.ts:19`).
-  - The TV's only intake alarm is suppressed (`serve.ts:140`: `intake_stale && !paused`).
-  - **Proposal: set `intake_paused` to false.** It is one Settings switch. It changes no decision and no write, and restores the alarm.
+- **One thing was unhealthy, and it is fixed** (owner, 10-25: "the only thing that should be paused are job and order update and creates").
+  - Settings `intake_paused=true` had been left on from the 10-21 pause, although intake was live again from 10-22 00:25 UTC.
+  - The TV read "Intake Paused" (`LiveFeedScreen.tsx:259`), the Help assistant told staff "new emails are not being read" (`app/lib/help/liveState.ts:19`), and the TV's intake alarm was suppressed (`serve.ts:140`).
+  - On 10-25 it was set to false. Only that key changed, and `bot_writes_enabled` stays false.
+  - The n8n Intake Watchdog, off since 10-21, was activated.
 
 **What I would verify to call it healthy.** These are read-only queries or existing tests, run daily:
 1. **No writes.** 0 executed writes while `bot_writes_enabled=false`. Today: 0/22.
 2. **No lost email, seen from Gmail's side.** Compare Gmail's own count of client messages per day against `thread_messages`.
    - The store cannot see mail that never reached it. That is the 08-26 failure mode (`app/lib/intakeHealth.ts:1-8`).
    - The 10-21 pause day holds 19 client emails in the store, against 54-103 on the other weekdays (snapshot, by message date). Whether those emails reached the store later is the first thing to check.
-3. **The alarm is live.** `intake_paused=false`, and the TV's intake-stale flag fires when no email arrives in working hours.
+3. **The alarm is live.** `intake_paused=false` and the Intake Watchdog is active (both true since 10-25). The TV's intake-stale flag fires when no email arrives in working hours.
 4. **No dropped need.** Every needs-created or needs-updated decision reaches the TV list (`test/feedKeepsEveryNeed.ts`).
 
 Silent misses are **not** on this list. They cannot be measured yet; see §5.
@@ -126,7 +126,7 @@ Within every tier the rule is recall first: when in doubt, it goes to the TV, fl
   - Cost: $0.031-0.033 each on Opus 4.8 (10-14, 10-15) and $0.005-0.010 on gpt-6.1-sol since 10-16. That is $0.02-3.42 a day.
 - **New: what do OPERATING §2's unfilled placeholders refer to?** Candidates are in `audit/history-and-assumptions.md` §6. None of them names a known-good version.
 - **New: does "client" count as the second fact beside the day (`evidence.ts:2-3`)?** It decides 426 of the generated labels, and how strict "never the day alone" is on real mail.
-- **New: may I set `intake_paused` to false?** See §4.
+- **Settled 10-25: `intake_paused` is false, and the Intake Watchdog is on.** See §4.
 - **New: who labels the eval set, and who settles disagreements?** See §5.
 
 ## Red team A: hits and responses
@@ -140,7 +140,7 @@ I re-ran 6 of its hits (H1, H2, H3, H4, H6, N1) from code and data. All 6 hold.
 | H3: the 4 strict silent misses reached staff; our mailbox answered all 18 questions (median 0.2 h) | decision | **accepted.** "Reached nobody" is withdrawn. They had no TV item, but staff caught all 4 from the inbox within an hour |
 | H4: labels went live 10-16, and all 6 later creates were rebuilt | decision | **accepted.** Visibility is not shown to be the cause of rebuilds |
 | H5: the silent-miss count cannot see a request nobody acted on | decision | **accepted.** This is now the reason for the highest-leverage move (§5) |
-| H6: `intake_paused=true` blinds the alarm and misinforms staff | decision | **accepted.** §4 proposes flipping it, which needs the owner's yes, and adds a Gmail-side count |
+| H6: `intake_paused=true` blinds the alarm and misinforms staff | decision | **accepted.** Flipped on the owner's word on 10-25, the watchdog was restored, and §4 adds a Gmail-side count |
 | N1: durable completions 3/84; new bookings 0 | number | **accepted** (R11562 is absent from the snapshot) |
 | N2: 9 equal by day, times and crew, 7 with trades | number | **accepted** |
 | N3: 6 of 31 label_wrong rows have a staff act on a day the email names | number | **accepted.** The strict count rests on one reader, and the eval set settles it |

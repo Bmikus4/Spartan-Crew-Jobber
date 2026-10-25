@@ -33,7 +33,7 @@ Every email that asks for something ends with the right thing in OnSinch, done b
    - Creates wait in To Confirm, where staff confirmed 1 of 21 and deleted 11.
    - Edits go live with no confirm.
    - The owner's rulings conflict on whether a person must confirm.
-5. **Production misreports its own intake.** `intake_paused=true` stays set while intake is live. The TV therefore shows "Intake Paused", the Help assistant tells staff new emails are not being read, and the TV's only intake alarm is off (`serve.ts:140`). The owner has said nothing is meant to be stopped.
+5. **Production misreported its own intake until 10-25.** `intake_paused=true` had been left on from the 10-21 pause, so the TV showed "Intake Paused" and its intake alarm was off. On the owner's word ("the only thing that should be paused are job and order update and creates"), the flag was cleared and the Intake Watchdog switched back on. Creates and updates stay paused.
 
 **What holds and should be kept:**
 - the deterministic spine: client first, candidate pools with a median of 2, 0 of 92 hand links in disagreement;
@@ -44,9 +44,7 @@ There is no known-good version to revert to.
 
 ## What I propose
 
-1. **No revert.**
-   - Flip `intake_paused` to false. This is a production setting, so it needs the owner's yes.
-   - Add a Gmail-side count to the health check, so that mail which never reached the store is seen. 10-21, the pause day, holds 19 client emails against 54-103 on other weekdays.
+1. **No revert.** Add a Gmail-side count to the health check, so that mail which never reached the store is seen. 10-21, the pause day, holds 19 client emails against 54-103 on other weekdays.
 2. **Highest-leverage move: a real-mail eval set that sees every client email, not only those staff acted on.**
    - For each email: what it asked for, and the right outcome. The labelling is independent of staff timing, done by two readers, with disagreements settled by the owner or Paz.
    - The 117 + 100 rows bucketed in Phase 0 are the seed. The 291 unread emails of the live week come first, because that is where real silent misses would hide.
@@ -56,7 +54,6 @@ There is no known-good version to revert to.
    - The labels experiment says visibility was not why staff rebuilt.
 
 **Decisions I need from the owner:**
-- Flip `intake_paused`?
 - Who labels, and who settles disagreements?
 - Q1: may the system book directly, and what should "confirm" do?
 - Q3: are crew notified on each edit?
