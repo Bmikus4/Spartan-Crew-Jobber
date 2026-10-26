@@ -1,0 +1,1052 @@
+{
+ "manifest_sha256_16": "833df054c5676fd5",
+ "calls": 14,
+ "cost_usd": 0.1485,
+ "cases": [
+  {
+   "id": "1a1211fbe4a3dc72",
+   "role": "miss",
+   "reread_id": "1a1211fbe4a3dc72",
+   "decided_at": "2026-10-09T14:45:40.123Z",
+   "readers_days": [
+    "2026-10-15",
+    "2026-10-16",
+    "2026-10-17",
+    "2026-10-18",
+    "2026-10-19",
+    "2026-10-20",
+    "2026-10-21",
+    "2026-10-22"
+   ],
+   "old_reading": {
+    "intent": "info_only",
+    "actions": [],
+    "days": []
+   },
+   "new_reading": {
+    "intent": "booking",
+    "actions": [
+     "new_shift",
+     "new_shift",
+     "new_shift",
+     "new_shift",
+     "new_shift",
+     "new_shift",
+     "new_shift",
+     "new_shift"
+    ],
+    "days": [
+     "2026-10-15",
+     "2026-10-16",
+     "2026-10-17",
+     "2026-10-18",
+     "2026-10-19",
+     "2026-10-20",
+     "2026-10-21",
+     "2026-10-22"
+    ]
+   },
+   "new_meta": {
+    "model": "openai/gpt-6.1-sol",
+    "prompt_id": "extract@f3e1a862322b",
+    "input_tokens": 4023,
+    "output_tokens": 1324,
+    "cost_usd": 0.0199192
+   },
+   "head": {
+    "old": {
+     "outcome": "none",
+     "card": null,
+     "code": "none_nothing_to_do"
+    },
+    "new": {
+     "outcome": "listed",
+     "card": "needs-created",
+     "code": "policy_confirmed_proposal"
+    }
+   },
+   "patch": {
+    "old": {
+     "outcome": "none",
+     "card": null,
+     "code": "none_nothing_to_do"
+    },
+    "new": {
+     "outcome": "listed",
+     "card": "needs-created",
+     "code": "policy_confirmed_proposal"
+    }
+   }
+  },
+  {
+   "id": "1a1215576c68f3e2",
+   "role": "miss",
+   "reread_id": "1a1215576c68f3e2",
+   "decided_at": "2026-10-09T15:43:48.201Z",
+   "readers_days": [
+    "2026-10-12"
+   ],
+   "old_reading": {
+    "intent": "info_only",
+    "actions": [],
+    "days": []
+   },
+   "new_reading": {
+    "intent": "info_only",
+    "actions": [],
+    "days": []
+   },
+   "new_meta": {
+    "model": "openai/gpt-6.1-sol",
+    "prompt_id": "extract@f3e1a862322b",
+    "input_tokens": 2614,
+    "output_tokens": 146,
+    "cost_usd": 0.0046167
+   },
+   "head": {
+    "old": {
+     "outcome": "none",
+     "card": null,
+     "code": "none_nothing_to_do"
+    },
+    "new": {
+     "outcome": "none",
+     "card": null,
+     "code": "none_nothing_to_do"
+    }
+   },
+   "patch": {
+    "old": {
+     "outcome": "none",
+     "card": null,
+     "code": "none_nothing_to_do"
+    },
+    "new": {
+     "outcome": "none",
+     "card": null,
+     "code": "none_nothing_to_do"
+    }
+   }
+  },
+  {
+   "id": "1a1303be1b2344bb",
+   "role": "miss",
+   "reread_id": "1a1303be1b2344bb",
+   "decided_at": "2026-10-12T13:10:41.560Z",
+   "readers_days": [
+    "2026-10-16"
+   ],
+   "old_reading": {
+    "intent": "info_only",
+    "actions": [],
+    "days": []
+   },
+   "new_reading": {
+    "intent": "info_only",
+    "actions": [],
+    "days": []
+   },
+   "new_meta": {
+    "model": "openai/gpt-6.1-sol",
+    "prompt_id": "extract@f3e1a862322b",
+    "input_tokens": 3387,
+    "output_tokens": 215,
+    "cost_usd": 0.0072392
+   },
+   "head": {
+    "old": {
+     "outcome": "none",
+     "card": null,
+     "code": "none_nothing_to_do"
+    },
+    "new": {
+     "outcome": "none",
+     "card": null,
+     "code": "none_nothing_to_do"
+    }
+   },
+   "patch": {
+    "old": {
+     "outcome": "none",
+     "card": null,
+     "code": "none_nothing_to_do"
+    },
+    "new": {
+     "outcome": "none",
+     "card": null,
+     "code": "none_nothing_to_do"
+    }
+   }
+  },
+  {
+   "id": "1a130b076cfc037b",
+   "role": "miss",
+   "reread_id": "1a130b076cfc037b",
+   "decided_at": "2026-10-12T15:17:54.645Z",
+   "readers_days": [
+    "2026-10-13"
+   ],
+   "old_reading": {
+    "intent": "info_only",
+    "actions": [],
+    "days": []
+   },
+   "new_reading": {
+    "intent": "info_only",
+    "actions": [],
+    "days": []
+   },
+   "new_meta": {
+    "model": "openai/gpt-6.1-sol",
+    "prompt_id": "extract@f3e1a862322b",
+    "input_tokens": 2788,
+    "output_tokens": 95,
+    "cost_usd": 0.0045417
+   },
+   "head": {
+    "old": {
+     "outcome": "none",
+     "card": null,
+     "code": "none_nothing_to_do"
+    },
+    "new": {
+     "outcome": "none",
+     "card": null,
+     "code": "none_nothing_to_do"
+    }
+   },
+   "patch": {
+    "old": {
+     "outcome": "none",
+     "card": null,
+     "code": "none_nothing_to_do"
+    },
+    "new": {
+     "outcome": "none",
+     "card": null,
+     "code": "none_nothing_to_do"
+    }
+   }
+  },
+  {
+   "id": "1a1353d267620c42",
+   "role": "miss",
+   "reread_id": "1a1353d267620c42",
+   "decided_at": "2026-10-13T12:29:50.669Z",
+   "readers_days": [],
+   "old_reading": {
+    "intent": "info_only",
+    "actions": [],
+    "days": []
+   },
+   "new_reading": {
+    "intent": "info_only",
+    "actions": [],
+    "days": []
+   },
+   "new_meta": {
+    "model": "openai/gpt-6.1-sol",
+    "prompt_id": "extract@f3e1a862322b",
+    "input_tokens": 3861,
+    "output_tokens": 87,
+    "cost_usd": 0.0071442
+   },
+   "head": {
+    "old": {
+     "outcome": "none",
+     "card": null,
+     "code": "none_nothing_to_do"
+    },
+    "new": {
+     "outcome": "none",
+     "card": null,
+     "code": "none_nothing_to_do"
+    }
+   },
+   "patch": {
+    "old": {
+     "outcome": "none",
+     "card": null,
+     "code": "none_nothing_to_do"
+    },
+    "new": {
+     "outcome": "none",
+     "card": null,
+     "code": "none_nothing_to_do"
+    }
+   }
+  },
+  {
+   "id": "1a1399db710f7409",
+   "role": "miss",
+   "reread_id": "1a1399db710f7409",
+   "decided_at": "2026-10-14T08:53:49.990Z",
+   "readers_days": [
+    "2026-11-01",
+    "2026-11-02"
+   ],
+   "old_reading": {
+    "intent": "info_only",
+    "actions": [],
+    "days": []
+   },
+   "new_reading": {
+    "intent": "info_only",
+    "actions": [],
+    "days": []
+   },
+   "new_meta": {
+    "model": "openai/gpt-6.1-sol",
+    "prompt_id": "extract@f3e1a862322b",
+    "input_tokens": 2824,
+    "output_tokens": 183,
+    "cost_usd": 0.0055117
+   },
+   "head": {
+    "old": {
+     "outcome": "none",
+     "card": null,
+     "code": "none_nothing_to_do"
+    },
+    "new": {
+     "outcome": "none",
+     "card": null,
+     "code": "none_nothing_to_do"
+    }
+   },
+   "patch": {
+    "old": {
+     "outcome": "none",
+     "card": null,
+     "code": "none_nothing_to_do"
+    },
+    "new": {
+     "outcome": "none",
+     "card": null,
+     "code": "none_nothing_to_do"
+    }
+   }
+  },
+  {
+   "id": "1a13aaf92b3b564e",
+   "role": "miss",
+   "reread_id": "1a13aaf92b3b564e",
+   "decided_at": "2026-10-14T13:52:54.909Z",
+   "readers_days": [
+    "2026-10-14"
+   ],
+   "old_reading": {
+    "intent": "info_only",
+    "actions": [],
+    "days": []
+   },
+   "new_reading": {
+    "intent": "info_only",
+    "actions": [],
+    "days": []
+   },
+   "new_meta": {
+    "model": "openai/gpt-6.1-sol",
+    "prompt_id": "extract@f3e1a862322b",
+    "input_tokens": 4000,
+    "output_tokens": 168,
+    "cost_usd": 0.0083017
+   },
+   "head": {
+    "old": {
+     "outcome": "none",
+     "card": null,
+     "code": "none_nothing_to_do"
+    },
+    "new": {
+     "outcome": "none",
+     "card": null,
+     "code": "none_nothing_to_do"
+    }
+   },
+   "patch": {
+    "old": {
+     "outcome": "none",
+     "card": null,
+     "code": "none_nothing_to_do"
+    },
+    "new": {
+     "outcome": "none",
+     "card": null,
+     "code": "none_nothing_to_do"
+    }
+   }
+  },
+  {
+   "id": "1a13fc34f09bf745",
+   "role": "miss",
+   "reread_id": "1a13fc34f09bf745",
+   "decided_at": "2026-10-15T13:32:54.279Z",
+   "readers_days": [
+    "2026-10-16"
+   ],
+   "old_reading": {
+    "intent": "info_only",
+    "actions": [],
+    "days": []
+   },
+   "new_reading": {
+    "intent": "info_only",
+    "actions": [],
+    "days": []
+   },
+   "new_meta": {
+    "model": "openai/gpt-6.1-sol",
+    "prompt_id": "extract@f3e1a862322b",
+    "input_tokens": 1953,
+    "output_tokens": 75,
+    "cost_usd": 0.0022542
+   },
+   "head": {
+    "old": {
+     "outcome": "none",
+     "card": null,
+     "code": "none_nothing_to_do"
+    },
+    "new": {
+     "outcome": "none",
+     "card": null,
+     "code": "none_nothing_to_do"
+    }
+   },
+   "patch": {
+    "old": {
+     "outcome": "none",
+     "card": null,
+     "code": "none_nothing_to_do"
+    },
+    "new": {
+     "outcome": "none",
+     "card": null,
+     "code": "none_nothing_to_do"
+    }
+   }
+  },
+  {
+   "id": "1a12093913c81661",
+   "role": "miss",
+   "reread_id": "1a12093913c81661",
+   "decided_at": "2026-10-09T12:12:56.658Z",
+   "readers_days": [
+    "2026-10-11"
+   ],
+   "old_reading": {
+    "intent": "change",
+    "actions": [
+     "change_times"
+    ],
+    "days": [
+     "2026-10-11"
+    ]
+   },
+   "new_reading": {
+    "intent": "change",
+    "actions": [
+     "change_times"
+    ],
+    "days": [
+     "2026-10-11"
+    ]
+   },
+   "new_meta": {
+    "model": "openai/gpt-6.1-sol",
+    "prompt_id": "extract@f3e1a862322b",
+    "input_tokens": 4522,
+    "output_tokens": 336,
+    "cost_usd": 0.0112867
+   },
+   "head": {
+    "old": {
+     "outcome": "none",
+     "card": null,
+     "code": "none_already_as_asked"
+    },
+    "new": {
+     "outcome": "none",
+     "card": null,
+     "code": "none_already_as_asked"
+    }
+   },
+   "patch": {
+    "old": {
+     "outcome": "none",
+     "card": null,
+     "code": "none_already_as_asked"
+    },
+    "new": {
+     "outcome": "none",
+     "card": null,
+     "code": "none_already_as_asked"
+    }
+   }
+  },
+  {
+   "id": "1a134d846cab863b",
+   "role": "miss",
+   "reread_id": "1a134d846cab863b",
+   "decided_at": "2026-10-13T10:39:50.263Z",
+   "readers_days": [
+    "2026-10-20",
+    "2026-10-21"
+   ],
+   "old_reading": {
+    "intent": "change",
+    "actions": [
+     "change_times"
+    ],
+    "days": [
+     "2026-10-20"
+    ]
+   },
+   "new_reading": {
+    "intent": "change",
+    "actions": [
+     "other",
+     "other"
+    ],
+    "days": [
+     "2026-10-20",
+     "2026-10-21"
+    ]
+   },
+   "new_meta": {
+    "model": "openai/gpt-6.1-sol",
+    "prompt_id": "extract@f3e1a862322b",
+    "input_tokens": 2947,
+    "output_tokens": 933,
+    "cost_usd": 0.0133192
+   },
+   "head": {
+    "old": {
+     "outcome": "none",
+     "card": null,
+     "code": "none_already_as_asked"
+    },
+    "new": {
+     "outcome": "listed",
+     "card": "needs-updated",
+     "code": "request_unsupported"
+    }
+   },
+   "patch": {
+    "old": {
+     "outcome": "none",
+     "card": null,
+     "code": "none_already_as_asked"
+    },
+    "new": {
+     "outcome": "listed",
+     "card": "needs-updated",
+     "code": "request_unsupported"
+    }
+   }
+  },
+  {
+   "id": "1a11bd05142050d8",
+   "role": "miss",
+   "reread_id": "1a11bf6850bebc48",
+   "decided_at": "2026-10-12T14:05:38.613Z",
+   "readers_days": [
+    "2026-10-09"
+   ],
+   "old_reading": {
+    "intent": "info_only",
+    "actions": [],
+    "days": []
+   },
+   "new_reading": {
+    "intent": "info_only",
+    "actions": [],
+    "days": []
+   },
+   "new_meta": {
+    "model": "openai/gpt-6.1-sol",
+    "prompt_id": "extract@f3e1a862322b",
+    "input_tokens": 2894,
+    "output_tokens": 75,
+    "cost_usd": 0.0046067
+   },
+   "head": {
+    "old": {
+     "outcome": "none",
+     "card": null,
+     "code": "none_nothing_to_do",
+     "via": "1a11bf6850bebc48"
+    },
+    "new": {
+     "outcome": "none",
+     "card": null,
+     "code": "none_nothing_to_do",
+     "via": "1a11bf6850bebc48"
+    }
+   },
+   "patch": {
+    "old": {
+     "outcome": "none",
+     "card": null,
+     "code": "none_nothing_to_do",
+     "via": "1a11bf6850bebc48"
+    },
+    "new": {
+     "outcome": "none",
+     "card": null,
+     "code": "none_nothing_to_do",
+     "via": "1a11bf6850bebc48"
+    }
+   }
+  },
+  {
+   "id": "1a13a8890d485caa",
+   "role": "control",
+   "reread_id": "1a13a8890d485caa",
+   "decided_at": "2026-10-14T13:10:59.286Z",
+   "readers_days": [
+    "2026-10-15"
+   ],
+   "old_reading": {
+    "intent": "change",
+    "actions": [
+     "change_times",
+     "change_crew"
+    ],
+    "days": []
+   },
+   "new_reading": {
+    "intent": "change",
+    "actions": [
+     "change_times",
+     "change_crew"
+    ],
+    "days": [
+     "2026-10-15"
+    ]
+   },
+   "new_meta": {
+    "model": "openai/gpt-6.1-sol",
+    "prompt_id": "extract@f3e1a862322b",
+    "input_tokens": 4658,
+    "output_tokens": 672,
+    "cost_usd": 0.0149867
+   },
+   "head": {
+    "old": {
+     "outcome": "check",
+     "card": "updated-check",
+     "code": "write"
+    },
+    "new": {
+     "outcome": "listed",
+     "card": "needs-updated",
+     "code": "reading_unproven"
+    }
+   },
+   "patch": {
+    "old": {
+     "outcome": "check",
+     "card": "updated-check",
+     "code": "write"
+    },
+    "new": {
+     "outcome": "listed",
+     "card": "needs-updated",
+     "code": "reading_unproven"
+    }
+   }
+  },
+  {
+   "id": "1a13e9ba4edde86b",
+   "role": "control",
+   "reread_id": "1a13e9ba4edde86b",
+   "decided_at": "2026-10-15T08:09:55.065Z",
+   "readers_days": [
+    "2026-10-15"
+   ],
+   "old_reading": {
+    "intent": "change",
+    "actions": [
+     "change_times"
+    ],
+    "days": [
+     "2026-10-15"
+    ]
+   },
+   "new_reading": {
+    "intent": "change",
+    "actions": [
+     "change_times"
+    ],
+    "days": [
+     "2026-10-15"
+    ]
+   },
+   "new_meta": {
+    "model": "openai/gpt-6.1-sol",
+    "prompt_id": "extract@f3e1a862322b",
+    "input_tokens": 2992,
+    "output_tokens": 518,
+    "cost_usd": 0.0092817
+   },
+   "head": {
+    "old": {
+     "outcome": "check",
+     "card": "updated-check",
+     "code": "write"
+    },
+    "new": {
+     "outcome": "check",
+     "card": "updated-check",
+     "code": "write"
+    }
+   },
+   "patch": {
+    "old": {
+     "outcome": "check",
+     "card": "updated-check",
+     "code": "write"
+    },
+    "new": {
+     "outcome": "check",
+     "card": "updated-check",
+     "code": "write"
+    }
+   }
+  },
+  {
+   "id": "1a13b45143681d8d",
+   "role": "control",
+   "reread_id": "1a13b45143681d8d",
+   "decided_at": "2026-10-14T16:37:30.317Z",
+   "readers_days": [
+    "2026-11-04",
+    "2026-11-05",
+    "2026-11-11",
+    "2026-11-17",
+    "2026-11-19",
+    "2026-11-20",
+    "2026-11-21",
+    "2026-11-22"
+   ],
+   "old_reading": {
+    "intent": "booking",
+    "actions": [
+     "new_shift",
+     "new_shift",
+     "new_shift",
+     "new_shift",
+     "new_shift",
+     "new_shift",
+     "new_shift",
+     "new_shift",
+     "new_shift",
+     "new_shift",
+     "new_shift",
+     "new_shift",
+     "new_shift",
+     "new_shift",
+     "new_shift"
+    ],
+    "days": [
+     "2025-11-04",
+     "2025-11-05",
+     "2025-11-11",
+     "2025-11-17",
+     "2025-11-19",
+     "2025-11-20",
+     "2025-11-21",
+     "2025-11-22"
+    ]
+   },
+   "new_reading": {
+    "intent": "booking",
+    "actions": [
+     "new_shift",
+     "new_shift",
+     "new_shift",
+     "new_shift",
+     "new_shift",
+     "new_shift",
+     "new_shift",
+     "new_shift",
+     "new_shift",
+     "new_shift",
+     "new_shift",
+     "new_shift",
+     "new_shift",
+     "new_shift",
+     "new_shift"
+    ],
+    "days": [
+     "2025-11-04",
+     "2025-11-05",
+     "2025-11-11",
+     "2025-11-17",
+     "2025-11-19",
+     "2025-11-21",
+     "2025-11-22",
+     "2026-11-20",
+     "2026-11-22"
+    ]
+   },
+   "new_meta": {
+    "model": "openai/gpt-6.1-sol",
+    "prompt_id": "extract@f3e1a862322b",
+    "input_tokens": 3703,
+    "output_tokens": 2959,
+    "cost_usd": 0.0354692
+   },
+   "head": {
+    "old": {
+     "outcome": "listed",
+     "card": "needs-created",
+     "code": "reading_unproven"
+    },
+    "new": {
+     "outcome": "check",
+     "card": "created-check",
+     "code": "write"
+    }
+   },
+   "patch": {
+    "old": {
+     "outcome": "listed",
+     "card": "needs-created",
+     "code": "reading_unproven"
+    },
+    "new": {
+     "outcome": "check",
+     "card": "created-check",
+     "code": "write"
+    }
+   }
+  },
+  {
+   "id": "1a120c3891f966d3",
+   "role": "control",
+   "reread_id": "1a120c3891f966d3",
+   "decided_at": "2026-10-09T13:04:51.502Z",
+   "readers_days": [
+    "2026-10-13"
+   ],
+   "old_reading": {
+    "intent": "booking",
+    "actions": [
+     "new_shift"
+    ],
+    "days": [
+     "2026-10-13"
+    ]
+   },
+   "new_reading": null,
+   "new_meta": null,
+   "head": {
+    "old": {
+     "outcome": "listed",
+     "card": "needs-created",
+     "code": "policy_lead_days"
+    },
+    "new": null
+   },
+   "patch": {
+    "old": {
+     "outcome": "listed",
+     "card": "needs-created",
+     "code": "policy_lead_days"
+    },
+    "new": null
+   }
+  },
+  {
+   "id": "1a13a02e4c08a985",
+   "role": "control",
+   "reread_id": "1a13a02e4c08a985",
+   "decided_at": "2026-10-14T10:45:05.209Z",
+   "readers_days": [
+    "2026-10-16"
+   ],
+   "old_reading": {
+    "intent": "change",
+    "actions": [
+     "cancel_shift",
+     "cancel_shift",
+     "new_shift"
+    ],
+    "days": []
+   },
+   "new_reading": null,
+   "new_meta": null,
+   "head": {
+    "old": {
+     "outcome": "listed",
+     "card": "needs-updated",
+     "code": "reading_unproven"
+    },
+    "new": null
+   },
+   "patch": {
+    "old": {
+     "outcome": "listed",
+     "card": "needs-updated",
+     "code": "reading_unproven"
+    },
+    "new": null
+   }
+  },
+  {
+   "id": "1a13a443201c1d31",
+   "role": "control",
+   "reread_id": "1a13a443201c1d31",
+   "decided_at": "2026-10-14T11:55:42.051Z",
+   "readers_days": [
+    "2026-10-15"
+   ],
+   "old_reading": {
+    "intent": "booking",
+    "actions": [
+     "new_shift"
+    ],
+    "days": [
+     "2026-10-15"
+    ]
+   },
+   "new_reading": null,
+   "new_meta": null,
+   "head": {
+    "old": {
+     "outcome": "listed",
+     "card": "needs-created",
+     "code": "client_unknown"
+    },
+    "new": null
+   },
+   "patch": {
+    "old": {
+     "outcome": "listed",
+     "card": "needs-created",
+     "code": "policy_lead_days"
+    },
+    "new": null
+   }
+  },
+  {
+   "id": "1a12179d602c6df4",
+   "role": "control",
+   "reread_id": "1a12179d602c6df4",
+   "decided_at": "2026-10-09T16:23:51.704Z",
+   "readers_days": [
+    "2026-10-13",
+    "2026-10-15"
+   ],
+   "old_reading": {
+    "intent": "booking",
+    "actions": [
+     "new_shift",
+     "new_shift"
+    ],
+    "days": [
+     "2026-10-13",
+     "2026-10-15"
+    ]
+   },
+   "new_reading": null,
+   "new_meta": null,
+   "head": {
+    "old": {
+     "outcome": "listed",
+     "card": "needs-created",
+     "code": "policy_lead_days"
+    },
+    "new": null
+   },
+   "patch": {
+    "old": {
+     "outcome": "listed",
+     "card": "needs-created",
+     "code": "policy_lead_days"
+    },
+    "new": null
+   }
+  },
+  {
+   "id": "1a13b2a104b579ab",
+   "role": "control",
+   "reread_id": "1a13b2a104b579ab",
+   "decided_at": "2026-10-14T16:06:58.692Z",
+   "readers_days": [
+    "2026-10-15"
+   ],
+   "old_reading": {
+    "intent": "booking",
+    "actions": [
+     "new_shift"
+    ],
+    "days": [
+     "2026-10-15"
+    ]
+   },
+   "new_reading": null,
+   "new_meta": null,
+   "head": {
+    "old": {
+     "outcome": "listed",
+     "card": "needs-created",
+     "code": "policy_lead_days"
+    },
+    "new": null
+   },
+   "patch": {
+    "old": {
+     "outcome": "listed",
+     "card": "needs-created",
+     "code": "policy_lead_days"
+    },
+    "new": null
+   }
+  },
+  {
+   "id": "1a13f49e6e01c4ab",
+   "role": "control",
+   "reread_id": "1a13f49e6e01c4ab",
+   "decided_at": "2026-10-15T11:19:58.079Z",
+   "readers_days": [
+    "2026-11-02",
+    "2026-11-03"
+   ],
+   "old_reading": {
+    "intent": "quote_request",
+    "actions": [
+     "new_shift",
+     "new_shift",
+     "new_shift",
+     "new_shift"
+    ],
+    "days": [
+     "2026-11-02",
+     "2026-11-03"
+    ]
+   },
+   "new_reading": null,
+   "new_meta": null,
+   "head": {
+    "old": {
+     "outcome": "check",
+     "card": "created-check",
+     "code": "write"
+    },
+    "new": null
+   },
+   "patch": {
+    "old": {
+     "outcome": "check",
+     "card": "created-check",
+     "code": "write"
+    },
+    "new": null
+   }
+  }
+ ]
+}

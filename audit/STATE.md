@@ -1,9 +1,35 @@
 # STATE.md
 
-Updated: 2026-10-25   Session: 2
+Updated: 2026-10-26   Session: 5
 
 ## Phase and section
-Phase: 1   Current section: §14 Checkpoint B   Status: awaiting checkpoint
+Phase: 1   Current section: Checkpoint B response (decisions/2026-10-26-checkpoint-b-response.md)   Status: in progress
+Checkpoint B stays closed: nothing deployed, writes off, no prompt change. The owner authorized a bounded investigation.
+
+## Session 5 plan (the owner's 7 items, 10-26)
+Summary for the owner: audit/checkpoint-B-response.md.
+- [x] O1 audit/evidence-index.md. Verified: HEAD = deployed = 305bf84; app unchanged since 6a98170; reader gpt-6.1-sol /
+      extract@f3e1a862322b since 10-16 07:00:44Z; writes off. 7 corrections appended to final-state.md and iterations.md.
+- [x] O2 eval/patches/items-1-3-runtime.diff + item-4-scoring.diff + items-1-4.md (worktree C:/Users/thera/spartan-v2-i14).
+      OnSinch's zone-less audit times are UTC: BST 1,810/1,813 as UTC, 0 as London (scripts/onsinch-zone-evidence.cjs).
+      Item 4 was incomplete in the held patch (6/23 by its own scorer); fixed, 8/6/9 re-judged on the audit copy.
+- [x] O3 eval/write-breakdown.md (fork; accepted after re-deriving: the 6/8/9, 11 production write decisions 8 blocked/2 not
+      run/1 verified, R11546 deleted 10:19Z, 1a158a5e6bd47095 written in production 10-20). 16/23 right by audit reading.
+- [x] O4 eval/component-assessment.md + audit/paz-acceptance-examples.md (fork; 4/4 acceptance completions re-derived from
+      Order-level rows by number). Paz not contacted: the owner sends the draft.
+- [x] O5 eval/reader-diagnostic/ (manifest 833df054c5676fd5 fixed before any call): 14 calls, $0.1485; stop rule ended at 3
+      of 9 controls. 9/11 old misses stay silent with the current reader.
+- [x] O6 audit/workflow-proposal.md (fork; tick = addMark only, check.ts:24-53, and untargeted Needs Updated,
+      v2.ts:85-91, re-read by me). Display precision under both definitions in component-assessment.md.
+- [x] O7 eval/dev-windows.md: D-cur 107 labelled current-reader inquiries (HEAD 17 silent); W2 10-26..10-28 labelled at
+      close; E3 from 10-29 00:00Z untouched. Next block recommended (checkpoint-B-response.md §7).
+
+## Session 5, next block (the owner: "then once you are fully done begin the next phase"; sandbox only, $0)
+- [ ] N1 Write judging as a committed, tested harness module (acts by number, deletes, net value per field, attribution
+      stopping at the next client email, order state at the window's end via the time-correct world); reproduces the 27-write table
+- [ ] N2 Planner op fixes, red-first on synthetic cases of the real shapes: role-named re-time, added crew/chief window,
+      add-N vs N-in-all hands off, two size ops on one position, a question planned as edits
+- [ ] N3 Re-measure on D-old and D-cur: wrong writes on these cases to 0, no new wrong write, recall unchanged
 
 Checkpoint A passed on 10-25: the owner, "bro the alignment is for you wtf" (decisions/2026-10-25-alignment-is-the-orchestrators.md).
 The eight questions were settled from the owner's own rulings or held without blocking (same file).

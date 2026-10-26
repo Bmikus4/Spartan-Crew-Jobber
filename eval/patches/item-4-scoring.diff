@@ -1,0 +1,47 @@
+diff --git a/app/lib/v2/score.ts b/app/lib/v2/score.ts
+index c29796d..4faca9f 100644
+--- a/app/lib/v2/score.ts
++++ b/app/lib/v2/score.ts
+@@ -71,8 +71,15 @@ export function bookingKeys(op: Op): string[] {
+ /** What staff did after an email, as booking keys; `other` is what no system operation can express. */
+ export function truthKeys(acts: Act[], orderById: (id: number) => any | undefined): { keys: string[]; other: string[] } {
+   const keys = new Set<string>(), other: string[] = [];
++  // An order staff created is judged once, by its create key. That key reads the order as it now stands,
++  // so it already holds every job, shift, position and edit staff made while building it; counting those
++  // again judged equal creates "partial" (1a121423eac99289: add job, a shift re-timed in the same minute;
++  // 1a13af10fc5250eb: add job, a trade changed 5 minutes on; eval/write-breakdown.md §1). A cancel of the
++  // order is not part of building it and still counts.
++  const made = new Set(acts.filter((a) => a.what === "create order").map((a) => a.order_id));
+   for (const a of acts) {
+     const o = orderById(a.order_id);
++    if (made.has(a.order_id) && a.what !== "create order" && a.what !== "cancel order") continue;
+     if (a.what === "create order") {
+       const shifts = teams(o).map(shiftKey).filter((k): k is string => !!k).sort();
+       if (shifts.length) keys.add(`create ${a.company_id}: ` + shifts.join(" | "));
+diff --git a/test/scoreStrict.ts b/test/scoreStrict.ts
+index 3280ba3..f0e2ae6 100644
+--- a/test/scoreStrict.ts
++++ b/test/scoreStrict.ts
+@@ -38,6 +38,22 @@ ok(judge([], truthOf([sizeTo6])).verdict === "missed", "nothing planned where st
+ ok(judge([size(6)], { keys: [], other: [] }).verdict === "wrong", "a write where staff did nothing: wrong");
+ 
+ console.log("\n[controls] the same plans with the right values pass");
++// Staff build an order as create, then add its shift and position: one order, judged once. Its create key is
++// read from the order's final state, so counting the adds again judged an equal create "partial" (1a121423eac99289,
++// 1a13af10fc5250eb; eval/item-correctness.md, 10-26).
++{
++  const built = [created, act({ what: "add shift", order_id: 16300, number: "11300", model: "SlotTeam", model_id: 601 }), act({ what: "add position", order_id: 16300, number: "11300", model: "Slot", model_id: 71 })];
++  ok(judge([create("32", 3)], truthOf(built)).verdict === "completed", "a create equal to the order staff built, shift by shift, is completed", judge([create("32", 3)], truthOf(built)));
++  // The build also logs its Job, and slot edits made while building (R11529's shift re-timed in the same minute,
++  // R11561's trade changed 5 minutes on). The order as it stands holds them; they are not separate work.
++  const buildEdits = [...built, act({ what: "add job", order_id: 16300, number: "11300", model: "Job", model_id: 801 }),
++    act({ what: "edit Slot.beginning+Slot.end", order_id: 16300, number: "11300", model: "Slot", model_id: 71,
++      changes: { beginning: { old: "2026-11-27 05:30:00", new: "2026-11-27 08:00:00" }, end: { old: "2026-11-27 13:30:00", new: "2026-11-27 16:00:00" } } }),
++    act({ what: "edit Slot.profession_id", order_id: 16300, number: "11300", model: "Slot", model_id: 71, changes: { profession_id: { old: 2, new: 1 } } })];
++  ok(judge([create("32", 3)], truthOf(buildEdits)).verdict === "completed", "and its job and in-build edits do not make it partial", judge([create("32", 3)], truthOf(buildEdits)));
++  const thenCancelled = [...built, act({ what: "cancel order", order_id: 16300, number: "11300", model: "Order" })];
++  ok(judge([create("32", 3)], truthOf(thenCancelled)).verdict === "partial", "a cancel of the order staff made still counts", judge([create("32", 3)], truthOf(thenCancelled)));
++}
+ ok(judge([size(6)], truthOf([sizeTo6])).verdict === "completed", "the count staff set", judge([size(6)], truthOf([sizeTo6])));
+ ok(judge([create("32", 3)], truthOf([created])).verdict === "completed", "the create staff made, however its positions are split", judge([create("32", 3)], truthOf([created])));
+ ok(fullyWritten([{ op: size(6) }], [{ status: "verified" }]), "every operation run and verified");

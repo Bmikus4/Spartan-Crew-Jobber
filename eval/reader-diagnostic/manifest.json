@@ -1,0 +1,337 @@
+{
+ "purpose": "Owner-authorized ($0.20 cap, 10-26): re-read the 11 old-reader dev misses and a control sample with production's current reader, isolated, no writes.",
+ "reader": {
+  "model": "openai/gpt-6.1-sol",
+  "prompt_id": "extract@f3e1a862322b",
+  "verified": "production v2_decisions rows 10-16..10-26 (read-only), and PROMPT_ID computed from app/lib/v2/interpret/extract.ts at 305bf84"
+ },
+ "input": "the replay's reconstruction of production's reader input (harness/real/replay.ts -> process.ts understand(): newest words, readContext from the time-correct world); not production's original input",
+ "control_rule": "dev B42 inquiries (labels all.jsonl, split-all dev) decided before 2026-10-16T07:00:44Z with their own stored reading, not read-together, shown (listed/check) in eval/harness/runs/all-replay-dev.json; ordered by sha256(\"reader-diagnostic-2026-10-26|\"+id); first 9. Pool 110.",
+ "scoring": {
+  "primary": "end-to-end outcome at HEAD code (replay): shown (listed/check, or reached through its carrier) vs silent, with the stored old reading and with the new reading",
+  "secondary": "reading: at least one request whose action is not 'other'; and whether a request's date is one of the readers' days (when they named days)",
+  "also": "the same primary with the held patch (eval/patches/p1-fixes.diff)"
+ },
+ "budget": {
+  "cap_usd": 0.2,
+  "stop_rule": "before each call: stop if spent + 2 x max(observed cost per call, 0.012) > 0.20; misses first, then controls, in this order"
+ },
+ "cases": [
+  {
+   "id": "1a1211fbe4a3dc72",
+   "role": "miss",
+   "why": "info_only: no change asked for",
+   "reread_id": "1a1211fbe4a3dc72",
+   "decided_at": "2026-10-09T14:45:40.123Z",
+   "readers_ask": [
+    "new_booking",
+    "new_booking"
+   ],
+   "readers_days": [
+    "2026-10-15",
+    "2026-10-16",
+    "2026-10-17",
+    "2026-10-18",
+    "2026-10-19",
+    "2026-10-20",
+    "2026-10-21",
+    "2026-10-22"
+   ],
+   "b42": true
+  },
+  {
+   "id": "1a1215576c68f3e2",
+   "role": "miss",
+   "why": "info_only: no change asked for",
+   "reread_id": "1a1215576c68f3e2",
+   "decided_at": "2026-10-09T15:43:48.201Z",
+   "readers_ask": [
+    "new_booking+question",
+    "new_booking"
+   ],
+   "readers_days": [
+    "2026-10-12"
+   ],
+   "b42": true
+  },
+  {
+   "id": "1a1303be1b2344bb",
+   "role": "miss",
+   "why": "info_only: no change asked for",
+   "reread_id": "1a1303be1b2344bb",
+   "decided_at": "2026-10-12T13:10:41.560Z",
+   "readers_ask": [
+    "quote_or_availability",
+    "quote_or_availability"
+   ],
+   "readers_days": [
+    "2026-10-16"
+   ],
+   "b42": true
+  },
+  {
+   "id": "1a130b076cfc037b",
+   "role": "miss",
+   "why": "info_only: no change asked for",
+   "reread_id": "1a130b076cfc037b",
+   "decided_at": "2026-10-12T15:17:54.645Z",
+   "readers_ask": [
+    "po_only",
+    "new_booking"
+   ],
+   "readers_days": [
+    "2026-10-13"
+   ],
+   "b42": true
+  },
+  {
+   "id": "1a1353d267620c42",
+   "role": "miss",
+   "why": "info_only: no change asked for",
+   "reread_id": "1a1353d267620c42",
+   "decided_at": "2026-10-13T12:29:50.669Z",
+   "readers_ask": [
+    "change+question",
+    "change"
+   ],
+   "readers_days": [],
+   "b42": true
+  },
+  {
+   "id": "1a1399db710f7409",
+   "role": "miss",
+   "why": "info_only: no change asked for",
+   "reread_id": "1a1399db710f7409",
+   "decided_at": "2026-10-14T08:53:49.990Z",
+   "readers_ask": [
+    "quote_or_availability",
+    "quote_or_availability"
+   ],
+   "readers_days": [
+    "2026-11-01",
+    "2026-11-02"
+   ],
+   "b42": true
+  },
+  {
+   "id": "1a13aaf92b3b564e",
+   "role": "miss",
+   "why": "info_only: no change asked for",
+   "reread_id": "1a13aaf92b3b564e",
+   "decided_at": "2026-10-14T13:52:54.909Z",
+   "readers_ask": [
+    "change",
+    "change"
+   ],
+   "readers_days": [
+    "2026-10-14"
+   ],
+   "b42": true
+  },
+  {
+   "id": "1a13fc34f09bf745",
+   "role": "miss",
+   "why": "info_only: no change asked for",
+   "reread_id": "1a13fc34f09bf745",
+   "decided_at": "2026-10-15T13:32:54.279Z",
+   "readers_ask": [
+    "new_booking",
+    "new_booking"
+   ],
+   "readers_days": [
+    "2026-10-16"
+   ],
+   "b42": true
+  },
+  {
+   "id": "1a12093913c81661",
+   "role": "miss",
+   "why": "partial reading: one request of the email's",
+   "reread_id": "1a12093913c81661",
+   "decided_at": "2026-10-09T12:12:56.658Z",
+   "readers_ask": [
+    "change",
+    "change"
+   ],
+   "readers_days": [
+    "2026-10-11"
+   ],
+   "b42": true
+  },
+  {
+   "id": "1a134d846cab863b",
+   "role": "miss",
+   "why": "partial reading: one request of the email's",
+   "reread_id": "1a134d846cab863b",
+   "decided_at": "2026-10-13T10:39:50.263Z",
+   "readers_ask": [
+    "change",
+    "change"
+   ],
+   "readers_days": [
+    "2026-10-20",
+    "2026-10-21"
+   ],
+   "b42": true
+  },
+  {
+   "id": "1a11bd05142050d8",
+   "role": "miss",
+   "why": "read together with 1a11bf6850bebc48; its own words name no day plus crew or time; re-read is the carrier's",
+   "reread_id": "1a11bf6850bebc48",
+   "decided_at": "2026-10-12T14:05:38.613Z",
+   "readers_ask": [
+    "new_booking",
+    "new_booking"
+   ],
+   "readers_days": [
+    "2026-10-09"
+   ],
+   "b42": true
+  },
+  {
+   "id": "1a13a8890d485caa",
+   "role": "control",
+   "reread_id": "1a13a8890d485caa",
+   "decided_at": "2026-10-14T13:10:59.286Z",
+   "head_outcome": "check",
+   "readers_ask": [
+    "change",
+    "change"
+   ],
+   "readers_days": [
+    "2026-10-15"
+   ],
+   "b42": true
+  },
+  {
+   "id": "1a13e9ba4edde86b",
+   "role": "control",
+   "reread_id": "1a13e9ba4edde86b",
+   "decided_at": "2026-10-15T08:09:55.065Z",
+   "head_outcome": "check",
+   "readers_ask": [
+    "change",
+    "change"
+   ],
+   "readers_days": [
+    "2026-10-15"
+   ],
+   "b42": true
+  },
+  {
+   "id": "1a13b45143681d8d",
+   "role": "control",
+   "reread_id": "1a13b45143681d8d",
+   "decided_at": "2026-10-14T16:37:30.317Z",
+   "head_outcome": "listed",
+   "readers_ask": [
+    "new_booking",
+    "new_booking"
+   ],
+   "readers_days": [
+    "2026-11-04",
+    "2026-11-05",
+    "2026-11-11",
+    "2026-11-17",
+    "2026-11-19",
+    "2026-11-20",
+    "2026-11-21",
+    "2026-11-22"
+   ],
+   "b42": true
+  },
+  {
+   "id": "1a120c3891f966d3",
+   "role": "control",
+   "reread_id": "1a120c3891f966d3",
+   "decided_at": "2026-10-09T13:04:51.502Z",
+   "head_outcome": "listed",
+   "readers_ask": [
+    "new_booking",
+    "new_booking"
+   ],
+   "readers_days": [
+    "2026-10-13"
+   ],
+   "b42": true
+  },
+  {
+   "id": "1a13a02e4c08a985",
+   "role": "control",
+   "reread_id": "1a13a02e4c08a985",
+   "decided_at": "2026-10-14T10:45:05.209Z",
+   "head_outcome": "listed",
+   "readers_ask": [
+    "cancel+change",
+    "change+cancel"
+   ],
+   "readers_days": [
+    "2026-10-16"
+   ],
+   "b42": true
+  },
+  {
+   "id": "1a13a443201c1d31",
+   "role": "control",
+   "reread_id": "1a13a443201c1d31",
+   "decided_at": "2026-10-14T11:55:42.051Z",
+   "head_outcome": "listed",
+   "readers_ask": [
+    "new_booking",
+    "new_booking"
+   ],
+   "readers_days": [
+    "2026-10-15"
+   ],
+   "b42": true
+  },
+  {
+   "id": "1a12179d602c6df4",
+   "role": "control",
+   "reread_id": "1a12179d602c6df4",
+   "decided_at": "2026-10-09T16:23:51.704Z",
+   "head_outcome": "listed",
+   "readers_ask": [
+    "new_booking",
+    "new_booking"
+   ],
+   "readers_days": [
+    "2026-10-13",
+    "2026-10-15"
+   ],
+   "b42": true
+  },
+  {
+   "id": "1a13b2a104b579ab",
+   "role": "control",
+   "reread_id": "1a13b2a104b579ab",
+   "decided_at": "2026-10-14T16:06:58.692Z",
+   "head_outcome": "listed",
+   "readers_ask": [
+    "new_booking",
+    "new_booking"
+   ],
+   "readers_days": [
+    "2026-10-15"
+   ],
+   "b42": true
+  },
+  {
+   "id": "1a13f49e6e01c4ab",
+   "role": "control",
+   "reread_id": "1a13f49e6e01c4ab",
+   "decided_at": "2026-10-15T11:19:58.079Z",
+   "head_outcome": "check",
+   "readers_ask": [
+    "quote_or_availability",
+    "quote_or_availability"
+   ],
+   "readers_days": [
+    "2026-11-02",
+    "2026-11-03"
+   ],
+   "b42": true
+  }
+ ]
+}

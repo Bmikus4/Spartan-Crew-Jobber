@@ -153,3 +153,34 @@ Two small items are recorded and not acted on, because changing labels only wher
 | B2-10 stale statements | minor | Corrected throughout. |
 | B2-11 subset untested | minor | Decision 1 says it is cut and tested first. |
 | B2-12 unverifiable claims | minor | Checkpoint run files kept in eval/harness/checkpoint-b/. The staff edits after the acceptances are in eval/iterations.md (ids, models, fields). |
+
+## Corrections after Checkpoint B (10-26, the owner's checks)
+
+These are found by the owner-authorized checks (decisions/2026-10-26-checkpoint-b-response.md). The text above stands as
+presented; read it with these.
+
+1. **The scorer's own output was 6/23 completed writes, not 8.**
+   - The patch's truthKeys fix skipped only "add shift" and "add position". Staff's "add job" and in-build slot edits
+     still made both creates partial (eval/write-breakdown.md §1).
+   - Fixed in eval/patches/item-4-scoring.diff. Re-judged on the audit copy, both are completed, so the scorer now gives
+     8/6/9 and item_correctness 8/152, 8/216 as stated.
+2. **"3 crew-chief within Ben's rule's 4%" (gaps table) is wrong on the facts.**
+   - Two of the three book exactly staff's headcount and chief count with the wrong window.
+   - The third (1a158a5e6bd47095, dev-2) is "add 3" against "3 in all". Production wrote it on 10-20 (both ops verified),
+     and staff cancelled the extra Crew Chief position the next day (eval/write-breakdown.md §5).
+3. **The dev misses are not only the replaced reader's (B2-2).**
+   - The current reader, on the same reconstructed inputs, still leaves 9 of the 11 silent (eval/reader-diagnostic/results.md).
+   - dev-2 is current-reader mail (233 of 238). With prospective-1 and dev's 81, that makes 107 labelled current-reader
+     inquiries; HEAD leaves 17 silent (eval/dev-windows.md).
+   - So "no clean set to tune on" was wrong: the evidence for a reader change exists.
+4. **"0 silent reply cards on current mail" held only for prospective-1.** On current-reader dev and dev-2 mail, 7 of
+   83 inquiries are silent reply cards.
+5. **"Selection-bound" was the wrong word.** Retrieval is not the bottleneck; reading and making the change are (eval/write-breakdown.md §6).
+6. **The reader's prompt did not change on 10-20 or 10-23.** prompt_id extract@f3e1a862322b is on every decision
+   since 10-13; what changed is the checks and planner after the reading (audit/evidence-index.md).
+7. **Staff completed all 4 accepted quote orders, not 3 of 4.**
+   - Each was confirmed from provisional (`order_confirm_provisional`) and given its PO within 0.0-0.9 h of the
+     client's acceptance (R11806, R11807, R11827, R11838).
+   - The Checkpoint B count read only Job, SlotTeam and Slot rows. It missed the Order-level rows, which name the order by
+     its number: the trap test/orderAuditByNumber.ts pins.
+   - "All four orders stay status 0 with no confirm row" is wrong.

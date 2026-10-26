@@ -1,0 +1,288 @@
+diff --git a/app/lib/errorReport.ts b/app/lib/errorReport.ts
+index 21ed012..f14b8f4 100644
+--- a/app/lib/errorReport.ts
++++ b/app/lib/errorReport.ts
+@@ -37,7 +37,7 @@ export type Severity = "alert" | "log";
+  * not running cannot report that it is not running. It is asked from outside on a schedule —
+  * see app/api/health/intake. The other three are the engine reporting on itself.
+  */
+-export type Route = "booking-lost" | "write-unconfirmed" | "engine-threw" | "intake-quiet" | "mail-undeliverable" | "mail-pull-failed" | "label-failed" | "help-report";
++export type Route = "booking-lost" | "write-unconfirmed" | "engine-threw" | "intake-quiet" | "mail-undeliverable" | "mail-pull-failed" | "label-failed" | "help-report" | "system-failed";
+ 
+ const ROUTE_TITLE: Record<Route, string> = {
+   "booking-lost": "A BOOKING WAS LOST",
+@@ -59,6 +59,10 @@ const ROUTE_TITLE: Record<Route, string> = {
+   // A person pressed Report an issue in the help panel. Not a failure the system found: the one
+   // route a human raises, sent to the same inbox because that is where SamurAI reads alarms.
+   "help-report": "SOMEBODY REPORTED AN ISSUE FROM THE HELP PANEL",
++  // The decision was recorded, so nothing is lost, but the reason a person must act is the
++  // system's own failure (OnSinch unreadable, a write stopped part-way), not the client's
++  // request. Staff see it as a need; until this route, the owner never heard of it.
++  "system-failed": "THE SYSTEM FAILED ON ITS OWN PART OF AN EMAIL",
+ };
+ 
+ /** Default gap between emails about the same thing. Long enough to stop a flood, short enough
+diff --git a/app/lib/v2/bot/ops.ts b/app/lib/v2/bot/ops.ts
+index 1dad066..d15987f 100644
+--- a/app/lib/v2/bot/ops.ts
++++ b/app/lib/v2/bot/ops.ts
+@@ -68,9 +68,14 @@ export function londonToUtc(date: string, hhmm: string): string {
+   return new Date(t).toISOString();
+ }
+ 
+-/** UTC instant -> London wall clock, as {date: "YYYY-MM-DD", time: "HH:MM"}. */
++/**
++ * UTC instant -> London wall clock, as {date: "YYYY-MM-DD", time: "HH:MM"}. A string with no zone is
++ * UTC: OnSinch's audit rows write "2026-10-23 07:30:00", and `new Date` would read that in the
++ * machine's zone (4 hours late on a New York box; test/zonelessIsUtc.ts).
++ */
+ export function utcToLondon(iso: string): { date: string; time: string } {
+-  const p = Object.fromEntries(LONDON.formatToParts(new Date(iso)).map((x) => [x.type, x.value]));
++  const zoned = /^\d{4}-\d\d-\d\d[ T]\d\d:\d\d(:\d\d(\.\d+)?)?$/.test(iso) ? iso.replace(" ", "T") + "Z" : iso;
++  const p = Object.fromEntries(LONDON.formatToParts(new Date(zoned)).map((x) => [x.type, x.value]));
+   return { date: `${p.year}-${p.month}-${p.day}`, time: `${p.hour}:${p.minute}` };
+ }
+ 
+diff --git a/app/lib/v2/process.ts b/app/lib/v2/process.ts
+index 72fbcd1..b0f81ea 100644
+--- a/app/lib/v2/process.ts
++++ b/app/lib/v2/process.ts
+@@ -23,7 +23,8 @@ import { utcToLondon } from "./bot/ops";
+ import { noTrace, type Tracer } from "./trace";
+ import { automationPausedFlag, v2Writes } from "../paused";
+ import { isTestId, isTestSender } from "../testData";
+-import { coded } from "./reasons";
++import { coded, systemFailureOf } from "./reasons";
++import { reportError } from "../errorReport";
+ 
+ /**
+  * Whether the bot may create and update orders for real clients now: the Settings master switch
+@@ -487,6 +488,13 @@ export function threadReads(sql: NeonQueryFunction<false, false>, m0: MessageIn,
+ 
+ export async function processMessage(message_id: string, opts: { execute: boolean; world?: World; with?: string[] } = { execute: false }): Promise<Processed> {
+   const sql = await db();
++  // WHAT WAS SENT FOR AN EMAIL IS ITS RECORD, so such an email is never decided again here. The
++  // upsert below writes `executed` as JSON null, which `coalesce` keeps, so a replay through
++  // /api/bot/process (the route intake's alarm names) erased the only account of what reached
++  // OnSinch (audit/pipeline-trace-addendum.md R4, 10-25). The replan refuses these rows too (replan.ts:63).
++  // `<> '[]'`, not jsonb_array_length: Postgres need not short-circuit AND, and the length of a scalar throws.
++  const sent = (await sql`SELECT 1 FROM v2_decisions WHERE message_id = ${message_id} AND jsonb_typeof(executed) = 'array' AND executed <> '[]'::jsonb`) as any[];
++  if (sent.length) return { message_id, skipped: "something was sent for this email: its record stands" };
+   const rows = (await sql`SELECT message_id, thread_id, from_address, date_iso, subject, body, is_from_spartan FROM thread_messages WHERE message_id = ${message_id}`) as any[];
+   const m0 = rows[0] as MessageIn | undefined;
+   if (!m0) return { message_id, skipped: "message not captured" };
+@@ -515,6 +523,12 @@ export async function processMessage(message_id: string, opts: { execute: boolea
+         ON CONFLICT (message_id) DO UPDATE SET kind = EXCLUDED.kind, interpretation = EXCLUDED.interpretation, decision = EXCLUDED.decision,
+           executed = coalesce(EXCLUDED.executed, v2_decisions.executed), code_version = EXCLUDED.code_version,
+           company_id = EXCLUDED.company_id, company = EXCLUDED.company`;
++      // THE SYSTEM'S OWN FAILURES GO TO THE OWNER (OPERATING §2, §15): 5 of the live week's 81
++      // listed cards were the system failing, shown to staff as ordinary needs and reported to
++      // nobody (audit/reconstruction.md §6.7). errorReport collapses repeats inside its window,
++      // so recording after each op cannot flood.
++      const failed = systemFailureOf(d.decision, d.executed);
++      if (failed) void reportError({ route: "system-failed", where: "v2/process", what: failed, detail: `message ${message_id}, thread ${m.thread_id}` });
+     },
+     trace: noTrace,
+   });
+diff --git a/app/lib/v2/reasons.ts b/app/lib/v2/reasons.ts
+index b8c1d91..c4a194b 100644
+--- a/app/lib/v2/reasons.ts
++++ b/app/lib/v2/reasons.ts
+@@ -14,6 +14,7 @@
+ // the words), system_ (a failure), none_ (nothing to do).
+ // ============================================================================
+ import type { Decision } from "./interpret/plan";
++import type { RunResult } from "./bot/run";
+ 
+ /** First match wins. */
+ export const REASON_CODES: ReadonlyArray<readonly [string, RegExp]> = [
+@@ -53,6 +54,23 @@ export const DEFAULT_CODES: ReadonlyArray<readonly [string, RegExp]> = [
+   ["default_venue_none", /no venue written, booked at No Location/],
+ ];
+ 
++/**
++ * ONE test of "the system failed on its own part", for the owner's alert (process.ts): an earlier
++ * copy tested `[verified, not verified]`, a shape no write ever had. The live week's 3 crew-chief
++ * stops are one op each with status `mismatch` (red-team-B H6). A refusal by rule (signed-on crew,
++ * workers on a position) is the client's need reaching ops, not a fault; the bot's own error on
++ * OnSinch's page is a fault. Not booking_link_unreadable: a linked order the system cannot read is a
++ * booking gone (above).
++ */
++export function systemFailureOf(decision: Decision, executed: ReadonlyArray<Pick<RunResult, "status" | "reasons">> | null | undefined): string | null {
++  const ran = executed ?? [];
++  if (ran.some((x) => x.status === "mismatch") || (ran.some((x) => x.status === "verified") && ran.some((x) => x.status !== "verified"))) return "a write stopped part-way";
++  if (ran.some((x) => x.status === "blocked" && (x.reasons ?? []).some((r) => /^bot error|^form changed|did not open a new|is not in .*'s fill list|is not on order \d+'s builder|: \d+ inputs$|^company: \d+ options match/.test(r)))) return "the bot failed on OnSinch's page";
++  // The plan named a contact OnSinch does not hold for the company: the system's own plan, not a rule (red-team-B2 B2-8).
++  if (ran.some((x) => x.status === "blocked" && (x.reasons ?? []).some((r) => /is not a contact of /.test(r)))) return "a write used a contact OnSinch does not hold for its client";
++  return coded(decision).code === "system_failed" ? "the system could not read, plan or decide an email" : null;
++}
++
+ export const codeOfReason = (reason: string): string => REASON_CODES.find(([, re]) => re.test(reason))?.[0] ?? "other";
+ 
+ /** The decision with its code, and for a write the defaults it used. A decision already coded keeps its code. */
+diff --git a/test/replayKeepsWriteRecord.ts b/test/replayKeepsWriteRecord.ts
+new file mode 100644
+index 0000000..06f3418
+--- /dev/null
++++ b/test/replayKeepsWriteRecord.ts
+@@ -0,0 +1,48 @@
++// ============================================================================
++// Deciding an email again never erases what the bot sent for it.
++// ----------------------------------------------------------------------------
++// The decision upsert writes `executed` as JSON null, and `coalesce` keeps a jsonb null, so a
++// replay through POST /api/bot/process replaced a write's executed statuses with nothing: the
++// only record of what reached OnSinch (audit/pipeline-trace-addendum.md R4, 2026-10-25). The
++// intake alarm names that route. An email with something sent is refused there instead, as the
++// replan already refuses it (replan.ts:63). An email that sent nothing still decides again.
++// Against PGlite (fixtures/pg.ts): nothing here reaches the production database.
++// npx tsx test/replayKeepsWriteRecord.ts
++// ============================================================================
++import { sql } from "./fixtures/pg";
++/* eslint-disable @typescript-eslint/no-require-imports */
++process.env.VERCEL_GIT_COMMIT_SHA = "test";
++// No key, so the reader throws before any request: the unguarded path then records a hand-off, which
++// is how a replay erases (and it costs nothing).
++delete process.env.OPENROUTER_API_KEY;
++const { processMessage, decideDelivery } = require("../app/lib/v2/process.ts");
++const { captureInboundRaw } = require("../app/lib/inboundRawDb.ts");
++
++let fails = 0;
++const ok = (c: boolean, m: string, d?: unknown) => { console.log(`  ${c ? "PASS" : "FAIL"}  ${m}${c ? "" : "  " + JSON.stringify(d)}`); if (!c) fails++; };
++
++(async () => {
++  // The message store and the decisions table exist, as in production; nothing is decided.
++  await captureInboundRaw({ thread_id: "t0", messages: [{ message_id: "m0", from: "Sam <sam@client.co.uk>", to: ["bookings@spartancrew.co.uk"], date: "2026-11-02T08:00:00Z", subject: "Crew", body: "thanks" }] });
++  // w1's own message is captured too, so without the guard it is decided again and its record overwritten.
++  await captureInboundRaw({ thread_id: "t1", messages: [{ message_id: "w1", from: "Sam <sam@client.co.uk>", to: ["bookings@spartancrew.co.uk"], date: "2026-11-02T09:00:00Z", subject: "PO", body: "PO 4471 please" }] });
++  await decideDelivery([]);
++  await processMessage("warm-up", { execute: false }).catch(() => {});
++  const executed = [{ status: "verified", op: "set_po" }];
++  await sql`INSERT INTO v2_decisions (message_id, thread_id, from_address, sent_at, kind, decision, executed, code_version)
++    VALUES ('w1', 't1', 'sam@client.co.uk', '2026-11-02T09:00:00Z', 'write', ${JSON.stringify({ kind: "write", ops: [], why: [] })}::jsonb, ${JSON.stringify(executed)}::jsonb, 'test'),
++           ('h1', 't2', 'sam@client.co.uk', '2026-11-02T09:00:00Z', 'handoff', ${JSON.stringify({ kind: "handoff", reasons: ["x"] })}::jsonb, 'null'::jsonb, 'test')`;
++
++  console.log("\nan email with a write that ran");
++  const r = await processMessage("w1", { execute: false });
++  ok(/record stands/.test(String(r.skipped)), "is refused, with the reason", r);
++  const [row] = (await sql`SELECT executed FROM v2_decisions WHERE message_id = 'w1'`) as any[];
++  ok(row?.executed?.length === 1 && row.executed[0].status === "verified" && row.executed[0].op === "set_po", "and keeps its executed statuses", row?.executed);
++
++  console.log("\nan email that sent nothing");
++  const h = await processMessage("h1", { execute: false });
++  ok(!/record stands/.test(String(h.skipped ?? "")), "is not refused by the guard (it goes on to read the message)", h);
++
++  if (fails) { console.log(`\n${fails} FAILED`); process.exit(1); }
++  console.log("\nall passed");
++})().catch((e) => { console.error(e); process.exit(1); });
+diff --git a/test/systemFailureToOwner.ts b/test/systemFailureToOwner.ts
+new file mode 100644
+index 0000000..1f0c6fc
+--- /dev/null
++++ b/test/systemFailureToOwner.ts
+@@ -0,0 +1,36 @@
++// ============================================================================
++// The system's own failures are reported to the owner, not left only as cards for staff.
++// ----------------------------------------------------------------------------
++// OPERATING §2: operational failures must never be visible to the team; §15: alerts go to the
++// owner. In the live week 10-14..10-21, 5 of the 81 listed cards were the system failing (two
++// "could not plan" reads of OnSinch, three writes stopped part-way), and nobody was told.
++// A linked order that cannot be read is a booking gone (reasons.ts:27), not a fault, and a
++// policy or a client's missing detail is the client's need: neither is reported.
++// npx tsx test/systemFailureToOwner.ts
++// ============================================================================
++import { systemFailureOf } from "../app/lib/v2/reasons";
++
++let fails = 0;
++const ok = (c: boolean, m: string, d?: unknown) => { console.log(`  ${c ? "PASS" : "FAIL"}  ${m}${c ? "" : "  " + JSON.stringify(d)}`); if (!c) fails++; };
++const handoff = (reason: string) => ({ kind: "handoff", reasons: [reason] }) as any;
++const write = { kind: "write", ops: [], why: [] } as any;
++
++ok(!!systemFailureOf(handoff("the system could not plan this email (GET /orders answered 503, so what it holds is unknown)"), null), "a planner that could not read OnSinch is reported");
++ok(!!systemFailureOf(handoff("this email was not decided when it arrived; the system is reading it again"), null), "an email the intake failed to decide is reported");
++ok(!!systemFailureOf(write, [{ status: "verified" }, { status: "mismatch" }] as any), "a write that stopped part-way is reported");
++ok(systemFailureOf(handoff("this thread is linked to order 16614, which the system could not read: no order is named"), null) === null, "a linked order that is gone is not a fault");
++ok(systemFailureOf(handoff("2026-10-20 is within 7 days of the email: a person creates it"), null) === null, "a policy hand-off is the client's need, not a fault");
++ok(systemFailureOf(write, [{ status: "verified" }, { status: "verified" }] as any) === null, "a write that landed is not reported");
++ok(systemFailureOf(write, [{ status: "blocked" }] as any) === null, "a write refused before anything was sent is a rule, not a part-way failure");
++// The shapes the live data holds (red-team-B H6, 10-26): the 3 crew-chief stops were one op each, status mismatch.
++ok(!!systemFailureOf(write, [{ status: "mismatch", reasons: ["stopped part-way: #1 position 2/crew_chief: blocked"] }] as any), "a single op that stopped part-way (the live week's 3 crew-chief stops) is reported");
++ok(!!systemFailureOf(write, [{ status: "blocked", reasons: ["bot error before submit: locator.waitFor: Timeout 30000ms exceeded."] }] as any), "the bot's own error on OnSinch's page is reported");
++ok(!!systemFailureOf(write, [{ status: "blocked", reasons: ["form changed: protocol update needed"] }] as any), "a changed OnSinch form is reported");
++ok(systemFailureOf(write, [{ status: "blocked", reasons: ["signed-on crew: 3 on position 9; ops must make this change"] }] as any) === null, "signed-on crew is a rule sending the change to ops, not a fault");
++// red-team-B2 B2-8: two more blocked shapes the data holds are the system's own making.
++ok(!!systemFailureOf(write, [{ status: "blocked", reasons: ['company: 2 options match /^Acme$/ for "Acme"'] }] as any), "several company options on OnSinch's page is the bot failing there");
++ok(!!systemFailureOf(write, [{ status: "blocked", reasons: ["sam@client.example is not a contact of Client Ltd"] }] as any), "a plan naming a contact the company lacks is the system's own failure");
++ok(systemFailureOf(write, [{ status: "blocked", reasons: ["4 workers on position 9, cut to 2: a worker must be dropped first"] }] as any) === null, "workers on a position is a rule, not a fault");
++
++if (fails) { console.log(`\n${fails} FAILED`); process.exit(1); }
++console.log("\nall passed");
+diff --git a/test/zonelessIsUtc.ts b/test/zonelessIsUtc.ts
+new file mode 100644
+index 0000000..0c24b0d
+--- /dev/null
++++ b/test/zonelessIsUtc.ts
+@@ -0,0 +1,64 @@
++// ============================================================================
++// An OnSinch time with no zone is UTC, whatever the machine's own zone is.
++// ----------------------------------------------------------------------------
++// OnSinch's audit rows write a slot's old and new times as "2026-10-23 07:30:00", with no zone;
++// its API writes the same slot as "2026-10-23T07:30:00+00:00". On the 10-22 copy, 1,810 of the 1,813
++// slots whose last audited time fell in British Summer Time hold, in the API, exactly the audited
++// time read as UTC, and none hold it read as London time (eval/patches/items-1-4.md). `new Date()`
++// reads a zone-less string in the process's zone: on the New York box every staff re-time read
++// 4 hours late, so every correct time change was judged wrong (eval/diagnostic-11-3.md: 1 completed
++// write instead of 7). Production runs in UTC and never saw it, so only other zones can prove the fix.
++// Node re-reads process.env.TZ on assignment, so one process tries several zones.
++// npx tsx test/zonelessIsUtc.ts
++// ============================================================================
++process.env.TZ = "America/New_York";
++
++let fails = 0;
++const ok = (c: boolean, m: string, d?: unknown) => { console.log(`  ${c ? "PASS" : "FAIL"}  ${m}${c ? "" : "  " + JSON.stringify(d)}`); if (!c) fails++; };
++
++(async () => {
++  const { utcToLondon } = await import("../app/lib/v2/bot/ops");
++  const { truthKeys } = await import("../app/lib/v2/score");
++  const at = (s: string) => { const r = utcToLondon(s); return `${r.date} ${r.time}`; };
++
++  // Zone-less audit times against the London wall clock staff see, across both 2026 clock changes
++  // (29 Mar and 25 Oct, at 01:00 UTC) and across midnight.
++  const cases: Array<[string, string, string]> = [
++    ["2026-10-23 07:30:00", "2026-10-23 08:30", "BST: 07:30 UTC is 08:30 in London"],
++    ["2026-11-03T07:30:00", "2026-11-03 07:30", "GMT, the T form"],
++    ["2026-10-23 07:30:00.250", "2026-10-23 08:30", "with fractional seconds"],
++    ["2026-03-29 00:59:00", "2026-03-29 00:59", "spring: the last minute of GMT"],
++    ["2026-03-29 01:00:00", "2026-03-29 02:00", "spring: 01:00 UTC is 02:00 BST (London skips 01:00-01:59)"],
++    ["2026-10-25 00:59:00", "2026-10-25 01:59", "autumn: the last minute of BST"],
++    ["2026-10-25 01:00:00", "2026-10-25 01:00", "autumn: 01:00 UTC is 01:00 GMT"],
++    ["2026-10-25 00:30:00", "2026-10-25 01:30", "autumn: London's 01:30 happens twice; the first is 00:30 UTC"],
++    ["2026-10-25 01:30:00", "2026-10-25 01:30", "autumn: and the second is 01:30 UTC"],
++    ["2026-08-25 23:30:00", "2026-08-26 00:30", "slot 52076's audited end: BST, after midnight in London (the API holds 2026-08-25T23:30:00+00:00)"],
++    ["2026-06-30 23:00:00", "2026-07-01 00:00", "BST: the month turns in London first"],
++    ["2026-12-31 23:30:00", "2026-12-31 23:30", "GMT: the year does not turn early"],
++  ];
++  for (const zone of ["America/New_York", "UTC", "Europe/London", "Asia/Kolkata", "Pacific/Auckland"]) {
++    process.env.TZ = zone;
++    console.log(`\nprocess zone ${zone}`);
++    if (zone !== "UTC" && zone !== "Europe/London") ok(new Date("2026-10-23 07:30:00").getTimezoneOffset() !== 0, "the process is not on UTC, so a zone-less read in it would be wrong");
++    for (const [input, want, why] of cases) ok(at(input) === want, why, { input, got: at(input) });
++    // A time that carries its zone is read as written, as the API's always do.
++    ok(at("2026-10-23T07:30:00+00:00") === "2026-10-23 08:30", "+00:00, the API's form");
++    ok(at("2026-10-23T07:30:00Z") === "2026-10-23 08:30", "Z");
++    ok(at("2026-10-23T08:30:00+01:00") === "2026-10-23 08:30", "+01:00");
++    ok(at("2026-10-25T00:30:00+00:00") === at("2026-10-25 00:30:00"), "the zoned and zone-less forms of one instant agree");
++  }
++  process.env.TZ = "America/New_York";
++
++  console.log("\nthe scorer judges a staff re-time at the hour it was booked");
++  const act = { at: "2026-10-20T10:00:00+00:00", by: 7, what: "edit", order_id: 1, number: "11000", company_id: 9, model: "Slot", model_id: 5,
++    changes: { beginning: { old: "2026-10-23 06:30:00", new: "2026-10-23 07:30:00" }, end: { old: "2026-10-23 14:30:00", new: "2026-10-23 15:30:00" } } };
++  const keys = truthKeys([act], () => ({ Job: [] })).keys;
++  ok(keys.includes("times 1/5=2026-10-23 08:30-16:30"), "08:30-16:30 London", keys);
++  const night = { ...act, changes: { beginning: { old: "2026-10-24 22:00:00", new: "2026-10-24 23:00:00" }, end: { old: "2026-10-25 04:00:00", new: "2026-10-25 05:00:00" } } };
++  const k2 = truthKeys([night], () => ({ Job: [] })).keys;
++  ok(k2.includes("times 1/5=2026-10-25 00:00-05:00"), "a night shift over the autumn change: starts 00:00 BST on the 25th, ends 05:00 GMT", k2);
++
++  if (fails) { console.log(`\n${fails} FAILED`); process.exit(1); }
++  console.log("\nall passed");
++})();

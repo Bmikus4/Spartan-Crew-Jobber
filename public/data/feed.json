@@ -4979,5 +4979,25 @@
    "audit/final-state.md",
    "eval/item-correctness.md"
   ]
+ },
+ {
+  "id": "S-0228",
+  "ts": "2026-10-26T12:31:24+00:00",
+  "kind": "measurement",
+  "headline": "Checkpoint B checks: current reader repeats 9/11 old misses; items 1-4 cut and tested apart; 4 claims corrected",
+  "subject": "The current reader still leaves 9 of the old reader's 11 dev misses silent",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 219,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  },
+  "sources": [
+   "eval/reader-diagnostic/results.md",
+   "eval/write-breakdown.md",
+   "eval/patches/items-1-4.md",
+   "audit/checkpoint-B-response.md"
+  ]
  }
 ]

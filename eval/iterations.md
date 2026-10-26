@@ -329,3 +329,17 @@ The 19 left:
 - R11838 (1a1695fbc4797b55): 0 rows.
 
 All four orders stay status 0 with no confirm row.
+
+## Corrections, 10-26 (after Checkpoint B)
+
+- **:263 "3 crew-chief compositions ... within the 4%"** is wrong on the facts: two are window errors and one is add
+  against total (eval/write-breakdown.md §5).
+- **:265, 1a139bd196d4eff6 "planned a new order where staff amended the client's existing quote order"**: production
+  wrote that create (R11546, verified 10-14), and staff deleted it at 10:19Z and built their own order. The real error is
+  the trade mix (eval/write-breakdown.md §3).
+- **:320 "the prompt changed again on 10-20 and 10-23"**: it did not (audit/evidence-index.md). And "all 11 dev misses
+  blamed on the reader" are not the replaced reader's alone: 9 of 11 recur with the current reader
+  (eval/reader-diagnostic/results.md).
+- **"Staff work after the prospective acceptances" (R11838: 0 rows; all four stay status 0 with no confirm row)**: wrong.
+  The Order-level rows, keyed by number, show staff confirming each of the 4 from provisional and setting its PO within
+  0.0-0.9 h of the acceptance (eval/component-assessment.md, item 6).
