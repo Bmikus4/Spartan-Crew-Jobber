@@ -27,9 +27,10 @@ Summary for the owner: audit/checkpoint-B-response.md.
 ## Session 5, next block (the owner: "then once you are fully done begin the next phase"; sandbox only, $0)
 - [x] N1 DONE in sandbox C:/Users/thera/spartan-v2-n1 (items 1-4 + N1): eval/patches/n1-write-judging.diff, eval/next-block.md.
       23 assessable: 13 completed / 2 partial / 8 wrong; agrees with the hand reading on 21/23. Held with item 4 (score.ts).
-- [ ] N2 Planner op fixes, red-first on synthetic cases of the real shapes: role-named re-time, added crew/chief window,
-      add-N vs N-in-all hands off, two size ops on one position, a question planned as edits
-- [ ] N3 Re-measure on D-old and D-cur: wrong writes on these cases to 0, no new wrong write, recall unchanged
+- [~] N2 eval/patches/n2-planner-ops.diff (stacked on n1): named-role re-time, crew change with its own hours hands off,
+      two changes to one shift hands off. Tests planNamedRoleRetime (6) + planCrewHours (7), red unfixed. NOT built:
+      add-N vs N-in-all (needs a grounding check on the quoted words) and a question planned as edits (reader).
+- [~] N3 dev: writes 27 -> 23 (4 hand off, none new); 21 assessable 13/2/6; recall 133/184 unchanged; dev-2 not run yet.
 
 Checkpoint A passed on 10-25: the owner, "bro the alignment is for you wtf" (decisions/2026-10-25-alignment-is-the-orchestrators.md).
 The eight questions were settled from the owner's own rulings or held without blocking (same file).
@@ -254,8 +255,8 @@ this file as it stood.
 none
 
 ## Next action
-N2 in C:/Users/thera/spartan-v2-n1: the five planner op fixes in eval/next-block.md, each red-first on a synthetic case of
-the real shape, then N3 (writes-run dev and dev-2, run.ts recall). Nothing ships; writes stay off. On or after
+In C:/Users/thera/spartan-v2-n1: N2 fix 3 (add-N vs N-in-all as a grounding check on crew_add's quoted words), then N3 on
+dev-2 (writes-run --set dev-2, run.ts recall). Nothing ships; writes stay off. On or after
 2026-10-28 16:06Z: the pause-window store (scripts/backfill-pause-window.mts store). On 10-29: label W2 (eval/dev-windows.md).
-Worktrees p1, i14, n1, rd, rdh hold junctions to this checkout: unlink each junction and verify before removing any of them
+Worktrees p1, i14, n1, rd, rdh, stack hold junctions to this checkout: unlink each junction and verify before removing any of them
 (audit/incident-2026-10-26-tmp-data.md).

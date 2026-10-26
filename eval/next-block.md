@@ -48,7 +48,44 @@ audit/checkpoint-B-response.md §7. Sandbox only, $0. **Nothing is deployed, and
     - 1a1308b99b2eaf9b: the planned new shift that staff built as positions on the existing shift.
 - **The scorer no longer hides the planner's errors behind its own artefacts.** What is left wrong is the work of N2.
 
-## N2: planner op fixes (next; sandbox, red-first)
+## N2: planner op fixes (built in the sandbox; held)
+
+**Diff:** `eval/patches/n2-planner-ops.diff` (sha256 5e15c0445f0373fb), stacked on n1.
+- Files: plan.ts, reasons.ts (codes for the new hand-offs), and 2 tests.
+- The four diffs apply in order on 305bf84 (items-1-3-runtime, item-4-scoring, n1-write-judging, n2-planner-ops). With
+  them, tsc is clean and the full suite passes (ALL 225 TEST FILES PASS).
+- **Not deployed:** plan.ts is runtime code.
+
+| # | case | fix | test |
+|---|---|---|---|
+| 1 | 1a13585d743572a8 | A re-time naming crew_chief or a trade moves only those positions. A trade OnSinch books as plain crew hands off. | test/planNamedRoleRetime.ts: 6 checks, 5 red on the unfixed planner |
+| 2 | 1a13fea576aeda13, 1a154d69fc48ba38 | A crew change carrying hours other than its shift's hands off (request_unsupported). | test/planCrewHours.ts: 7 checks, 5 red unfixed (with 4) |
+| 4 | 1a121640a61d9b46 | Two crew counts, or two times, for one shift in one email hand off. So does the same op twice on one position (request_inconsistent). | test/planCrewHours.ts |
+| 3 | 1a158a5e6bd47095 | **Not built.** "Add 3" read where the client meant 3 in all. Telling them apart needs the reading's quoted words; that is a grounding check for the next step. | |
+| 5 | 1a139bb8ded24cbd | **Not built.** An availability question planned as edits. That is the reader's intent, so it belongs with the reader work. | |
+
+## N3: re-measured on dev ($0, the fresh copy)
+
+- **Writes: 27 → 23.** No new write appears.
+- **4 now hand off:**
+  - 1a13fea576aeda13 and 1a154d69fc48ba38 (both wrong before);
+  - 1a121640a61d9b46 (the two-counts defect);
+  - 1a134990c712db28 (unscored; a crew count with its own hours).
+- **The 21 assessable writes left:** 13 completed, 2 partial, 6 wrong.
+  - Shape limits: 1a12c17f9c71e222 and 1a1308b99b2eaf9b (§N1).
+  - Wrong:
+    - the named-role re-time: it now moves only the chief and the forklift, but staff acted after the client's next
+      booking email, so their changes sit in that email's window, and their end times differ from the plan's;
+    - the reversed cancel (sequencing);
+    - the unmatched venue;
+    - the question read as edits;
+    - two trade mixes on creates.
+- **Recall unchanged:** run.ts replay on dev gives 133/184, the same as HEAD. The 4 hand-offs are listed cards, so
+  review_rate moves 125 → 129 of 152 items, and display precision is unchanged.
+- **dev-2 is not run yet.** It is the next measurement, with fixes 3 and 5.
+
+## Appendix: the N2 case notes as first written
+
 
 Each fix is built on a synthetic case with the real case's shape, and no email text:
 1. **1a13585d743572a8:** a re-time that names a role or trade is applied to the whole shift.
@@ -74,7 +111,7 @@ Each fix is built on a synthetic case with the real case's shape, and no email t
 Creates are left for later: a venue not matched (1a13438a3dd67400) and the trade mix (1a139bd196d4eff6,
 1a13f49e6e01c4ab). They go to To Confirm, and staff rebuilt 14 of 16 bot creates historically.
 
-## N3: re-measure
+### (superseded) N3 plan
 
 - writes-run on dev and dev-2: the wrong writes above go to 0, with no new wrong write.
 - run.ts replay: recall unchanged.

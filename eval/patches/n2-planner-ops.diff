@@ -1,0 +1,229 @@
+diff --git a/app/lib/v2/interpret/plan.ts b/app/lib/v2/interpret/plan.ts
+index 4b4b10e..1819dc6 100644
+--- a/app/lib/v2/interpret/plan.ts
++++ b/app/lib/v2/interpret/plan.ts
+@@ -505,7 +505,14 @@ async function decide(msg: Message, i: Interpretation, world: World, threadOrder
+     const prof = trade && !trade.asCrew ? pickProfession(trade, clientOrders, live) : null;
+     return trade && prof ? { trade, prof } : null;
+   };
++  /** The hours a crew change asks for, when they are not its shift's; null when it names none or the same. */
++  const hoursOf = (r: Request, first: { beginning: string; end: string }) => {
++    const s = utcToLondon(first.beginning).time, e = utcToLondon(first.end).time;
++    const start = r.start ?? s, end = r.end ?? (r.duration ? addMinutes(start, r.duration) : e);
++    return start !== s || end !== e ? `${start}-${end}` : null;
++  };
+   const ops: { source: string; op: Op }[] = [];
++  const asked = new Set<string>();
+   const why: string[] = [];
+   const src = (n: number) => `${msg.message_id}#${n}`;
+ 
+@@ -565,15 +572,32 @@ async function decide(msg: Message, i: Interpretation, world: World, threadOrder
+     const pickedShift = r.shift_id ? teams(order).find((t) => t.id === r.shift_id) : undefined;
+     const shift = pickedShift ?? targetShift(order, r);
+     if (typeof shift === "string") return (`R${order.number}: ${shift}`);
++    // Two crew counts, or two times, for one shift in one email: each request reads the shift as it stood, so
++    // applied one after the other they make a shift the client asked for in neither (1a121640a61d9b46).
++    const once = `${shift.id}|${r.action}`;
++    if (asked.has(once)) return (`R${order.number} shift ${shift.id}: two ${r.action === "change_crew" ? "crew" : r.action === "change_times" ? "time" : "such"} changes in one email`);
++    asked.add(once);
+     const first = shift.slots[0];
+     // A change names its shift by the day it is on (target) and may give a NEW day (date).
+     // Until 10-11 the new day was ignored, so "move Tuesday's shift to Wednesday, 9-5" wrote
+     // 9-5 on Tuesday: measured by the harness, 40 of 40 such emails were wrong writes.
+     const date = r.target?.date && r.date && r.date !== r.target.date ? r.date : dayOf(first.beginning);
+     if (r.action === "change_times") {
++      // A TIME FOR A NAMED ROLE OR TRADE MOVES ONLY THOSE POSITIONS. "The forklift driver and the chief
++      // from 07:00" on a shift of crew, a chief and a forklift moved all three, so 6 crew would have
++      // arrived an hour early; staff moved the chief and the forklift alone (1a13585d743572a8,
++      // eval/next-block.md N2). A trade OnSinch books as plain crew cannot say which crew are meant.
++      const trade = tradeOf(r.trade);
++      let slots = shift.slots;
++      if (r.crew_chief || trade) {
++        if (trade && (trade.asCrew || trade.named || !trade.candidates.length)) return (`R${order.number} shift ${shift.id}: a time for the ${trade.label} only, and the shift does not say which positions are theirs`);
++        slots = shift.slots.filter((s) => (r.crew_chief && Number(s.role) === 1) || (!!trade && Number(s.role) !== 1 && trade.candidates.includes(String(s.profession_id))));
++        if (!slots.length) return (`R${order.number} shift ${shift.id}: no ${[r.crew_chief ? "crew chief" : "", trade?.label ?? ""].filter(Boolean).join(" or ")} position to re-time`);
++      }
++      const first = slots[0];
+       // "Tuesday 13th 2 x Crew 8 hours": a count written beside a time change says which shift
+       // the client means, so it must be that shift's size or this is another shift.
+-      const size = shift.slots.reduce((a, s) => a + Number(s.size), 0);
++      const size = slots.reduce((a, s) => a + Number(s.size), 0);
+       if (r.crew && r.crew !== size) return (`R${order.number} shift ${shift.id}: the email says ${r.crew} crew, the shift has ${size}`);
+       // A length beside an end sets the start: "six hours ending 18:00" is 12:00 (addendum F22).
+       const start = r.start ?? (r.end && r.duration ? addMinutes(r.end, -r.duration) : utcToLondon(first.beginning).time);
+@@ -585,7 +609,7 @@ async function decide(msg: Message, i: Interpretation, world: World, threadOrder
+       const end = r.end ?? (r.duration ? addMinutes(start, r.duration) : r.start ? addMinutes(start, length) : utcToLondon(first.end).time);
+       if (start === end) return (`R${order.number} shift ${shift.id}: ${start}-${end} has no length`);
+       // A position already at the asked times is left alone: a restated booking is not a change.
+-      for (const s of shift.slots) {
++      for (const s of slots) {
+         const w = shiftWindow(date, start, end);
+         if (Date.parse(s.beginning) === Date.parse(w.beginning) && Date.parse(s.end) === Date.parse(w.end)) continue;
+         ops.push({ source: `${src(n)}:${s.id}`, op: { kind: "set_position_times", order_id: Number(order.id), slot_id: Number(s.id), date, start, end } });
+@@ -594,6 +618,11 @@ async function decide(msg: Message, i: Interpretation, world: World, threadOrder
+     } else if (r.action === "cancel_shift") {
+       for (const s of shift.slots) ops.push({ source: `${src(n)}:${s.id}`, op: { kind: "cancel_position", order_id: Number(order.id), slot_id: Number(s.id) } });
+       why.push(`R${order.number} shift ${shift.id}: cancelled`);
++    } else if (r.action === "change_crew" && hoursOf(r, first)) {
++      // A CREW CHANGE WITH ITS OWN HOURS is not a size change of the shift. "4 crew from 17:00 for 4 hours"
++      // on a 17:00-23:00 shift booked all 4 to 23:00 (1a13fea576aeda13); "2 more, 22:00-01:00" on a
++      // 22:00-03:00 shift kept the 2 to 03:00 (1a154d69fc48ba38). Staff split such a shift by hours.
++      return (`R${order.number} shift ${shift.id}: a crew change for ${hoursOf(r, first)}, the shift is ${utcToLondon(first.beginning).time}-${utcToLondon(first.end).time}`);
+     } else if (r.action === "change_crew" && professionOf(r)) {
+       // "add a carpenter to the team tomorrow" (Wall to Wall, 10-11): a position of that
+       // profession on the shift, beside the crew. Only an addition: a total or a reduction of
+@@ -651,6 +680,14 @@ async function decide(msg: Message, i: Interpretation, world: World, threadOrder
+     return null;
+   };
+   for (const [n, r] of changes.entries()) { const no = await change(n, r); if (no) return handoff(no); }
++  // TWO CHANGES TO ONE POSITION IN ONE EMAIL are not a plan: each request read the shift as it stood, so
++  // "4 crew for 2 hours" and "2 crew for 4 hours" on one 07:00 call sized one position 3, then 2, and
++  // cancelled another (1a121640a61d9b46). A time and a size on the same position are two fields, not two
++  // changes; the same kind twice, or a cancel beside anything, is for a person.
++  const onSlot = new Map<number, string[]>();
++  for (const { op } of ops) if ("slot_id" in op) onSlot.set(Number(op.slot_id), [...(onSlot.get(Number(op.slot_id)) ?? []), op.kind]);
++  for (const [slot, kinds] of onSlot) if (new Set(kinds).size !== kinds.length || (kinds.includes("cancel_position") && kinds.length > 1))
++    return handoff(`position ${slot}: ${kinds.length} changes in one email (${kinds.join(", ")})`);
+ 
+   // New shifts on a booking the email names (R number, or the thread the bot booked it in)
+   // are added to it: Legal Geek's "add a derig on the 13th" is a shift on #13709, not a new
+diff --git a/app/lib/v2/reasons.ts b/app/lib/v2/reasons.ts
+index c4a194b..a2dea6f 100644
+--- a/app/lib/v2/reasons.ts
++++ b/app/lib/v2/reasons.ts
+@@ -32,8 +32,8 @@ export const REASON_CODES: ReadonlyArray<readonly [string, RegExp]> = [
+   ["booking_not_identified", /no order is named|could be the one meant|does not single out|of the client's orders have a shift on|the email names \d+ orders|existing bookings in one email/],
+   ["booking_not_found", /\bR\d+ not found|belongs to another client|could not read|no shift on \d{4}-\d\d-\d\d/],
+   ["venue_not_identified", /locations; which one|one call at \d+ venues|venues are named|is not an OnSinch venue|no OnSinch venue/],
+-  ["request_inconsistent", /the email says \d+ crew, the shift has|makes \d+, not the \d+ written|already has PO/],
+-  ["request_unsupported", /not an operation the system performs|count other than adding|no words cancelling|no crew position|has no length|is not one/],
++  ["request_inconsistent", /the email says \d+ crew, the shift has|makes \d+, not the \d+ written|already has PO|changes in one email|position to re-time$/],
++  ["request_unsupported", /not an operation the system performs|count other than adding|no words cancelling|no crew position|has no length|is not one|a crew change for \d\d:\d\d-\d\d:\d\d|which positions are theirs/],
+   ["partly_booked", /part of this is already booked/],
+   ["reading_unproven", /is not in the email|reads as .*, not |a value with no words quoted/],
+   ["none_not_client", /not a client's email/],
+diff --git a/test/planNamedRoleRetime.ts b/test/planNamedRoleRetime.ts
+new file mode 100644
+index 0000000..da643a5
+--- /dev/null
++++ b/test/planNamedRoleRetime.ts
+@@ -0,0 +1,57 @@
++// ============================================================================
++// A time change for a named role or trade moves only those positions.
++// ----------------------------------------------------------------------------
++// 1a13585d743572a8 (eval/next-block.md N2): the reading asked for the forklift driver and the crew chief
++// from 07:00 on a shift of 6 crew, a chief and a forklift. The planner moved all three positions, so the
++// 6 crew would have come an hour early; staff moved the chief and the forklift alone. The shape here is
++// that case's, on a fake OnSinch; no email text.
++// npx tsx test/planNamedRoleRetime.ts
++// ============================================================================
++import { plan, type World, type Message } from "../app/lib/v2/interpret/plan";
++import type { Interpretation, Request } from "../app/lib/v2/interpret/interpret";
++
++let fails = 0;
++const ok = (c: boolean, m: string, d?: unknown) => { console.log(`  ${c ? "PASS" : "FAIL"}  ${m}${c ? "" : "  " + JSON.stringify(d)}`); if (!c) fails++; };
++
++const slot = (id: number, prof: number, role: number, size: number) =>
++  ({ id, beginning: "2026-10-18T08:00:00+01:00", end: "2026-10-18T13:00:00+01:00", size, profession_id: prof, role, SlotLocation: { place_id: 29 } });
++const R10522 = { id: 13597, number: "10522", company_id: 210, intern_name: "", Job: [{ SlotTeam: [{ id: 35069, name: "Build", Slot: [slot(51207, 36, 1, 1), slot(51208, 1, 0, 6), slot(51215, 22, 0, 1)] }] }] };
++const world: World = {
++  companies: async () => [{ id: 210, name: "Client", Client: [{ id: 1, email: "ops@client.example" }] }],
++  placesNamed: async () => [],
++  companyOrders: async (c) => (c === 210 ? [R10522] : []),
++  orderByNumber: async (n) => (n === "10522" ? R10522 : null),
++};
++const msg: Message = { message_id: "m1", from: "ops@client.example", subject: "R10522", sentIso: "2026-10-13T12:48:00Z", text: "(the email)" };
++const r = (x: Partial<Request>): Request => ({ action: "change_times", problems: [], date: "2026-10-18", start: "07:00", end: "12:00", target: { date: "2026-10-18" }, ...x } as Request);
++const I = (requests: Request[]): Interpretation => ({ intent: "change", requests, problems: [] });
++const slotsOf = (d: any): number[] => d.kind === "write" ? d.ops.map((o: any) => o.op.slot_id).sort() : [];
++
++(async () => {
++  console.log("\nthe forklift driver and the chief, 07:00-12:00");
++  const both = await plan(msg, I([r({ trade: "forklift driver", crew_chief: true })]), world, 13597);
++  ok(both.kind === "write" && JSON.stringify(slotsOf(both)) === JSON.stringify([51207, 51215]), "moves the chief and the forklift, not the 6 crew", both);
++
++  console.log("\nthe forklift driver alone");
++  const fork = await plan(msg, I([r({ trade: "forklift driver" })]), world, 13597);
++  ok(fork.kind === "write" && JSON.stringify(slotsOf(fork)) === JSON.stringify([51215]), "moves the forklift only", fork);
++
++  console.log("\nthe crew chief alone");
++  const chief = await plan(msg, I([r({ crew_chief: true })]), world, 13597);
++  ok(chief.kind === "write" && JSON.stringify(slotsOf(chief)) === JSON.stringify([51207]), "moves the chief only", chief);
++
++  console.log("\na trade OnSinch books as plain crew");
++  const rig = await plan(msg, I([r({ trade: "riggers" })]), world, 13597);
++  ok(rig.kind === "handoff" && rig.reasons.some((x) => /which positions are theirs/.test(x)), "hands off: the shift cannot say which crew are the riggers", rig);
++
++  console.log("\na trade the shift does not hold");
++  const tele = await plan(msg, I([r({ trade: "telehandler" })]), world, 13597);
++  ok(tele.kind === "handoff" && tele.reasons.some((x) => /no Telehandler position/.test(x)), "hands off: no telehandler position to re-time", tele);
++
++  console.log("\nno role or trade named");
++  const all = await plan(msg, I([r({})]), world, 13597);
++  ok(all.kind === "write" && JSON.stringify(slotsOf(all)) === JSON.stringify([51207, 51208, 51215]), "the whole shift moves, as before", all);
++
++  if (fails) { console.log(`\n${fails} FAILED`); process.exit(1); }
++  console.log("\nall passed");
++})();
+diff --git a/test/planCrewHours.ts b/test/planCrewHours.ts
+new file mode 100644
+index 0000000..0feb61e
+--- /dev/null
++++ b/test/planCrewHours.ts
+@@ -0,0 +1,56 @@
++// ============================================================================
++// A crew change with hours of its own, or two changes to one position, goes to a person.
++// ----------------------------------------------------------------------------
++// eval/next-block.md N2, from three dev writes judged wrong (eval/write-breakdown.md):
++//   1a13fea576aeda13: 4 crew "from 17:00 for 4 hours" on a 17:00-23:00 shift booked all 4 to 23:00;
++//   1a154d69fc48ba38: "2 more, 22:00-01:00" on a 22:00-03:00 shift kept the 2 to 03:00;
++//   1a121640a61d9b46: 4 crew for 2 h and 2 crew for 4 h on one 07:00 call sized one position 3, then 2.
++// Staff split such shifts by hours, which the planner cannot yet do, so it hands them off. The shapes
++// are the cases'; no email text.
++// npx tsx test/planCrewHours.ts
++// ============================================================================
++import { plan, type World, type Message } from "../app/lib/v2/interpret/plan";
++import type { Interpretation, Request } from "../app/lib/v2/interpret/interpret";
++import { coded } from "../app/lib/v2/reasons";
++
++let fails = 0;
++const ok = (c: boolean, m: string, d?: unknown) => { console.log(`  ${c ? "PASS" : "FAIL"}  ${m}${c ? "" : "  " + JSON.stringify(d)}`); if (!c) fails++; };
++
++const pos = (id: number, b: string, e: string, size: number, chief = false) =>
++  ({ id, beginning: b, end: e, size, profession_id: chief ? 36 : 1, role: chief ? 1 : 0, SlotLocation: { place_id: 29 } });
++// R11613: 3 crew 17:00-23:00 London on 19 Oct. R11349: 3 crew 22:00-03:00 on 22 Oct.
++const R11613 = { id: 16670, number: "11613", company_id: 310, intern_name: "", Job: [{ SlotTeam: [{ id: 42596, name: "Crew", Slot: [pos(59905, "2026-10-19T17:00:00+01:00", "2026-10-19T23:00:00+01:00", 3)] }] }] };
++const R11349 = { id: 16385, number: "11349", company_id: 310, intern_name: "", Job: [{ SlotTeam: [{ id: 41899, name: "Crew", Slot: [pos(58866, "2026-10-22T22:00:00+01:00", "2026-10-23T03:00:00+01:00", 3)] }] }] };
++const world: World = {
++  companies: async () => [{ id: 310, name: "Client", Client: [{ id: 1, email: "ops@client.example" }] }],
++  placesNamed: async () => [],
++  companyOrders: async (c) => (c === 310 ? [R11613, R11349] : []),
++  orderByNumber: async (n) => [R11613, R11349].find((o) => o.number === n) ?? null,
++};
++const msg: Message = { message_id: "m1", from: "ops@client.example", subject: "crew", sentIso: "2026-10-15T13:14:00Z", text: "(the email)" };
++const r = (x: Partial<Request>): Request => ({ action: "change_crew", problems: [], ...x } as Request);
++const I = (requests: Request[]): Interpretation => ({ intent: "change", requests, problems: [] });
++const handedOff = (d: any, re: RegExp) => d.kind === "handoff" && d.reasons.some((x: string) => re.test(x));
++
++(async () => {
++  console.log("\na crew change with its own hours");
++  const four = await plan(msg, I([r({ crew: 4, start: "17:00", duration: 240, date: "2026-10-19", target: { quote: "17:00", date: "2026-10-19", start: "17:00" } })]), world, 16670);
++  ok(handedOff(four, /a crew change for 17:00-21:00, the shift is 17:00-23:00/), "4 crew from 17:00 for 4 hours on a 17:00-23:00 shift is handed off", four);
++  ok(coded(four as any).code === "request_unsupported", "and coded request_unsupported", coded(four as any).code);
++  const two = await plan(msg, I([r({ crew_add: 2, start: "22:00", end: "01:00", date: "2026-10-22" })]), world, 16385);
++  ok(handedOff(two, /a crew change for 22:00-01:00, the shift is 22:00-03:00/), "2 more 22:00-01:00 on a 22:00-03:00 shift is handed off", two);
++
++  console.log("\nthe same changes with the shift's own hours, or none, still write");
++  const same = await plan(msg, I([r({ crew_add: 2, start: "22:00", end: "03:00", date: "2026-10-22" })]), world, 16385);
++  ok(same.kind === "write", "2 more 22:00-03:00 on that shift writes", same);
++  const none = await plan(msg, I([r({ crew_add: 2, date: "2026-10-22" })]), world, 16385);
++  ok(none.kind === "write", "2 more with no hours writes", none);
++
++  console.log("\ntwo changes to one position in one email");
++  const both = await plan(msg, I([r({ crew: 4, date: "2026-10-22" }), r({ crew: 2, date: "2026-10-22" })]), world, 16385);
++  ok(handedOff(both, /changes in one email/), "two counts for one shift are handed off, not applied one after the other", both);
++  ok(coded(both as any).code === "request_inconsistent", "and coded request_inconsistent", coded(both as any).code);
++
++  if (fails) { console.log(`\n${fails} FAILED`); process.exit(1); }
++  console.log("\nall passed");
++})();

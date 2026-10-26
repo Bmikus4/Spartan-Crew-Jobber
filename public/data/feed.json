@@ -5017,5 +5017,23 @@
    "audit/incident-2026-10-26-tmp-data.md",
    "eval/next-block.md"
   ]
+ },
+ {
+  "id": "S-0230",
+  "ts": "2026-10-26T21:00:10+00:00",
+  "kind": "measurement",
+  "headline": "Next block N2 held: named-role re-time scoped, crew changes with own hours and double counts hand off; dev writes 27->23, recall 133/184",
+  "subject": "A re-time for one role moves only that role's positions in the held planner diff",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 219,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  },
+  "sources": [
+   "eval/next-block.md",
+   "eval/patches/n2-planner-ops.diff"
+  ]
  }
 ]
