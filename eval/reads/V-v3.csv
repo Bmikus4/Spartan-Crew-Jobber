@@ -1,0 +1,20 @@
+# agent: reader-Vv3
+# brief hash: 76fe3b9c
+# utc: 2026-10-26T02:28:55Z
+# summary: 12 emails read from .tmp-v2/reads/emails-v3.json; 12 rows, 9 unsure.
+# asks counts (of 12): nothing 4, new_booking 3, question 2, change 2, po_only 1, cancel 0, quote_or_availability 0.
+# new_booking rows: 2 are confirmations of quotes Spartan sent earlier in the thread, 1 is a portal order notice; unsure because "confirms a quote" also reads as nothing.
+# date resolution: email dates are 2026-10-23 (Fri) to 2026-10-25, London time; "Sunday" = 2026-10-25, "Monday 26th" = 2026-10-26.
+message_id,asks,target_ref,days,crew,sure,note
+1a1680d80d8f93e8,nothing,,,,unsure,spreadsheet share notification; words ask nothing; content only behind link
+1a1684ccee5fcdef,nothing,,,,sure,thanks for reply to post-event feedback; no request
+1a168828f23ef2c7,po_only,R11804,2026-10-28;2026-10-29,,unsure,confirms the provisional quoted order and supplies PO number with PDF
+1a16891679d86e11,nothing,,,,unsure,answers meeting-point question: crew load in at front entrance by vans
+1a168b35a7903fe9,question,,2026-10-25,,unsure,asks for a specific named crew member on the Sunday shift if available
+1a168c10aef60790,new_booking,,2026-10-27,1,unsure,portal notice: client created 1-shift order for 1 crew awaiting approval
+1a1691cf73519e44,new_booking,,2026-10-24,2,unsure,confirms quoted 2-crew 4-hour load-in for the next day
+1a1692a52e75811d,question,,,,unsure,asks Spartan to tell crew to wear ankle-covering footwear on site
+1a169712b33a563d,new_booking,,2026-10-26,6,unsure,confirms quoted 6-crew 4-hour Monday booking; PO to follow
+1a16a72ebd3b120d,change,day,2026-11-02;2026-11-03,2,sure,new meeting point and times: 1 crew 2h each day; PO attached
+1a16d5c74ba606ad,change,thread,,,unsure,asks to remove one no-show crew member from the bill
+1a1739fda74d919b,nothing,,,,sure,marketing newsletter unrelated to crew

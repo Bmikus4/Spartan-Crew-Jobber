@@ -1,4 +1,4 @@
 # Hashed and compared as text: a CRLF checkout gave the same labels commit a second hash (audit/red-team-B.md H14).
 eval/harness/labels/* text eol=lf
-eval/harness/production-shown.jsonl text eol=lf
+eval/harness/production-shown*.jsonl text eol=lf
 eval/reads/*.csv text eol=lf

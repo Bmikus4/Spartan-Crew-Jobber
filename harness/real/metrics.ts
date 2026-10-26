@@ -10,7 +10,9 @@
 //                     never lists it (failure-taxonomy §1.1), so it is silent.
 //   silent miss       a real inquiry whose outcome is none or needs-reply. An email intake read
 //                     with a later one is reached when the later email's card is an item: its
-//                     words are in that email's reading (process.ts:204-224).
+//                     words are in that email's reading (process.ts:204-224). A repeat ("nothing
+//                     new asked for: the requests are the thread's earlier ones") is reached when
+//                     the thread's latest earlier labelled email is: its card holds those requests.
 // The metrics that need the opportunity an email is about (item_correctness, recall@5,
 // selection_given_correct_candidate, action_accuracy) or the client it is from
 // (client_resolution_accuracy) are reported as not measurable: no reader recorded either.
@@ -63,8 +65,20 @@ export type Scored = ReturnType<typeof score>;
 
 export function score(labels: Label[], rows: Map<string, SystemRow>, opts: { latencyUnit: "min" | "ms"; cost: string }) {
   const R = (l: Label) => rows.get(l.message_id)!;
-  /** The row whose card carries this email's request: its own, or the later email's it was read with. */
-  const card = (l: Label) => { const r = R(l); return r.carried_by && rows.has(r.carried_by) ? rows.get(r.carried_by)! : r; };
+  /** The thread's latest labelled email before this one. */
+  const before = (l: Label) => labels.filter((x) => x.thread_id === l.thread_id && x.date_iso < l.date_iso).sort((a, b) => a.date_iso.localeCompare(b.date_iso)).pop();
+  const repeats = (r: SystemRow) => /^nothing new asked for/.test(String(r.decision?.reason ?? ""));
+  /**
+   * The row whose card carries this email's request: its own; the later email's it was read with; or, for a
+   * repeat of the thread's earlier requests, the earlier email's. Keyed on the words, not the code: production
+   * coded "nothing new asked for" as "other" until 10-25, and both must be read the same way.
+   */
+  const card = (l: Label): SystemRow => {
+    const r = R(l);
+    if (r.carried_by && rows.has(r.carried_by)) return rows.get(r.carried_by)!;
+    const e = repeats(r) ? before(l) : undefined;
+    return e ? card(e) : r;
+  };
   const missing = labels.filter((l) => !rows.has(l.message_id)).map((l) => l.message_id);
   if (missing.length) throw new Error(`score: ${missing.length} labelled emails have no system row (${missing.slice(0, 5).join(", ")})`);
   const outcomes: Count = Object.fromEntries(OUTCOMES.map((o) => [o, 0]));
@@ -122,6 +136,7 @@ export function score(labels: Label[], rows: Map<string, SystemRow>, opts: { lat
     none_precision: rate(proposingNew.filter(noneLabel).length, proposingNew.length),
     none_recall: rate(noneLabelled.filter((l) => SHOWN(card(l).outcome) && card(l).proposes_new).length, noneLabelled.length),
     read_together_reached: labels.filter((l) => R(l).carried_by && SHOWN(card(l).outcome)).length,
+    repeat_reached: labels.filter((l) => repeats(R(l)) && !SHOWN(R(l).outcome) && SHOWN(card(l).outcome)).length,
     item_correctness: `${nm}: no reader recorded which order an email is about`,
     action_accuracy: `${nm}: needs the correct order first`,
     client_resolution_accuracy: `${nm}: no reader recorded the client`,
@@ -163,6 +178,7 @@ export function markdown(s: Scored, head: { mode: string; set: string; git: stri
   L.push(`| action_accuracy | ${s.action_accuracy} |`);
   L.push(`| suppression_count by rule | ${Object.entries(s.suppression).map(([k, v]) => `${k} ${v}`).join("; ") || "0"} |`);
   L.push(`| read with a later email whose card is an item (reached, not silent) | ${s.read_together_reached} |`);
+  L.push(`| a repeat of the thread's earlier request, whose card is an item (reached, not silent) | ${s.repeat_reached} |`);
   L.push(`| none by reading or planner (not a rule) | ${Object.entries(s.none_by_judgment).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${k} ${v}`).join("; ")} |`);
   L.push(`| cost per email | ${s.cost} |`);
   L.push(`| latency p50 / p95 (n ${s.latency.n}) | ${fmt(s.latency.p50, s.latency.unit)} / ${fmt(s.latency.p95, s.latency.unit)} |`, "");

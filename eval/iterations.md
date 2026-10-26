@@ -216,3 +216,53 @@ the live-week dev split's 280 are in the 238 test set) and H7 (test/harnessReal.
 
 **The 238 "test" emails are tuned on (H1).** They are now dev-2: reported, never called held out. A clean set is mail no
 step has read, from after the 10-22 snapshot (Session 4 plan, R5).
+
+## Iteration 4: an earlier email of a burst is shown when the newest asks for nothing; a repeat is reached through the earlier card. 2026-10-26, dev
+
+**What the 21 misses were.** Each was re-replayed for its reason (ids and codes only, names redacted).
+- **5 `none_read_together`.**
+  - Each earlier email was folded into a later one, and that later one asked for nothing. In 3 of the 4 carriers, both readers say the carrier asks nothing.
+  - The stored readings were made 10-12..10-14 from the joined text: latestText keeps every part, so the earlier request reached the reader. The model still read "nothing asked".
+  - So this is the reader misreading, as with the 8 "no change asked for".
+- **2 `none_thread_history`** sit on one thread. Each repeats, minutes later, a request whose earlier email is a listed card. The scorer counted them silent although the request was on the TV.
+- **4 `none_already_as_asked`**, checked against OnSinch's audit trail after each email:
+  - 1a163b198663b88e: staff added the shift 15 minutes before the email and changed nothing material after it. It was already done, so the label is wrong.
+  - 1a12093913c81661: the times were already set; staff then changed the shift's site-contact note, a part the reading missed.
+  - 1a134d846cab863b: the times were already set; staff changed crew sizes 38-150 minutes later, a part the reading missed.
+  - 1a12b778ce6be39a: not settled.
+
+**Changes.**
+- **Patch: `settleEarlier`** (process.ts), one pure function for intake, the sweep and the harness. An earlier email of a burst is a card when the newest's decision is `none` and the earlier email's own words name a day plus a crew count or a time.
+  - Its code is `reading_burst_unread`.
+  - It carries the order the newest was checked against, when there is exactly one. An email with no reading is now an update when its decision names an order (feed/v2.ts).
+  - On dev it raises 8 cards: 4 inquiries and 4 not. All 4 inquiries were silent misses. The rule was chosen on dev.
+  - Tests: test/v2BurstUnread.ts (7) and test/feedQuoteAcceptedIsUpdate.ts (+2).
+- **Harness: a repeat is reached through the earlier card.** A decision reading "nothing new asked for: the requests are the thread's earlier ones" is reached when the thread's latest earlier labelled email is shown, just as a read-together email is reached through its carrier.
+  - It is keyed on the words, because production coded the same words "other" until 10-25.
+  - It moves every column alike: HEAD +2, production +1.
+
+| metric (dev, B42) | production, as shown | HEAD replay | patch without the display rule | whole patch |
+|---|---|---|---|---|
+| inquiry_recall | 121/184 = 65.8% | 133/184 = 72.3% | 155/184 = 84.2% | **169/184 = 91.8% (15 silent; CI 86.9-95.4)** |
+| display_precision, any request | | 146/152 = 96.1% | 190/199 = 95.5% | 214/224 = 95.5% |
+| display_precision, B42 inquiry | 117/142 = 82.4% | 129/152 = 84.9% | 151/199 = 75.9% | 164/224 = 73.2% |
+| none_precision | | 70/88 = 79.5% | 72/95 = 75.8% | 72/95 = 75.8% |
+| review_rate | 126/142 = 88.7% | 125/152 = 82.2% | 172/199 = 86.4% | 197/224 = 87.9% |
+| writes | | 27 | 27 | 27, same ids |
+
+**The 15 left.**
+- At least 11 are the reader's: 8 "no change asked for", 1 read-together with no day-and-crew signal, and 2 partial readings.
+- 1 label is wrong (already done).
+- 1 is a PO with no order named (booking_not_identified). Ben's ruling is that a PO is cosmetic.
+- 1 is an unsupported request in a quote, answered by a reply.
+- 1 is not settled.
+
+**No $0 recall move is left that the evidence backs.** The next one is a reader-prompt change, measured on a capped paid run, which needs the owner's yes.
+
+**Wrong-value writes (item correctness), from the diagnostic's 9.**
+- **3 crew-chief compositions.** Ben's rule (plan.ts:60-71, 10-15) matched 96% of 3,145 staff shifts, and these are within the 4%. This is evidence for the owner, not a change I make.
+- **3 creates:**
+  - one planned a new order where staff amended the client's existing quote order (1a139bd196d4eff6), the acceptance family again;
+  - one split a shift differently and booked a trade the email did not name;
+  - one has no staff act in the truth window.
+  - No rule is justified on one case each.

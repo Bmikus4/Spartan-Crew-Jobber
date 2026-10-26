@@ -14,10 +14,10 @@
 // ============================================================================
 import { execSync } from "node:child_process";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
-import { ROOT, datasetHash, gold, type GoldDecision, type GoldMessage } from "./data";
+import { basename, join } from "node:path";
+import { GOLD, GOLD_IS_DEFAULT, ROOT, datasetHash, gold, type GoldDecision, type GoldMessage } from "./data";
 
-export const SHOWN = join(ROOT, "eval/harness/production-shown.jsonl");
+export const SHOWN = join(ROOT, `eval/harness/production-shown${GOLD_IS_DEFAULT ? "" : "-" + basename(GOLD)}.jsonl`);
 export type Shown = { message_id: string; outcome: string; card: string | null; code: string; proposes_new: boolean; carried_by: string | null };
 type Meta = { frozen_at: string; dataset: string; rows: number };
 

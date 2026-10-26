@@ -15,7 +15,7 @@
 // npx tsx test/harnessReal.ts
 // ============================================================================
 import { readFileSync } from "node:fs";
-import { goldPresent, textOf } from "../harness/real/data";
+import { fileHash, goldPresent, textOf } from "../harness/real/data";
 import type { LabelSet } from "../harness/real/labels";
 
 let fails = 0;
@@ -33,8 +33,8 @@ const ok = (c: boolean, m: string, d?: unknown) => { console.log(`  ${c ? "PASS"
 
   // 1-2. both label files and both splits. The test hashes are pinned HERE as well as in the split
   // files: a split file regenerated with a fresh hash still fails, because the lock is this line.
-  const LOCKED: Record<LabelSet, string> = { "live-week": "8aaf7ecd8b29ba86", all: "d2790450e2c9ae4f" };
-  for (const set of ["live-week", "all"] as LabelSet[]) {
+  const LOCKED: Record<"live-week" | "all", string> = { "live-week": "8aaf7ecd8b29ba86", all: "d2790450e2c9ae4f" };
+  for (const set of ["live-week", "all"] as const) {
     ok(serialize(buildLabels(set)) === textOf(labelPath(set)), `${set}: the label file equals the converted blind reads`);
     const ls = loadLabels(labelPath(set));
     let split: ReturnType<typeof loadSplit> | null = null;
@@ -47,6 +47,13 @@ const ok = (c: boolean, m: string, d?: unknown) => { console.log(`  ${c ? "PASS"
     ok(split.test.every((i) => !by.get(i)!.provisional), `${set}: no provisional label is in test`);
     ok(split.dev.length + split.test.length + split.excluded_from_test.length === ls.length, `${set}: every labelled email is in dev, test or kept out of test`);
     if (set === "all") ok(ls.length === 799 && ls.every((l) => l.consensus.strict !== "disputed"), "all: 799 emails, and no row stays disputed (settled.csv)", { n: ls.length });
+  }
+  // The prospective set (mail after the 10-22 copy, red-team-B H1): every email is test, and its lock is pinned here too.
+  // Its labels are built from the 10-26 copy (HARNESS_GOLD), so this checks the lock and the file, not the rebuild.
+  {
+    const ps = loadSplit(splitPath("prospective"));
+    ok(ps.dev.length === 0 && hashIds(ps.test) === "7f277f8725036c76" && ps.test_hash === "7f277f8725036c76", "prospective: all 79 are test, and their ids hash to the locked 7f277f8725036c76", { got: hashIds(ps.test) });
+    ok(fileHash(labelPath("prospective")) === "6a9d545a23025055", "prospective: the label file is the one the checkpoint was scored on", { got: fileHash(labelPath("prospective")) });
   }
   const labels = loadLabels(labelPath("live-week"));
 

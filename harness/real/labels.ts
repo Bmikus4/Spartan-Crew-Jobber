@@ -23,7 +23,7 @@ import { dirname, join } from "node:path";
 import { loadShown } from "./shown";
 import { coded } from "../../app/lib/v2/reasons";
 import { utcToLondon } from "../../app/lib/v2/bot/ops";
-import { READS, LABELS, LABELS_ALL, ROOT, csvRows, fileHash, gold, readJson, type GoldDecision, type GoldMessage } from "./data";
+import { READS, LABELS, LABELS_ALL, LABELS_PROSPECTIVE, ROOT, csvRows, fileHash, gold, readJson, type GoldDecision, type GoldMessage } from "./data";
 
 export type Reading = { asks: string; target_ref: string; days: string; crew: string; sure: string };
 export type Tri = "inquiry" | "disputed" | "not";
@@ -65,10 +65,11 @@ export type Label = {
 };
 
 /** Which blind reads a label file is built from. live-week: the 400 the baseline was measured on, splits left disputed. */
-export type LabelSet = "live-week" | "all";
+export type LabelSet = "live-week" | "all" | "prospective";
 const SOURCES: Record<LabelSet, { A: string[]; B: string[]; V: string[]; settle: boolean; path: string }> = {
   "live-week": { A: ["A-1.csv", "A-2.csv"], B: ["B-1.csv", "B-2.csv"], V: ["V-v.csv"], settle: false, path: LABELS },
   all: { A: ["A-1.csv", "A-2.csv", "A-3.csv", "A-4.csv"], B: ["B-1.csv", "B-2.csv", "B-3.csv", "B-4.csv"], V: ["V-v.csv", "V-v2.csv"], settle: true, path: LABELS_ALL },
+  prospective: { A: ["A-5.csv"], B: ["B-5.csv"], V: ["V-v3.csv"], settle: true, path: LABELS_PROSPECTIVE },
 };
 export const labelPath = (set: LabelSet) => SOURCES[set].path;
 
@@ -178,7 +179,8 @@ export function buildLabels(set: LabelSet = "live-week"): Label[] {
 export const serialize = (rows: Label[]) => rows.map((r) => JSON.stringify(r)).join("\n") + "\n";
 
 if (process.argv[1] && /labels\.ts$/.test(process.argv[1])) {
-  for (const set of ["live-week", "all"] as LabelSet[]) {
+  // Each copy writes only its own sets: built from the 10-26 copy, all.jsonl would take that copy's later decisions.
+  for (const set of (process.env.HARNESS_GOLD ? ["prospective"] : ["live-week", "all"]) as LabelSet[]) {
     const rows = buildLabels(set), path = labelPath(set);
     mkdirSync(dirname(path), { recursive: true });
     writeFileSync(path, serialize(rows));

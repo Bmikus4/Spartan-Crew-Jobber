@@ -2,8 +2,9 @@
 // Output: eval/reads/settled.csv, message_id,asks,source. Labels only.
 import fs from "node:fs";
 const csv = (p: string) => new Map(fs.readFileSync(p, "utf8").trim().split(/\r?\n/).slice(1).map((l) => { const c = l.split(","); return [c[0], c] as [string, string[]]; }));
-const A = new Map([1, 2, 3, 4].flatMap((n) => [...csv(`eval/reads/A-${n}.csv`)])), B = new Map([1, 2, 3, 4].flatMap((n) => [...csv(`eval/reads/B-${n}.csv`)]));
-const V = new Map([...csv("eval/reads/V-v.csv"), ...csv("eval/reads/V-v2.csv")]);
+// Batch 5 is the prospective set (mail after the 10-22 copy), settled by V-v3 the same way.
+const A = new Map([1, 2, 3, 4, 5].flatMap((n) => [...csv(`eval/reads/A-${n}.csv`)])), B = new Map([1, 2, 3, 4, 5].flatMap((n) => [...csv(`eval/reads/B-${n}.csv`)]));
+const V = new Map([...csv("eval/reads/V-v.csv"), ...csv("eval/reads/V-v2.csv"), ...csv("eval/reads/V-v3.csv")]);
 const strict = (a?: string) => /new_booking|change|cancel/.test(a ?? "");
 const out = ["message_id,asks,days,crew,source"]; let n = 0, missing = 0;
 for (const [id, a] of A) {

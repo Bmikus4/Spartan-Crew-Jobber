@@ -15,7 +15,7 @@
 // after a look at test results is how a test set stops being one. Tuning reads dev only.
 // ============================================================================
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
-import { SPLIT, SPLIT_ALL, sha256 } from "./data";
+import { SPLIT, SPLIT_ALL, SPLIT_PROSPECTIVE, sha256 } from "./data";
 import { labelPath, loadLabels, type Label, type LabelSet } from "./labels";
 
 export type Split = { method: string; created_at: string; dev: string[]; test: string[]; excluded_from_test: string[]; test_hash: string };
@@ -45,16 +45,17 @@ export function loadSplit(path = SPLIT): Split {
   return s;
 }
 
-export const splitPath = (set: LabelSet) => (set === "all" ? SPLIT_ALL : SPLIT);
+export const splitPath = (set: LabelSet) => (set === "all" ? SPLIT_ALL : set === "prospective" ? SPLIT_PROSPECTIVE : SPLIT);
 
 if (process.argv[1] && /split\.ts$/.test(process.argv[1])) {
-  for (const set of ["live-week", "all"] as LabelSet[]) {
+  for (const set of (process.env.HARNESS_GOLD ? ["prospective"] : ["live-week", "all"]) as LabelSet[]) {
     const path = splitPath(set);
     if (existsSync(path)) {
       const s = loadSplit(path);
       console.log(`${set}: split exists and is intact: dev ${s.dev.length}, test ${s.test.length}, test hash ${s.test_hash}. Not rewritten.`);
     } else {
-      const s = makeSplit(loadLabels(labelPath(set)));
+      // Prospective: nothing is tuned on it, so every email is test (devShare 0).
+      const s = makeSplit(loadLabels(labelPath(set)), set === "prospective" ? 0 : 0.7);
       writeFileSync(path, JSON.stringify(s, null, 1) + "\n");
       console.log(`${set}: split written: dev ${s.dev.length}, test ${s.test.length}, excluded from test ${s.excluded_from_test.length}, test hash ${s.test_hash}`);
     }

@@ -8,9 +8,12 @@
 // The timeline is what the labels are made from: a staff action on an order after an email.
 // Written to .tmp-data/gold/ (gitignored: it is client data).
 //
-//   npx tsx --env-file=.env.local scripts/gold/snapshot.mts [--from 2026-07-29T00:00:00Z] [--orders 3500]
+//   npx tsx --env-file=.env.local scripts/gold/snapshot.mts [--from 2026-07-29T00:00:00Z] [--orders 3500] [--out .tmp-data/gold]
+// Every statement runs in a READ ONLY transaction (scripts/_readonly.mts), and a refused write is shown
+// first: the addendum's rule for scripts on real data (23 Oct). A second copy goes to its own --out, so a
+// copy the harness has hashed is never overwritten.
 // ============================================================================
-import { neon } from "@neondatabase/serverless";
+import { proveReadOnly, readOnlySql } from "../_readonly.mts";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { httpTransport } from "../../app/lib/engine/onsinch";
 import { readPage, readRows } from "../../app/lib/v2/read";
@@ -18,8 +21,9 @@ import { readPage, readRows } from "../../app/lib/v2/read";
 const arg = (k: string, d: string) => { const i = process.argv.indexOf(k); return i > 0 ? process.argv[i + 1] : d; };
 const FROM = arg("--from", "2026-07-29T00:00:00Z");
 const ORDERS = Number(arg("--orders", "3500"));
-const OUT = ".tmp-data/gold";
-const sql = neon((process.env.DATABASE_URL || "").trim());
+const OUT = arg("--out", ".tmp-data/gold");
+const sql = readOnlySql();
+console.log(`database read-only: ${(await proveReadOnly(sql)).slice(0, 80)}`);
 const t = httpTransport({ baseUrl: process.env.ONSINCH_BASE_URL || "https://spartancrew.onsinch.com/api/v1", apiKey: process.env.ONSINCH_API_KEY || "" }) as any;
 mkdirSync(OUT, { recursive: true });
 const save = (name: string, v: unknown) => { writeFileSync(`${OUT}/${name}.json`, JSON.stringify(v)); console.log(`${name}: ${Array.isArray(v) ? v.length : Object.keys(v as object).length}`); };

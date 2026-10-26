@@ -13,12 +13,20 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 export const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
-export const GOLD = join(ROOT, ".tmp-data/gold");
+/**
+ * The production copy. HARNESS_GOLD names another copy (the prospective set's, taken 10-26): a copy the
+ * harness has hashed is never overwritten, so each later read goes to its own directory.
+ */
+export const GOLD = join(ROOT, process.env.HARNESS_GOLD || ".tmp-data/gold");
+export const GOLD_IS_DEFAULT = !process.env.HARNESS_GOLD || process.env.HARNESS_GOLD === ".tmp-data/gold";
 export const READS = join(ROOT, "eval/reads");
 export const LABELS = join(ROOT, "eval/harness/labels/live-week.jsonl");
 export const SPLIT = join(ROOT, "eval/harness/labels/split.json");
 export const LABELS_ALL = join(ROOT, "eval/harness/labels/all.jsonl");
 export const SPLIT_ALL = join(ROOT, "eval/harness/labels/split-all.json");
+/** Mail sent after the 10-22 copy was taken: no tuning step read it, so all of it is the locked test set (red-team-B H1). */
+export const LABELS_PROSPECTIVE = join(ROOT, "eval/harness/labels/prospective.jsonl");
+export const SPLIT_PROSPECTIVE = join(ROOT, "eval/harness/labels/split-prospective.json");
 
 /** Every gold file a mode reads. The dataset hash covers all of them, in this order. */
 export const GOLD_FILES = ["messages.json", "orders.json", "timeline.json", "decisions.json", "readings.json", "links.json", "companies.json", "places.json", "professions.json"] as const;

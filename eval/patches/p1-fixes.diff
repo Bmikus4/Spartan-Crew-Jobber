@@ -154,7 +154,7 @@ index c69370e..131a64a 100644
    // only jobs with an R and J should be listed, its that every job should HAVE its proper R and J
    // number, and they should always be the correct R and J numbers"). The numbers come only from
 diff --git a/app/lib/feed/v2.ts b/app/lib/feed/v2.ts
-index 19e38ee..56672c2 100644
+index 19e38ee..32bd6ac 100644
 --- a/app/lib/feed/v2.ts
 +++ b/app/lib/feed/v2.ts
 @@ -19,6 +19,7 @@ import type { Op } from "../v2/bot/ops";
@@ -193,18 +193,21 @@ index 19e38ee..56672c2 100644
  /** What a decision says about its card: the kind, the order it is about, what the bot did for it. */
  function classify(row: V2Row, d: Decision) {
    const g = row.grounded;
-@@ -82,7 +95,9 @@ function classify(row: V2Row, d: Decision) {
+@@ -82,8 +95,11 @@ function classify(row: V2Row, d: Decision) {
    // A thread that names an order, or a request aimed at an existing shift, is an update even
    // when it also adds a shift: "move the de-rig to Tuesday, and 6 more on Wednesday" (The
    // Events House, 10-11) read as Needs Created because one of its requests was a new shift.
 -  const aimsAtOrder = !!r_numbers.length || !!order_id || !!g?.requests.some((r) => r.action !== "new_shift" || r.target);
+-  const asksNew = g ? !aimsAtOrder && (g.intent === "booking" || g.intent === "quote_request" || g.requests.some((r) => r.action === "new_shift")) : !r_numbers.length;
 +  // A client accepting a quote is about the quote's order, which OnSinch holds for 54 of 73 (acceptance-study.md):
 +  // drawn as Needs Created, staff would build a second order (red-team-B H4).
 +  const aimsAtOrder = !!r_numbers.length || !!order_id || !!g?.requests.some((r) => r.action !== "new_shift" || r.target) || coded(d).code === "quote_accepted";
-   const asksNew = g ? !aimsAtOrder && (g.intent === "booking" || g.intent === "quote_request" || g.requests.some((r) => r.action === "new_shift")) : !r_numbers.length;
++  // An email with no reading (unread, or read with a later one) is about the order its decision names, when it names one.
++  const asksNew = g ? !aimsAtOrder && (g.intent === "booking" || g.intent === "quote_request" || g.requests.some((r) => r.action === "new_shift")) : !aimsAtOrder;
    let kind: FeedKind;
    if (d.kind === "write" && written) kind = creates ? "created-check" : "updated-check";
-@@ -109,6 +124,14 @@ export function v2Source(row: V2Row, now: number): FeedSource {
+   else if (d.kind === "write") kind = creates ? "needs-created" : "needs-updated";
+@@ -109,6 +125,14 @@ export function v2Source(row: V2Row, now: number): FeedSource {
    const item: (Omit<FeedItem, "green"> & { order_id: number | null }) | null = d.kind === "none" ? null : {
      item_key: `${first.kind}:${row.thread_id}:${first.order_id ?? 0}:${row.message_id}`,
      kind: c.kind, status: STATUS_TEXT[c.kind], at, order_id: c.order_id,
@@ -219,7 +222,7 @@ index 19e38ee..56672c2 100644
    };
  
    // A day the planner says is already over is the card's day too, so the card leaves with its job
-@@ -146,6 +169,10 @@ export function v2Source(row: V2Row, now: number): FeedSource {
+@@ -146,6 +170,10 @@ export function v2Source(row: V2Row, now: number): FeedSource {
      // card after the order was deleted. The bot's own orders are linked (links.ts backfillLinks).
      r_number: row.link?.r_number ? `R${String(row.link.r_number).replace(/^R/i, "")}` : null,
      j_number: row.link?.job_id ? `J${row.link.job_id}` : null,
@@ -448,9 +451,18 @@ index 4b4b10e..e5846e2 100644
 +  return ops.length ? { kind: "write", ops, why: [...why, ...assumed, ...notes] } : { kind: "none", reason: [why.join("; ") || "already as asked", ...notes].join("; "), ...(checked.size ? { found: [...checked] } : {}) };
  }
 diff --git a/app/lib/v2/process.ts b/app/lib/v2/process.ts
-index 72fbcd1..df7922c 100644
+index 72fbcd1..0b1f005 100644
 --- a/app/lib/v2/process.ts
 +++ b/app/lib/v2/process.ts
+@@ -15,7 +15,7 @@ import { httpTransport, OnsinchClient } from "../engine/onsinch";
+ import { matchCompanyBySender, normName } from "../engine/resolve";
+ import { extractWithMeta, type Extraction, type ExtractMeta } from "./interpret/extract";
+ import { ground, type Interpretation, type Request } from "./interpret/interpret";
+-import { latestText } from "./interpret/ground";
++import { countsIn, datesIn, latestText, timesIn } from "./interpret/ground";
+ import { plan, type Decision, type World } from "./interpret/plan";
+ import { runOp, type RunResult } from "./bot/run";
+ import type { Op } from "./bot/ops";
 @@ -23,7 +23,9 @@ import { utcToLondon } from "./bot/ops";
  import { noTrace, type Tracer } from "./trace";
  import { automationPausedFlag, v2Writes } from "../paused";
@@ -462,7 +474,67 @@ index 72fbcd1..df7922c 100644
  
  /**
   * Whether the bot may create and update orders for real clients now: the Settings master switch
-@@ -450,12 +452,19 @@ async function understand(m: MessageIn, from: string, deps: DecideDeps, seen: {
+@@ -158,6 +160,27 @@ export async function retryStopped(): Promise<{ retried: number; results: string
+ 
+ export type Processed = { message_id: string; skipped?: string; interpretation?: Interpretation; decision?: Decision; executed?: RunResult[] };
+ 
++export const BURST_UNREAD = "asks for nothing, and this earlier email names a day and crew or a time: a person reads it";
++/**
++ * What an earlier email of a burst becomes once the newest is decided. Read together, "4 crew" then
++ * "make it 5" is one request, so the earlier one is settled by the newest's decision. But when the
++ * newest's decision is `none`, the earlier request is lost with it: the reader, given both texts
++ * joined, read "thanks" and nothing else, and 5 of dev's 21 silent misses were such earlier emails
++ * (eval/iterations.md, iteration 4). An earlier email whose own words name a day and a crew count
++ * or a time is then a card. Measured on dev: 8 such cards, 4 of them inquiries.
++ */
++export function settleEarlier(body: string, sentIso: string, newest: { message_id: string; decision: Decision | undefined }): Decision {
++  const read: Decision = coded({ kind: "none", reason: `read together with the later email ${newest.message_id}` });
++  const d = newest.decision;
++  if (d?.kind !== "none") return read;
++  const t = latestText(body);
++  // The order the newest was checked against, when there is one, is the card's: an unread email is
++  // never "Order Needs Created" for a booking OnSinch holds (red-team-B H4).
++  return datesIn(t, sentIso).size && (countsIn(t).size || timesIn(t).size)
++    ? coded({ kind: "handoff", reasons: [`the later email ${newest.message_id} ${BURST_UNREAD}`], ...(d.found?.length === 1 ? { order_id: d.found[0] } : {}) })
++    : read;
++}
++
+ const NOT_CLIENT = /spartancrew\.co\.uk|no-?reply|mailer-daemon|postmaster|onsinch|sinch\.cz/i;
+ 
+ const addr = (from: unknown) => String(from ?? "").replace(/.*</, "").replace(/>.*/, "").trim().toLowerCase();
+@@ -212,11 +235,13 @@ export async function decideDelivery(newIds: string[], decide: Decide = decideNe
+   if (newest) {
+     const seen = (await sql`SELECT kind FROM v2_decisions WHERE message_id = ${newest.message_id}`) as any[];
+     const done = seen.length ? { message_id: newest.message_id, skipped: `already decided (${seen[0].kind})` } : await decide(newest.message_id, earlier.map((r) => r.message_id));
++    const newestDecision: Decision | undefined = seen.length ? undefined : (done as Processed | undefined)?.decision;
++    const bodies = new Map(((await sql`SELECT message_id, body FROM thread_messages WHERE message_id = ANY(${earlier.map((r) => r.message_id)})`) as any[]).map((b) => [String(b.message_id), String(b.body ?? "")]));
+     for (const r of earlier) {
+-      const decision: Decision = coded({ kind: "none", reason: `read together with the later email ${newest.message_id}` });
++      const decision = settleEarlier(bodies.get(r.message_id) ?? "", r.date_iso, { message_id: newest.message_id, decision: newestDecision });
+       await sql`
+         INSERT INTO v2_decisions (message_id, thread_id, from_address, sent_at, kind, decision, code_version)
+-        VALUES (${r.message_id}, ${r.thread_id}, ${addr(r.from_address)}, ${r.date_iso}, 'none', ${JSON.stringify(decision)}::jsonb, ${codeVersion()})
++        VALUES (${r.message_id}, ${r.thread_id}, ${addr(r.from_address)}, ${r.date_iso}, ${decision.kind}, ${JSON.stringify(decision)}::jsonb, ${codeVersion()})
+         ON CONFLICT (message_id) DO NOTHING`;
+       out.push({ message_id: r.message_id, decision });
+     }
+@@ -290,9 +315,12 @@ export async function sweepUndecided(opts: { decide?: Decide; limit?: number } =
+     if (overtaken || !claimed.has(newest.message_id)) { rep.carded.push(...claimed); continue; }
+     const earlier = list.slice(0, -1).map((m) => m.message_id).filter((id) => claimed.has(id));
+     try {
+-      await (opts.decide ?? decideNewest)(newest.message_id, earlier);
+-      const settled: Decision = coded({ kind: "none", reason: `read together with the later email ${newest.message_id}` });
+-      if (earlier.length) await sql`UPDATE v2_decisions SET kind = 'none', decision = ${JSON.stringify(settled)}::jsonb WHERE message_id = ANY(${earlier}) AND decision->'reasons'->>0 = ${reason}`;
++      const done = await (opts.decide ?? decideNewest)(newest.message_id, earlier);
++      const bodies = earlier.length ? ((await sql`SELECT message_id, body, date_iso FROM thread_messages WHERE message_id = ANY(${earlier})`) as any[]) : [];
++      for (const b of bodies) {
++        const settled = settleEarlier(String(b.body ?? ""), String(b.date_iso), { message_id: newest.message_id, decision: (done as Processed | undefined)?.decision });
++        await sql`UPDATE v2_decisions SET kind = ${settled.kind}, decision = ${JSON.stringify(settled)}::jsonb WHERE message_id = ${b.message_id} AND decision->'reasons'->>0 = ${reason}`;
++      }
+       rep.decided.push(newest.message_id);
+     } catch (e) {
+       const failed: Decision = coded({ kind: "handoff", reasons: [`${NOT_DECIDED}, and reading it again failed (${String((e as Error)?.message ?? e).slice(0, 120)})`] });
+@@ -450,12 +478,19 @@ async function understand(m: MessageIn, from: string, deps: DecideDeps, seen: {
    const leadDays = deps.leadDays ? await deps.leadDays().catch(() => undefined) : undefined;
    // A PLAN THAT THROWS IS A CARD FOR A PERSON, like a read that fails: a time London's clock
    // skips, a window with no length or an OnSinch read that failed would otherwise lose the email.
@@ -484,7 +556,7 @@ index 72fbcd1..df7922c 100644
    deps.trace("plan", { kind: decision.kind, ops: decision.kind === "write" ? decision.ops.map((o) => o.op.kind) : [], said: decision.kind === "write" ? decision.why : decision.kind === "handoff" ? decision.reasons : [decision.reason] }, Date.now() - t2);
    return { kind: decision.kind, interpretation: { extraction: x, grounded: interpretation, meta }, decision, executed: null, client };
  }
-@@ -487,6 +496,13 @@ export function threadReads(sql: NeonQueryFunction<false, false>, m0: MessageIn,
+@@ -487,6 +522,13 @@ export function threadReads(sql: NeonQueryFunction<false, false>, m0: MessageIn,
  
  export async function processMessage(message_id: string, opts: { execute: boolean; world?: World; with?: string[] } = { execute: false }): Promise<Processed> {
    const sql = await db();
@@ -498,7 +570,7 @@ index 72fbcd1..df7922c 100644
    const rows = (await sql`SELECT message_id, thread_id, from_address, date_iso, subject, body, is_from_spartan FROM thread_messages WHERE message_id = ${message_id}`) as any[];
    const m0 = rows[0] as MessageIn | undefined;
    if (!m0) return { message_id, skipped: "message not captured" };
-@@ -515,6 +531,12 @@ export async function processMessage(message_id: string, opts: { execute: boolea
+@@ -515,6 +557,12 @@ export async function processMessage(message_id: string, opts: { execute: boolea
          ON CONFLICT (message_id) DO UPDATE SET kind = EXCLUDED.kind, interpretation = EXCLUDED.interpretation, decision = EXCLUDED.decision,
            executed = coalesce(EXCLUDED.executed, v2_decisions.executed), code_version = EXCLUDED.code_version,
            company_id = EXCLUDED.company_id, company = EXCLUDED.company`;
@@ -512,7 +584,7 @@ index 72fbcd1..df7922c 100644
      trace: noTrace,
    });
 diff --git a/app/lib/v2/reasons.ts b/app/lib/v2/reasons.ts
-index b8c1d91..206c161 100644
+index b8c1d91..85e6526 100644
 --- a/app/lib/v2/reasons.ts
 +++ b/app/lib/v2/reasons.ts
 @@ -14,9 +14,11 @@
@@ -527,8 +599,12 @@ index b8c1d91..206c161 100644
    ["reply_quote", /the client asked for a quote/],
    ["reply_unclear", /the request is unclear/],
    ["reply_detail_missing", /: no (day|start time|end time or duration|crew count|new time or length|venue) the client wrote$|^no venue in the email$/],
-@@ -39,7 +41,10 @@ export const REASON_CODES: ReadonlyArray<readonly [string, RegExp]> = [
+@@ -37,9 +39,14 @@ export const REASON_CODES: ReadonlyArray<readonly [string, RegExp]> = [
+   ["reading_unproven", /is not in the email|reads as .*, not |a value with no words quoted/],
+   ["none_not_client", /not a client's email/],
    ["none_read_together", /read together with the later email/],
++  // An earlier email of a burst shown because the newest asks for nothing.
++  ["reading_burst_unread", /asks for nothing, and this earlier email names a day/],
    ["none_already_booked", /already booked/],
    // A change whose ops are all already true: the reason is the line that would have been written.
 -  ["none_already_as_asked", /shift \d+: (times to \d\d:\d\d-\d\d:\d\d|\d+ crew in all)/],
@@ -539,7 +615,7 @@ index b8c1d91..206c161 100644
    ["none_nothing_to_do", /nothing is booked on|no change asked for|left off: no order is named|nothing to/],
  ];
  
-@@ -53,6 +58,21 @@ export const DEFAULT_CODES: ReadonlyArray<readonly [string, RegExp]> = [
+@@ -53,6 +60,21 @@ export const DEFAULT_CODES: ReadonlyArray<readonly [string, RegExp]> = [
    ["default_venue_none", /no venue written, booked at No Location/],
  ];
  
@@ -561,6 +637,46 @@ index b8c1d91..206c161 100644
  export const codeOfReason = (reason: string): string => REASON_CODES.find(([, re]) => re.test(reason))?.[0] ?? "other";
  
  /** The decision with its code, and for a write the defaults it used. A decision already coded keeps its code. */
+diff --git a/harness/real/replay.ts b/harness/real/replay.ts
+index 6b908a9..d12c861 100644
+--- a/harness/real/replay.ts
++++ b/harness/real/replay.ts
+@@ -17,7 +17,7 @@
+ // Emails production read together with a later one (process.ts:204-224) are joined to it the
+ // same way processMessage joins them (process.ts:494-495).
+ // ============================================================================
+-import { decideMessage, readContext, type MessageIn, type Recorded } from "../../app/lib/v2/process";
++import { decideMessage, readContext, settleEarlier, type MessageIn, type Recorded } from "../../app/lib/v2/process";
+ import { PROMPT_ID } from "../../app/lib/v2/interpret/extract";
+ import { latestText } from "../../app/lib/v2/interpret/ground";
+ import type { Request } from "../../app/lib/v2/interpret/interpret";
+@@ -81,7 +81,9 @@ export async function replay(evalIds: string[], askedDays: (id: string) => strin
+   const last = Math.max(...evalIds.map((id) => T(byId.get(id)!.date_iso)));
+   const threads = new Set(evalIds.map((id) => byId.get(id)!.thread_id));
+   // Warm-ups: earlier emails on the same threads whose reading production stored, so `prior` is HEAD's own.
+-  const warm = [...dec.values()].filter((d) => threads.has(d.thread_id) && !evalSet.has(d.message_id) && reading.has(d.message_id) && byId.has(d.message_id) && T(byId.get(d.message_id)!.date_iso) < last);
++  // And the later email an eval email was read with, wherever it falls: its decision settles the earlier one (settleEarlier).
++  const carriers = new Set(evalIds.map((id) => carrierOf(dec.get(id)?.decision)).filter((c): c is string => !!c));
++  const warm = [...dec.values()].filter((d) => threads.has(d.thread_id) && !evalSet.has(d.message_id) && reading.has(d.message_id) && byId.has(d.message_id) && (T(byId.get(d.message_id)!.date_iso) < last || carriers.has(d.message_id)));
+   const order = [...evalIds, ...warm.map((d) => d.message_id)].map((id) => byId.get(id)!).sort((a, b) => T(a.date_iso) - T(b.date_iso) || a.message_id.localeCompare(b.message_id));
+ 
+   const done = new Map<string, Recorded>();
+@@ -139,6 +141,15 @@ export async function replay(evalIds: string[], askedDays: (id: string) => strin
+     const r = recorded as Recorded | null;
+     if (!r) throw new Error(`replay: ${m0.message_id} ended with no recorded decision`);
+     done.set(m0.message_id, r);
++    // The earlier emails read with this one are settled by its decision, as intake settles them (process.ts settleEarlier).
++    for (const id of (together.get(m0.message_id) ?? []).filter((x) => evalSet.has(x))) {
++      const e = byId.get(id)!;
++      const decision = settleEarlier(String(e.body ?? ""), e.date_iso, { message_id: m0.message_id, decision: r.decision });
++      if (decision.kind === "none") continue;
++      const card = cardOf({ thread_id: e.thread_id, message_id: id, sent_at: e.date_iso, subject: e.subject, from_address: addr(e.from_address) }, decision.kind, decision, null, null, r.client.id);
++      rows.set(id, { message_id: id, kind: decision.kind, decision, executed: null, outcome: outcomeOfCard(card), card, code: decision.code ?? "uncoded",
++        proposes_new: proposesNew(decision.kind, decision, card), company_id: r.client.id, latency_ms: 0, cost_usd: 0, carried_by: null });
++    }
+     if (!evalSet.has(m0.message_id)) continue;
+ 
+     const card = cardOf({ thread_id: m0.thread_id, message_id: m0.message_id, sent_at: m0.date_iso, subject: m0.subject, from_address: addr(m0.from_address) }, r.kind, r.decision, r.executed, r.interpretation?.grounded ?? null, r.client.id);
 diff --git a/test/feedNeedKind.ts b/test/feedNeedKind.ts
 new file mode 100644
 index 0000000..7ae76fb
@@ -634,10 +750,10 @@ index 0000000..7ae76fb
 +})();
 diff --git a/test/feedQuoteAcceptedIsUpdate.ts b/test/feedQuoteAcceptedIsUpdate.ts
 new file mode 100644
-index 0000000..514a4e1
+index 0000000..575d558
 --- /dev/null
 +++ b/test/feedQuoteAcceptedIsUpdate.ts
-@@ -0,0 +1,35 @@
+@@ -0,0 +1,40 @@
 +// ============================================================================
 +// A client accepting Spartan's quote is a card about the quote's order, never "Order Needs Created".
 +// ----------------------------------------------------------------------------
@@ -664,12 +780,17 @@ index 0000000..514a4e1
 +const accepted = row("A", { decision: { kind: "handoff", reasons: [QUOTE_ACCEPTED] } });
 +const known = row("K", { decision: { kind: "handoff", reasons: [QUOTE_ACCEPTED], order_id: 16614 } });
 +const fresh = row("N", { decision: { kind: "handoff", reasons: ["2026-10-14 is within 7 days of the email: a person creates it"] } });
-+const cards = project([], new Map(), [], null, NOW, new Map(), v2Sources([accepted, known, fresh], NOW)).cards;
++// An email with no reading of its own (read with a later one, iteration 4) whose decision names its order.
++const unreadKnown = row("U", { grounded: null as any, decision: { kind: "handoff", reasons: ["the later email x asks for nothing, and this earlier email names a day and crew or a time: a person reads it"], order_id: 13597 } });
++const unreadNone = row("V", { grounded: null as any, decision: { kind: "handoff", reasons: ["the later email x asks for nothing, and this earlier email names a day and crew or a time: a person reads it"] } });
++const cards = project([], new Map(), [], null, NOW, new Map(), v2Sources([accepted, known, fresh, unreadKnown, unreadNone], NOW)).cards;
 +const kindOf = (t: string) => cards.find((c) => c.thread_id === t)?.items[0]?.kind;
 +
 +ok(kindOf("A") === "needs-updated", "an acceptance whose order the planner did not single out is an update", kindOf("A"));
 +ok(kindOf("K") === "needs-updated", "an acceptance with its order is an update", kindOf("K"));
 +ok(kindOf("N") === "needs-created", "a new booking with no order is still Needs Created", kindOf("N"));
++ok(kindOf("U") === "needs-updated", "an email with no reading whose decision names its order is an update", kindOf("U"));
++ok(kindOf("V") === "needs-created", "an email with no reading and no order stays Needs Created", kindOf("V"));
 +
 +if (fails) { console.log(`\n${fails} FAILED`); process.exit(1); }
 +console.log("\nall passed");
@@ -814,6 +935,45 @@ index 0000000..98a07df
 +ok(!!systemFailureOf(write, [{ status: "blocked", reasons: ["form changed: protocol update needed"] }] as any), "a changed OnSinch form is reported");
 +ok(systemFailureOf(write, [{ status: "blocked", reasons: ["signed-on crew: 3 on position 9; ops must make this change"] }] as any) === null, "signed-on crew is a rule sending the change to ops, not a fault");
 +ok(systemFailureOf(write, [{ status: "blocked", reasons: ["4 workers on position 9, cut to 2: a worker must be dropped first"] }] as any) === null, "workers on a position is a rule, not a fault");
++
++if (fails) { console.log(`\n${fails} FAILED`); process.exit(1); }
++console.log("\nall passed");
+diff --git a/test/v2BurstUnread.ts b/test/v2BurstUnread.ts
+new file mode 100644
+index 0000000..dc17a1d
+--- /dev/null
++++ b/test/v2BurstUnread.ts
+@@ -0,0 +1,33 @@
++// ============================================================================
++// An earlier email of a burst is a card when the newest asks for nothing and it names a day and crew.
++// ----------------------------------------------------------------------------
++// Several new client emails are read as one and decided once, on the newest. When the newest is
++// "thanks" and its decision is `none`, the request in the earlier email went with it: 5 of dev's 21
++// silent misses (eval/iterations.md, iteration 4). The reader had both texts joined and still read
++// nothing, so the earlier email's own words decide whether a person should read it.
++// npx tsx test/v2BurstUnread.ts
++// ============================================================================
++import { settleEarlier, BURST_UNREAD } from "../app/lib/v2/process";
++
++let fails = 0;
++const ok = (c: boolean, m: string, d?: unknown) => { console.log(`  ${c ? "PASS" : "FAIL"}  ${m}${c ? "" : "  " + JSON.stringify(d)}`); if (!c) fails++; };
++const SENT = "2026-10-08T13:59:56Z";
++const booking = "Hi, could we get 4 crew on Friday 17th October, 08:00 to 16:00 please?";
++const later = { message_id: "later-1" };
++
++const a = settleEarlier(booking, SENT, { ...later, decision: { kind: "none", reason: "no change asked for" } });
++ok(a.kind === "handoff" && a.reasons[0].includes(BURST_UNREAD), "a booking before a 'thanks' that was decided none is a card", a);
++ok(a.code === "reading_burst_unread", "with its own code, not none_read_together", a.code);
++const b = settleEarlier("Thanks, see you then!", SENT, { ...later, decision: { kind: "none", reason: "no change asked for" } });
++ok(b.kind === "none" && b.code === "none_read_together", "an earlier 'thanks' stays read together", b);
++const c = settleEarlier(booking, SENT, { ...later, decision: { kind: "write", ops: [], why: [] } });
++ok(c.kind === "none" && c.code === "none_read_together", "when the newest was acted on, the earlier one is settled by it", c);
++const d = settleEarlier(booking, SENT, { ...later, decision: { kind: "handoff", reasons: ["x"] } });
++ok(d.kind === "none", "when the newest is a card, the earlier one is on it", d);
++const f = settleEarlier(booking, SENT, { ...later, decision: { kind: "none", reason: "R10522 shift 35071: times to 17:00-22:00", found: [16614] } });
++ok(f.kind === "handoff" && f.order_id === 16614, "the order the newest was checked against goes on the card", f);
++const e = settleEarlier("Please can you confirm the venue address for the 17th?", SENT, { ...later, decision: { kind: "none", reason: "no change asked for" } });
++ok(e.kind === "none", "a day with no crew count and no time is not enough", e);
 +
 +if (fails) { console.log(`\n${fails} FAILED`); process.exit(1); }
 +console.log("\nall passed");

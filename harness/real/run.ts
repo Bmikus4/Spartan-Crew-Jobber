@@ -1,8 +1,8 @@
 // ============================================================================
 // The real-mail harness. $0: no model call, no network, no database, no write.
 // ----------------------------------------------------------------------------
-//   npx tsx harness/real/run.ts --mode score-production [--labels all|live-week] [--set dev|test|all] [--checkpoint] [--display current]
-//   npx tsx harness/real/run.ts --mode replay           [--labels all|live-week] [--set dev|test|all] [--checkpoint]
+//   npx tsx harness/real/run.ts --mode score-production [--labels all|live-week|prospective] [--set dev|test|all] [--checkpoint] [--display current]
+//   npx tsx harness/real/run.ts --mode replay           [--labels all|live-week|prospective] [--set dev|test|all] [--checkpoint]
 //
 // --labels all       (default) the 799 read emails, labels/all.jsonl, split labels/split-all.json
 // --labels live-week the live week's 400, labels/live-week.jsonl, split labels/split.json: the
@@ -18,7 +18,7 @@
 // ============================================================================
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { ROOT, datasetHash, gitSha, goldPresent, labelsHash } from "./data";
+import { GOLD_IS_DEFAULT, ROOT, datasetHash, gitSha, goldPresent, labelsHash } from "./data";
 import { labelPath, loadLabels, type LabelSet } from "./labels";
 import { loadSplit, splitPath } from "./split";
 import { productionRows } from "./system";
@@ -63,7 +63,8 @@ export function limitsMarkdown(limits: Map<string, EmailLimits>): string {
 async function main() {
   const mode = arg("mode"), set = arg("set") ?? "dev", checkpoint = process.argv.includes("--checkpoint");
   const labelSet = (arg("labels") ?? "all") as LabelSet;
-  if (labelSet !== "all" && labelSet !== "live-week") throw new Error("--labels all | live-week");
+  if (!["all", "live-week", "prospective"].includes(labelSet)) throw new Error("--labels all | live-week | prospective");
+  if ((labelSet === "prospective") === GOLD_IS_DEFAULT) throw new Error("--labels prospective reads the 10-26 copy and only it: set HARNESS_GOLD=.tmp-data/gold-1026");
   if (mode !== "score-production" && mode !== "replay") throw new Error("--mode score-production | replay");
   if (!["dev", "test", "all"].includes(set)) throw new Error("--set dev | test | all");
   if (set !== "dev" && !checkpoint) throw new Error(`--set ${set} contains the locked test set: it is read only at a checkpoint (add --checkpoint)`);

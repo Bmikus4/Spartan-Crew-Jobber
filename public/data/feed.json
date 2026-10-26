@@ -4943,5 +4943,23 @@
    "eval/iterations.md",
    "audit/red-team-B.md"
   ]
+ },
+ {
+  "id": "S-0226",
+  "ts": "2026-10-26T02:37:44+00:00",
+  "kind": "measurement",
+  "headline": "Prospective set 79 emails locked (7f277f87): production 20/24; dev recall 91.8% with the held patch",
+  "subject": "Mail after the 10-22 copy is a locked test set that no tuning step has read",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 218,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  },
+  "sources": [
+   "eval/iterations.md",
+   "eval/harness/labels/split-prospective.json"
+  ]
  }
 ]
