@@ -4999,5 +4999,23 @@
    "eval/patches/items-1-4.md",
    "audit/checkpoint-B-response.md"
   ]
+ },
+ {
+  "id": "S-0229",
+  "ts": "2026-10-26T12:50:52+00:00",
+  "kind": "measurement",
+  "headline": "Local data lost and rebuilt: production-shown 847/847 + 936/936 identical, dev replay 561/561, dev-2 237/238; write judging held as n1 diff",
+  "subject": "A fresh read-only copy reproduces production as shown row for row after the local copies were lost",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 219,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  },
+  "sources": [
+   "audit/incident-2026-10-26-tmp-data.md",
+   "eval/next-block.md"
+  ]
  }
 ]

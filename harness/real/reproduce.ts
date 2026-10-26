@@ -32,6 +32,16 @@ const EXTRA = {
 };
 export const extraHashes = () => Object.fromEntries(Object.entries(EXTRA).map(([k, p]) => [k, existsSync(p) ? fileHash(p) : "absent"]));
 
+/**
+ * The week-review inputs the document was measured on were deleted on 10-26 (audit/incident-2026-10-26-tmp-data.md)
+ * and regenerated read-only for the same window. Week-review's own verdicts (lines 12, 14) and "staff acted on the
+ * named day" (lines 33, 35) read OnSinch as it stands when the script runs, so on these files they differ: 270/130
+ * against 291/109, and 6/2 against 4/4. With exactly these files those four are shown, not gated; any other inputs
+ * are checked in full again.
+ */
+const REGENERATED_1026 = { weekReview: "2eeb30b85f8d3602", acts: "8ba4ad911d0ff34f", orders: "379faa80a0d3b196" };
+const regenerated = () => { const h = extraHashes(); return h.weekReview === REGENERATED_1026.weekReview && h.acts === REGENERATED_1026.acts && h.orders === REGENERATED_1026.orders; };
+
 const pc = (k: number, n: number, dp = 1) => `${((100 * k) / n).toFixed(dp)}%`;
 const ci = (k: number, n: number, dp = 1) => { const c = exact(k, n); return `${(100 * c.lo).toFixed(dp)}-${(100 * c.hi).toFixed(dp)}`; };
 const tally = (xs: string[]) => { const t: Record<string, number> = {}; for (const x of xs) t[x] = (t[x] ?? 0) + 1; return t; };
@@ -64,8 +74,9 @@ export function reproduce(labels: Label[], rows: Map<string, SystemRow>): Check[
 
   // --- line 12: unread before the reads (week-review verdicts with no work)
   const unread = wr.filter((r) => r.verdict === "nothing to do" || r.verdict === "handed off").length;
-  check(12, "never read before (week-review: nothing to do + handed off)", "291 of 400", `${unread} of ${wr.length}`);
-  check(14, "already read", "109", wr.length - unread);
+  const regen = regenerated();
+  check(12, "never read before (week-review: nothing to do + handed off)", "291 of 400", `${unread} of ${wr.length}`, regen);
+  check(14, "already read", "109", wr.length - unread, regen);
 
   // --- lines 17-21: reader agreement
   let both = 0, neither = 0, aOnly = 0, bOnly = 0;
@@ -132,11 +143,11 @@ export function reproduce(labels: Label[], rows: Map<string, SystemRow>): Check[
   };
   const noneNothing = silentNone.filter((l) => R(l).code === "none_nothing_to_do");
   const actedNone = noneNothing.filter((l) => staffOnDay(l) > 0).map((l) => l.message_id).sort();
-  check(33, "of the 8 none, staff acted on the named day", "4: 1a13fd80597e6e43, 1a13fd94ac637812, 1a14105b82e3493e, 1a159376628160f2", `${actedNone.length}: ${actedNone.join(", ")}`);
+  check(33, "of the 8 none, staff acted on the named day", "4: 1a13fd80597e6e43, 1a13fd94ac637812, 1a14105b82e3493e, 1a159376628160f2", `${actedNone.length}: ${actedNone.join(", ")}`, regen);
   const tax = taxonomy();
   const lw = labels.find((l) => l.message_id === "1a13fd94ac637812")!;
   check(34, "1a13fd94ac637812: taxonomy bucket; both readers; staff acts on its day", "label_wrong; booking work; yes", `${tax.get(lw.message_id)?.bucket}; ${lw.consensus.strict === "inquiry" ? "booking work" : lw.consensus.strict}; ${staffOnDay(lw) > 0 ? "yes" : "no"}`);
-  check(35, "the other 4 of the 8: no staff act on a named day", "4", noneNothing.filter((l) => staffOnDay(l) === 0).length);
+  check(35, "the other 4 of the 8: no staff act on a named day", "4", noneNothing.filter((l) => staffOnDay(l) === 0).length, regen);
   const nr = silent.filter((l) => R(l).outcome === "needs-reply");
   const nrReply = nr.map((l) => ({ id: l.message_id, h: replyH(l) }));
   check(36, "needs-reply silent misses; staff acted on the named day", "8; 4", `${nr.length}; ${nr.filter((l) => staffOnDay(l) > 0).length}`);

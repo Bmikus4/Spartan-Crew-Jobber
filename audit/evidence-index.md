@@ -26,7 +26,7 @@ an earlier session and not re-checked today.
 - blind reads: eval/reads/A-5.csv, B-5.csv (two readers, brief 76fe3b9c); third reader on the 4 splits: eval/reads/V-v3.csv
 - case-level results: eval/harness/checkpoint-b/prospective-prod.json, -head.json, -nodisp.json, -patch.json (each with .md)
 - production as shown: eval/harness/production-shown-gold-1026.jsonl (936 rows)
-- the data copy: .tmp-data/gold-1026 (local, not in git; taken 10-26 02:19:43Z, read-only)
+- the data copy: .tmp-data/gold-1026 (local, not in git). The 10-26 02:19Z copy was lost on 10-26 and replaced by a fresh read-only copy that reproduces the committed results (audit/incident-2026-10-26-tmp-data.md)
 
 **Dev sets and their provenance:**
 
@@ -39,7 +39,7 @@ an earlier session and not re-checked today.
 
 - Reads: eval/reads/A-1..A-4, B-1..B-4, V-v, V-v2, settled.csv, adjudicate.csv.
 - Production as shown: eval/harness/production-shown.jsonl (847).
-- Copy: .tmp-data/gold (taken 10-23 01:45Z).
+- Copy: .tmp-data/gold. The 10-23 copy was lost on 10-26; the fresh copy gives dev 561/561 and dev-2 237/238 of the committed outcomes (same incident file).
 - **"Old reader"** = anthropic/claude-opus-4.8; **"current"** = openai/gpt-6.1-sol, by each decision's created_at against
   10-16 07:00:44Z.
 - **Correction:** Checkpoint B said a reader change had "no clean set to tune on until current-reader mail is labelled".

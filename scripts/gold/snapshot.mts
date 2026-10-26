@@ -59,10 +59,12 @@ while (lo < hi) { const mid = Math.floor((lo + hi) / 2); const r = await readPag
 const startId = Number((await readPage(t, `/timelineAudits?limit=100&page=${Math.max(1, lo - 1)}`)).rows[0]?.id ?? 0);
 const rows: any[] = [];
 for (const action of ["common_change", "common_create", "order_create", "order_create_by_copy", "order_confirm_provisional", "common_delete", "order_cancel", "order_created_via_api"]) {
+  // Stop at the answer's page count: an action with an exact multiple of 100 rows has a full last page, and the
+  // page after it is a 404, not an empty page (10-26).
   for (let p = 1; p <= 1000; p++) {
     const r = await readPage(t, `/timelineAudits?action[eq]=${action}&id[gte]=${startId}&limit=100&page=${p}`);
     rows.push(...r.rows);
-    if (r.rows.length < 100) break;
+    if (r.rows.length < 100 || p >= r.pageCount) break;
   }
 }
 save("timeline", rows.filter((x) => Date.parse(x.created) >= Date.parse(FROM)).sort((a, b) => Number(a.id) - Number(b.id)));

@@ -25,8 +25,8 @@ Summary for the owner: audit/checkpoint-B-response.md.
       close; E3 from 10-29 00:00Z untouched. Next block recommended (checkpoint-B-response.md §7).
 
 ## Session 5, next block (the owner: "then once you are fully done begin the next phase"; sandbox only, $0)
-- [ ] N1 Write judging as a committed, tested harness module (acts by number, deletes, net value per field, attribution
-      stopping at the next client email, order state at the window's end via the time-correct world); reproduces the 27-write table
+- [x] N1 DONE in sandbox C:/Users/thera/spartan-v2-n1 (items 1-4 + N1): eval/patches/n1-write-judging.diff, eval/next-block.md.
+      23 assessable: 13 completed / 2 partial / 8 wrong; agrees with the hand reading on 21/23. Held with item 4 (score.ts).
 - [ ] N2 Planner op fixes, red-first on synthetic cases of the real shapes: role-named re-time, added crew/chief window,
       add-N vs N-in-all hands off, two size ops on one position, a question planned as edits
 - [ ] N3 Re-measure on D-old and D-cur: wrong writes on these cases to 0, no new wrong write, recall unchanged
@@ -254,4 +254,8 @@ this file as it stood.
 none
 
 ## Next action
-Await owner response to Checkpoint B (audit/checkpoint-B.md). Hard stop: nothing ships, no next phase. On or after 2026-10-28 16:06Z: the pause-window store (scripts/backfill-pause-window.mts store), as ruled.
+N2 in C:/Users/thera/spartan-v2-n1: the five planner op fixes in eval/next-block.md, each red-first on a synthetic case of
+the real shape, then N3 (writes-run dev and dev-2, run.ts recall). Nothing ships; writes stay off. On or after
+2026-10-28 16:06Z: the pause-window store (scripts/backfill-pause-window.mts store). On 10-29: label W2 (eval/dev-windows.md).
+Worktrees p1, i14, n1, rd, rdh hold junctions to this checkout: unlink each junction and verify before removing any of them
+(audit/incident-2026-10-26-tmp-data.md).

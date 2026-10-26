@@ -1,0 +1,400 @@
+diff --git a/app/lib/v2/score.ts b/app/lib/v2/score.ts
+index 4faca9f..549a8bf 100644
+--- a/app/lib/v2/score.ts
++++ b/app/lib/v2/score.ts
+@@ -62,24 +62,62 @@ export function bookingKeys(op: Op): string[] {
+     case "set_position_size": return [`size ${op.order_id}/${op.slot_id}=${op.size}`];
+     case "set_position_times": return [`times ${op.order_id}/${op.slot_id}=${op.date} ${op.start}-${op.end}`];
+     case "cancel_position": return [`cancel ${op.order_id}/${op.slot_id}`];
+-    case "set_po": return [`po ${op.order_id}=${op.po}`];
++    case "set_po": return [`po ${op.order_id}=${String(op.po).trim()}`];
+     case "add_shift": return [`shift ${op.order_id}: ${op.date} ${op.start}-${op.end} ${crewOf(op.positions)}`];
+     case "add_position": return [`position ${op.order_id}/${op.shift_id}: ${op.date} ${op.start}-${op.end} ${crewOf([op.position])}`];
+   }
+ }
+ 
++const same = (x: unknown, y: unknown) => String(x ?? "").trim() === String(y ?? "").trim();
++
++/**
++ * Edits as their net effect: one Slot's (or one Order's) edits in the window become one act holding each
++ * field's first old and last new value, and a field that ends where it began is no change at all. Counted
++ * edit by edit, a PO typed then corrected, or a time moved and moved back, was two changes the plan could
++ * not hold, and an equal plan was judged partial (eval/write-breakdown.md §7, fault 1).
++ */
++function netEdits(acts: Act[]): Act[] {
++  const out: Act[] = [], net = new Map<string, Act>();
++  for (const a of [...acts].sort((x, y) => Date.parse(x.at) - Date.parse(y.at))) {
++    const id = a.model === "Slot" ? a.model_id : a.model === "Order" ? a.order_id : undefined;
++    if (!a.changes || !id || !/^edit /.test(a.what)) { out.push(a); continue; }
++    const k = `${a.model}:${id}`, was = net.get(k);
++    if (!was) { const first = { ...a, changes: { ...a.changes } }; net.set(k, first); out.push(first); continue; }
++    for (const [f, v] of Object.entries(a.changes)) was.changes![f] = { old: was.changes![f] ? was.changes![f].old : v.old, new: v.new };
++    was.at = a.at;
++  }
++  for (const a of net.values()) for (const f of Object.keys(a.changes!)) if (same(a.changes![f].old, a.changes![f].new)) delete a.changes![f];
++  return out.filter((a) => !a.changes || Object.keys(a.changes).length);
++}
++
+ /** What staff did after an email, as booking keys; `other` is what no system operation can express. */
+ export function truthKeys(acts: Act[], orderById: (id: number) => any | undefined): { keys: string[]; other: string[] } {
+   const keys = new Set<string>(), other: string[] = [];
+-  // An order staff created is judged once, by its create key. That key reads the order as it now stands,
+-  // so it already holds every job, shift, position and edit staff made while building it; counting those
+-  // again judged equal creates "partial" (1a121423eac99289: add job, a shift re-timed in the same minute;
+-  // 1a13af10fc5250eb: add job, a trade changed 5 minutes on; eval/write-breakdown.md §1). A cancel of the
+-  // order is not part of building it and still counts.
++  // An order staff created is judged once, by its create key. That key reads the order as it stands at the
++  // judging time, so it already holds every job, shift, position and edit staff made while building it;
++  // counting those again judged equal creates "partial" (1a121423eac99289: add job, a shift re-timed in the
++  // same minute; 1a13af10fc5250eb: add job, a trade changed 5 minutes on; eval/write-breakdown.md §1). A
++  // cancel of the order is not part of building it and still counts.
+   const made = new Set(acts.filter((a) => a.what === "create order").map((a) => a.order_id));
+-  for (const a of acts) {
++  // A part added and deleted inside the window left no work behind (fault 2): both acts are dropped. A
++  // delete row names the deleted part, as the act's model and model_id (harness/real/writes.ts).
++  const deleted = new Set(acts.filter((a) => /^delete /.test(a.what)).map((a) => `${a.model}:${a.model_id}`));
++  const added = new Set(acts.filter((a) => /^add (shift|position)$/.test(a.what)).map((a) => `${a.model}:${a.model_id}`));
++  // An added shift or position is keyed by its state at the judging time, so later edits to it are in that key.
++  const addedTeams = new Set(acts.filter((a) => a.what === "add shift").map((a) => Number(a.model_id)));
++  const teamOfSlot = (o: any, slotId: number) => teams(o).find((t) => ([] as any[]).concat(t?.Slot ?? []).some((s: any) => Number(s.id) === slotId));
++  for (const a of netEdits(acts)) {
+     const o = orderById(a.order_id);
+     if (made.has(a.order_id) && a.what !== "create order" && a.what !== "cancel order") continue;
++    const part = `${a.model}:${a.model_id}`;
++    if (/^add (shift|position)$/.test(a.what) && deleted.has(part)) continue;
++    if (/^delete /.test(a.what)) {
++      if (added.has(part)) continue;
++      // A position that existed before the email and is deleted is the cancel the system would send.
++      if (a.model === "Slot") keys.add(`cancel ${a.order_id}/${a.model_id}`); else other.push(`deleted a ${String(a.model)} on R${a.number}`);
++      continue;
++    }
++    if (a.model === "Slot" && a.model_id && /^edit /.test(a.what) && (added.has(part) || addedTeams.has(Number(teamOfSlot(o, a.model_id)?.id)))) continue;
+     if (a.what === "create order") {
+       const shifts = teams(o).map(shiftKey).filter((k): k is string => !!k).sort();
+       if (shifts.length) keys.add(`create ${a.company_id}: ` + shifts.join(" | "));
+@@ -109,7 +147,7 @@ export function truthKeys(acts: Act[], orderById: (id: number) => any | undefine
+       for (const f of Object.keys(ch).filter((f) => !["size", "cancelled", "beginning", "end"].includes(f))) other.push(`changed ${f} on R${a.number}`);
+       continue;
+     }
+-    if (a.model === "Order" && ch.intern_name) { keys.add(`po ${a.order_id}=${String(ch.intern_name.new ?? "")}`); continue; }
++    if (a.model === "Order" && ch.intern_name) { keys.add(`po ${a.order_id}=${String(ch.intern_name.new ?? "").trim()}`); continue; }
+     other.push(`${a.what} on R${a.number}`);
+   }
+   return { keys: [...keys].sort(), other };
+diff --git a/test/scoreStrict.ts b/test/scoreStrict.ts
+index f0e2ae6..109743e 100644
+--- a/test/scoreStrict.ts
++++ b/test/scoreStrict.ts
+@@ -59,5 +59,24 @@ ok(judge([create("32", 3)], truthOf([created])).verdict === "completed", "the cr
+ ok(fullyWritten([{ op: size(6) }], [{ status: "verified" }]), "every operation run and verified");
+ ok(judge([size(6)], truthOf([sizeTo6, created])).verdict === "partial", "right as far as it went, staff also created an order: partial");
+ 
++console.log("\n[net effect] staff's edits count by where they end, not edit by edit (eval/write-breakdown.md §7)");
++const po = (n: string): Op => ({ kind: "set_po", order_id: 16200, po: n });
++const poEdit = (old: string, nu: string, at: string) => act({ at, what: "edit Order.intern_name", model: "Order", model_id: 11200, changes: { intern_name: { old, new: nu } } });
++// 1a1206f2acc35678: the PO typed with a trailing space, then retyped.
++ok(judge([po("PO 4471")], truthOf([poEdit("", "PO 447 ", "2026-10-16T10:00:00Z"), poEdit("PO 447 ", "PO 4471 ", "2026-10-16T10:01:00Z")])).verdict === "completed",
++  "a PO typed then corrected is the one PO it ends as, spaces aside", judge([po("PO 4471")], truthOf([poEdit("", "PO 447 ", "2026-10-16T10:00:00Z"), poEdit("PO 447 ", "PO 4471 ", "2026-10-16T10:01:00Z")])));
++const sizeEdit = (old: number, nu: number, at: string) => act({ at, what: "edit Slot.size", model: "Slot", model_id: 62, changes: { size: { old, new: nu } } });
++ok(judge([size(7)], truthOf([sizeEdit(5, 6, "2026-10-16T10:00:00Z"), sizeEdit(6, 7, "2026-10-16T11:00:00Z")])).verdict === "completed", "two size edits are judged at the last value");
++ok(judge([], truthOf([sizeEdit(5, 6, "2026-10-16T10:00:00Z"), sizeEdit(6, 5, "2026-10-16T10:02:00Z")])).verdict === "nothing to do", "a size moved and moved back is no change");
++ok(judge([size(6)], truthOf([sizeEdit(5, 6, "2026-10-16T10:00:00Z"), sizeEdit(6, 5, "2026-10-16T10:02:00Z")])).verdict === "wrong", "so a plan that changes it is wrong");
++
++console.log("\n[deletes] a part added and deleted inside the window left no work behind");
++// 1a1259926be7623f, 1a12fc76a35c018d, 1a1345c6d25b4669: positions added and deleted within seconds on R11224.
++const addPos = act({ at: "2026-10-16T10:00:00Z", what: "add position", model: "Slot", model_id: 64 });
++const delPos = act({ at: "2026-10-16T10:00:20Z", what: "delete position", model: "Slot", model_id: 64 });
++ok(judge([size(6)], truthOf([sizeTo6, addPos, delPos])).verdict === "completed", "an added-then-deleted position is not work the plan lacks", judge([size(6)], truthOf([sizeTo6, addPos, delPos])));
++ok(judge([{ kind: "cancel_position", order_id: 16200, slot_id: 63 }], truthOf([act({ what: "delete position", model: "Slot", model_id: 63 })])).verdict === "completed",
++  "deleting a position that existed before the email is the cancel the system would send");
++
+ console.log(fails ? `\n${fails} FAILED` : "\nALL PASS");
+ process.exit(fails ? 1 : 0);
+diff --git a/harness/real/writes.ts b/harness/real/writes.ts
+new file mode 100644
+index 0000000..e021ef0
+--- /dev/null
++++ b/harness/real/writes.ts
+@@ -0,0 +1,149 @@
++// ============================================================================
++// Write judging: what staff did after an email, against what the system would have written.
++// ----------------------------------------------------------------------------
++// item_correctness on writes was measured once by a worker whose scripts were deleted, and that
++// measurement carried six scorer faults (eval/write-breakdown.md §7). This is the committed,
++// tested version. app/lib/v2/score.ts nets edits and drops parts added then deleted (faults 1-3);
++// this file fixes the act set and the order state judged against (faults 4-6):
++//   - acts come from the audit copy, Order-level rows keyed by NUMBER (only order_create names the id;
++//     test/orderAuditByNumber.ts), deletes kept as acts on the deleted part, the bot (2257) and
++//     OnSinch's automated cancels left out;
++//   - an email's window runs from 1 h before it to the first of 96 h after it or the next client email
++//     on its thread: the next email's work is that email's (fault 5);
++//   - orders are read as they stood when the window closed, through the time-correct world, so a later
++//     email's change, or a later cancel, cannot make an earlier right plan wrong (faults 4, 6).
++// Offline: the gold copy only.
++// ============================================================================
++import type { Op } from "../../app/lib/v2/bot/ops";
++import { utcToLondon } from "../../app/lib/v2/bot/ops";
++import { judge, truthKeys, type Act, type Verdict } from "../../app/lib/v2/score";
++import { gold, type GoldMessage } from "./data";
++import { TimeWorld, type Index } from "./world";
++
++export const BOT = 2257;
++const HOUR = 3600e3;
++const T = (s: unknown) => Date.parse(String(s ?? "")) || 0;
++const BOOKING = /^Slot\.(size|beginning|end|profession_id|cancelled|role)$|^Order\.intern_name$/;
++const PART: Record<string, string> = { SlotTeam: "shift", Slot: "position", Job: "job" };
++
++export type Who = { order_id: number; number: string; company_id: number };
++
++/**
++ * Every entity key an audit row can name, to its order. Snapshot orders give their parts; a create row's
++ * path ("Order:13617/Job:13897/SlotTeam:5/Slot:9") gives parts deleted since.
++ */
++export function ownerIndex(orders: any[], rows: any[]): Map<string, Who> {
++  const owner = new Map<string, Who>(), byId = new Map<number, Who>();
++  for (const o of orders) {
++    const who = { order_id: Number(o.id), number: String(o.number), company_id: Number(o.company_id) };
++    byId.set(who.order_id, who);
++    owner.set(`Order:${o.id}`, who);
++    owner.set(`OrderNo:${o.number}`, who);
++    for (const j of [].concat(o.Job ?? []) as any[]) {
++      owner.set(`Job:${j.id}`, who);
++      for (const t of [].concat(j.SlotTeam ?? []) as any[]) { owner.set(`SlotTeam:${t.id}`, who); for (const s of [].concat(t.Slot ?? []) as any[]) owner.set(`Slot:${s.id}`, who); }
++    }
++  }
++  for (const r of rows) {
++    let d: any; try { d = typeof r.data === "string" ? JSON.parse(r.data) : r.data; } catch { continue; }
++    const segs = String(d?.data?.path ?? "").split("/");
++    const who = /^Order:(\d+)$/.test(segs[0] ?? "") ? byId.get(Number(segs[0].slice(6))) : undefined;
++    if (who) for (const s of segs.slice(1)) if (!owner.has(s)) owner.set(s, who);
++  }
++  return owner;
++}
++
++/** Staff booking acts from audit rows, with the values the scorer judges by. */
++export function actsOf(rows: any[], owner: Map<string, Who>): Act[] {
++  const acts: Act[] = [];
++  for (const r of rows) {
++    if (Number(r.creator) === BOT) continue;
++    let d: any; try { d = typeof r.data === "string" ? JSON.parse(r.data) : r.data; } catch { continue; }
++    let what = "", key = "", model = String(d?.model ?? ""), model_id = Number(d?.id) || undefined;
++    let changes: Act["changes"];
++    if (r.action === "order_create") { what = "create order"; key = `Order:${d.id}`; }
++    else if (r.action === "order_create_by_copy") { what = "create order"; key = `OrderNo:${d.id}`; }
++    else if (r.action === "order_cancel") { if (d?.data?.automated) continue; what = "cancel order"; key = `OrderNo:${d.id}`; }
++    else if (r.action === "order_confirm_provisional") { what = "confirm order"; key = `OrderNo:${d.id}`; }
++    else if (r.action === "common_create" && PART[d.model]) { what = `add ${PART[d.model]}`; key = String(d.data?.path ?? "").split("/").pop() || `${d.model}:${d.id}`; }
++    else if (r.action === "common_delete" && PART[d.data?.model]) {
++      // A delete row names the parent as model/id and the deleted part in data.
++      what = `delete ${PART[d.data.model]}`; model = String(d.data.model); model_id = Number(d.data.id) || undefined;
++      key = `${model}:${model_id}`;
++      if (!owner.has(key)) key = d.model === "Order" ? `OrderNo:${d.id}` : `${d.model}:${d.id}`;
++    } else if (r.action === "common_change") {
++      const fields = Object.entries(d.diffChanges ?? {}).flatMap(([m, f]) => Object.keys(f as object).map((k) => `${m}.${k}`)).filter((f) => BOOKING.test(f));
++      if (!fields.length) continue;
++      what = `edit ${[...new Set(fields)].sort().join("+")}`;
++      key = d.model === "Order" ? `OrderNo:${d.id}` : `${d.model}:${d.id}`;
++      changes = Object.fromEntries(fields.filter((f) => f.startsWith(`${d.model}.`)).map((f) => [f.split(".")[1], d.diffChanges[d.model][f.split(".")[1]]]));
++    } else continue;
++    const who = owner.get(key);
++    if (!who) continue;
++    acts.push({ at: String(r.created), by: Number(r.creator), what, ...who, model, model_id, ...(changes ? { changes } : {}) });
++  }
++  return acts;
++}
++
++/**
++ * An email's window: 1 h before it to the first of 96 h after it or the thread's next client email that
++ * `cuts` (one asking for new booking work). A follow-up that asks nothing new ("any update?") does not
++ * cut: staff often act on the first email after it (1a1308b99b2eaf9b, 1a13e9ba4edde86b).
++ */
++export function windowFor(email: { date_iso: string; message_id: string }, thread: Array<Pick<GoldMessage, "message_id" | "date_iso" | "is_from_spartan">>, cuts: (message_id: string) => boolean = () => true): { from: number; to: number; cut_by: string | null } {
++  const at = T(email.date_iso);
++  const next = thread.filter((m) => !m.is_from_spartan && m.message_id !== email.message_id && T(m.date_iso) > at && cuts(m.message_id)).sort((a, b) => T(a.date_iso) - T(b.date_iso))[0];
++  const cap = at + 96 * HOUR, nextAt = next ? T(next.date_iso) : Infinity;
++  return { from: at - HOUR, to: Math.min(cap, nextAt), cut_by: nextAt < cap ? next!.message_id : null };
++}
++
++const slotsOf = (o: any): any[] => ([].concat(o?.Job ?? []) as any[]).flatMap((j) => [].concat(j.SlotTeam ?? []) as any[]).flatMap((t) => ([].concat(t.Slot ?? []) as any[]).map((x) => ({ ...x, team: Number(t.id) })));
++const day = (iso: unknown) => utcToLondon(String(iso)).date;
++
++/** The London days an act is about, for the readers'-days test; null when it has none (a PO, a cancel). */
++function actDays(a: Act, order: any): string[] | null {
++  const slots = slotsOf(order).filter((x) => x.beginning);
++  if (a.what === "create order") return [...new Set(slots.filter((x) => x.cancelled !== true).map((x) => day(x.beginning)))];
++  if (a.model === "SlotTeam") { const ds = slots.filter((x) => x.team === a.model_id).map((x) => day(x.beginning)); return ds.length ? ds : null; }
++  if (a.model !== "Slot" || !a.model_id) return null;
++  const b = a.changes?.beginning?.new ?? slots.find((x) => Number(x.id) === a.model_id)?.beginning;
++  return b ? [day(b)] : null;
++}
++
++export type WriteJudgement = { message_id: string; ops: string[]; orders: number[]; window: { from: string; to: string; cut_by: string | null }; acts: number; verdict: Verdict; extra: string[]; lacking: string[] };
++
++/**
++ * One write judged: staff's acts on the write's own orders (a create: the orders staff created in the
++ * window for that client) within the email's window, on the readers' days when they named any, against
++ * the orders as they stood when the window closed.
++ */
++export async function judgeWrite(ix: Index, acts: Act[], email: { message_id: string; date_iso: string; thread: GoldMessage[] }, ops: Op[], companyId: number | null, days: string[], cuts?: (message_id: string) => boolean): Promise<WriteJudgement> {
++  const w = windowFor(email, email.thread, cuts);
++  // An order staff created before the email existed when the client wrote: its create is not this email's
++  // work, and staff's later edits to it are (1a13fea576aeda13's R11613, 1a139bb8ded24cbd's R11541).
++  const inWindow = acts.filter((a) => T(a.at) >= w.from && T(a.at) <= w.to && !(a.what === "create order" && T(a.at) < T(email.date_iso)));
++  const targets = new Set<number>(ops.flatMap((o) => ("order_id" in o && o.order_id ? [Number(o.order_id)] : [])));
++  if (ops.some((o) => o.kind === "create_order")) {
++    const company = Number((ops.find((o) => o.kind === "create_order") as any).company_id) || companyId;
++    for (const a of inWindow) if (a.what === "create order" && a.company_id === company) targets.add(a.order_id);
++  }
++  const world = new TimeWorld(ix, w.to);
++  const orders = new Map<number, any>();
++  for (const id of targets) orders.set(id, await world.orderById(id).catch(() => undefined));
++  // A confirm is staff accepting an order into the schedule, never a change the plan could hold.
++  const mine = inWindow.filter((a) => targets.has(a.order_id) && a.what !== "confirm order").filter((a) => {
++    if (!days.length) return true;
++    const ds = actDays(a, orders.get(a.order_id));
++    return ds == null || ds.some((d) => days.includes(d));
++  });
++  const v = judge(ops, truthKeys(mine, (id) => orders.get(id)));
++  const iso = (n: number) => new Date(n).toISOString();
++  return { message_id: email.message_id, ops: ops.map((o) => o.kind), orders: [...targets], window: { from: iso(w.from), to: iso(w.to), cut_by: w.cut_by }, acts: mine.length, ...v };
++}
++
++/** The audit acts of the gold copy, once per process. */
++let _acts: Act[] | null = null;
++export function goldActs(ix: Index): Act[] {
++  if (!_acts) { const rows = gold<any[]>("timeline.json"); _acts = actsOf(rows, ownerIndex(ix.orders, rows)); }
++  return _acts;
++}
+diff --git a/harness/real/writes-run.ts b/harness/real/writes-run.ts
+new file mode 100644
+index 0000000..56fa99d
+--- /dev/null
++++ b/harness/real/writes-run.ts
+@@ -0,0 +1,65 @@
++// ============================================================================
++// Every write the replay makes on a labelled set, judged against staff's acts (harness/real/writes.ts).
++// ----------------------------------------------------------------------------
++// $0 and offline: the replay's own preflight closes the network, and no model is called.
++//   npx tsx harness/real/writes-run.ts [--set dev|dev-2]     (labels all.jsonl, split-all.json)
++// Writes eval/harness/runs/writes-<set>.json and .md. Prospective mail is not judged here: it is spent
++// only at a checkpoint.
++// ============================================================================
++import { mkdirSync, writeFileSync } from "node:fs";
++import { join } from "node:path";
++import type { Op } from "../../app/lib/v2/bot/ops";
++import { ROOT, datasetHash, gitSha, gold, type GoldMessage } from "./data";
++import { labelPath, loadLabels } from "./labels";
++import { b42 } from "./metrics";
++import { loadSplit, splitPath } from "./split";
++import { replay } from "./replay";
++import { rate } from "./stats";
++import { goldActs, judgeWrite, type WriteJudgement } from "./writes";
++import { Index } from "./world";
++
++const arg = (k: string) => { const i = process.argv.indexOf(`--${k}`); return i > 0 ? process.argv[i + 1] : undefined; };
++
++(async () => {
++  const set = arg("set") ?? "dev";
++  if (set !== "dev" && set !== "dev-2") throw new Error("--set dev | dev-2 (the prospective set is read only at a checkpoint)");
++  const labels = loadLabels(labelPath("all")), split = loadSplit(splitPath("all"));
++  const ids = set === "dev" ? split.dev : split.test;
++  const days = new Map(labels.map((l) => [l.message_id, [...new Set([l.A?.days, l.B?.days].filter(Boolean).flatMap((s) => String(s).split(";")))]]));
++  // Only a later email the readers read as booking work ends this email's window (writes.ts windowFor).
++  const work = new Set(labels.filter(b42).map((l) => l.message_id));
++  const r = await replay(ids);
++  if (r.modelCalls || r.netAttempts) throw new Error(`the replay called out: ${r.modelCalls} model calls, ${r.netAttempts} network attempts`);
++  const msgs = gold<GoldMessage[]>("messages.json");
++  const byId = new Map(msgs.map((m) => [m.message_id, m]));
++  const byThread = new Map<string, GoldMessage[]>();
++  for (const m of msgs) byThread.set(m.thread_id, [...(byThread.get(m.thread_id) ?? []), m]);
++  const ix = new Index(), acts = goldActs(ix);
++  const out: WriteJudgement[] = [];
++  for (const id of ids) {
++    const row = r.rows.get(id);
++    if (row?.kind !== "write") continue;
++    const ops: Op[] = (row.decision.ops ?? []).map((o: any) => o.op);
++    const m = byId.get(id)!;
++    out.push(await judgeWrite(ix, acts, { message_id: id, date_iso: String(m.date_iso), thread: byThread.get(m.thread_id) ?? [] }, ops, row.company_id ?? null, days.get(id) ?? [], (mid) => work.has(mid)));
++  }
++  const by = (k: string) => out.filter((x) => x.verdict === k).length;
++  const cls = (j: WriteJudgement) => [...new Set(j.ops)].sort().join("+");
++  const classes = [...new Set(out.map(cls))].sort();
++  const head = { set, git: gitSha(), dataset: datasetHash(), at: new Date().toISOString(), writes: out.length, completed: by("completed"), partial: by("partial"), wrong: by("wrong") };
++  // A new place is keyed by its typed name, and a PO is the client's own reference: the files name neither.
++  // Equality is judged on the real values above; only the printed keys are masked.
++  const mask = (k: string) => k.replace(/@new:[^|]*?(?= \d+\|)/g, "@new-place").replace(/^po (\d+)=.*$/, "po $1=(value)");
++  for (const j of out) { j.extra = j.extra.map(mask); j.lacking = j.lacking.map(mask); }
++  const md = [`# Writes judged on ${set} (${out.length})`, "", `git ${head.git}, dataset ${head.dataset}. $0, offline.`, "",
++    `- completed ${head.completed}, partial ${head.partial}, wrong ${head.wrong}${out.length ? `; completed ${rate(head.completed, out.length)}` : ""}`, "",
++    "| class | writes | completed | partial | wrong |", "|---|---|---|---|---|",
++    ...classes.map((c) => { const xs = out.filter((j) => cls(j) === c); return `| ${c} | ${xs.length} | ${xs.filter((x) => x.verdict === "completed").length} | ${xs.filter((x) => x.verdict === "partial").length} | ${xs.filter((x) => x.verdict === "wrong").length} |`; }),
++    "", "| message_id | ops | verdict | extra | lacking | window cut by |", "|---|---|---|---|---|---|",
++    ...out.map((j) => `| ${j.message_id} | ${j.ops.join(", ")} | ${j.verdict} | ${j.extra.join("; ")} | ${j.lacking.join("; ")} | ${j.window.cut_by ?? ""} |`)];
++  const dir = join(ROOT, "eval/harness/runs");
++  mkdirSync(dir, { recursive: true });
++  writeFileSync(join(dir, `writes-${set}.md`), md.join("\n") + "\n");
++  writeFileSync(join(dir, `writes-${set}.json`), JSON.stringify({ ...head, rows: out }, null, 1) + "\n");
++  console.log(md.slice(0, 6 + classes.length + 2).join("\n"));
++})().catch((e) => { console.error(e); process.exit(1); });
+diff --git a/test/harnessWrites.ts b/test/harnessWrites.ts
+new file mode 100644
+index 0000000..4e29df0
+--- /dev/null
++++ b/test/harnessWrites.ts
+@@ -0,0 +1,56 @@
++// ============================================================================
++// Write judging reads the audit rows the way OnSinch writes them, and judges each email on its own window.
++// ----------------------------------------------------------------------------
++// eval/write-breakdown.md §7: the first item_correctness count lost deletes, pooled the next email's work
++// into this one's, and keyed Order rows by id where OnSinch writes the number. Synthetic rows in OnSinch's
++// shapes (harness/real/world.ts header): each must come out as the act the scorer expects.
++// npx tsx test/harnessWrites.ts
++// ============================================================================
++import { actsOf, ownerIndex, windowFor, BOT } from "../harness/real/writes";
++
++let fails = 0;
++const ok = (c: boolean, m: string, d?: unknown) => { console.log(`  ${c ? "PASS" : "FAIL"}  ${m}${c ? "" : "  " + JSON.stringify(d)}`); if (!c) fails++; };
++
++// Order id 16200 is R11200; its number collides with order id 11200 (R9000), the trap test/orderAuditByNumber.ts pins.
++const orders = [
++  { id: 16200, number: "11200", company_id: 137, Job: [{ id: 900, SlotTeam: [{ id: 502, Slot: [{ id: 62 }, { id: 63 }] }] }] },
++  { id: 11200, number: "9000", company_id: 55, Job: [] },
++];
++const row = (id: number, action: string, data: unknown, creator = 110, created = "2026-10-16T10:00:00+00:00") => ({ id, action, creator, created, data: JSON.stringify(data) });
++const rows = [
++  row(1, "common_change", { id: "11200", model: "Order", diffChanges: { Order: { intern_name: { old: "", new: "PO 1" } } } }),
++  row(2, "order_cancel", { id: "11200" }),
++  row(3, "order_cancel", { id: "11200", data: { automated: true } }),
++  row(4, "common_create", { id: "64", model: "Slot", data: { path: "Order:16200/Job:900/SlotTeam:502/Slot:64" } }),
++  row(5, "common_delete", { id: "502", model: "SlotTeam", data: { model: "Slot", id: "64" } }),
++  row(6, "common_change", { id: "62", model: "Slot", diffChanges: { Slot: { size: { old: 4, new: 6 } } } }, BOT),
++  row(7, "common_change", { id: "63", model: "Slot", diffChanges: { Slot: { size: { old: 2, new: 3 } } } }),
++];
++const acts = actsOf(rows, ownerIndex(orders, rows));
++
++console.log("\nOrder rows are keyed by number");
++ok(acts.some((a) => a.what === "edit Order.intern_name" && a.order_id === 16200 && a.number === "11200"), "a PO edit naming 11200 is R11200's (order 16200), not order 11200's", acts.map((a) => [a.what, a.order_id]));
++ok(acts.filter((a) => a.what === "cancel order").length === 1 && acts.find((a) => a.what === "cancel order")!.order_id === 16200, "a staff cancel is kept, OnSinch's automated one is not");
++
++console.log("\ndeletes are acts on the deleted part");
++const del = acts.find((a) => a.what === "delete position");
++ok(!!del && del.model === "Slot" && del.model_id === 64 && del.order_id === 16200, "the delete row's data names the part; its order comes from the create path", del);
++ok(acts.some((a) => a.what === "add position" && a.model_id === 64), "the add of the same part is an act too, so the scorer can drop the pair");
++
++console.log("\nthe bot is not staff");
++ok(!acts.some((a) => a.model === "Slot" && a.model_id === 62), "the bot's own size edit is left out");
++ok(acts.some((a) => a.model === "Slot" && a.model_id === 63 && a.changes?.size?.new === 3), "a staff size edit is kept with its values");
++
++console.log("\nan email's window ends at the thread's next client email");
++const thread = [
++  { message_id: "a", date_iso: "2026-10-16T09:00:00Z", is_from_spartan: false },
++  { message_id: "b", date_iso: "2026-10-16T10:00:00Z", is_from_spartan: true },
++  { message_id: "c", date_iso: "2026-10-17T09:00:00Z", is_from_spartan: false },
++];
++const w = windowFor(thread[0] as any, thread as any);
++ok(w.from === Date.parse("2026-10-16T08:00:00Z") && w.to === Date.parse("2026-10-17T09:00:00Z") && w.cut_by === "c", "1 h before, to the next client email (our reply does not cut it)", w);
++const last = windowFor(thread[2] as any, thread as any);
++ok(last.to === Date.parse("2026-10-17T09:00:00Z") + 96 * 3600e3 && last.cut_by === null, "with no later client email, 96 h", last);
++
++if (fails) { console.log(`\n${fails} FAILED`); process.exit(1); }
++console.log("\nall passed");

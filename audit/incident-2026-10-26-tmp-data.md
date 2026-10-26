@@ -43,6 +43,23 @@ Orchestrator. **Nothing in production, the repository or OnSinch was affected.**
   email's world at its time; differences can only come from unlogged changes and parts deleted since. Any difference is
   reported, never smoothed.
 
+## Recovery, verified
+
+- **A fresh read-only snapshot** was taken 10-26: `.tmp-data/gold-r1026`, dataset b0436e50bc1bf7f4.
+  - Messages, decisions, readings, links, companies, places, professions and 3,500 orders came from the snapshot script.
+  - The audit timeline (40,330 rows through 12:23Z) was fetched separately. The script had stopped on a 404 for a page
+    past the end; scripts/gold/snapshot.mts now stops at the reported page count.
+  - Copied to `.tmp-data/gold` and `.tmp-data/gold-1026`, and backed up to `C:\Users\thera\spartan-data-backup\`.
+- **Production as shown, re-frozen on it:**
+  - all 847 rows of the old production-shown.jsonl and all 936 of production-shown-gold-1026.jsonl are identical;
+  - each file gains only the decisions made since (958 rows), and its header names the new dataset.
+- **HEAD replay on it:**
+  - dev: 561 of 561 emails give the committed outcome, card and code;
+  - dev-2: 237 of 238. The one difference, 1a159f2b548dfdf2, is an email whose order R11790 staff edited on 10-26,
+    deleting a part at 11:31Z. A deleted part cannot be rolled back, so the order rebuilt for the email's time lacks it.
+    That is a counted limit of the time-correct world, not a change in the system.
+- **So every committed figure is re-runnable on the fresh copy,** with that one known exception.
+
 ## Prevention
 
 - **Rule (memory, feedback_worktree_remove_follows_junctions):**
