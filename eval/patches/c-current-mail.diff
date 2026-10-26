@@ -1,0 +1,348 @@
+diff --git a/app/lib/v2/interpret/plan.ts b/app/lib/v2/interpret/plan.ts
+index 1819dc6..e09ed6c 100644
+--- a/app/lib/v2/interpret/plan.ts
++++ b/app/lib/v2/interpret/plan.ts
+@@ -135,7 +135,7 @@ export function venueKey(name: string): string {
+  * dropped (venueKey). Never a resemblance: a key must equal a key. Several places with one
+  * name (146 addresses hold 2 or more) are narrowed to the ones this client has booked before.
+  */
+-async function placesFor(world: World, venue: string, clientOrders: any[] = []): Promise<{ id: number; name: string }[]> {
++async function placesFor(world: World, venue: string, clientOrders: any[] = []): Promise<{ id: number; name: string; byHistory?: true }[]> {
+   let hits: { id: number; name: string; address?: string }[] = (await world.placesNamed(venue)).filter((p) => normName(p.name) === normName(venue));
+   if (!hits.length) {
+     const head = venue.split(",")[0].trim();
+@@ -155,6 +155,30 @@ async function placesFor(world: World, venue: string, clientOrders: any[] = []):
+       if (acr.length === 1) hits = acr;
+     }
+   }
++  // A PLACE THIS CLIENT BOOKS, NAMED IN MORE OR FEWER WORDS. When nothing matches by name, or only places
++  // the client never booked, the one place the client has booked whose name words and the email's share
++  // at least two, one set holding the other, is the venue. On current mail creates booked a new place, or
++  // an unused duplicate (place 7083, no booking ever), where staff used the client's own place, booked 2
++  // to 32 times (1a15984719fbd60e, 1a15984f57ab3251, 1a13438a3dd67400; eval/phase-c.md). Exactly one:
++  // two such places stay as they were.
++  // With no place of that name at all, the one OnSinch place (of 2,319 with an address) that fits the same
++  // way is the venue: right and unique on 2 of the 4 current-mail cases, and never a guess between two.
++  if (world.allPlaces) {
++    const used = new Set(clientOrders.flatMap((o) => teams(o).flatMap((t) => t.slots.map((x) => Number(x.SlotLocation?.place_id)))).filter(Boolean));
++    if (!hits.some((h) => used.has(Number(h.id)))) {
++      const words = (s: string | null | undefined) => new Set(venueKey(s ?? "").split(" ").filter((w) => w.length > 2));
++      const asked = words(venue);
++      const fit = (p: { name: string; address?: string }) => {
++        const name = words(p.name), shared = [...asked].filter((w) => name.has(w)).length;
++        return !!p.address && shared >= 2 && (shared === name.size || shared === asked.size);
++      };
++      const all = await world.allPlaces();
++      const mine = all.filter((p) => used.has(Number(p.id)) && fit(p));
++      if (mine.length === 1) return [{ id: Number(mine[0].id), name: mine[0].name, byHistory: true }];
++      const any = hits.length ? [] : all.filter(fit);
++      if (any.length === 1) return [{ id: Number(any[0].id), name: any[0].name, byHistory: true }];
++    }
++  }
+   // ONE BUILDING, SEVERAL PLACES: 146 addresses hold 2 or more. "Mandarin Oriental" (230) and
+   // "Mandarin Oriental Hyde Park, London" (468) are both 66 Knightsbridge, and EMS moved from
+   // 230 to 468 in May 2026; booked by name the order went to 230 (10-09). The building's
+@@ -833,6 +857,7 @@ async function decide(msg: Message, i: Interpretation, world: World, threadOrder
+         }
+         place = places.length ? { id: String(places[0].id), name: places[0].name } : { id: `new:${venue.trim().slice(0, 120)}`, name: venue.trim().split(",")[0].slice(0, 80) };
+         if (!places.length) extra.push(`venue "${venue.trim()}" is new to OnSinch and was added`);
++        else if (places[0].byHistory) extra.push(`assumed: "${venue.trim()}" is ${places[0].name} (place ${places[0].id}), the one OnSinch venue whose name fits these words`);
+       }
+       // No venue written: the client's own premises when it has exactly one among the places it
+       // books (a warehouse, HQ, yard or depot): Event Concept's "Crew" for this week went to
+diff --git a/app/lib/v2/reasons.ts b/app/lib/v2/reasons.ts
+index a2dea6f..cb2e52c 100644
+--- a/app/lib/v2/reasons.ts
++++ b/app/lib/v2/reasons.ts
+@@ -52,6 +52,7 @@ export const DEFAULT_CODES: ReadonlyArray<readonly [string, RegExp]> = [
+   ["default_venue_most_used", /the one most of its shifts/],
+   ["default_venue_same_name", /OnSinch venues are named .*; booked at/],
+   ["default_venue_none", /no venue written, booked at No Location/],
++  ["default_venue_assumed", /the one OnSinch venue whose name fits these words/],
+ ];
+ 
+ /**
+diff --git a/app/lib/v2/process.ts b/app/lib/v2/process.ts
+index b0f81ea..3e9052a 100644
+--- a/app/lib/v2/process.ts
++++ b/app/lib/v2/process.ts
+@@ -157,6 +157,36 @@ export async function retryStopped(): Promise<{ retried: number; results: string
+   return { retried: results.length, results };
+ }
+ 
++/**
++ * AN EMAIL THE SYSTEM COULD NOT READ IS READ AGAIN, up to three times, 5, 15 and 45 minutes on, within the
++ * week the sweep covers. A rate limit or a timeout is the system's own passing failure (OPERATING §2, §15),
++ * yet it stayed on the TV as "Needs Created" for good: 1a144c619a140ea6, "OpenRouter 429" on 10-23, still
++ * red on 10-26 (audit/verification-2026-10-26.md). A read that fails again keeps its card and counts the try.
++ */
++export const UNREAD_RETRIES = 3;
++const UNREAD = "the system could not read this email";
++export async function retryUnread(opts: { decide?: (message_id: string) => Promise<unknown>; now?: number; limit?: number } = {}): Promise<{ retried: string[]; paused?: true }> {
++  if (automationPausedFlag()) return { retried: [], paused: true };
++  const sql = await db();
++  const now = opts.now ?? Date.now();
++  const rows = (await sql`SELECT message_id, decision, created_at FROM v2_decisions
++    WHERE kind = 'handoff' AND decision->'reasons'->>0 LIKE ${UNREAD + "%"} AND coalesce(jsonb_typeof(executed), 'null') = 'null'
++      AND created_at > now() - (${UNDECIDED_SENT_WITHIN_DAYS} || ' days')::interval ORDER BY created_at`) as any[];
++  const retried: string[] = [];
++  for (const d of rows) {
++    if (retried.length >= (opts.limit ?? 2)) break;
++    const reads = Number(d.decision?.reads ?? 0);
++    const since = Date.parse(String(d.decision?.read_at ?? d.created_at));
++    if (reads >= UNREAD_RETRIES || now - since < 5 * 60_000 * 3 ** reads) continue;
++    await (opts.decide ?? (async (id: string) => processMessage(id, { execute: await botWrites() })))(d.message_id).catch(() => {});
++    // Still unread: the card stays, and the try is counted on it so the next one waits longer.
++    await sql`UPDATE v2_decisions SET decision = decision || ${JSON.stringify({ reads: reads + 1, read_at: new Date(now).toISOString() })}::jsonb
++      WHERE message_id = ${d.message_id} AND decision->'reasons'->>0 LIKE ${UNREAD + "%"}`;
++    retried.push(d.message_id);
++  }
++  return { retried };
++}
++
+ export type Processed = { message_id: string; skipped?: string; interpretation?: Interpretation; decision?: Decision; executed?: RunResult[] };
+ 
+ const NOT_CLIENT = /spartancrew\.co\.uk|no-?reply|mailer-daemon|postmaster|onsinch|sinch\.cz/i;
+diff --git a/app/api/bot/sync/route.ts b/app/api/bot/sync/route.ts
+index a5cea7b..3350676 100644
+--- a/app/api/bot/sync/route.ts
++++ b/app/api/bot/sync/route.ts
+@@ -1,7 +1,7 @@
+ import { NextResponse } from "next/server";
+ import { authorizeMachineCall } from "../../../lib/apiAuth";
+ import { backfillBoardLinks, backfillLinks, sweepLinks } from "../../../lib/v2/links";
+-import { botWrites, retryStopped, sweepUndecided } from "../../../lib/v2/process";
++import { botWrites, retryStopped, retryUnread, sweepUndecided } from "../../../lib/v2/process";
+ import { replanOpen } from "../../../lib/v2/replan";
+ import { neon } from "@neondatabase/serverless";
+ import { httpTransport } from "../../../lib/engine/onsinch";
+@@ -32,6 +32,8 @@ export async function POST(request: Request): Promise<Response> {
+   const retry = await retryStopped().catch((e) => ({ error: String(e?.message ?? e).slice(0, 160) }));
+   // A stored client email with no decision is decided, or becomes a card (process.ts sweepUndecided).
+   const undecided = await sweepUndecided().catch((e) => ({ error: String(e?.message ?? e).slice(0, 160) }));
++  // An email the reader could not read (a rate limit, a timeout) is read again with backoff (process.ts retryUnread).
++  const unread = await retryUnread().catch((e) => ({ error: String(e?.message ?? e).slice(0, 160) }));
+   // The planner again on every open card, against OnSinch now (Ben approved 10-20): reads only, never a write.
+   const replan = await replanOpen(sql).catch((e) => ({ error: String(e?.message ?? e).slice(0, 160) }));
+   const t = httpTransport({ baseUrl: process.env.ONSINCH_BASE_URL || "https://spartancrew.onsinch.com/api/v1", apiKey: process.env.ONSINCH_API_KEY || "" }) as unknown as OnsinchCall;
+@@ -39,5 +41,5 @@ export async function POST(request: Request): Promise<Response> {
+     .then(async (s) => maybeSweep(sql, t, !!s.test_data_autoclear, { writes: await botWrites() }))
+     .then((r) => (typeof r === "string" ? r : { orders: r.orders.length, companies: r.companies.length, rows: Object.values(r.rows).reduce((a, b) => a + b, 0), refused: r.refused ?? null, failed: r.failed.length }))
+     .catch((e) => ({ error: String(e?.message ?? e).slice(0, 160) }));
+-  return NextResponse.json({ ok: true, ms: Date.now() - t0, backfilled, board, sweep, retry, undecided, replan, testData });
++  return NextResponse.json({ ok: true, ms: Date.now() - t0, backfilled, board, sweep, retry, undecided, unread, replan, testData });
+ }
+diff --git a/harness/real/writes.ts b/harness/real/writes.ts
+index e021ef0..d1ab1f5 100644
+--- a/harness/real/writes.ts
++++ b/harness/real/writes.ts
+@@ -53,11 +53,11 @@ export function ownerIndex(orders: any[], rows: any[]): Map<string, Who> {
+   return owner;
+ }
+ 
+-/** Staff booking acts from audit rows, with the values the scorer judges by. */
+-export function actsOf(rows: any[], owner: Map<string, Who>): Act[] {
++/** Staff booking acts from audit rows, with the values the scorer judges by; `creator: "bot"` reads the API user's instead. */
++export function actsOf(rows: any[], owner: Map<string, Who>, creator: "staff" | "bot" = "staff"): Act[] {
+   const acts: Act[] = [];
+   for (const r of rows) {
+-    if (Number(r.creator) === BOT) continue;
++    if ((Number(r.creator) === BOT) !== (creator === "bot")) continue;
+     let d: any; try { d = typeof r.data === "string" ? JSON.parse(r.data) : r.data; } catch { continue; }
+     let what = "", key = "", model = String(d?.model ?? ""), model_id = Number(d?.id) || undefined;
+     let changes: Act["changes"];
+@@ -117,7 +117,12 @@ export type WriteJudgement = { message_id: string; ops: string[]; orders: number
+  * window for that client) within the email's window, on the readers' days when they named any, against
+  * the orders as they stood when the window closed.
+  */
+-export async function judgeWrite(ix: Index, acts: Act[], email: { message_id: string; date_iso: string; thread: GoldMessage[] }, ops: Op[], companyId: number | null, days: string[], cuts?: (message_id: string) => boolean): Promise<WriteJudgement> {
++export async function judgeWrite(ix: Index, staffActs: Act[], email: { message_id: string; date_iso: string; thread: GoldMessage[] }, ops: Op[], companyId: number | null, days: string[], cuts?: (message_id: string) => boolean, botActs: Act[] = []): Promise<WriteJudgement> {
++  // WHAT PRODUCTION WROTE FOR THIS EMAIL IS PART OF WHAT WAS DONE. Before the 10-21 pause the bot ran some of
++  // these writes itself; staff then had nothing left to do, and a staff-only truth called the same plan
++  // "wrong" (3 dev-2 POs the bot set, which the orders still hold). The caller passes the bot's acts only
++  // for an email whose own decision ran; a staff reversal of them is a later staff act and nets them out.
++  const acts = [...staffActs, ...botActs];
+   const w = windowFor(email, email.thread, cuts);
+   // An order staff created before the email existed when the client wrote: its create is not this email's
+   // work, and staff's later edits to it are (1a13fea576aeda13's R11613, 1a139bb8ded24cbd's R11541).
+@@ -142,8 +147,8 @@ export async function judgeWrite(ix: Index, acts: Act[], email: { message_id: st
+ }
+ 
+ /** The audit acts of the gold copy, once per process. */
+-let _acts: Act[] | null = null;
+-export function goldActs(ix: Index): Act[] {
+-  if (!_acts) { const rows = gold<any[]>("timeline.json"); _acts = actsOf(rows, ownerIndex(ix.orders, rows)); }
++let _acts: { staff: Act[]; bot: Act[] } | null = null;
++export function goldActs(ix: Index): { staff: Act[]; bot: Act[] } {
++  if (!_acts) { const rows = gold<any[]>("timeline.json"), owner = ownerIndex(ix.orders, rows); _acts = { staff: actsOf(rows, owner), bot: actsOf(rows, owner, "bot") }; }
+   return _acts;
+ }
+diff --git a/harness/real/writes-run.ts b/harness/real/writes-run.ts
+index 56fa99d..c185dd8 100644
+--- a/harness/real/writes-run.ts
++++ b/harness/real/writes-run.ts
+@@ -35,13 +35,16 @@ const arg = (k: string) => { const i = process.argv.indexOf(`--${k}`); return i
+   const byThread = new Map<string, GoldMessage[]>();
+   for (const m of msgs) byThread.set(m.thread_id, [...(byThread.get(m.thread_id) ?? []), m]);
+   const ix = new Index(), acts = goldActs(ix);
++  const dec = new Map(gold<any[]>("decisions.json").map((d) => [d.message_id, d]));
+   const out: WriteJudgement[] = [];
+   for (const id of ids) {
+     const row = r.rows.get(id);
+     if (row?.kind !== "write") continue;
+     const ops: Op[] = (row.decision.ops ?? []).map((o: any) => o.op);
+     const m = byId.get(id)!;
+-    out.push(await judgeWrite(ix, acts, { message_id: id, date_iso: String(m.date_iso), thread: byThread.get(m.thread_id) ?? [] }, ops, row.company_id ?? null, days.get(id) ?? [], (mid) => work.has(mid)));
++    // The bot's audit rows count only for an email whose production decision ran a write (writes.ts judgeWrite).
++    const ran = (dec.get(id)?.executed ?? []).some((e: any) => e?.status === "verified");
++    out.push(await judgeWrite(ix, acts.staff, { message_id: id, date_iso: String(m.date_iso), thread: byThread.get(m.thread_id) ?? [] }, ops, row.company_id ?? null, days.get(id) ?? [], (mid) => work.has(mid), ran ? acts.bot : []));
+   }
+   const by = (k: string) => out.filter((x) => x.verdict === k).length;
+   const cls = (j: WriteJudgement) => [...new Set(j.ops)].sort().join("+");
+diff --git a/test/harnessWrites.ts b/test/harnessWrites.ts
+index 4e29df0..7f45f8f 100644
+--- a/test/harnessWrites.ts
++++ b/test/harnessWrites.ts
+@@ -40,6 +40,8 @@ ok(acts.some((a) => a.what === "add position" && a.model_id === 64), "the add of
+ console.log("\nthe bot is not staff");
+ ok(!acts.some((a) => a.model === "Slot" && a.model_id === 62), "the bot's own size edit is left out");
+ ok(acts.some((a) => a.model === "Slot" && a.model_id === 63 && a.changes?.size?.new === 3), "a staff size edit is kept with its values");
++const bot = actsOf(rows, ownerIndex(orders, rows), "bot");
++ok(bot.length === 1 && bot[0].model_id === 62 && bot[0].changes?.size?.new === 6, "the bot's own rows are read apart, for an email whose write production ran", bot);
+ 
+ console.log("\nan email's window ends at the thread's next client email");
+ const thread = [
+diff --git a/test/planVenueClientHistory.ts b/test/planVenueClientHistory.ts
+new file mode 100644
+index 0000000..8288f7a
+--- /dev/null
++++ b/test/planVenueClientHistory.ts
+@@ -0,0 +1,64 @@
++// ============================================================================
++// A new order is booked at the venue this client books, not a new or unused place of a similar name.
++// ----------------------------------------------------------------------------
++// eval/phase-c.md C1: on current mail, creates booked a new place, or a place no booking has ever used,
++// where staff used the client's own venue, booked 2 to 32 times. Its name words and the email's share two
++// or more, one set holding the other: 2 of 2 (1a15984719fbd60e), 4 of 4 (1a13438a3dd67400), and 3 of 3
++// against an unused exact-name duplicate (1a15984f57ab3251). The names here are invented; the shapes are
++// the cases'.
++// npx tsx test/planVenueClientHistory.ts
++// ============================================================================
++import { plan, type World, type Message } from "../app/lib/v2/interpret/plan";
++import type { Interpretation, Request } from "../app/lib/v2/interpret/interpret";
++import { coded } from "../app/lib/v2/reasons";
++
++let fails = 0;
++const ok = (c: boolean, m: string, d?: unknown) => { console.log(`  ${c ? "PASS" : "FAIL"}  ${m}${c ? "" : "  " + JSON.stringify(d)}`); if (!c) fails++; };
++
++const PLACES = [
++  { id: 1114, name: "Harbour Hall", address: "1 Quay Road" },
++  { id: 205, name: "Riverside Studios Hammersmith", address: "101 Queen Caroline Street" },
++  { id: 7083, name: "Riverside Studios", address: "101 Queen Caroline St" },          // a duplicate no booking uses
++  { id: 300, name: "Kings Place", address: "90 York Way" },
++  { id: 301, name: "Kings Place Hall Two", address: "90 York Way" },
++  { id: 640, name: "Old Exchange Rooms", address: "4 Market Street" },             // OnSinch holds it; this client never booked it
++];
++const at = (place: number) => ({ id: place * 10, beginning: "2026-09-01T08:00:00+01:00", end: "2026-09-01T16:00:00+01:00", size: 2, profession_id: 1, role: 0, SlotLocation: { place_id: place } });
++const past = (n: number, place: number) => ({ id: 9000 + n, number: String(9000 + n), company_id: 157, created: `2026-09-0${n}T10:00:00Z`, Job: [{ SlotTeam: [{ id: 800 + n, Slot: [at(place)] }] }] });
++const history = [past(1, 1114), past(2, 205), past(3, 300), past(4, 301)];
++const world: World = {
++  companies: async () => [{ id: 157, name: "Client", Client: [{ id: 1, email: "ops@client.example" }] }],
++  placesNamed: async (n) => PLACES.filter((p) => p.name.toLowerCase() === n.toLowerCase()),
++  allPlaces: async () => PLACES,
++  companyOrders: async (c) => (c === 157 ? history : []),
++  orderByNumber: async () => null,
++} as World;
++const msg: Message = { message_id: "m1", from: "ops@client.example", subject: "crew", sentIso: "2026-10-20T09:00:00Z", text: "(the email)" };
++const r = (venue: string): Request => ({ action: "new_shift", problems: [], date: "2026-11-20", start: "08:00", end: "16:00", crew: 3, venue } as Request);
++const I = (requests: Request[]): Interpretation => ({ intent: "booking", requests, problems: [] });
++const placeOf = (d: any) => d.kind === "write" ? d.ops.find((o: any) => o.op.kind === "create_order")?.op.shifts[0].place_id : `(${d.kind}: ${(d.reasons ?? [d.reason]).join("; ")})`;
++
++(async () => {
++  console.log("\nthe email names the client's venue in more words");
++  const more = await plan(msg, I([r("The Harbour Hall Hotel")]), world);
++  ok(placeOf(more) === "1114", "\"The Harbour Hall Hotel\" is the client's Harbour Hall (1114), not a new place", placeOf(more));
++  ok(more.kind === "write" && more.why.some((w: string) => /the one OnSinch venue whose name fits these words/.test(w)), "and the order says it assumed so", more);
++  ok(more.kind === "write" && (coded(more as any) as any).defaults?.includes("default_venue_assumed"), "coded default_venue_assumed", coded(more as any));
++
++  console.log("\nthe email names it in fewer words, and an unused duplicate has that exact name");
++  const fewer = await plan(msg, I([r("Riverside Studios")]), world);
++  ok(placeOf(fewer) === "205", "the client's Riverside Studios Hammersmith (205), not the unused exact-name 7083", placeOf(fewer));
++
++  console.log("\nno place has the name; exactly one OnSinch place fits the words");
++  const other = await plan(msg, I([r("The Old Exchange Rooms Gallery")]), world);
++  ok(placeOf(other) === "640", "the Old Exchange Rooms (640), not a new place", placeOf(other));
++
++  console.log("\nunchanged");
++  const fresh = await plan(msg, I([r("Lakeside Pavilion")]), world);
++  ok(String(placeOf(fresh)).startsWith("new:"), "a venue the client has never booked and OnSinch does not hold is still a new place", placeOf(fresh));
++  const two = await plan(msg, I([r("Kings Place Hall")]), world);
++  ok(placeOf(two) !== "300" && placeOf(two) !== "301", "two client venues fit (Kings Place, Kings Place Hall Two): no guess between them", placeOf(two));
++
++  if (fails) { console.log(`\n${fails} FAILED`); process.exit(1); }
++  console.log("\nall passed");
++})();
+diff --git a/test/retryUnread.ts b/test/retryUnread.ts
+new file mode 100644
+index 0000000..75154cb
+--- /dev/null
++++ b/test/retryUnread.ts
+@@ -0,0 +1,58 @@
++// ============================================================================
++// An email the system could not read is read again with backoff, never left as a card for good.
++// ----------------------------------------------------------------------------
++// 1a144c619a140ea6 (10-23): "the system could not read this email (extract: OpenRouter 429)" stayed on
++// the TV as Needs Created for three days, because nothing reads a failed email again (only writes that
++// stopped are retried, retryStopped). retryUnread reads it again 5, 15 and 45 minutes on, three times at
++// most, within the sweep's week. Against PGlite (fixtures/pg.ts); the reader is a stub, no model is called.
++// npx tsx test/retryUnread.ts
++// ============================================================================
++import { sql } from "./fixtures/pg";
++/* eslint-disable @typescript-eslint/no-require-imports */
++process.env.VERCEL_GIT_COMMIT_SHA = "test";
++delete process.env.OPENROUTER_API_KEY;
++const { retryUnread, decideDelivery, processMessage, UNREAD_RETRIES } = require("../app/lib/v2/process.ts");
++
++let fails = 0;
++const ok = (c: boolean, m: string, d?: unknown) => { console.log(`  ${c ? "PASS" : "FAIL"}  ${m}${c ? "" : "  " + JSON.stringify(d)}`); if (!c) fails++; };
++const MIN = 60_000;
++
++(async () => {
++  await decideDelivery([]);
++  await processMessage("warm-up", { execute: false }).catch(() => {});
++  const unread = (id: string, at: string, extra: Record<string, unknown> = {}) => sql`INSERT INTO v2_decisions (message_id, thread_id, from_address, sent_at, kind, decision, executed, code_version, created_at)
++    VALUES (${id}, ${"t-" + id}, 'sam@client.example', ${at}, 'handoff', ${JSON.stringify({ kind: "handoff", reasons: ["the system could not read this email (extract: OpenRouter 429)"], code: "system_failed", ...extra })}::jsonb, 'null'::jsonb, 'test', ${at})`;
++  const now = Date.now(), iso = (ms: number) => new Date(ms).toISOString();
++  await unread("fresh", iso(now - 2 * MIN));
++  await unread("due", iso(now - 10 * MIN));
++  await unread("again", iso(now - 60 * MIN), { reads: 1, read_at: iso(now - 20 * MIN) });
++  await unread("waiting", iso(now - 60 * MIN), { reads: 1, read_at: iso(now - 10 * MIN) });
++  await unread("spent", iso(now - 300 * MIN), { reads: UNREAD_RETRIES, read_at: iso(now - 200 * MIN) });
++  await sql`INSERT INTO v2_decisions (message_id, thread_id, from_address, sent_at, kind, decision, executed, code_version)
++    VALUES ('other', 't-other', 'sam@client.example', ${iso(now - 60 * MIN)}, 'handoff', ${JSON.stringify({ kind: "handoff", reasons: ["2026-10-20 is within 7 days of the email: a person creates it"] })}::jsonb, 'null'::jsonb, 'test')`;
++
++  console.log("\nthe reader still fails");
++  const tried: string[] = [];
++  const failing = async (id: string) => { tried.push(id); };
++  const r = await retryUnread({ decide: failing, now, limit: 10 });
++  ok(JSON.stringify([...tried].sort()) === JSON.stringify(["again", "due"]), "reads again the one 10 min old and the one whose second wait (15 min) is over", tried);
++  ok(!tried.includes("fresh"), "not one read 2 min ago (waits 5)");
++  ok(!tried.includes("waiting"), "not one whose last try was 10 min ago after a first retry (waits 15)");
++  ok(!tried.includes("spent"), `not one already tried ${UNREAD_RETRIES} times`);
++  ok(!tried.includes("other"), "not a hand-off for any other reason");
++  const [due] = (await sql`SELECT decision FROM v2_decisions WHERE message_id = 'due'`) as any[];
++  ok(due.decision.reads === 1 && !!due.decision.read_at, "a failed try is counted on the card", due.decision);
++  ok(r.retried.length === 2, "and reported", r);
++
++  console.log("\nthe reader succeeds");
++  await unread("heals", iso(now - 10 * MIN));
++  const healing = async (id: string) => {
++    await sql`UPDATE v2_decisions SET kind = 'write', decision = ${JSON.stringify({ kind: "write", ops: [], why: ["read on retry"] })}::jsonb WHERE message_id = ${id}`;
++  };
++  await retryUnread({ decide: healing, now, limit: 10 });
++  const [h] = (await sql`SELECT kind, decision FROM v2_decisions WHERE message_id = 'heals'`) as any[];
++  ok(h.kind === "write" && h.decision.reads === undefined, "the new decision stands, with no try counted on it", h);
++
++  if (fails) { console.log(`\n${fails} FAILED`); process.exit(1); }
++  console.log("\nall passed");
++})().catch((e) => { console.error(e); process.exit(1); });

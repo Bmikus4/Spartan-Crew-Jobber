@@ -254,9 +254,22 @@ this file as it stood.
 ## Blockers
 none
 
+## Session 6 (10-26 evening; the owner: "finish the next phase ... the phase after that ... take good notes ... stop when you're done building ... thorough audits ... opened in my browser")
+- [x] Checks first: nothing writes orders (0 API rows in 15,049 OnSinch audit rows since 10-21); the TV is current and every
+      write or hand-off since 10-23 is accounted for (audit/verification-2026-10-26.md). Two faults: a 429 read failure shown
+      as Needs Created for 3 days; old open needs never age.
+- [x] Next phase closed (eval/next-block.md): N2's fixes 3 and 5 closed without code, with evidence (a grounded "add 3" is a
+      chief-rule question; the question has no "?" sentence). N3: dev-2 writes 7/2/11, unchanged by N2.
+- [x] Phase after: Phase C, current-mail correctness (eval/phase-c.md, eval/patches/c-current-mail.diff): venue matching
+      (2 of 4 places fixed), the bot's own runs counted (3 dev-2 POs were artefacts), failed reads retried (retryUnread).
+      dev writes 14/4/5, dev-2 10/2/8; recall unchanged (133/184, 60/69).
+- [x] Audits: audit/self-audit-2026-10-26.md (mine) and audit/system-audit-2026-10-26.md (independent agent), published as
+      one page and opened for the owner: https://claude.ai/artifact/Npsy28gT3r7uQ6wSBgvwv3
+STOP after the audits (the owner's instruction). Nothing ships without the owner's yes.
+
 ## Next action
-In C:/Users/thera/spartan-v2-n1: N2 fix 3 (add-N vs N-in-all as a grounding check on crew_add's quoted words), then N3 on
-dev-2 (writes-run --set dev-2, run.ts recall). Nothing ships; writes stay off. On or after
+Await the owner on the audits' decisions (audit/self-audit-2026-10-26.md §7). Held work: the 5-diff stack in
+C:/Users/thera/spartan-v2-n1 (= items-1-3-runtime, item-4-scoring, n1-write-judging, n2-planner-ops, c-current-mail). Nothing ships; writes stay off. On or after
 2026-10-28 16:06Z: the pause-window store (scripts/backfill-pause-window.mts store). On 10-29: label W2 (eval/dev-windows.md).
 Worktrees p1, i14, n1, rd, rdh, stack hold junctions to this checkout: unlink each junction and verify before removing any of them
 (audit/incident-2026-10-26-tmp-data.md).

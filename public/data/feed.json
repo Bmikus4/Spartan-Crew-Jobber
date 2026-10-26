@@ -5035,5 +5035,23 @@
    "eval/next-block.md",
    "eval/patches/n2-planner-ops.diff"
   ]
+ },
+ {
+  "id": "S-0231",
+  "ts": "2026-10-26T21:52:23+00:00",
+  "kind": "measurement",
+  "headline": "Phase C held: dev-2 writes 7/2/11 -> 10/2/8, recall unchanged; 0 order writes since 10-21; self + system audits",
+  "subject": "Phase C current-mail fixes are held as a diff, and both 10-26 audits are recorded",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 219,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  },
+  "sources": [
+   "eval/phase-c.md",
+   "audit/verification-2026-10-26.md"
+  ]
  }
 ]

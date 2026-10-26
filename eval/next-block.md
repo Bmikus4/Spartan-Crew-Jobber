@@ -48,7 +48,7 @@ audit/checkpoint-B-response.md §7. Sandbox only, $0. **Nothing is deployed, and
     - 1a1308b99b2eaf9b: the planned new shift that staff built as positions on the existing shift.
 - **The scorer no longer hides the planner's errors behind its own artefacts.** What is left wrong is the work of N2.
 
-## N2: planner op fixes (built in the sandbox; held)
+## N2: planner op fixes (built in the sandbox; held; closed 10-26)
 
 **Diff:** `eval/patches/n2-planner-ops.diff` (sha256 5e15c0445f0373fb), stacked on n1.
 - Files: plan.ts, reasons.ts (codes for the new hand-offs), and 2 tests.
@@ -61,8 +61,8 @@ audit/checkpoint-B-response.md §7. Sandbox only, $0. **Nothing is deployed, and
 | 1 | 1a13585d743572a8 | A re-time naming crew_chief or a trade moves only those positions. A trade OnSinch books as plain crew hands off. | test/planNamedRoleRetime.ts: 6 checks, 5 red on the unfixed planner |
 | 2 | 1a13fea576aeda13, 1a154d69fc48ba38 | A crew change carrying hours other than its shift's hands off (request_unsupported). | test/planCrewHours.ts: 7 checks, 5 red unfixed (with 4) |
 | 4 | 1a121640a61d9b46 | Two crew counts, or two times, for one shift in one email hand off. So does the same op twice on one position (request_inconsistent). | test/planCrewHours.ts |
-| 3 | 1a158a5e6bd47095 | **Not built.** "Add 3" read where the client meant 3 in all. Telling them apart needs the reading's quoted words; that is a grounding check for the next step. | |
-| 5 | 1a139bb8ded24cbd | **Not built.** An availability question planned as edits. That is the reader's intent, so it belongs with the reader work. | |
+| 3 | 1a158a5e6bd47095 | **Closed, not built.** The quoted crew words do carry an adding word (checked as a boolean, 10-26), so the reading is grounded. Staff's correction was cancelling the chief Ben's rule added on a shift growing to 4. That is a business-rule question for the owner and Paz (does a client's "add 3" on a shift of 1 get a chief?), not a planner bug. | |
+| 5 | 1a139bb8ded24cbd | **Closed, not built.** None of the request's quoted words sits in a sentence ending "?" (checked as a boolean), so code cannot tell the question apart. It is the reader's intent: reader work, with the owner's approval. | |
 
 ## N3: re-measured on dev ($0, the fresh copy)
 
@@ -82,7 +82,17 @@ audit/checkpoint-B-response.md §7. Sandbox only, $0. **Nothing is deployed, and
     - two trade mixes on creates.
 - **Recall unchanged:** run.ts replay on dev gives 133/184, the same as HEAD. The 4 hand-offs are listed cards, so
   review_rate moves 125 → 129 of 152 items, and display precision is unchanged.
-- **dev-2 is not run yet.** It is the next measurement, with fixes 3 and 5.
+- **dev-2 (233 of 238 read by the current reader), 20 replay writes: 7 completed, 2 partial, 11 wrong, the same with and
+  without N2.** None of N2's fixes fires on current mail. The 11 wrong:
+  - 3 creates booked a new place, or another existing one, where staff used a known venue: 1a14063b8d8dd75c,
+    1a15984719fbd60e, 1a15984f57ab3251;
+  - 3 PO writes staff never made: 1a1453ad2be0aa98, 1a145583d37f41bc, 1a159e4c31d0440e;
+  - 3 creates whose shifts differ from staff's: 1a153e512dae2620 (split differently), 1a144f983605bc19 (end time),
+    1a1541de84b036b8 (staff made nothing; it is an open card on the TV);
+  - 1 chief-rule disagreement (1a158a5e6bd47095);
+  - 1 cancel staff did not make (1a163dd1e345c607).
+- **So the next phase is current-mail write correctness:** venue resolution on creates, then PO writes
+  (eval/phase-c.md).
 
 ## Appendix: the N2 case notes as first written
 
