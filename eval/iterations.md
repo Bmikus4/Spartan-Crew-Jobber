@@ -266,3 +266,66 @@ step has read, from after the 10-22 snapshot (Session 4 plan, R5).
   - one split a shift differently and booked a trade the email did not name;
   - one has no staff act in the truth window.
   - No rule is justified on one case each.
+
+## Checkpoint run: the prospective set, scored once. 2026-10-26
+
+The set is mail sent after the 10-22 copy, 10-23..10-25:
+- read from the 10-26 copy, taken read-only;
+- 79 emails, two blind readers agreeing on 75/79, the third settling the 4 splits;
+- locked as test before any run (7f277f8725036c76).
+
+| prospective, B42 (24) | production, as shown | HEAD replay | patch without the display rule | whole patch |
+|---|---|---|---|---|
+| inquiry_recall | 20/24 = 83.3% (CI 62.6-95.3) | 20/24 | 20/24 | 20/24 |
+| items / display_precision B42 | 23 / 87.0% | 23 / 87.0% | 29 / 69.0% | 30 / 66.7% |
+| writes / new-order proposals | | 13 / 15 | | 13 / 15, same ids |
+
+- **The 4 misses are all `none_nothing_to_do`.** The model read "no change asked for" where both readers read a change or a new booking. The patch has nothing for them.
+- **The patch adds 6 acceptance cards and 1 reply card.** The labels exclude the acceptances as already done (production said "already booked" on 4).
+  - Staff then edited 3 of those 4 quote orders: admin notes, team descriptions, contact lists. That is completing the quote order.
+  - If that counts as booking work, production is 20/28 and the patch 24/28. This is the owner's definition to give; the labels were not changed after seeing results.
+- **The dev gains did not show on clean mail.** With n = 24 a small gain cannot be seen either.
+
+## Iteration 5: red-team-B2's hits on the patch. 2026-10-26, dev
+
+audit/red-team-B2.md reproduced every dev column and landed 1 decision-changing hit, 4 material and 7 minor. Changes to the held patch (now 23 files):
+- **B2-1: the burst rule (iteration 4) is removed.**
+  - 7 of its 8 dev cards were drawn "Order Needs Created" with no order; 5 were on emails the readers do not call a new booking, one of them a cancellation of a named booking.
+  - Its gain was on dev only, chosen on dev, and it fired 0 times on the prospective set.
+  - The read-together loss stays a finding for the reader. The 5 read-together misses return.
+- **B2-7: the crew-count parser's added verbs** (change, reduce, drop, cut, bring, lower, decrease, amend) count a number only when the words between name the crew, and never a time or a place.
+  - "Change the start time to 8:00" read as 8 crew, which let a misread count pass the grounding check.
+  - test/v2Ground.ts +3.
+  - Over all 514 prospective texts (bodies, subjects and the readings' quotes), the scored parser and this one give identical counts. So the prospective figures stand for this patch without a second scoring.
+- **B2-8: the failure check** adds the bot finding several company options on OnSinch's page, and a write naming a contact the client does not hold.
+  - Over the 847 stored decisions it reports 9: 2 read or plan failures, 3 stops, 2 page failures, 2 contacts.
+  - The other 16 blocked writes are rule refusals: signed-on crew 13, workers on a position 3.
+  - test/systemFailureToOwner.ts +2.
+
+| metric (dev, B42) | production, as shown | HEAD replay | patch without the display rule | whole patch |
+|---|---|---|---|---|
+| inquiry_recall | 121/184 = 65.8% | 133/184 = 72.3% | 151/184 = 82.1% | **165/184 = 89.7% (19 silent; CI 84.3-93.7)** |
+| display_precision, any request / B42 | / 82.4% | 96.1% / 84.9% | 95.8% / 77.0% | 95.8% / 74.1% |
+| none_precision | | 70/88 = 79.5% | 70/88 = 79.5% | 70/88 = 79.5% |
+| review_rate | 88.7% | 82.2% | 85.9% | 87.5% |
+| writes / new-order proposals | | 27 / 88 | | 27 / 88, same ids, 0 added |
+
+The 19 left:
+- none_nothing_to_do 8;
+- none_read_together 5;
+- none_already_as_asked 4;
+- request_unsupported 1;
+- booking_not_identified 1.
+
+**B2-2 changes what the dev misses mean.** Production switched its reader to another model on 10-15 (275c296), and the prompt changed again on 10-20 and 10-23.
+- All 11 dev misses blamed on the reader were decided 10-09..10-15, before the switch.
+- Production's silent reply cards on B42 inquiries are 33 of 184 on dev, but 0 of 24 on the prospective set.
+- So the display rule fixes a failure that has not been seen on current mail. And the only misreads by the current reader are the 4 locked test emails. A reader-prompt change has no clean set to tune on until current-reader mail is labelled as a new dev window.
+
+**Staff work after the prospective acceptances** (audit rows on each quote order's Job, SlotTeam and Slot, after the email; field names only):
+- R11806 (1a1685bf51fb7ef6): 7 rows, Job admin_note, SlotTeam description and Contactlist;
+- R11807 (1a1685cd856e3d9a): 4 rows, SlotTeam description and Contactlist, Job admin_note;
+- R11827 (1a16915c98972d9e): 6 rows, SlotTeam description and Contactlist;
+- R11838 (1a1695fbc4797b55): 0 rows.
+
+All four orders stay status 0 with no confirm row.

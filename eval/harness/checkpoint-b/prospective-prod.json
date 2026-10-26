@@ -1,0 +1,777 @@
+{
+ "mode": "score-production (labels prospective, 79 emails)",
+ "set": "test",
+ "git": "bdf29fb9bb04+dirty",
+ "dataset": "c1e3618768a1fc8b",
+ "labels": "6a9d545a23025055",
+ "split": "7f277f8725036c76",
+ "harness": "real-1",
+ "at": "2026-10-26T02:29:45.539Z",
+ "n": 79,
+ "display": "frozen",
+ "metrics": {
+  "n": 79,
+  "provisional": 0,
+  "outcomes": {
+   "none": 55,
+   "needs-reply": 1,
+   "listed": 23,
+   "check": 0
+  },
+  "items": 23,
+  "views": [
+   {
+    "name": "B42 (working headline)",
+    "inquiries": 24,
+    "items": 20,
+    "silent": 4,
+    "recall": "20/24 = 83.3% (CI 62.6-95.3)",
+    "silent_ids": [
+     "1a168d83b151f870",
+     "1a16a147cedc24dd",
+     "1a16d5c74ba606ad",
+     "1a16d8ca05a1fea7"
+    ]
+   },
+   {
+    "name": "booking work only",
+    "inquiries": 16,
+    "items": 12,
+    "silent": 4,
+    "recall": "12/16 = 75.0% (CI 47.6-92.7)",
+    "silent_ids": [
+     "1a168d83b151f870",
+     "1a16a147cedc24dd",
+     "1a16d5c74ba606ad",
+     "1a16d8ca05a1fea7"
+    ]
+   },
+   {
+    "name": "every quote counted",
+    "inquiries": 27,
+    "items": 21,
+    "silent": 6,
+    "recall": "21/27 = 77.8% (CI 57.7-91.4)",
+    "silent_ids": [
+     "1a1678c810c700fa",
+     "1a168d83b151f870",
+     "1a1698db8139299b",
+     "1a16a147cedc24dd",
+     "1a16d5c74ba606ad",
+     "1a16d8ca05a1fea7"
+    ]
+   },
+   {
+    "name": "splits resolved by reader-V",
+    "inquiries": 16,
+    "items": 12,
+    "silent": 4,
+    "recall": "12/16 = 75.0% (CI 47.6-92.7)",
+    "silent_ids": [
+     "1a168d83b151f870",
+     "1a16a147cedc24dd",
+     "1a16d5c74ba606ad",
+     "1a16d8ca05a1fea7"
+    ]
+   }
+  ],
+  "headline": {
+   "name": "B42 (working headline)",
+   "inquiries": 24,
+   "items": 20,
+   "silent": 4,
+   "recall": "20/24 = 83.3% (CI 62.6-95.3)",
+   "silent_ids": [
+    "1a168d83b151f870",
+    "1a16a147cedc24dd",
+    "1a16d5c74ba606ad",
+    "1a16d8ca05a1fea7"
+   ]
+  },
+  "silent_miss_count": 4,
+  "inquiry_recall": "20/24 = 83.3% (CI 62.6-95.3)",
+  "display_precision_any_request": "23/23 = 100.0% (CI 85.2-100.0)",
+  "display_precision_b42": "20/23 = 87.0% (CI 66.4-97.2)",
+  "review_rate": "23/23 = 100.0% (CI 85.2-100.0)",
+  "none_precision": "13/15 = 86.7% (CI 59.5-98.3)",
+  "none_recall": "13/17 = 76.5% (CI 50.1-93.2)",
+  "read_together_reached": 0,
+  "repeat_reached": 0,
+  "item_correctness": "not measurable from these labels: no reader recorded which order an email is about",
+  "action_accuracy": "not measurable from these labels: needs the correct order first",
+  "client_resolution_accuracy": "not measurable from these labels: no reader recorded the client",
+  "recall_at_5": "not measurable from these labels: the system stores no candidate list (plan.ts:41-50), and no label names the true order",
+  "selection_given_correct_candidate": "not measurable from these labels: as recall@5",
+  "suppression": {
+   "sender rule (process.ts:161)": 7
+  },
+  "none_by_judgment": {
+   "none_nothing_to_do": 40,
+   "none_already_as_asked": 1,
+   "none_already_booked": 7
+  },
+  "reason_codes": {
+   "none": {
+    "none_nothing_to_do": 40,
+    "none_not_client": 7,
+    "none_already_as_asked": 1,
+    "none_already_booked": 7
+   },
+   "listed": {
+    "write": 13,
+    "policy_lead_days": 6,
+    "reading_unproven": 2,
+    "client_unknown": 1,
+    "system_failed": 1
+   },
+   "needs-reply": {
+    "reply_detail_missing": 1
+   }
+  },
+  "latency": {
+   "unit": "min",
+   "n": 79,
+   "p50": 0.8797,
+   "p95": 1.7414333333333334
+  },
+  "cost": "not measurable: the gold copy stores no model cost (readings carry no meta)",
+  "buckets_by_ask": [
+   [
+    "nothing asked (both readers)",
+    {
+     "n": 28,
+     "none": 28,
+     "needs-reply": 0,
+     "listed": 0,
+     "check": 0
+    }
+   ],
+   [
+    "other request (PO, question) or readers split on it",
+    {
+     "n": 11,
+     "none": 9,
+     "needs-reply": 0,
+     "listed": 2,
+     "check": 0
+    }
+   ],
+   [
+    "booking work: new booking",
+    {
+     "n": 9,
+     "none": 1,
+     "needs-reply": 0,
+     "listed": 8,
+     "check": 0
+    }
+   ],
+   [
+    "quote with day and crew (B42 inquiry)",
+    {
+     "n": 8,
+     "none": 0,
+     "needs-reply": 0,
+     "listed": 8,
+     "check": 0
+    }
+   ],
+   [
+    "booking work: change or cancel",
+    {
+     "n": 7,
+     "none": 3,
+     "needs-reply": 0,
+     "listed": 4,
+     "check": 0
+    }
+   ],
+   [
+    "booking work: already done when decided (excluded)",
+    {
+     "n": 7,
+     "none": 7,
+     "needs-reply": 0,
+     "listed": 0,
+     "check": 0
+    }
+   ],
+   [
+    "booking work: OnSinch portal notice (excluded)",
+    {
+     "n": 6,
+     "none": 6,
+     "needs-reply": 0,
+     "listed": 0,
+     "check": 0
+    }
+   ],
+   [
+    "quote without shifts",
+    {
+     "n": 3,
+     "none": 1,
+     "needs-reply": 1,
+     "listed": 1,
+     "check": 0
+    }
+   ]
+  ],
+  "buckets_by_taxonomy": []
+ },
+ "rows": [
+  {
+   "id": "1a1678c810c700fa",
+   "outcome": "none",
+   "card": null,
+   "code": "none_nothing_to_do",
+   "proposes_new": false
+  },
+  {
+   "id": "1a167c1b71dee908",
+   "outcome": "none",
+   "card": null,
+   "code": "none_nothing_to_do",
+   "proposes_new": false
+  },
+  {
+   "id": "1a167c81a62827fe",
+   "outcome": "none",
+   "card": null,
+   "code": "none_nothing_to_do",
+   "proposes_new": false
+  },
+  {
+   "id": "1a167e8a2be585ab",
+   "outcome": "listed",
+   "card": "needs-created",
+   "code": "write",
+   "proposes_new": true
+  },
+  {
+   "id": "1a1680d80d8f93e8",
+   "outcome": "none",
+   "card": null,
+   "code": "none_not_client",
+   "proposes_new": false
+  },
+  {
+   "id": "1a168119dc10fab2",
+   "outcome": "none",
+   "card": null,
+   "code": "none_nothing_to_do",
+   "proposes_new": false
+  },
+  {
+   "id": "1a1681cfdfa5e21b",
+   "outcome": "none",
+   "card": null,
+   "code": "none_already_as_asked",
+   "proposes_new": false
+  },
+  {
+   "id": "1a1681f052c7dee0",
+   "outcome": "listed",
+   "card": "needs-created",
+   "code": "write",
+   "proposes_new": true
+  },
+  {
+   "id": "1a168216318457a3",
+   "outcome": "listed",
+   "card": "needs-updated",
+   "code": "write",
+   "proposes_new": false
+  },
+  {
+   "id": "1a1682d3c1fbfa8e",
+   "outcome": "none",
+   "card": null,
+   "code": "none_not_client",
+   "proposes_new": false
+  },
+  {
+   "id": "1a1683286093221d",
+   "outcome": "listed",
+   "card": "needs-updated",
+   "code": "write",
+   "proposes_new": false
+  },
+  {
+   "id": "1a1683652c046c20",
+   "outcome": "none",
+   "card": null,
+   "code": "none_nothing_to_do",
+   "proposes_new": false
+  },
+  {
+   "id": "1a1683faceefa50f",
+   "outcome": "none",
+   "card": null,
+   "code": "none_nothing_to_do",
+   "proposes_new": false
+  },
+  {
+   "id": "1a1684c735040f8d",
+   "outcome": "none",
+   "card": null,
+   "code": "none_nothing_to_do",
+   "proposes_new": false
+  },
+  {
+   "id": "1a1684ccee5fcdef",
+   "outcome": "none",
+   "card": null,
+   "code": "none_nothing_to_do",
+   "proposes_new": false
+  },
+  {
+   "id": "1a1685bf51fb7ef6",
+   "outcome": "none",
+   "card": null,
+   "code": "none_already_booked",
+   "proposes_new": false
+  },
+  {
+   "id": "1a1685cd856e3d9a",
+   "outcome": "none",
+   "card": null,
+   "code": "none_already_booked",
+   "proposes_new": false
+  },
+  {
+   "id": "1a1685f74d946a1d",
+   "outcome": "listed",
+   "card": "needs-updated",
+   "code": "write",
+   "proposes_new": false
+  },
+  {
+   "id": "1a168607d1875747",
+   "outcome": "none",
+   "card": null,
+   "code": "none_nothing_to_do",
+   "proposes_new": false
+  },
+  {
+   "id": "1a16867fcd072728",
+   "outcome": "listed",
+   "card": "needs-created",
+   "code": "policy_lead_days",
+   "proposes_new": true
+  },
+  {
+   "id": "1a168782b7d8fdcb",
+   "outcome": "none",
+   "card": null,
+   "code": "none_nothing_to_do",
+   "proposes_new": false
+  },
+  {
+   "id": "1a16878c281060ba",
+   "outcome": "listed",
+   "card": "needs-created",
+   "code": "policy_lead_days",
+   "proposes_new": true
+  },
+  {
+   "id": "1a1687ca122a4c8d",
+   "outcome": "listed",
+   "card": "needs-created",
+   "code": "write",
+   "proposes_new": true
+  },
+  {
+   "id": "1a1687f49deb83d9",
+   "outcome": "listed",
+   "card": "needs-created",
+   "code": "write",
+   "proposes_new": true
+  },
+  {
+   "id": "1a168828f23ef2c7",
+   "outcome": "listed",
+   "card": "needs-updated",
+   "code": "write",
+   "proposes_new": false
+  },
+  {
+   "id": "1a1688a18bd24fac",
+   "outcome": "none",
+   "card": null,
+   "code": "none_nothing_to_do",
+   "proposes_new": false
+  },
+  {
+   "id": "1a1688ccb20380d1",
+   "outcome": "listed",
+   "card": "needs-created",
+   "code": "write",
+   "proposes_new": true
+  },
+  {
+   "id": "1a16891679d86e11",
+   "outcome": "none",
+   "card": null,
+   "code": "none_nothing_to_do",
+   "proposes_new": false
+  },
+  {
+   "id": "1a168a2df50e3c77",
+   "outcome": "listed",
+   "card": "needs-updated",
+   "code": "reading_unproven",
+   "proposes_new": false
+  },
+  {
+   "id": "1a168a43810d3d7d",
+   "outcome": "none",
+   "card": null,
+   "code": "none_not_client",
+   "proposes_new": false
+  },
+  {
+   "id": "1a168b35a7903fe9",
+   "outcome": "none",
+   "card": null,
+   "code": "none_nothing_to_do",
+   "proposes_new": false
+  },
+  {
+   "id": "1a168b38cc024aec",
+   "outcome": "listed",
+   "card": "needs-created",
+   "code": "client_unknown",
+   "proposes_new": true
+  },
+  {
+   "id": "1a168b92e69f07b8",
+   "outcome": "none",
+   "card": null,
+   "code": "none_not_client",
+   "proposes_new": false
+  },
+  {
+   "id": "1a168ba7b6099b3c",
+   "outcome": "none",
+   "card": null,
+   "code": "none_nothing_to_do",
+   "proposes_new": false
+  },
+  {
+   "id": "1a168baac427e271",
+   "outcome": "none",
+   "card": null,
+   "code": "none_not_client",
+   "proposes_new": false
+  },
+  {
+   "id": "1a168bebd33a2c6e",
+   "outcome": "listed",
+   "card": "needs-created",
+   "code": "policy_lead_days",
+   "proposes_new": true
+  },
+  {
+   "id": "1a168c10aef60790",
+   "outcome": "none",
+   "card": null,
+   "code": "none_not_client",
+   "proposes_new": false
+  },
+  {
+   "id": "1a168d1ac3896820",
+   "outcome": "none",
+   "card": null,
+   "code": "none_nothing_to_do",
+   "proposes_new": false
+  },
+  {
+   "id": "1a168d20bdfff81e",
+   "outcome": "none",
+   "card": null,
+   "code": "none_not_client",
+   "proposes_new": false
+  },
+  {
+   "id": "1a168d83b151f870",
+   "outcome": "none",
+   "card": null,
+   "code": "none_nothing_to_do",
+   "proposes_new": false
+  },
+  {
+   "id": "1a168e9898d4caf3",
+   "outcome": "none",
+   "card": null,
+   "code": "none_nothing_to_do",
+   "proposes_new": false
+  },
+  {
+   "id": "1a168f3900705081",
+   "outcome": "listed",
+   "card": "needs-created",
+   "code": "policy_lead_days",
+   "proposes_new": true
+  },
+  {
+   "id": "1a16902a3939cb51",
+   "outcome": "none",
+   "card": null,
+   "code": "none_nothing_to_do",
+   "proposes_new": false
+  },
+  {
+   "id": "1a16908670736680",
+   "outcome": "none",
+   "card": null,
+   "code": "none_nothing_to_do",
+   "proposes_new": false
+  },
+  {
+   "id": "1a16915c98972d9e",
+   "outcome": "none",
+   "card": null,
+   "code": "none_already_booked",
+   "proposes_new": false
+  },
+  {
+   "id": "1a1691ac39c29035",
+   "outcome": "none",
+   "card": null,
+   "code": "none_nothing_to_do",
+   "proposes_new": false
+  },
+  {
+   "id": "1a1691cf73519e44",
+   "outcome": "none",
+   "card": null,
+   "code": "none_already_booked",
+   "proposes_new": false
+  },
+  {
+   "id": "1a16928aac676e7c",
+   "outcome": "none",
+   "card": null,
+   "code": "none_nothing_to_do",
+   "proposes_new": false
+  },
+  {
+   "id": "1a1692a52e75811d",
+   "outcome": "none",
+   "card": null,
+   "code": "none_nothing_to_do",
+   "proposes_new": false
+  },
+  {
+   "id": "1a1692e406011b69",
+   "outcome": "none",
+   "card": null,
+   "code": "none_nothing_to_do",
+   "proposes_new": false
+  },
+  {
+   "id": "1a1693f954a8bffa",
+   "outcome": "listed",
+   "card": "needs-created",
+   "code": "policy_lead_days",
+   "proposes_new": true
+  },
+  {
+   "id": "1a1694adb26be49f",
+   "outcome": "none",
+   "card": null,
+   "code": "none_nothing_to_do",
+   "proposes_new": false
+  },
+  {
+   "id": "1a169500bcbc38c2",
+   "outcome": "none",
+   "card": null,
+   "code": "none_nothing_to_do",
+   "proposes_new": false
+  },
+  {
+   "id": "1a169539cc7a2408",
+   "outcome": "none",
+   "card": null,
+   "code": "none_already_booked",
+   "proposes_new": false
+  },
+  {
+   "id": "1a16957b48f68328",
+   "outcome": "none",
+   "card": null,
+   "code": "none_nothing_to_do",
+   "proposes_new": false
+  },
+  {
+   "id": "1a1695fbc4797b55",
+   "outcome": "none",
+   "card": null,
+   "code": "none_already_booked",
+   "proposes_new": false
+  },
+  {
+   "id": "1a1696c2511347f0",
+   "outcome": "listed",
+   "card": "needs-created",
+   "code": "system_failed",
+   "proposes_new": true
+  },
+  {
+   "id": "1a169712b33a563d",
+   "outcome": "none",
+   "card": null,
+   "code": "none_already_booked",
+   "proposes_new": false
+  },
+  {
+   "id": "1a16981f8e34486e",
+   "outcome": "listed",
+   "card": "needs-updated",
+   "code": "write",
+   "proposes_new": false
+  },
+  {
+   "id": "1a1698c120d46942",
+   "outcome": "listed",
+   "card": "needs-created",
+   "code": "write",
+   "proposes_new": true
+  },
+  {
+   "id": "1a1698db8139299b",
+   "outcome": "needs-reply",
+   "card": "needs-reply",
+   "code": "reply_detail_missing",
+   "proposes_new": false
+  },
+  {
+   "id": "1a169a81fd58d1c5",
+   "outcome": "none",
+   "card": null,
+   "code": "none_nothing_to_do",
+   "proposes_new": false
+  },
+  {
+   "id": "1a169b8092b3001b",
+   "outcome": "none",
+   "card": null,
+   "code": "none_nothing_to_do",
+   "proposes_new": false
+  },
+  {
+   "id": "1a169b85bec7915a",
+   "outcome": "none",
+   "card": null,
+   "code": "none_nothing_to_do",
+   "proposes_new": false
+  },
+  {
+   "id": "1a16a147cedc24dd",
+   "outcome": "none",
+   "card": null,
+   "code": "none_nothing_to_do",
+   "proposes_new": false
+  },
+  {
+   "id": "1a16a329900ebf2c",
+   "outcome": "none",
+   "card": null,
+   "code": "none_nothing_to_do",
+   "proposes_new": false
+  },
+  {
+   "id": "1a16a519f68078d4",
+   "outcome": "none",
+   "card": null,
+   "code": "none_nothing_to_do",
+   "proposes_new": false
+  },
+  {
+   "id": "1a16a72ebd3b120d",
+   "outcome": "listed",
+   "card": "needs-updated",
+   "code": "write",
+   "proposes_new": false
+  },
+  {
+   "id": "1a16aaea2690dc49",
+   "outcome": "none",
+   "card": null,
+   "code": "none_nothing_to_do",
+   "proposes_new": false
+  },
+  {
+   "id": "1a16d5c74ba606ad",
+   "outcome": "none",
+   "card": null,
+   "code": "none_nothing_to_do",
+   "proposes_new": false
+  },
+  {
+   "id": "1a16d89e6cd5024a",
+   "outcome": "none",
+   "card": null,
+   "code": "none_nothing_to_do",
+   "proposes_new": false
+  },
+  {
+   "id": "1a16d8ca05a1fea7",
+   "outcome": "none",
+   "card": null,
+   "code": "none_nothing_to_do",
+   "proposes_new": false
+  },
+  {
+   "id": "1a16e87c573beb16",
+   "outcome": "none",
+   "card": null,
+   "code": "none_nothing_to_do",
+   "proposes_new": false
+  },
+  {
+   "id": "1a16fab720c76f92",
+   "outcome": "listed",
+   "card": "needs-created",
+   "code": "policy_lead_days",
+   "proposes_new": true
+  },
+  {
+   "id": "1a16fd765ffb6bcd",
+   "outcome": "none",
+   "card": null,
+   "code": "none_nothing_to_do",
+   "proposes_new": false
+  },
+  {
+   "id": "1a16ffd3ab23404b",
+   "outcome": "listed",
+   "card": "needs-created",
+   "code": "reading_unproven",
+   "proposes_new": true
+  },
+  {
+   "id": "1a1726d572d76ced",
+   "outcome": "none",
+   "card": null,
+   "code": "none_nothing_to_do",
+   "proposes_new": false
+  },
+  {
+   "id": "1a1738484e06397f",
+   "outcome": "listed",
+   "card": "needs-updated",
+   "code": "write",
+   "proposes_new": false
+  },
+  {
+   "id": "1a1739fda74d919b",
+   "outcome": "none",
+   "card": null,
+   "code": "none_nothing_to_do",
+   "proposes_new": false
+  }
+ ]
+}

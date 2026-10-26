@@ -29,6 +29,10 @@ for (const c of [...new Set(emails.map((e) => Number(e.company_id)))]) {
     const who = { order_id: Number(o.id), number: String(o.number), company_id: c };
     orderRec.set(Number(o.id), o);
     owner.set(`Order:${o.id}`, who);
+    // An Order's own audit rows (cancel, copy, an edit of the Order) name it by its NUMBER; only
+    // order_create names the id. Numbers and ids overlap: read as ids, 26 cancels and PO edits and a
+    // copy were filed under another order, and the rest dropped (eval/item-correctness.md, 10-26).
+    owner.set(`OrderNo:${o.number}`, who);
     for (const j of ([] as any[]).concat(o.Job ?? [])) {
       owner.set(`Job:${j.id}`, who);
       for (const tm of ([] as any[]).concat(j.SlotTeam ?? [])) {
@@ -55,13 +59,14 @@ for (const a of audits) {
   let what = "";
   let key = "";
   let changes: Act["changes"];
-  if (a.action === "order_create" || a.action === "order_create_by_copy") { what = "create order"; key = `Order:${d.id}`; }
-  else if (a.action === "order_cancel") { what = "cancel order"; key = `Order:${d.id}`; }
+  if (a.action === "order_create") { what = "create order"; key = `Order:${d.id}`; }
+  else if (a.action === "order_create_by_copy") { what = "create order"; key = `OrderNo:${d.id}`; }
+  else if (a.action === "order_cancel") { what = "cancel order"; key = `OrderNo:${d.id}`; }
   else if (a.action === "common_create" && /^(SlotTeam|Slot|Job)$/.test(d.model)) { what = `add ${d.model === "SlotTeam" ? "shift" : d.model === "Slot" ? "position" : "job"}`; key = String(d.data?.path ?? "").split("/")[0] || `${d.model}:${d.id}`; }
   else if (a.action === "common_change") {
     const fields = Object.entries(d.diffChanges ?? {}).flatMap(([m, f]) => Object.keys(f as any).map((k) => `${m}.${k}`)).filter((f) => BOOKING.test(f));
     if (!fields.length) continue;
-    what = `edit ${[...new Set(fields)].sort().join("+")}`; key = `${d.model}:${d.id}`;
+    what = `edit ${[...new Set(fields)].sort().join("+")}`; key = d.model === "Order" ? `OrderNo:${d.id}` : `${d.model}:${d.id}`;
     changes = Object.fromEntries(fields.filter((f) => f.startsWith(`${d.model}.`)).map((f) => [f.split(".")[1], (d.diffChanges as any)[d.model][f.split(".")[1]]]));
   } else continue;
   const who = owner.get(key);

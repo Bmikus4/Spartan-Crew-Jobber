@@ -3,7 +3,7 @@
 Updated: 2026-10-25   Session: 2
 
 ## Phase and section
-Phase: 1   Current section: §8 Sandbox + §13.1 step 1 (harness, isolation)   Status: in progress
+Phase: 1   Current section: §14 Checkpoint B   Status: awaiting checkpoint
 
 Checkpoint A passed on 10-25: the owner, "bro the alignment is for you wtf" (decisions/2026-10-25-alignment-is-the-orchestrators.md).
 The eight questions were settled from the owner's own rulings or held without blocking (same file).
@@ -69,9 +69,9 @@ and I gate every merge. Nothing is deployed: shipping waits for Checkpoint B (§
       the replay (H3, H5, H8).
 - [x] R4 DONE 10-26 (iteration 4): burst rule + repeat reach, dev 91.8% (15 silent, >=11 the reader's); no evidence-backed $0 recall move left; crew-chief 3 = Ben's rule's 4%, creates 3 single cases. Was: $0 levers, largest first, each on dev: none_thread_history (2), crew-chief composition (3 wrong writes),
       time values (2), new-order composition (3), already-as-asked settled by a blind reader (4).
-- [~] R5 RUNNING 10-26: copy .tmp-data/gold-1026 taken read-only (936 decisions; 79 client emails 10-23..10-25), production-shown-gold-1026.jsonl frozen at bdf29fb (app = 90529c9), readers A5/B5 dispatched. A clean test set (H1): mail after the 10-22 snapshot, a fresh read-only snapshot in a new directory, two blind
+- [x] R5 DONE 10-26 (569d4bb, S-0226): prospective set 79 emails locked 7f277f8725036c76, scored once: production 20/24, HEAD 20/24, patch 20/24; all 4 misses none_nothing_to_do (the reader). A clean test set (H1).
       readers + a third, locked before any step reads it. The 238 stay as a second dev set, named as tuned-on.
-- [ ] R6 final-state.md rewritten (H1-H15 answered), red team again, Checkpoint B.
+- [x] R6 DONE 10-26: red-team-B2 (1 decision-changing, 4 material) answered in iteration 5 (burst rule removed, parser and failure check fixed); item_correctness measured (accepted, c0245716): 8/152 HEAD, 8/216 patch; final-state.md + checkpoint-B.md written.
 
 ## Work units (from audit/spec-compliance.md "Order of work"; row ids in brackets)
 - [x] W1 Ledger and decisions: this file rewritten; decisions/ holds the five dated entries (RB2-*, RB3-g, S16-2, S16-3, A2-13)
@@ -133,6 +133,8 @@ and I gate every merge. Nothing is deployed: shipping waits for Checkpoint B (§
 | (none running) | | | | |
 
 Accepted on 10-26: readers A5, B5 (76fe3b9c), 79 prospective emails, 75/79 agree on booking work; third reader Vv3 matched the pair on 7/8 sampled agreements and settled the 4 splits (all A+V).
+Accepted on 10-26: item-correctness c0245716 (headline recounts from its table: 6/152, 6/216; its labels agree with the diagnostic on 65/65 shared items; its two scorer faults confirmed and fixed).
+Returned 10-26: red-team-B2 668a4048 (audit/red-team-B2.md): every dev column reproduced; hits answered in final-state.md.
 Returned 10-26: red-team-B 668a4048 (audit/red-team-B.md): 3 decision-changing, 7 material, 5 minor. H1 re-checked by me (60 of live-week dev in the 238 test); H7 reproduced (harnessReal fails with the patch). Session 4 plan answers each.
 Accepted on 10-25: diagnostic-11-3 7b8bd993 (75/75 as-is codes equal eval/harness/runs/live-week-replay-all.json; headline counts recount from its table).
 Returned 10-25: readers A3, B3, A4, B4 (all 399; strict agreement 785/799 across both batches).
@@ -226,5 +228,4 @@ this file as it stood.
 none
 
 ## Next action
-Sandbox suite with the clock fix (22-file patch): tsc + test:all exit 0, 10-25 night. On red-team-B's return: re-run every decision-changing hit, revise audit/final-state.md, commit through the gate (reports and
-the patch file only; 90529c9 holds the harness, labels and the first patch), then present Checkpoint B (RUNBOOK §6), a hard stop. On or after 2026-10-28 16:06Z: the pause-window store.
+Await owner response to Checkpoint B (audit/checkpoint-B.md). Hard stop: nothing ships, no next phase. On or after 2026-10-28 16:06Z: the pause-window store (scripts/backfill-pause-window.mts store), as ruled.

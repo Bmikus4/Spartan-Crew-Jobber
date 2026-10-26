@@ -107,7 +107,9 @@ for (const a of timeline) {
   let what = "", oid = 0;
   // An Order's own rows name it by its NUMBER (order_cancel, order_confirm_provisional, a change
   // to Order.intern_name), an order_create by its id: numbers and ids overlap, so never mixed.
-  if (a.action === "order_create" || a.action === "order_create_by_copy") { what = "create order"; oid = Number(d.id); }
+  // A copy names the new order by its number too (45 of 48 copies match a number and no id, 10-26).
+  if (a.action === "order_create") { what = "create order"; oid = Number(d.id); }
+  else if (a.action === "order_create_by_copy") { what = "create order"; oid = byNumber.get(String(d.id))?.id ?? 0; }
   else if (a.action === "order_cancel") { what = "cancel order"; oid = byNumber.get(String(d.id))?.id ?? 0; }
   else if (a.action === "order_confirm_provisional") { what = "confirm order"; oid = byNumber.get(String(d.id))?.id ?? 0; }
   else if (a.action === "common_create" && /^(Job|SlotTeam|Slot)$/.test(d.model)) { what = `add ${d.model}`; oid = Number(/^Order:(\d+)/.exec(String(d.data?.path ?? ""))?.[1] ?? 0) || owner.get(`${d.model}:${d.id}`) || 0; }

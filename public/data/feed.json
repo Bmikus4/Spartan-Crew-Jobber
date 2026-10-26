@@ -4961,5 +4961,23 @@
    "eval/iterations.md",
    "eval/harness/labels/split-prospective.json"
   ]
+ },
+ {
+  "id": "S-0227",
+  "ts": "2026-10-26T03:32:14+00:00",
+  "kind": "measurement",
+  "headline": "Checkpoint B: prospective 20/24 all columns; dev 89.7% patch; item_correctness 8/152 HEAD, 8/216 patch",
+  "subject": "Checkpoint B: on mail no step had read, production, HEAD and the held patch all reach 20 of 24",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 219,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  },
+  "sources": [
+   "audit/final-state.md",
+   "eval/item-correctness.md"
+  ]
  }
 ]
