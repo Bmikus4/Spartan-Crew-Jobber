@@ -15,7 +15,7 @@
 // npx tsx test/harnessReal.ts
 // ============================================================================
 import { readFileSync } from "node:fs";
-import { goldPresent } from "../harness/real/data";
+import { goldPresent, textOf } from "../harness/real/data";
 import type { LabelSet } from "../harness/real/labels";
 
 let fails = 0;
@@ -35,7 +35,7 @@ const ok = (c: boolean, m: string, d?: unknown) => { console.log(`  ${c ? "PASS"
   // files: a split file regenerated with a fresh hash still fails, because the lock is this line.
   const LOCKED: Record<LabelSet, string> = { "live-week": "8aaf7ecd8b29ba86", all: "d2790450e2c9ae4f" };
   for (const set of ["live-week", "all"] as LabelSet[]) {
-    ok(serialize(buildLabels(set)) === readFileSync(labelPath(set), "utf8"), `${set}: the label file equals the converted blind reads`);
+    ok(serialize(buildLabels(set)) === textOf(labelPath(set)), `${set}: the label file equals the converted blind reads`);
     const ls = loadLabels(labelPath(set));
     let split: ReturnType<typeof loadSplit> | null = null;
     try { split = loadSplit(splitPath(set)); } catch (e) { ok(false, `${set}: the split loads with its locked hash`, String(e)); }

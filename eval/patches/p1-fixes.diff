@@ -154,14 +154,14 @@ index c69370e..131a64a 100644
    // only jobs with an R and J should be listed, its that every job should HAVE its proper R and J
    // number, and they should always be the correct R and J numbers"). The numbers come only from
 diff --git a/app/lib/feed/v2.ts b/app/lib/feed/v2.ts
-index 19e38ee..d3b5f21 100644
+index 19e38ee..56672c2 100644
 --- a/app/lib/feed/v2.ts
 +++ b/app/lib/feed/v2.ts
 @@ -19,6 +19,7 @@ import type { Op } from "../v2/bot/ops";
  import { londonToUtc, shiftWindow } from "../v2/bot/ops";
  import { rNumbersIn } from "../engine/resolve";
  import { cardNote } from "./cardNote";
-+import { coded } from "../v2/reasons";
++import { coded, systemFailureOf } from "../v2/reasons";
  
  /** One v2_decisions row of kind write or handoff, with its message's subject. */
  export interface V2Row {
@@ -174,7 +174,7 @@ index 19e38ee..d3b5f21 100644
    /** The planner's answer on this email now (v2/replan.ts), when it has been planned again. */
    replan?: Decision | null;
  }
-@@ -64,6 +65,23 @@ function startOf(date: string, start?: string): number {
+@@ -64,6 +65,18 @@ function startOf(date: string, start?: string): number {
    try { return Date.parse(londonToUtc(date, start ?? "00:00")); } catch { return NaN; }
  }
  
@@ -189,16 +189,22 @@ index 19e38ee..d3b5f21 100644
 +  backfill: "an earlier record",
 +};
 +
-+/** The system failed on its own part: a read or plan that failed, or a write stopped part-way (process.ts systemFailureOf). */
-+function isSystemFailure(d: Decision, executed: RunResult[] | null): boolean {
-+  if (executed?.some((r) => r.status === "verified") && executed.some((r) => r.status !== "verified")) return true;
-+  return (coded(d) as { code?: string }).code === "system_failed";
-+}
 +
  /** What a decision says about its card: the kind, the order it is about, what the bot did for it. */
  function classify(row: V2Row, d: Decision) {
    const g = row.grounded;
-@@ -109,6 +127,14 @@ export function v2Source(row: V2Row, now: number): FeedSource {
+@@ -82,7 +95,9 @@ function classify(row: V2Row, d: Decision) {
+   // A thread that names an order, or a request aimed at an existing shift, is an update even
+   // when it also adds a shift: "move the de-rig to Tuesday, and 6 more on Wednesday" (The
+   // Events House, 10-11) read as Needs Created because one of its requests was a new shift.
+-  const aimsAtOrder = !!r_numbers.length || !!order_id || !!g?.requests.some((r) => r.action !== "new_shift" || r.target);
++  // A client accepting a quote is about the quote's order, which OnSinch holds for 54 of 73 (acceptance-study.md):
++  // drawn as Needs Created, staff would build a second order (red-team-B H4).
++  const aimsAtOrder = !!r_numbers.length || !!order_id || !!g?.requests.some((r) => r.action !== "new_shift" || r.target) || coded(d).code === "quote_accepted";
+   const asksNew = g ? !aimsAtOrder && (g.intent === "booking" || g.intent === "quote_request" || g.requests.some((r) => r.action === "new_shift")) : !r_numbers.length;
+   let kind: FeedKind;
+   if (d.kind === "write" && written) kind = creates ? "created-check" : "updated-check";
+@@ -109,6 +124,14 @@ export function v2Source(row: V2Row, now: number): FeedSource {
    const item: (Omit<FeedItem, "green"> & { order_id: number | null }) | null = d.kind === "none" ? null : {
      item_key: `${first.kind}:${row.thread_id}:${first.order_id ?? 0}:${row.message_id}`,
      kind: c.kind, status: STATUS_TEXT[c.kind], at, order_id: c.order_id,
@@ -209,11 +215,11 @@ index 19e38ee..d3b5f21 100644
 +    ...(c.kind === "needs-reply" && (g?.requests.some((r) => r.action !== "other") || g?.intent === "unclear") ? { work: true } : {}),
 +    // What kind of need it is (audit/display-proposals.md B1): the system's own failure, or a
 +    // write that is ready but not run while writes are off. Absent: a decision only a person can make.
-+    ...(isSystemFailure(d, c.executed) ? { cls: "system" as const } : d.kind === "write" && !c.executed?.length ? { cls: "paused" as const } : {}),
++    ...(systemFailureOf(d, c.executed) ? { cls: "system" as const } : d.kind === "write" && !c.executed?.length ? { cls: "paused" as const } : {}),
    };
  
    // A day the planner says is already over is the card's day too, so the card leaves with its job
-@@ -146,6 +172,10 @@ export function v2Source(row: V2Row, now: number): FeedSource {
+@@ -146,6 +169,10 @@ export function v2Source(row: V2Row, now: number): FeedSource {
      // card after the order was deleted. The bot's own orders are linked (links.ts backfillLinks).
      r_number: row.link?.r_number ? `R${String(row.link.r_number).replace(/^R/i, "")}` : null,
      j_number: row.link?.job_id ? `J${row.link.job_id}` : null,
@@ -284,6 +290,27 @@ index 0000000..749ba41
 +}
 +
 +export const QUOTE_ACCEPTED = "the client accepted Spartan's quote: confirm the order in OnSinch";
+diff --git a/app/lib/v2/bot/ops.ts b/app/lib/v2/bot/ops.ts
+index 1dad066..d15987f 100644
+--- a/app/lib/v2/bot/ops.ts
++++ b/app/lib/v2/bot/ops.ts
+@@ -68,9 +68,14 @@ export function londonToUtc(date: string, hhmm: string): string {
+   return new Date(t).toISOString();
+ }
+ 
+-/** UTC instant -> London wall clock, as {date: "YYYY-MM-DD", time: "HH:MM"}. */
++/**
++ * UTC instant -> London wall clock, as {date: "YYYY-MM-DD", time: "HH:MM"}. A string with no zone is
++ * UTC: OnSinch's audit rows write "2026-10-23 07:30:00", and `new Date` would read that in the
++ * machine's zone (4 hours late on a New York box; test/zonelessIsUtc.ts).
++ */
+ export function utcToLondon(iso: string): { date: string; time: string } {
+-  const p = Object.fromEntries(LONDON.formatToParts(new Date(iso)).map((x) => [x.type, x.value]));
++  const zoned = /^\d{4}-\d\d-\d\d[ T]\d\d:\d\d(:\d\d(\.\d+)?)?$/.test(iso) ? iso.replace(" ", "T") + "Z" : iso;
++  const p = Object.fromEntries(LONDON.formatToParts(new Date(zoned)).map((x) => [x.type, x.value]));
+   return { date: `${p.year}-${p.month}-${p.day}`, time: `${p.hour}:${p.minute}` };
+ }
+ 
 diff --git a/app/lib/v2/interpret/ground.ts b/app/lib/v2/interpret/ground.ts
 index b374433..6b06fd9 100644
 --- a/app/lib/v2/interpret/ground.ts
@@ -330,7 +357,7 @@ index b374433..6b06fd9 100644
    return out;
  }
 diff --git a/app/lib/v2/interpret/plan.ts b/app/lib/v2/interpret/plan.ts
-index 4b4b10e..f3f6f1a 100644
+index 4b4b10e..e5846e2 100644
 --- a/app/lib/v2/interpret/plan.ts
 +++ b/app/lib/v2/interpret/plan.ts
 @@ -17,7 +17,7 @@ import { confirms, type Interpretation, type Request } from "./interpret";
@@ -338,7 +365,7 @@ index 4b4b10e..f3f6f1a 100644
  import { fillTimes, pastShifts } from "./assume";
  import { tradeOf, pickProfession, PROFESSION_NAME, type LiveProfession } from "./professions";
 -import { matchCompanyBySender, rNumbersIn, normName } from "../../engine/resolve";
-+import { matchCompanyBySender, rNumbersIn, normName, domainOfEmail } from "../../engine/resolve";
++import { matchCompanyBySender, rNumbersIn, normName, domainOfEmail, CONSUMER_DOMAINS } from "../../engine/resolve";
  import { evidenceMatch, wantOf, BOT_USER, type Found } from "../evidence";
  import { coded } from "../reasons";
  import { findOrder as findByEvidence, companiesOf, coveredBy, stampedSince, type ThreadIn, type ThreadMsg, type StateWorld, type Grounded } from "../threadState";
@@ -353,7 +380,7 @@ index 4b4b10e..f3f6f1a 100644
    /** found: the orders that already hold what the email asks for; the thread is linked to one. */
    | { kind: "none"; reason: string; found?: number[] }) & { code?: string };
  
-@@ -495,8 +497,20 @@ async function decide(msg: Message, i: Interpretation, world: World, threadOrder
+@@ -495,8 +497,22 @@ async function decide(msg: Message, i: Interpretation, world: World, threadOrder
    // person to place. OnSinch's API cannot delete a company, so the bar is high on purpose.
    const STOP = new Set(["ltd", "limited", "uk", "the", "and", "group", "events", "event", "solutions", "services", "productions", "production", "media", "live", "co", "company", "plc", "llp", "&"]);
    const words = (t: string) => normName(t).split(" ").filter((w) => w.length > 2 && !STOP.has(w));
@@ -363,7 +390,9 @@ index 4b4b10e..f3f6f1a 100644
 +  // model was shown no bookings for them. Two to three companies only: a wider domain is a mail host.
 +  // A domain OnSinch already holds is never a new client either: a name matching none of its
 +  // companies is for a person to place, not a reason to create one more.
-+  const senderDomain = domainOfEmail(msg.from);
++  // A personal mail host is neither: icloud.com sits on 2 of the 811 companies and gmail.com on 34, and a
++  // person's address says nothing about which company they book for (red-team-B H2, resolve.ts:41-44).
++  const senderDomain = CONSUMER_DOMAINS.has(domainOfEmail(msg.from)) ? "" : domainOfEmail(msg.from);
 +  const onDomain = !companyId && senderDomain ? (await world.companies()).filter((c) => (c.Client ?? []).some((cl: { email?: string }) => domainOfEmail(cl.email) === senderDomain)) : [];
 +  if (!companyId && i.company_name) {
 +    const named = onDomain.length >= 2 && onDomain.length <= 3 ? onDomain.filter((c) => words(String(c.name ?? "")).some((w) => words(i.company_name!).includes(w))) : [];
@@ -375,7 +404,24 @@ index 4b4b10e..f3f6f1a 100644
    if (!companyId && !newClient) return handoff(`no single client company for ${msg.from}`);
    const clientOrders = await world.companyOrders(companyId);
    const live = reqs.some((r) => tradeOf(r.trade)?.named) && world.professions ? await world.professions() : [];
-@@ -731,7 +745,8 @@ async function decide(msg: Message, i: Interpretation, world: World, threadOrder
+@@ -557,11 +573,16 @@ async function decide(msg: Message, i: Interpretation, world: World, threadOrder
+   const changes = reqs.filter((r) => r.action !== "new_shift").flatMap((r) =>
+     r.action === "change_times" && (r.crew_add || r.crew_remove) ? [{ ...r, crew_add: undefined, crew_remove: undefined }, { ...r, action: "change_crew" as const, start: undefined, end: undefined, duration: undefined, crew: undefined }] : [r]);
+ 
++  // The orders a change was checked against. An "already as asked" names them, so a card raised on it
++  // later (a client accepting a quote, process.ts) is about that order, never "Order Needs Created" for
++  // an order that exists (red-team-B H4: 4 of 39 dev acceptance cards).
++  const checked = new Set<number>();
+   /** One change on one order's shift: its operations, or why a person must make it. */
+   const change = async (n: number, r: Request): Promise<string | null> => {
+     const picked = r.order_id ? clientOrders.find((o) => Number(o.id) === r.order_id) : null;
+     const order = picked ?? (await findOrder(msg, companyId, world, threadOrderId, ev));
+     if (typeof order === "string") return (order);
++    checked.add(Number(order.id));
+     const pickedShift = r.shift_id ? teams(order).find((t) => t.id === r.shift_id) : undefined;
+     const shift = pickedShift ?? targetShift(order, r);
+     if (typeof shift === "string") return (`R${order.number}: ${shift}`);
+@@ -731,7 +752,8 @@ async function decide(msg: Message, i: Interpretation, world: World, threadOrder
        if (hits.length > 1) {
          // Booked as asked in every one of them is still booked; anything else needs a person to pick.
          if (each.every((v) => typeof v === "object" && !v.synth.length)) { verdicts.push({ w, order: hits[0], synth: [] }); continue; }
@@ -385,14 +431,32 @@ index 4b4b10e..f3f6f1a 100644
        }
        const v = each[0];
        if (v === "fresh") verdicts.push({ w, order: null, synth: [] });
+@@ -746,7 +768,7 @@ async function decide(msg: Message, i: Interpretation, world: World, threadOrder
+       return ops.length ? { kind: "write", ops, why: [...why, booked, ...assumed, ...(i.notes ?? [])] } : { kind: "none", reason: booked, found: found.map((o) => Number(o.id)) };
+     }
+     for (const [n, r] of synth.entries()) { const no = await change(300 + n, r); if (no) return handoff(no); }
+-    if (bookedV.length === verdicts.length) return ops.length ? { kind: "write", ops, why: [...why, ...assumed, ...(i.notes ?? [])] } : { kind: "none", reason: [why.join("; ") || "already as asked", ...(i.notes ?? [])].join("; ") };
++    if (bookedV.length === verdicts.length) return ops.length ? { kind: "write", ops, why: [...why, ...assumed, ...(i.notes ?? [])] } : { kind: "none", reason: [why.join("; ") || "already as asked", ...(i.notes ?? [])].join("; "), found: [...new Set([...bookedV.map((v) => Number(v.order.id)), ...checked])] };
+     // Some of it already booked, all in ONE order: the email re-lists that booking and adds to
+     // it ("Yes please, 2 x crew also for 2 hours at 21:30", Encore 10-09, which ops added to
+     // R11498). The rest is added to that order at its one location; anything else is a person's.
+@@ -848,5 +870,5 @@ async function decide(msg: Message, i: Interpretation, world: World, threadOrder
+     why.push(`R${order.number}: PO ${i.po}`);
+   }
+   const notes = i.notes ?? [];
+-  return ops.length ? { kind: "write", ops, why: [...why, ...assumed, ...notes] } : { kind: "none", reason: [why.join("; ") || "already as asked", ...notes].join("; ") };
++  return ops.length ? { kind: "write", ops, why: [...why, ...assumed, ...notes] } : { kind: "none", reason: [why.join("; ") || "already as asked", ...notes].join("; "), ...(checked.size ? { found: [...checked] } : {}) };
+ }
 diff --git a/app/lib/v2/process.ts b/app/lib/v2/process.ts
-index 72fbcd1..0cc00b8 100644
+index 72fbcd1..df7922c 100644
 --- a/app/lib/v2/process.ts
 +++ b/app/lib/v2/process.ts
-@@ -24,6 +24,8 @@ import { noTrace, type Tracer } from "./trace";
+@@ -23,7 +23,9 @@ import { utcToLondon } from "./bot/ops";
+ import { noTrace, type Tracer } from "./trace";
  import { automationPausedFlag, v2Writes } from "../paused";
  import { isTestId, isTestSender } from "../testData";
- import { coded } from "./reasons";
+-import { coded } from "./reasons";
++import { coded, systemFailureOf } from "./reasons";
 +import { reportError } from "../errorReport";
 +import { acceptsQuote, QUOTE_ACCEPTED } from "./acceptance";
  
@@ -420,17 +484,8 @@ index 72fbcd1..0cc00b8 100644
    deps.trace("plan", { kind: decision.kind, ops: decision.kind === "write" ? decision.ops.map((o) => o.op.kind) : [], said: decision.kind === "write" ? decision.why : decision.kind === "handoff" ? decision.reasons : [decision.reason] }, Date.now() - t2);
    return { kind: decision.kind, interpretation: { extraction: x, grounded: interpretation, meta }, decision, executed: null, client };
  }
-@@ -485,8 +494,22 @@ export function threadReads(sql: NeonQueryFunction<false, false>, m0: MessageIn,
-   };
- }
+@@ -487,6 +496,13 @@ export function threadReads(sql: NeonQueryFunction<false, false>, m0: MessageIn,
  
-+/** Why a recorded decision is the system's own failure rather than the client's request, or null. */
-+export function systemFailureOf(decision: Decision, executed: RunResult[] | null | undefined): string | null {
-+  if (executed?.some((x) => x.status === "verified") && executed.some((x) => x.status !== "verified")) return "a write stopped part-way";
-+  // Not booking_link_unreadable: a linked order the system cannot read is a booking gone (reasons.ts:27).
-+  return (coded(decision) as { code?: string }).code === "system_failed" ? "the system could not read, plan or decide an email" : null;
-+}
-+
  export async function processMessage(message_id: string, opts: { execute: boolean; world?: World; with?: string[] } = { execute: false }): Promise<Processed> {
    const sql = await db();
 +  // WHAT WAS SENT FOR AN EMAIL IS ITS RECORD, so such an email is never decided again here. The
@@ -443,11 +498,11 @@ index 72fbcd1..0cc00b8 100644
    const rows = (await sql`SELECT message_id, thread_id, from_address, date_iso, subject, body, is_from_spartan FROM thread_messages WHERE message_id = ${message_id}`) as any[];
    const m0 = rows[0] as MessageIn | undefined;
    if (!m0) return { message_id, skipped: "message not captured" };
-@@ -515,6 +538,12 @@ export async function processMessage(message_id: string, opts: { execute: boolea
+@@ -515,6 +531,12 @@ export async function processMessage(message_id: string, opts: { execute: boolea
          ON CONFLICT (message_id) DO UPDATE SET kind = EXCLUDED.kind, interpretation = EXCLUDED.interpretation, decision = EXCLUDED.decision,
            executed = coalesce(EXCLUDED.executed, v2_decisions.executed), code_version = EXCLUDED.code_version,
            company_id = EXCLUDED.company_id, company = EXCLUDED.company`;
-+      // THE SYSTEM'S OWN FAILURES GO TO THE OWNER (OPERATING §2, §15): 8 of the live week's 81
++      // THE SYSTEM'S OWN FAILURES GO TO THE OWNER (OPERATING §2, §15): 5 of the live week's 81
 +      // listed cards were the system failing, shown to staff as ordinary needs and reported to
 +      // nobody (audit/reconstruction.md §6.7). errorReport collapses repeats inside its window,
 +      // so recording after each op cannot flood.
@@ -457,10 +512,14 @@ index 72fbcd1..0cc00b8 100644
      trace: noTrace,
    });
 diff --git a/app/lib/v2/reasons.ts b/app/lib/v2/reasons.ts
-index b8c1d91..455f233 100644
+index b8c1d91..206c161 100644
 --- a/app/lib/v2/reasons.ts
 +++ b/app/lib/v2/reasons.ts
-@@ -17,6 +17,7 @@ import type { Decision } from "./interpret/plan";
+@@ -14,9 +14,11 @@
+ // the words), system_ (a failure), none_ (nothing to do).
+ // ============================================================================
+ import type { Decision } from "./interpret/plan";
++import type { RunResult } from "./bot/run";
  
  /** First match wins. */
  export const REASON_CODES: ReadonlyArray<readonly [string, RegExp]> = [
@@ -468,7 +527,7 @@ index b8c1d91..455f233 100644
    ["reply_quote", /the client asked for a quote/],
    ["reply_unclear", /the request is unclear/],
    ["reply_detail_missing", /: no (day|start time|end time or duration|crew count|new time or length|venue) the client wrote$|^no venue in the email$/],
-@@ -39,7 +40,10 @@ export const REASON_CODES: ReadonlyArray<readonly [string, RegExp]> = [
+@@ -39,7 +41,10 @@ export const REASON_CODES: ReadonlyArray<readonly [string, RegExp]> = [
    ["none_read_together", /read together with the later email/],
    ["none_already_booked", /already booked/],
    // A change whose ops are all already true: the reason is the line that would have been written.
@@ -480,6 +539,28 @@ index b8c1d91..455f233 100644
    ["none_nothing_to_do", /nothing is booked on|no change asked for|left off: no order is named|nothing to/],
  ];
  
+@@ -53,6 +58,21 @@ export const DEFAULT_CODES: ReadonlyArray<readonly [string, RegExp]> = [
+   ["default_venue_none", /no venue written, booked at No Location/],
+ ];
+ 
++/**
++ * ONE test of "the system failed on its own part", for the owner's alert (process.ts) and the TV's chip
++ * (feed/v2.ts): two copies tested `[verified, not verified]`, a shape no write ever had. The live week's 3
++ * crew-chief stops are one op each with status `mismatch` (red-team-B H6). A refusal by rule (signed-on
++ * crew, workers on a position) is the client's need reaching ops, not a fault; the bot's own error on
++ * OnSinch's page is a fault. Not booking_link_unreadable: a linked order the system cannot read is a
++ * booking gone (above).
++ */
++export function systemFailureOf(decision: Decision, executed: ReadonlyArray<Pick<RunResult, "status" | "reasons">> | null | undefined): string | null {
++  const ran = executed ?? [];
++  if (ran.some((x) => x.status === "mismatch") || (ran.some((x) => x.status === "verified") && ran.some((x) => x.status !== "verified"))) return "a write stopped part-way";
++  if (ran.some((x) => x.status === "blocked" && (x.reasons ?? []).some((r) => /^bot error|^form changed|did not open a new|is not in .*'s fill list|is not on order \d+'s builder|: \d+ inputs$/.test(r)))) return "the bot failed on OnSinch's page";
++  return coded(decision).code === "system_failed" ? "the system could not read, plan or decide an email" : null;
++}
++
+ export const codeOfReason = (reason: string): string => REASON_CODES.find(([, re]) => re.test(reason))?.[0] ?? "other";
+ 
+ /** The decision with its code, and for a write the defaults it used. A decision already coded keeps its code. */
 diff --git a/test/feedNeedKind.ts b/test/feedNeedKind.ts
 new file mode 100644
 index 0000000..7ae76fb
@@ -551,6 +632,47 @@ index 0000000..7ae76fb
 +if (fails) { console.log(`\n${fails} FAILED`); process.exit(1); }
 +console.log("\nall passed");
 +})();
+diff --git a/test/feedQuoteAcceptedIsUpdate.ts b/test/feedQuoteAcceptedIsUpdate.ts
+new file mode 100644
+index 0000000..514a4e1
+--- /dev/null
++++ b/test/feedQuoteAcceptedIsUpdate.ts
+@@ -0,0 +1,35 @@
++// ============================================================================
++// A client accepting Spartan's quote is a card about the quote's order, never "Order Needs Created".
++// ----------------------------------------------------------------------------
++// OnSinch already holds the quote as an order for 54 of 73 acceptances (eval/acceptance-study.md).
++// A reading of new shifts with no order named drew the card as Needs Created, and the thread's Gmail
++// label followed it: 4 of the 39 dev acceptance cards told staff to build an order that existed
++// (red-team-B H4, 10-26). A plain new booking with no order is still Needs Created.
++// npx tsx test/feedQuoteAcceptedIsUpdate.ts
++// ============================================================================
++import { project } from "../app/lib/feed/project";
++import { v2Sources, type V2Row } from "../app/lib/feed/v2";
++import { QUOTE_ACCEPTED } from "../app/lib/v2/acceptance";
++
++let fails = 0;
++const ok = (c: boolean, m: string, d?: unknown) => { console.log(`  ${c ? "PASS" : "FAIL"}  ${m}${c ? "" : "  " + JSON.stringify(d)}`); if (!c) fails++; };
++
++const NOW = Date.parse("2026-10-03T12:00:00Z");
++const shifts = { intent: "booking", requests: [{ action: "new_shift", date: "2026-10-14", start: "08:00", end: "16:00", crew: 4, problems: [] }], problems: [] };
++const row = (thread: string, over: Partial<V2Row>): V2Row => ({
++  thread_id: thread, message_id: `${thread}-m`, sent_at: new Date(NOW - 3 * 3_600_000).toISOString(), kind: "handoff",
++  grounded: shifts as any, decision: { kind: "handoff", reasons: ["x"] }, executed: null, company_id: 343, company: "Client",
++  from_address: "sam@client.example", subject: "Crew", ...over,
++});
++const accepted = row("A", { decision: { kind: "handoff", reasons: [QUOTE_ACCEPTED] } });
++const known = row("K", { decision: { kind: "handoff", reasons: [QUOTE_ACCEPTED], order_id: 16614 } });
++const fresh = row("N", { decision: { kind: "handoff", reasons: ["2026-10-14 is within 7 days of the email: a person creates it"] } });
++const cards = project([], new Map(), [], null, NOW, new Map(), v2Sources([accepted, known, fresh], NOW)).cards;
++const kindOf = (t: string) => cards.find((c) => c.thread_id === t)?.items[0]?.kind;
++
++ok(kindOf("A") === "needs-updated", "an acceptance whose order the planner did not single out is an update", kindOf("A"));
++ok(kindOf("K") === "needs-updated", "an acceptance with its order is an update", kindOf("K"));
++ok(kindOf("N") === "needs-created", "a new booking with no order is still Needs Created", kindOf("N"));
++
++if (fails) { console.log(`\n${fails} FAILED`); process.exit(1); }
++console.log("\nall passed");
 diff --git a/test/feedReplyWithWork.ts b/test/feedReplyWithWork.ts
 new file mode 100644
 index 0000000..e3ff5ab
@@ -658,10 +780,10 @@ index 0000000..c4cf1a9
 +})().catch((e) => { console.error(e); process.exit(1); });
 diff --git a/test/systemFailureToOwner.ts b/test/systemFailureToOwner.ts
 new file mode 100644
-index 0000000..21e489f
+index 0000000..98a07df
 --- /dev/null
 +++ b/test/systemFailureToOwner.ts
-@@ -0,0 +1,27 @@
+@@ -0,0 +1,33 @@
 +// ============================================================================
 +// The system's own failures are reported to the owner, not left only as cards for staff.
 +// ----------------------------------------------------------------------------
@@ -672,7 +794,7 @@ index 0000000..21e489f
 +// policy or a client's missing detail is the client's need: neither is reported.
 +// npx tsx test/systemFailureToOwner.ts
 +// ============================================================================
-+import { systemFailureOf } from "../app/lib/v2/process";
++import { systemFailureOf } from "../app/lib/v2/reasons";
 +
 +let fails = 0;
 +const ok = (c: boolean, m: string, d?: unknown) => { console.log(`  ${c ? "PASS" : "FAIL"}  ${m}${c ? "" : "  " + JSON.stringify(d)}`); if (!c) fails++; };
@@ -686,6 +808,12 @@ index 0000000..21e489f
 +ok(systemFailureOf(handoff("2026-10-20 is within 7 days of the email: a person creates it"), null) === null, "a policy hand-off is the client's need, not a fault");
 +ok(systemFailureOf(write, [{ status: "verified" }, { status: "verified" }] as any) === null, "a write that landed is not reported");
 +ok(systemFailureOf(write, [{ status: "blocked" }] as any) === null, "a write refused before anything was sent is a rule, not a part-way failure");
++// The shapes the live data holds (red-team-B H6, 10-26): the 3 crew-chief stops were one op each, status mismatch.
++ok(!!systemFailureOf(write, [{ status: "mismatch", reasons: ["stopped part-way: #1 position 2/crew_chief: blocked"] }] as any), "a single op that stopped part-way (the live week's 3 crew-chief stops) is reported");
++ok(!!systemFailureOf(write, [{ status: "blocked", reasons: ["bot error before submit: locator.waitFor: Timeout 30000ms exceeded."] }] as any), "the bot's own error on OnSinch's page is reported");
++ok(!!systemFailureOf(write, [{ status: "blocked", reasons: ["form changed: protocol update needed"] }] as any), "a changed OnSinch form is reported");
++ok(systemFailureOf(write, [{ status: "blocked", reasons: ["signed-on crew: 3 on position 9; ops must make this change"] }] as any) === null, "signed-on crew is a rule sending the change to ops, not a fault");
++ok(systemFailureOf(write, [{ status: "blocked", reasons: ["4 workers on position 9, cut to 2: a worker must be dropped first"] }] as any) === null, "workers on a position is a rule, not a fault");
 +
 +if (fails) { console.log(`\n${fails} FAILED`); process.exit(1); }
 +console.log("\nall passed");
@@ -805,10 +933,10 @@ index 0000000..03a638b
 +console.log("\nall passed");
 diff --git a/test/v2SharedDomain.ts b/test/v2SharedDomain.ts
 new file mode 100644
-index 0000000..48343ed
+index 0000000..ee045d8
 --- /dev/null
 +++ b/test/v2SharedDomain.ts
-@@ -0,0 +1,46 @@
+@@ -0,0 +1,61 @@
 +// ============================================================================
 +// A sender whose domain several clients share is placed by the company the email names.
 +// ----------------------------------------------------------------------------
@@ -826,7 +954,7 @@ index 0000000..48343ed
 +
 +const world = (companies: Array<{ id: number; name: string; Client: Array<{ id: number; email: string }> }>): World => ({
 +  companies: async () => companies,
-+  placesNamed: async () => [],
++  placesNamed: async (n) => (n.toLowerCase() === "tobacco dock" ? [{ id: 40, name: "Tobacco Dock" }] : []),
 +  companyOrders: async () => [],
 +  orderByNumber: async () => null,
 +});
@@ -834,10 +962,10 @@ index 0000000..48343ed
 +  { id: 501, name: "Harbour Staging Ltd", Client: [{ id: 1, email: "ops@agency.example" }] },
 +  { id: 635, name: "Lantern Events", Client: [{ id: 2, email: "bookings@agency.example" }] },
 +];
-+const msg = (from: string): Message => ({ message_id: "m1", from, subject: "Crew", sentIso: "2026-10-01T09:00:00Z", text: "Please book 4 crew" });
++const msg = (from: string): Message => ({ message_id: "m1", from, subject: "Crew", sentIso: "2026-10-01T09:00:00Z", text: "Please book 4 crew at Tobacco Dock on 20 November, 08:00-16:00" });
 +const booking = (company_name?: string): Interpretation => ({
 +  intent: "booking", problems: [], ...(company_name ? { company_name } : {}),
-+  requests: [{ action: "new_shift", problems: [], date: "2026-11-20", start: "08:00", end: "16:00", crew: 4 } as Request],
++  requests: [{ action: "new_shift", problems: [], date: "2026-11-20", start: "08:00", end: "16:00", crew: 4, venue: "Tobacco Dock" } as Request],
 +});
 +const noClient = (d: any) => d.kind === "handoff" && /no single client company/.test((d.reasons ?? []).join());
 +
@@ -851,6 +979,66 @@ index 0000000..48343ed
 +  console.log("a domain many companies share (a mail host)");
 +  const many = [1, 2, 3, 4].map((n) => ({ id: 900 + n, name: `Client ${n} Lantern`, Client: [{ id: n, email: `p${n}@host.example` }] }));
 +  ok(noClient(await plan(msg("tom@host.example"), booking("Lantern"), world(many))), "four or more companies on a domain are never chosen between by name");
++
++  // red-team-B H2 (10-26): icloud.com sits on exactly 2 of the 811 companies, and gmail.com on 34. A personal
++  // address says nothing about which company a person books for (resolve.ts CONSUMER_DOMAINS).
++  console.log("a personal mail host is no evidence of a company");
++  const icloud = [
++    { id: 501, name: "Harbour Staging Ltd", Client: [{ id: 1, email: "anna@icloud.com" }] },
++    { id: 635, name: "Lantern Events", Client: [{ id: 2, email: "ben@icloud.com" }] },
++  ];
++  const d1 = await plan(msg("new.person@icloud.com"), booking("Harbour Lights Weddings"), world(icloud));
++  ok(!(d1.kind === "write" && JSON.stringify(d1).includes("501")), "a new icloud.com sender is never given the company of another icloud.com contact", JSON.stringify(d1).slice(0, 200));
++  const gmail = [1, 2, 3, 4, 5, 6].map((n) => ({ id: 900 + n, name: `Gmail Client ${n}`, Client: [{ id: n, email: `p${n}@gmail.com` }] }));
++  const d2 = await plan(msg("new.person@gmail.com"), booking("Riverside Weddings"), world(gmail));
++  const d3 = await plan(msg("new.person@gmail.com"), booking("Riverside Weddings"), world([]));
++  ok(d3.kind === "write", "control: with no gmail.com company on file, the new client is created", JSON.stringify(d3).slice(0, 200));
++  ok(d2.kind === d3.kind, "gmail.com contacts on other companies do not stop a new client", JSON.stringify(d2).slice(0, 200));
++
++  if (fails) { console.log(`\n${fails} FAILED`); process.exit(1); }
++  console.log("\nall passed");
++})();
+diff --git a/test/zonelessIsUtc.ts b/test/zonelessIsUtc.ts
+new file mode 100644
+index 0000000..79d455c
+--- /dev/null
++++ b/test/zonelessIsUtc.ts
+@@ -0,0 +1,39 @@
++// ============================================================================
++// An OnSinch time with no zone is UTC, whatever the machine's own zone is.
++// ----------------------------------------------------------------------------
++// OnSinch's audit rows write a slot's old and new times as "2026-10-23 07:30:00", UTC with no
++// zone. `new Date()` reads such a string in the process's zone, and the box the scoring scripts
++// run on is America/New_York: every staff re-time read 4 hours late, so every correct time
++// change was judged wrong (eval/diagnostic-11-3.md: 1 completed write instead of 7). Production
++// runs in UTC and never saw it, which is why only a non-UTC zone can prove the fix.
++// npx tsx test/zonelessIsUtc.ts
++// ============================================================================
++process.env.TZ = "America/New_York";
++
++let fails = 0;
++const ok = (c: boolean, m: string, d?: unknown) => { console.log(`  ${c ? "PASS" : "FAIL"}  ${m}${c ? "" : "  " + JSON.stringify(d)}`); if (!c) fails++; };
++
++(async () => {
++  const { utcToLondon } = await import("../app/lib/v2/bot/ops");
++  const { truthKeys } = await import("../app/lib/v2/score");
++  ok(new Date("2026-10-23 07:30:00").getTimezoneOffset() !== 0, "the process is not on UTC, so the case below can fail");
++
++  console.log("\nan audit row's time, no zone");
++  ok(JSON.stringify(utcToLondon("2026-10-23 07:30:00")) === JSON.stringify({ date: "2026-10-23", time: "08:30" }), "07:30 UTC is 08:30 in London (BST)", utcToLondon("2026-10-23 07:30:00"));
++  ok(utcToLondon("2026-11-03T07:30:00").time === "07:30", "the T form too, in GMT", utcToLondon("2026-11-03T07:30:00"));
++  ok(utcToLondon("2026-10-23T23:30:00").date === "2026-10-24", "late UTC is the next London day", utcToLondon("2026-10-23T23:30:00"));
++
++  console.log("\na time that carries its zone is read as written");
++  ok(utcToLondon("2026-10-23T07:30:00+00:00").time === "08:30", "+00:00");
++  ok(utcToLondon("2026-10-23T07:30:00Z").time === "08:30", "Z");
++  ok(utcToLondon("2026-10-23T08:30:00+01:00").time === "08:30", "+01:00");
++
++  console.log("\nthe scorer judges a staff re-time at the hour it was booked");
++  const act = { at: "2026-10-20T10:00:00+00:00", by: 7, what: "edit", order_id: 1, number: "11000", company_id: 9, model: "Slot", model_id: 5,
++    changes: { beginning: { old: "2026-10-23 06:30:00", new: "2026-10-23 07:30:00" }, end: { old: "2026-10-23 14:30:00", new: "2026-10-23 15:30:00" } } };
++  const keys = truthKeys([act], () => ({ Job: [] })).keys;
++  ok(keys.includes("times 1/5=2026-10-23 08:30-16:30"), "08:30-16:30 London", keys);
 +
 +  if (fails) { console.log(`\n${fails} FAILED`); process.exit(1); }
 +  console.log("\nall passed");

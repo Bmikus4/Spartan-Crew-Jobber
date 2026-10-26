@@ -169,3 +169,50 @@ The 21 silent misses left:
 | booking_not_identified, request_unsupported | 2 | single cases |
 
 **Reading.** Recall rose by 17.4 points on n = 184. The interval is about ±6, so this is evidence (§8.9). Display precision is unchanged within its interval, and no write was added. The test set has not been run; it is reported only at Checkpoint B (§8.8).
+
+## Iteration 3: red-team-B's harms fixed, and the harness's "production" frozen. 2026-10-26, dev (561 emails, 184 B42 inquiries)
+
+audit/red-team-B.md landed three hits that change a decision and seven material ones. Re-checked before acting: H1 (60 of
+the live-week dev split's 280 are in the 238 test set) and H7 (test/harnessReal.ts fails with the patch) both reproduce.
+
+**Patch changes** (eval/patches/p1-fixes.diff, now 23 files; each fix has a test that fails without it):
+- **H2, personal mail hosts.** The shared-domain rule now skips resolve.ts CONSUMER_DOMAINS. Without it, a new icloud.com
+  sender was booked under another icloud.com client (icloud.com sits on 2 of 811 companies). Every new gmail.com client
+  was also refused, because gmail.com is on 34. test/v2SharedDomain.ts +3.
+- **H6, the owner alert.** The two copies of the failure test (process.ts, feed/v2.ts) are now one, `systemFailureOf` in
+  reasons.ts. It matches the shapes the data holds: a single op with status `mismatch` (the live week's 3 crew-chief stops),
+  or the bot's own error on OnSinch's page. Over all 847 stored decisions it reports 6: 2 read or plan failures, 3 stops,
+  1 bot error. The old test reported 2. process.ts's comment said "8 of 81"; it now says 5. test/systemFailureToOwner.ts +5.
+- **H4, acceptance cards.** An acceptance is drawn as an update to the quote's order, never Needs Created. "Already as
+  asked" now carries the order it checked, so one found order goes on the card. Dev: the 4 acceptance cards that proposed
+  a new order are gone. none_precision is back to 70/88 = 79.5% (it was 76.1%). test/feedQuoteAcceptedIsUpdate.ts, new.
+
+**Harness changes** (committed, not in the patch):
+- **H7.** score-production drew production's stored decisions through the TV code on disk. So the patch rewrote
+  "production": live-week silent misses read 8 of 90, not the 16 production had. What the TV showed is now frozen once,
+  at 90529c9 (the code production runs), in eval/harness/production-shown.jsonl: 847 rows, ids and codes only. Production
+  figures and the labels' exclusion codes read it. `--display current` keeps the other question (production's decisions
+  through the new TV), filed under its own name. harnessReal is 18/18 at HEAD and with the patch.
+- **H14.** Label and read files hash as text (CRLF folded), and .gitattributes pins them to LF. The labels hash is
+  unchanged: 55e6f3e99cfd95d5.
+
+**Dev, three columns (H3, H5, H8):**
+
+| metric (dev, B42) | production, as shown | HEAD replay | patch without the display rule | whole patch |
+|---|---|---|---|---|
+| inquiry_recall | 120/184 = 65.2% (64 silent) | 131/184 = 71.2% (53) | **149/184 = 81.0% (35; CI 74.6-86.4)** | **163/184 = 88.6% (21; CI 83.1-92.8)** |
+| display_precision, any request | | 146/152 = 96.1% | 183/191 = 95.8% | 207/216 = 95.8% |
+| display_precision, B42 inquiry | 117/142 = 82.4% | 129/152 = 84.9% | 147/191 = 77.0% | 160/216 = 74.1% |
+| none_precision | | 70/88 = 79.5% | 70/88 = 79.5% | 70/88 = 79.5% |
+| review_rate | 126/142 = 88.7% | 125/152 = 82.2% | 164/191 = 85.9% | 189/216 = 87.5% |
+| writes / new-order proposals | | 27 / 88 | 27 / 88 | 27 / 88, same ids |
+
+- Production's own stored decisions drawn through the patched TV reach 154/184 = 83.7%. The display rule is the
+  largest single lever, and it waits on the owner and Paz.
+- The B42 precision falls by 10.8 points. That is the trade for 32 fewer silent misses: §4 ranks noise third, behind
+  missing an inquiry and confirming the wrong thing.
+- The replay's HEAD is 6 points above production. The replay matches production's outcome on 476 of 561; the causes of
+  the other 85 are listed in its limits table. How well a replay figure predicts production has not been measured.
+
+**The 238 "test" emails are tuned on (H1).** They are now dev-2: reported, never called held out. A clean set is mail no
+step has read, from after the 10-22 snapshot (Session 4 plan, R5).

@@ -33,7 +33,9 @@ export const gold = <T = any>(f: GoldFile): T => readJson<T>(join(GOLD, f));
 export const goldPresent = () => GOLD_FILES.every((f) => existsSync(join(GOLD, f)));
 
 export const sha256 = (b: string | Buffer) => createHash("sha256").update(b).digest("hex");
-export const fileHash = (p: string) => sha256(readFileSync(p)).slice(0, 16);
+/** A text file's hash is of its text: git checks these files out as CRLF on this box (red-team-B H14). */
+export const textOf = (p: string) => readFileSync(p, "utf8").replace(/\r\n/g, "\n");
+export const fileHash = (p: string) => sha256(textOf(p)).slice(0, 16);
 
 /** One hash over every gold file, so a re-copied snapshot is a different dataset. */
 export function datasetHash(): string {

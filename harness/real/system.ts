@@ -9,6 +9,7 @@
 // eval/reads/scripts/score.mts re-implemented this; `readsOutcome` is that copy, kept only so
 // score-production can show both agree on every email before trusting either.
 // ============================================================================
+import { loadShown } from "./shown";
 import { coded } from "../../app/lib/v2/reasons";
 import { v2Source, type V2Row } from "../../app/lib/feed/v2";
 import type { Interpretation } from "../../app/lib/v2/interpret/interpret";
@@ -93,8 +94,12 @@ export function proposesNew(kind: SystemRow["kind"], decision: any, card: string
   return card === "needs-created";
 }
 
-/** Production's stored decision for each email, as the TV showed it. */
-export function productionRows(ids: string[]): Map<string, SystemRow> {
+/**
+ * Production's stored decision for each email, as the TV showed it: from the frozen record (shown.ts).
+ * `display: "current"` draws the same decisions through the TV code on disk instead.
+ */
+export function productionRows(ids: string[], display: "frozen" | "current" = "frozen"): Map<string, SystemRow> {
+  const shown = display === "frozen" ? loadShown().rows : null;
   const msgs = new Map(gold<GoldMessage[]>("messages.json").map((m) => [m.message_id, m]));
   const dec = new Map(gold<GoldDecision[]>("decisions.json").map((d) => [d.message_id, d]));
   const rd = new Map(gold<any[]>("readings.json").map((r) => [r.message_id, r.extraction]));
@@ -102,6 +107,13 @@ export function productionRows(ids: string[]): Map<string, SystemRow> {
   for (const id of ids) {
     const d = dec.get(id), m = msgs.get(id);
     if (!d || !m) throw new Error(`score-production: ${id} has no ${d ? "message" : "decision"} in the gold copy`);
+    if (shown) {
+      const s = shown.get(id);
+      if (!s) throw new Error(`score-production: ${id} is not in production-shown.jsonl`);
+      out.set(id, { message_id: id, kind: d.kind, decision: { ...d.decision, code: s.code }, executed: d.executed, outcome: s.outcome as SystemRow["outcome"], card: s.card, code: s.code,
+        proposes_new: s.proposes_new, company_id: d.company_id, latency_ms: Date.parse(d.created_at) - Date.parse(d.sent_at), cost_usd: null, carried_by: s.carried_by });
+      continue;
+    }
     const decision = coded(d.decision);
     const card = cardOf({ thread_id: d.thread_id, message_id: id, sent_at: d.sent_at, subject: m.subject, from_address: addr(m.from_address) }, d.kind, decision, d.executed, groundedFromReading(rd.get(id)), d.company_id);
     out.set(id, {

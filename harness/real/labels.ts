@@ -20,6 +20,7 @@
 // ============================================================================
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
+import { loadShown } from "./shown";
 import { coded } from "../../app/lib/v2/reasons";
 import { utcToLondon } from "../../app/lib/v2/bot/ops";
 import { READS, LABELS, LABELS_ALL, ROOT, csvRows, fileHash, gold, readJson, type GoldDecision, type GoldMessage } from "./data";
@@ -145,7 +146,8 @@ export function buildLabels(set: LabelSet = "live-week"): Label[] {
     let excluded: Label["excluded"] = null, excluded_basis: string | null = null;
     const d = dec.get(id);
     if (strict !== "not" && d?.kind === "none") {
-      const c = coded(d.decision).code;
+      // Production's code as production coded it (shown.ts): reasons.ts may since code the same words otherwise.
+      const c = loadShown().rows.get(id)?.code ?? coded(d.decision).code;
       const reason = String(d.decision.reason ?? "");
       if (c === "none_not_client") { excluded = "portal_notice"; excluded_basis = "sender rule (process.ts:161); production code none_not_client"; }
       else if (c === "none_already_booked" || c === "none_already_as_asked" || (c === "other" && /^already as asked/.test(reason))) {

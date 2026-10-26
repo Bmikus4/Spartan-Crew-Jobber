@@ -1,7 +1,7 @@
 // ============================================================================
 // The real-mail harness. $0: no model call, no network, no database, no write.
 // ----------------------------------------------------------------------------
-//   npx tsx harness/real/run.ts --mode score-production [--labels all|live-week] [--set dev|test|all] [--checkpoint]
+//   npx tsx harness/real/run.ts --mode score-production [--labels all|live-week] [--set dev|test|all] [--checkpoint] [--display current]
 //   npx tsx harness/real/run.ts --mode replay           [--labels all|live-week] [--set dev|test|all] [--checkpoint]
 //
 // --labels all       (default) the 799 read emails, labels/all.jsonl, split labels/split-all.json
@@ -83,8 +83,12 @@ async function main() {
     const pf = preflight({ env: process.env, allowHosts: [], adapterChecks: [] });
     if (!pf.ok) throw new Error(`preflight failed: ${pf.checks.filter((c) => !c.ok).map((c) => `${c.name} (${c.detail})`).join("; ")}`);
     closeNetwork([]);
-    const rows = productionRows(labels.map((l) => l.message_id));
-    if (set === "all" && labelSet === "live-week") {
+    // Frozen: what production's TV showed (shown.ts). Current: the same decisions through the TV code on disk.
+    const display = arg("display") === "current" ? "current" : "frozen";
+    json.display = display;
+    if (display === "current") out.push(`**Display: current.** Production's stored decisions drawn through the TV code on disk (${gitSha()}), not as production showed them.`, "");
+    const rows = productionRows(labels.map((l) => l.message_id), display);
+    if (set === "all" && labelSet === "live-week" && display === "frozen") {
       const checks = reproduce(labels, rows);
       out.push(reproductionMarkdown(checks), "", `Reproduction inputs outside the gold copy: ${Object.entries(extraHashes()).map(([k, v]) => `${k} ${v}`).join(", ")}`, "");
       json.reproduction = checks;
@@ -128,8 +132,8 @@ async function main() {
 
   const dir = join(ROOT, "eval/harness/runs");
   mkdirSync(dir, { recursive: true });
-  writeFileSync(join(dir, `${labelSet}-${mode}-${set}.md`), out.join("\n") + "\n");
-  writeFileSync(join(dir, `${labelSet}-${mode}-${set}.json`), JSON.stringify(json, null, 1) + "\n");
+  writeFileSync(join(dir, `${labelSet}-${mode}${json.display === "current" ? "-display-current" : ""}-${set}.md`), out.join("\n") + "\n");
+  writeFileSync(join(dir, `${labelSet}-${mode}${json.display === "current" ? "-display-current" : ""}-${set}.json`), JSON.stringify(json, null, 1) + "\n");
   console.log(out.join("\n"));
   if (failed) { console.error(mode === "replay" ? "REPLAY ISOLATION BROKEN" : "BASELINE NOT REPRODUCED"); process.exit(1); }
 }

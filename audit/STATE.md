@@ -20,13 +20,13 @@ and I gate every merge. Nothing is deployed: shipping waits for Checkpoint B (§
       (audit/isolation-report.md addendum): score-production runs the preflight; credential names refused by shape; the lock covers
       http/https, sockets, child processes. Was: P2 Isolation (isolation-verifier, a different agent). It tries to make the harness reach production, OnSinch or mail.
       A leak halts everything (§8.4).
-- [ ] P3 Eval set (§13.1 step 2):
+- [x] P3 Eval set (§13.1 step 2) DONE: 799 read, 785/799 agree, 14 settled by V/V2; split dev 561 / test 238 (test hash d2790450e2c9ae4f). Was:
       - read the 399 other snapshot emails with two readers (A3, B3, A4 running; B4 queued);
       - a third blind reader settles disagreements;
       - apply the B42 rule;
       - make a chronological dev/test split with test locked.
       The target is about 500 outstanding inquiries, so the interval is about ±4 (§8.9).
-- [ ] P4 §11.3 diagnostic: inject the correct order into the planner's candidates on dev. It decides whether retrieval or
+- [x] P4 DONE, ACCEPTED (7b8bd993): selection-bound. recall@5 43/46, selection 62/75 injected, action_accuracy 7/50; 75/75 as-is codes equal the committed run. Its clock finding (zone-less audit times read in the box's zone) fixed in the patch, test/zonelessIsUtc.ts red without it; dev replay unchanged. Was: §11.3 diagnostic: inject the correct order into the planner's candidates on dev. It decides whether retrieval or
       selection is the bottleneck.
 - [ ] P5 Fixes, largest bucket first, each measured on dev in replay ($0) and logged in eval/iterations.md (§13.2):
       a. grounding and parser (reading_unproven 34 listed; at most 15 parser-side: crew in words, "Duration: N", a day
@@ -57,6 +57,21 @@ and I gate every merge. Nothing is deployed: shipping waits for Checkpoint B (§
 - [x] P5 MEASURED (eval/iterations.md, iterations 1-2): dev silent 16 -> 5 of 79, recall 79.7% -> 93.7%, display 94.3%;
       patch eval/patches/p1-fixes.diff (20 files, applies cleanly; NOT deployed: pushing app code to v2 deploys production).
 - [ ] P6 After each iteration, check the exit conditions (§14). When one holds: red-team-B, audit/final-state.md, Checkpoint B.
+
+## Session 4 plan (Phase 1 continues): red-team-B (668a4048) landed H1-H3 decision-changing, H4-H10 material
+§14.4 "Blocked" did not hold (H10): $0 moves remain. Each step verified before the next; nothing deployed.
+- [x] R1 DONE 10-26 (iterations.md iteration 3): Patch harms: H2 consumer mail domains in the shared-domain rule (resolve.ts CONSUMER_DOMAINS); H6 a single-op
+      crew-chief stop is a system failure, and process.ts's "8 of 81" comment says 5; H4 an acceptance on a thread whose
+      planner found the order is a confirm card on that order, never "Order Needs Created".
+- [x] R2 DONE 10-26: production-shown.jsonl frozen at 90529c9 (847); harnessReal 18/18 at HEAD and patched. Harness honesty: H7 "production" in the harness is what production showed (frozen per-email outcomes at
+      90529c9), not production's decisions through the TV code on disk; H14 labels/reads hash on content, eol=lf.
+- [x] R3 DONE 10-26: production 65.2 / HEAD 71.2 / no display 81.0 / patch 88.6; production through patched TV 83.7. Re-measure dev in three columns (HEAD, items without display, all items), both precisions, production beside
+      the replay (H3, H5, H8).
+- [ ] R4 $0 levers, largest first, each on dev: none_thread_history (2), crew-chief composition (3 wrong writes),
+      time values (2), new-order composition (3), already-as-asked settled by a blind reader (4).
+- [ ] R5 A clean test set (H1): mail after the 10-22 snapshot, a fresh read-only snapshot in a new directory, two blind
+      readers + a third, locked before any step reads it. The 238 stay as a second dev set, named as tuned-on.
+- [ ] R6 final-state.md rewritten (H1-H15 answered), red team again, Checkpoint B.
 
 ## Work units (from audit/spec-compliance.md "Order of work"; row ids in brackets)
 - [x] W1 Ledger and decisions: this file rewritten; decisions/ holds the five dated entries (RB2-*, RB3-g, S16-2, S16-3, A2-13)
@@ -115,8 +130,10 @@ and I gate every merge. Nothing is deployed: shipping waits for Checkpoint B (§
 ## Active subagents
 | agent | brief hash | dispatched | expected output | status |
 |---|---|---|---|---|
-| diagnostic-11-3 | 7b8bd993 | 2026-10-25 S3 | eval/diagnostic-11-3.md | running |
+| (none running) | | | | |
 
+Returned 10-26: red-team-B 668a4048 (audit/red-team-B.md): 3 decision-changing, 7 material, 5 minor. H1 re-checked by me (60 of live-week dev in the 238 test); H7 reproduced (harnessReal fails with the patch). Session 4 plan answers each.
+Accepted on 10-25: diagnostic-11-3 7b8bd993 (75/75 as-is codes equal eval/harness/runs/live-week-replay-all.json; headline counts recount from its table).
 Returned 10-25: readers A3, B3, A4, B4 (all 399; strict agreement 785/799 across both batches).
 Accepted on 10-25: readers A1, A2, B1, B2 (baffb5cd), checked by a third blind reader V on a 10% sample, 38/40 + days 10/10.
 Accepted on 10-25: card-anatomy a4ae517a (22 of 222 citations re-opened, all hold).
@@ -208,6 +225,5 @@ this file as it stood.
 none
 
 ## Next action
-On the three returns: accept isolation (re-run attempts 1 and 5), re-measure the patch on all 799 dev, fold the diagnostic into
-audit/final-state.md, then dispatch red-team-B (brief 668a4048) and present Checkpoint B. Commit through the gate: harness,
-labels, reports, the patch file (not the app changes themselves). On or after 2026-10-28 16:06Z: the pause-window store.
+Sandbox suite with the clock fix (22-file patch): tsc + test:all exit 0, 10-25 night. On red-team-B's return: re-run every decision-changing hit, revise audit/final-state.md, commit through the gate (reports and
+the patch file only; 90529c9 holds the harness, labels and the first patch), then present Checkpoint B (RUNBOOK §6), a hard stop. On or after 2026-10-28 16:06Z: the pause-window store.
