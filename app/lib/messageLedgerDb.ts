@@ -24,6 +24,7 @@
 // message we ever see on a thread is a new job, every later one is an update.
 // ============================================================================
 import { neon, type NeonQueryFunction } from "@neondatabase/serverless";
+import { ensureSchema } from "./migrations";
 
 let _sql: NeonQueryFunction<false, false> | null = null;
 let _ready = false;
@@ -40,19 +41,7 @@ function db(): NeonQueryFunction<false, false> | null {
 }
 async function ensure(sql: NeonQueryFunction<false, false>): Promise<void> {
   if (_ready) return;
-  await sql`
-    CREATE TABLE IF NOT EXISTS message_ledger (
-      message_id    TEXT PRIMARY KEY,
-      thread_id     TEXT,
-      subject       TEXT,
-      from_address  TEXT,
-      first_seen_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-      last_seen_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
-      seen_count    INT NOT NULL DEFAULT 1,
-      note          TEXT
-    )`;
-  await sql`CREATE INDEX IF NOT EXISTS message_ledger_thread ON message_ledger (thread_id)`;
-  await sql`CREATE INDEX IF NOT EXISTS message_ledger_first_seen ON message_ledger (first_seen_at DESC)`;
+  await ensureSchema(sql);
   _ready = true;
 }
 

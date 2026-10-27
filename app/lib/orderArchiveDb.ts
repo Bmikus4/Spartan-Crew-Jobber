@@ -25,6 +25,7 @@
 // ============================================================================
 import { neon, type NeonQueryFunction } from "@neondatabase/serverless";
 import type { DesiredOrder, DesiredSlotTeam } from "./engine/types";
+import { ensureSchema } from "./migrations";
 
 let _sql: NeonQueryFunction<false, false> | null = null;
 let _ready = false;
@@ -39,32 +40,7 @@ function db(): NeonQueryFunction<false, false> | null {
 
 async function ensure(sql: NeonQueryFunction<false, false>): Promise<void> {
   if (_ready) return;
-  await sql`
-    CREATE TABLE IF NOT EXISTS order_archive (
-      id             BIGSERIAL PRIMARY KEY,
-      thread_id      TEXT NOT NULL,
-      -- What was deleted.
-      order_id       BIGINT NOT NULL,
-      order_number   TEXT,
-      job_id         BIGINT,
-      -- What replaced it. Null while the rebuild is in flight, and null forever if the
-      -- rebuild failed — which is precisely the row somebody needs to find.
-      replaced_by_order_id     BIGINT,
-      replaced_by_order_number TEXT,
-      replaced_by_job_id       BIGINT,
-      -- The whole thing, as it stood.
-      live_order     JSONB,
-      slot_teams     JSONB NOT NULL DEFAULT '[]'::jsonb,
-      slot_teams_are_reconstruction BOOLEAN NOT NULL DEFAULT true,
-      -- Why, in the words a human would use: "crew 6 -> 4".
-      reason         TEXT,
-      created        TIMESTAMPTZ,
-      deleted_at     TIMESTAMPTZ NOT NULL DEFAULT now()
-    )`;
-  await sql`CREATE INDEX IF NOT EXISTS order_archive_thread ON order_archive (thread_id)`;
-  // The lookups that matter are by the number a human types, not by the api id.
-  await sql`CREATE INDEX IF NOT EXISTS order_archive_number ON order_archive (order_number)`;
-  await sql`CREATE INDEX IF NOT EXISTS order_archive_job ON order_archive (job_id)`;
+  await ensureSchema(sql);
   _ready = true;
 }
 

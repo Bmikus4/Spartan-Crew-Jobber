@@ -13,6 +13,7 @@
 // ever looks at again. At-least-once, in the one place it is decided.
 // ============================================================================
 import { neon, type NeonQueryFunction } from "@neondatabase/serverless";
+import { ensureSchema } from "../migrations";
 
 let _ready = false;
 
@@ -23,14 +24,7 @@ function db(): NeonQueryFunction<false, false> | null {
 
 async function ensure(sql: NeonQueryFunction<false, false>): Promise<void> {
   if (_ready) return;
-  await sql`
-    CREATE TABLE IF NOT EXISTS mail_cursor (
-      mailbox     TEXT PRIMARY KEY,
-      history_id  TEXT NOT NULL,
-      updated_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
-      last_run_at TIMESTAMPTZ,
-      last_count  INTEGER NOT NULL DEFAULT 0
-    )`;
+  await ensureSchema(sql);
   _ready = true;
 }
 
@@ -87,14 +81,7 @@ export async function cursorStatus(mailbox: string): Promise<{ history_id: strin
  * per tick and the cursor moves only once the whole set is done.
  */
 async function ensureSeen(sql: NeonQueryFunction<false, false>): Promise<void> {
-  await sql`
-    CREATE TABLE IF NOT EXISTS mail_seen (
-      mailbox  TEXT NOT NULL,
-      gmail_id TEXT NOT NULL,
-      seen_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
-      PRIMARY KEY (mailbox, gmail_id)
-    )`;
-  await sql`CREATE INDEX IF NOT EXISTS mail_seen_at ON mail_seen (seen_at DESC)`;
+  await ensureSchema(sql);
 }
 
 export async function unseenIds(mailbox: string, ids: string[]): Promise<string[]> {

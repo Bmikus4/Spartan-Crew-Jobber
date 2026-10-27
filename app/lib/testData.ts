@@ -23,6 +23,7 @@
 import type { NeonQueryFunction } from "@neondatabase/serverless";
 import { readRows } from "./v2/read";
 import { automationPausedFlag } from "./paused";
+import { ensureSchema } from "./migrations";
 
 export const AUTOMATION_USER = 2257;
 /**
@@ -259,7 +260,7 @@ export async function clearTestData(sql: Sql, t: OnsinchCall, trigger: string, o
 
 /** Every clear is kept: what went, when, and what started it. */
 async function log(sql: Sql, res: ClearResult) {
-  await sql`CREATE TABLE IF NOT EXISTS test_data_clears (at TIMESTAMPTZ NOT NULL DEFAULT now(), trigger TEXT NOT NULL, result JSONB NOT NULL)`;
+  await ensureSchema(sql);
   await sql`INSERT INTO test_data_clears (trigger, result) VALUES (${res.trigger}, ${JSON.stringify(res)})`;
 }
 

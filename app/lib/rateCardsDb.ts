@@ -5,6 +5,7 @@
 // (authoritative) over the top. Phase A's rates.ts reads getRateCard() FIRST,
 // before falling back to a live history scan.
 import { neon, type NeonQueryFunction } from "@neondatabase/serverless";
+import { ensureSchema } from "./migrations";
 
 let _sql: NeonQueryFunction<false, false> | null = null;
 let _ready = false;
@@ -33,15 +34,7 @@ export function rateCardsDbEnabled(): boolean {
 
 async function ensure(sql: NeonQueryFunction<false, false>): Promise<void> {
   if (_ready) return;
-  await sql`
-    CREATE TABLE IF NOT EXISTS rate_cards (
-      company_id INT PRIMARY KEY,
-      card       INT NOT NULL,
-      source     TEXT NOT NULL DEFAULT 'history',
-      share      REAL,
-      n          INT,
-      updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
-    )`;
+  await ensureSchema(sql);
   _ready = true;
 }
 

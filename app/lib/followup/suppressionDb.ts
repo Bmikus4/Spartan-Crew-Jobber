@@ -17,6 +17,7 @@
 // from one nobody is waiting on. That is the failure this shape cannot have.
 // ============================================================================
 import { neon, type NeonQueryFunction } from "@neondatabase/serverless";
+import { ensureSchema } from "../migrations";
 
 let _sql: NeonQueryFunction<false, false> | null = null;
 let _ready = false;
@@ -31,14 +32,7 @@ function db(): NeonQueryFunction<false, false> | null {
 
 async function ensure(sql: NeonQueryFunction<false, false>): Promise<void> {
   if (_ready) return;
-  await sql`
-    CREATE TABLE IF NOT EXISTS followup_suppressions (
-      thread_id         TEXT PRIMARY KEY,
-      waiting_since_iso TEXT NOT NULL,
-      suppressed_by     TEXT,
-      reason            TEXT,
-      suppressed_at     TIMESTAMPTZ NOT NULL DEFAULT now()
-    )`;
+  await ensureSchema(sql);
   _ready = true;
 }
 

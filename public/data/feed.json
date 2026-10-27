@@ -5175,5 +5175,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0240",
+  "ts": "2026-10-27T12:47:08+00:00",
+  "kind": "measurement",
+  "headline": "R6 (Prompt 11): switches admin-only, kept and reported (F34); app/lib/migrations.ts (F44); Preview branch steps",
+  "subject": "Only an admin can turn writes or replies on, and the schema has one home",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 234,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]

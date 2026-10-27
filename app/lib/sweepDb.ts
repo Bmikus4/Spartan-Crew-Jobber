@@ -16,6 +16,7 @@
 // what to measure. The corpus is analysed offline, from here.
 // ============================================================================
 import { neon, type NeonQueryFunction } from "@neondatabase/serverless";
+import { ensureSchema } from "./migrations";
 
 let _sql: NeonQueryFunction<false, false> | null = null;
 let _ready = false;
@@ -32,20 +33,7 @@ function db(): NeonQueryFunction<false, false> | null {
 }
 async function ensure(sql: NeonQueryFunction<false, false>): Promise<void> {
   if (_ready) return;
-  await sql`
-    CREATE TABLE IF NOT EXISTS sweep_threads (
-      thread_id     TEXT PRIMARY KEY,
-      mailbox       TEXT,
-      message_count INT NOT NULL DEFAULT 0,
-      first_date    TIMESTAMPTZ,
-      last_date     TIMESTAMPTZ,
-      subject       TEXT,
-      participants  JSONB,
-      payload       JSONB NOT NULL,
-      swept_at      TIMESTAMPTZ NOT NULL DEFAULT now()
-    )`;
-  await sql`CREATE INDEX IF NOT EXISTS sweep_threads_last ON sweep_threads (last_date DESC)`;
-  await sql`CREATE INDEX IF NOT EXISTS sweep_threads_count ON sweep_threads (message_count DESC)`;
+  await ensureSchema(sql);
   _ready = true;
 }
 

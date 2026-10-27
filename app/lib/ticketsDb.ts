@@ -6,6 +6,7 @@
 import { neon, type NeonQueryFunction } from "@neondatabase/serverless";
 import type { ConversationState } from "./engine/types";
 import type { Job } from "./jobsDb";
+import { ensureSchema } from "./migrations";
 
 let _sql: NeonQueryFunction<false, false> | null = null;
 let _ready = false;
@@ -26,65 +27,7 @@ export function ticketsDbEnabled(): boolean {
 
 async function ensure(sql: NeonQueryFunction<false, false>): Promise<void> {
   if (_ready) return;
-  await sql`
-    CREATE TABLE IF NOT EXISTS tickets (
-      thread_id            TEXT PRIMARY KEY,
-      subject              TEXT,
-      contact              TEXT,
-      company_id           INT,
-      user_id              INT,
-      place_id             INT,
-      onsinch_order_id     BIGINT,
-      onsinch_order_number TEXT,
-      onsinch_job_id       BIGINT,
-      classification       TEXT,
-      status               TEXT,
-      is_client_inquiry    BOOLEAN,
-      gate_reason          TEXT,
-      priority             TEXT,
-      crew_size            INT,
-      dates                JSONB,
-      location             TEXT,
-      reply_state          TEXT,
-      reply_draft_id       TEXT,
-      ai_replied           BOOLEAN,
-      needs_human          BOOLEAN,
-      extracted            JSONB,
-      notes                JSONB,
-      created_at           TIMESTAMPTZ NOT NULL DEFAULT now(),
-      updated_at           TIMESTAMPTZ NOT NULL DEFAULT now()
-    )`;
-  // Several threads may own the SAME order, because a client raises one job and
-  // then emails about it more than once — a new thread for the crew change,
-  // another for the invoice query. Order dedup matches on company + happening
-  // date, so all of them correctly resolve to one order, and that is right:
-  // one job, one order. Ben, 2026-08-03: "both threads should own it, its the
-  // same job."
-  //
-  // This was a UNIQUE index, which enforced one TICKET per ORDER and refused the
-  // second thread's link — live, 19fb8a6d756a916b lost to 19fb421845dd47b4 over
-  // order 13639 and ended up with no ticket at all. It also never matched its own
-  // comment ("a second order can't link to the same ticket twice" is the reverse
-  // relation, already guaranteed by thread_id being the primary key).
-  //
-  // The invariant that DOES matter — never create a duplicate order for one job —
-  // lives in resolve.matchExistingOrder and is untouched.
-  // The CREATE above only runs on an empty database, so a column added later has
-  // to be added here too or it exists in dev and nowhere else.
-  await sql`ALTER TABLE tickets ADD COLUMN IF NOT EXISTS onsinch_job_id BIGINT`;
-  await sql`DROP INDEX IF EXISTS tickets_order_uniq`;
-  await sql`CREATE INDEX IF NOT EXISTS tickets_order ON tickets (onsinch_order_id) WHERE onsinch_order_id IS NOT NULL`;
-  await sql`CREATE INDEX IF NOT EXISTS tickets_updated ON tickets (updated_at DESC)`;
-  await sql`CREATE INDEX IF NOT EXISTS tickets_status ON tickets (status)`;
-  await sql`
-    CREATE TABLE IF NOT EXISTS ticket_events (
-      id        BIGSERIAL PRIMARY KEY,
-      thread_id TEXT NOT NULL,
-      kind      TEXT NOT NULL,
-      meta      JSONB,
-      ts        TIMESTAMPTZ NOT NULL DEFAULT now()
-    )`;
-  await sql`CREATE INDEX IF NOT EXISTS ticket_events_thread ON ticket_events (thread_id, ts DESC)`;
+  await ensureSchema(sql);
   _ready = true;
 }
 

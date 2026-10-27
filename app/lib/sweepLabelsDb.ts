@@ -14,6 +14,7 @@
 // rather than one silently replacing the other.
 // ============================================================================
 import { neon, type NeonQueryFunction } from "@neondatabase/serverless";
+import { ensureSchema } from "./migrations";
 
 let _sql: NeonQueryFunction<false, false> | null = null;
 let _ready = false;
@@ -29,43 +30,7 @@ function db(): NeonQueryFunction<false, false> {
 async function ensure(): Promise<NeonQueryFunction<false, false>> {
   const sql = db();
   if (_ready) return sql;
-  await sql`
-    CREATE TABLE IF NOT EXISTS sweep_labels (
-      thread_id      TEXT NOT NULL,
-      model          TEXT NOT NULL,
-      classification TEXT,
-      is_cancellation BOOLEAN NOT NULL DEFAULT false,
-      priority       TEXT,
-      job_summary    TEXT,
-      company_name   TEXT,
-      location_text  TEXT,
-      blocks         JSONB NOT NULL DEFAULT '[]'::jsonb,
-      first_start    TIMESTAMPTZ,
-      last_end       TIMESTAMPTZ,
-      -- PEAK crew, not the sum across blocks: four crew over three days is a job for
-      -- four people, and summing read it as twelve (one thread scored 61).
-      crew_peak      INT,
-      crew_days      INT,
-      error          TEXT,
-      labelled_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
-      PRIMARY KEY (thread_id, model)
-    )`;
-  // The first version of this table summed crew into crew_total. Rename rather than
-  // drop, so the handful of rows labelled under the old meaning are still inspectable
-  // — and re-labelling overwrites them with the peak.
-  await sql`
-    DO $$ BEGIN
-      IF EXISTS (SELECT 1 FROM information_schema.columns
-                 WHERE table_name = 'sweep_labels' AND column_name = 'crew_total') THEN
-        ALTER TABLE sweep_labels RENAME COLUMN crew_total TO crew_peak;
-      END IF;
-      IF NOT EXISTS (SELECT 1 FROM information_schema.columns
-                     WHERE table_name = 'sweep_labels' AND column_name = 'crew_days') THEN
-        ALTER TABLE sweep_labels ADD COLUMN crew_days INT;
-      END IF;
-    END $$`;
-  await sql`CREATE INDEX IF NOT EXISTS sweep_labels_class ON sweep_labels (classification)`;
-  await sql`CREATE INDEX IF NOT EXISTS sweep_labels_start ON sweep_labels (first_start)`;
+  await ensureSchema(sql);
   _ready = true;
   return sql;
 }

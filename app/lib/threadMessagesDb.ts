@@ -17,6 +17,7 @@
 // ============================================================================
 import { neon, type NeonQueryFunction } from "@neondatabase/serverless";
 import { idsIn } from "./mail/rfc822";
+import { ensureSchema } from "./migrations";
 
 let _sql: NeonQueryFunction<false, false> | null = null;
 let _ready = false;
@@ -33,35 +34,7 @@ function db(): NeonQueryFunction<false, false> | null {
 }
 async function ensure(sql: NeonQueryFunction<false, false>): Promise<void> {
   if (_ready) return;
-  await sql`
-    CREATE TABLE IF NOT EXISTS thread_messages (
-      message_id      TEXT PRIMARY KEY,
-      thread_id       TEXT NOT NULL,
-      from_address    TEXT,
-      to_addresses    JSONB,
-      date_iso        TEXT,
-      subject         TEXT,
-      body            TEXT,
-      is_from_spartan BOOLEAN NOT NULL DEFAULT false,
-      first_seen_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
-      archived_at     TIMESTAMPTZ
-    )`;
-  await sql`CREATE INDEX IF NOT EXISTS thread_messages_thread ON thread_messages (thread_id, date_iso)`;
-  await sql`CREATE INDEX IF NOT EXISTS thread_messages_seen ON thread_messages (first_seen_at DESC)`;
-  // A second key, not a replacement for message_id: every historical row is keyed by
-  // Gmail id and has no RFC id to backfill from. UNIQUE so the same email read by the
-  // poller (Gmail id) and by mail-inbound (RFC id) is one row, not two.
-  await sql`ALTER TABLE thread_messages ADD COLUMN IF NOT EXISTS rfc_message_id TEXT`;
-  await sql`CREATE UNIQUE INDEX IF NOT EXISTS thread_messages_rfc ON thread_messages (rfc_message_id) WHERE rfc_message_id IS NOT NULL`;
-  // The reply chain, for the resolver (design §9.2: a reply-chain parent is strong
-  // evidence). `reference_ids`, not `references`, which is a reserved word in Postgres.
-  await sql`ALTER TABLE thread_messages ADD COLUMN IF NOT EXISTS in_reply_to TEXT[]`;
-  await sql`ALTER TABLE thread_messages ADD COLUMN IF NOT EXISTS reference_ids TEXT[]`;
-  // For the job matcher: who was copied in (a colleague on Cc is often the order's contact)
-  // and the files' names (a PO arrives as "PO 1244.pdf"). Kept apart from to_addresses, which
-  // finders already read: folding Cc in would change which companies a thread resolves to.
-  await sql`ALTER TABLE thread_messages ADD COLUMN IF NOT EXISTS cc_addresses JSONB`;
-  await sql`ALTER TABLE thread_messages ADD COLUMN IF NOT EXISTS attachment_names JSONB`;
+  await ensureSchema(sql);
   _ready = true;
 }
 

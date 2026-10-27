@@ -32,5 +32,6 @@ export async function GET(request: Request): Promise<Response> {
 export async function POST(request: Request): Promise<Response> {
   const caller = await authorizeAction(request);
   if (!caller.ok) return Response.json({ ok: false, error: "Unauthorized" }, { status: 401 });
-  return handleSettingsPost(request);
+  // The write and reply switches are an admin's alone (addendum F34): routes/settings.ts.
+  return handleSettingsPost(request, undefined, caller);
 }

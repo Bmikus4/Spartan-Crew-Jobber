@@ -44,6 +44,7 @@ every step update its status line, its §0 table and any measurement.**
 ## Where things live
 - The plan and its status: `ADDENDUM.md`. Rulings: `DECISIONS.md` (dated ones in `decisions/`).
 - Measured numbers: `public/data/feed.json`, one ticket per ship. The docs index: `docs/README.md`.
+- The schema: `app/lib/migrations.ts`, append only; each store calls `ensureSchema()`. Never a CREATE or ALTER elsewhere.
 - History, not instructions: `OPERATING.md`, `RUNBOOK.md`, `audit/`, `fleet/resume/`.
 
 ## The session gate

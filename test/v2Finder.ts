@@ -122,7 +122,7 @@ const NOW = Date.parse("2026-10-20T09:00:00Z");
   console.log("A found order never displaces a live link (links.ts linkFound)");
   {
     const writes: string[] = [];
-    const fake = (rows: any[]) => (async (strings: TemplateStringsArray) => { const q = strings.join("?").trim(); if (/^SELECT/.test(q)) return rows; if (/^(INSERT|DELETE|UPDATE)/.test(q)) writes.push(q.split(/\s+/).slice(0, 3).join(" ")); return []; }) as any;
+    const fake = (rows: any[]) => (async (strings: TemplateStringsArray | string) => { const q = (typeof strings === "string" ? strings : strings.join("?")).trim(); if (/schema_migrations|^(CREATE|ALTER|DROP|DO)/.test(q)) return []; if (/^SELECT/.test(q)) return rows; if (/^(INSERT|DELETE|UPDATE)/.test(q)) writes.push(q.split(/\s+/).slice(0, 3).join(" ")); return []; }) as any;
     ok(await linkFound(fake([{ order_id: 5, state: "linked" }]), { thread_id: "t", order_id: 6, source: "finder" }) === "kept" && !writes.length, "a thread linked to another live order keeps it");
     ok(await linkFound(fake([{ order_id: 6, state: "relinked" }]), { thread_id: "t", order_id: 6, source: "finder" }) === "same" && !writes.length, "the same order is no change");
   }

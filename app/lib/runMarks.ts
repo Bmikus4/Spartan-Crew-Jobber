@@ -1,6 +1,7 @@
 // When each timed run last finished, and whether every step in it succeeded: what the heartbeat
 // reads (heartbeat.ts). One row per run name, overwritten each time; the history is not kept.
 import { neon, type NeonQueryFunction } from "@neondatabase/serverless";
+import { ensureSchema } from "./migrations";
 
 export type RunName = "sync" | "labels";
 
@@ -13,7 +14,7 @@ async function db(): Promise<NeonQueryFunction<false, false>> {
     _sql = neon(url);
   }
   if (!_ready) {
-    await _sql`CREATE TABLE IF NOT EXISTS run_marks (name TEXT PRIMARY KEY, at TIMESTAMPTZ NOT NULL, ok BOOLEAN NOT NULL, detail JSONB)`;
+    await ensureSchema(_sql);
     _ready = true;
   }
   return _sql;

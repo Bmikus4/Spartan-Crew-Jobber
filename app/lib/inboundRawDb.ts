@@ -15,6 +15,7 @@
 import { neon, type NeonQueryFunction } from "@neondatabase/serverless";
 import { createHash } from "node:crypto";
 import { storeThreadMessages, messagesFromPayload } from "./threadMessagesDb";
+import { ensureSchema } from "./migrations";
 
 let _sql: NeonQueryFunction<false, false> | null = null;
 let _ready = false;
@@ -31,23 +32,7 @@ function db(): NeonQueryFunction<false, false> | null {
 }
 async function ensure(sql: NeonQueryFunction<false, false>): Promise<void> {
   if (_ready) return;
-  await sql`
-    CREATE TABLE IF NOT EXISTS inbound_raw (
-      id          BIGSERIAL PRIMARY KEY,
-      dedup_key   TEXT UNIQUE NOT NULL,
-      source      TEXT,
-      thread_id   TEXT,
-      message_id  TEXT,
-      payload     JSONB NOT NULL,
-      received_at TIMESTAMPTZ NOT NULL DEFAULT now()
-    )`;
-  await sql`CREATE INDEX IF NOT EXISTS inbound_raw_received ON inbound_raw (received_at DESC)`;
-  await sql`CREATE INDEX IF NOT EXISTS inbound_raw_thread ON inbound_raw (thread_id)`;
-  // The payload column is EMPTIED, not dropped: reverting is then one line, and rows
-  // captured before the restructure keep the copy the ops scripts may still read.
-  await sql`ALTER TABLE inbound_raw ALTER COLUMN payload DROP NOT NULL`;
-  await sql`ALTER TABLE inbound_raw ADD COLUMN IF NOT EXISTS message_ids TEXT[]`;
-  await sql`ALTER TABLE inbound_raw ADD COLUMN IF NOT EXISTS envelope JSONB`;
+  await ensureSchema(sql);
   _ready = true;
 }
 

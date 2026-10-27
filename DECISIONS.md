@@ -209,3 +209,9 @@ the owner's where the comment quotes them. Owner decisions still OPEN are in ADD
 | V33 | | A PO is cosmetic (1 in 50): one not proven is left off with a note and never blocks the booking | interpret/interpret.ts, interpret/plan.ts |
 | V34 | 10-04..10-10 | The TV's order and clocks: a client waiting 24 h is red and rises (10-04); old untouched work sinks, never hidden (10-05); open above done (10-04, 10-05); Needs Follow Up after a quiet day (10-10); a job has no timer (10-06); quiet resets on any update (10-06); the colour is the need (10-04) | feed/order.ts, feed/project.ts |
 | V35 | 10-05, 10-10 | An order the engine wrote is not done until somebody checks it; nothing is sent to ops, ops are told on the TV; the TV starts from go-live (10-10); synced once a minute (10-10) | feed/project.ts, feed/v2.ts, feed/verify.ts |
+
+## Defaults set in code, the owner's to change
+
+| id | date | default | dial |
+|---|---|---|---|
+| A1 | 27 Oct | Who may change the write and reply switches (bot_writes_enabled, replies_enabled, reply_delivery): the break-glass admin session and the owner's two addresses. Not an owner ruling: the addendum (F34) asked for "admin only" and named no list | SPARTAN_ADMIN_EMAILS adds addresses; the list is OWNER_EMAILS in app/lib/apiAuth.ts |

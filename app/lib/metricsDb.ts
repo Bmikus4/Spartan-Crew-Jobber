@@ -9,6 +9,7 @@ import type { MetricEvent, MetricSink, MetricType } from "./engine/metrics";
 import { aggregate, type DashboardStats } from "./engine/metrics";
 import { ticketStateCounts, type TicketStateCounts } from "./ticketsDb";
 import { v2Engine } from "./paused";
+import { ensureSchema } from "./migrations";
 
 let _sql: NeonQueryFunction<false, false> | null = null;
 let _ready = false;
@@ -37,15 +38,7 @@ export function metricsDbEnabled(): boolean {
 
 async function ensure(sql: NeonQueryFunction<false, false>): Promise<void> {
   if (_ready) return;
-  await sql`
-    CREATE TABLE IF NOT EXISTS metric_events (
-      id BIGSERIAL PRIMARY KEY,
-      kind TEXT NOT NULL,
-      ts TIMESTAMPTZ NOT NULL DEFAULT now(),
-      thread_id TEXT,
-      meta JSONB
-    )`;
-  await sql`CREATE INDEX IF NOT EXISTS metric_events_kind_ts ON metric_events (kind, ts)`;
+  await ensureSchema(sql);
   _ready = true;
 }
 

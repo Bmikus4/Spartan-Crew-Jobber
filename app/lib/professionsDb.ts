@@ -18,6 +18,7 @@
 // ============================================================================
 import { neon, type NeonQueryFunction } from "@neondatabase/serverless";
 import type { ProfessionRec } from "./engine/professions";
+import { ensureSchema } from "./migrations";
 
 let _sql: NeonQueryFunction<false, false> | null = null;
 let _ready = false;
@@ -32,18 +33,7 @@ function db(): NeonQueryFunction<false, false> | null {
 
 async function ensure(sql: NeonQueryFunction<false, false>): Promise<void> {
   if (_ready) return;
-  await sql`
-    CREATE TABLE IF NOT EXISTS onsinch_professions (
-      id          INT PRIMARY KEY,
-      name        TEXT NOT NULL,
-      alias       TEXT,
-      description TEXT,
-      -- Deleted rows are STORED, not dropped. They still come back from OnSinch and
-      -- the resolver has to know they are unbookable; a row missing from the cache
-      -- is indistinguishable from a row we never fetched.
-      deleted     BOOLEAN NOT NULL DEFAULT false,
-      synced_at   TIMESTAMPTZ NOT NULL DEFAULT now()
-    )`;
+  await ensureSchema(sql);
   _ready = true;
 }
 

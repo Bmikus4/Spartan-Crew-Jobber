@@ -20,6 +20,7 @@
 import type { NeonQueryFunction } from "@neondatabase/serverless";
 import { httpTransport } from "../engine/onsinch";
 import { readRows } from "./read";
+import { ensureSchema } from "../migrations";
 
 type Sql = NeonQueryFunction<false, false>;
 export const HOLD_TV_MINUTES = 30;
@@ -34,11 +35,7 @@ export function assumeLinksTable(): void { ready = true; }
 
 export async function ensureLinks(sql: Sql): Promise<void> {
   if (ready) return;
-  await sql`CREATE TABLE IF NOT EXISTS job_links (
-    thread_id TEXT NOT NULL, order_id BIGINT NOT NULL, r_number TEXT, job_id BIGINT, company_id INTEGER,
-    state TEXT NOT NULL DEFAULT 'linked', source TEXT, shifts JSONB,
-    first_seen TIMESTAMPTZ NOT NULL DEFAULT now(), last_checked TIMESTAMPTZ, held_since TIMESTAMPTZ, note TEXT,
-    PRIMARY KEY (thread_id, order_id))`;
+  await ensureSchema(sql);
   ready = true;
 }
 

@@ -5,6 +5,7 @@
 import { neon, type NeonQueryFunction } from "@neondatabase/serverless";
 import { DEFAULT_SETTINGS, type Settings } from "./engine/types";
 import { reportError } from "./errorReport";
+import { ensureSchema } from "./migrations";
 
 let _sql: NeonQueryFunction<false, false> | null = null;
 let _ready = false;
@@ -21,7 +22,7 @@ function db(): NeonQueryFunction<false, false> | null {
 }
 async function ensure(sql: NeonQueryFunction<false, false>): Promise<void> {
   if (_ready) return;
-  await sql`CREATE TABLE IF NOT EXISTS app_settings (id TEXT PRIMARY KEY, value JSONB NOT NULL, updated_at TIMESTAMPTZ NOT NULL DEFAULT now())`;
+  await ensureSchema(sql);
   _ready = true;
 }
 
@@ -84,6 +85,13 @@ export async function getSettings(sql: NeonQueryFunction<false, false> | null = 
     });
     throw err;
   }
+}
+
+/** One change of a write or reply switch, kept for good: who, when, from and to (routes/settings.ts). */
+export async function settingsHistory(c: { field: string; from: unknown; to: unknown; actor: string; at: string }, sql: NeonQueryFunction<false, false> | null = db()): Promise<void> {
+  if (!sql) return;
+  await ensure(sql);
+  await sql`INSERT INTO settings_history (field, from_value, to_value, actor, at) VALUES (${c.field}, ${JSON.stringify(c.from ?? null)}::jsonb, ${JSON.stringify(c.to ?? null)}::jsonb, ${c.actor}, ${c.at})`;
 }
 
 /** Throws when the write fails, so the Settings screen is never told "saved" for nothing. */

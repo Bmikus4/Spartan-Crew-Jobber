@@ -41,6 +41,7 @@ import type { Grounded as Asked, ThreadMsg } from "./threadState";
 import { bookingsOf, contextText, venuesOf, type ReadContext, type ThreadLine } from "./interpret/context";
 import { readRows } from "./read";
 import { getSettings } from "../settingsDb";
+import { ensureSchema } from "../migrations";
 
 let _sql: NeonQueryFunction<false, false> | null = null;
 let _ready = false;
@@ -51,23 +52,7 @@ async function db(): Promise<NeonQueryFunction<false, false>> {
     _sql = neon(url);
   }
   if (!_ready) {
-    await _sql`
-      CREATE TABLE IF NOT EXISTS v2_decisions (
-        message_id     TEXT PRIMARY KEY,
-        thread_id      TEXT,
-        from_address   TEXT,
-        sent_at        TEXT,
-        kind           TEXT NOT NULL,
-        interpretation JSONB,
-        decision       JSONB NOT NULL,
-        executed       JSONB,
-        code_version   TEXT,
-        created_at     TIMESTAMPTZ NOT NULL DEFAULT now()
-      )`;
-    // The client as the TV names it; resolved here because the TV must not read OnSinch per refresh.
-    await _sql`ALTER TABLE v2_decisions ADD COLUMN IF NOT EXISTS company_id INTEGER, ADD COLUMN IF NOT EXISTS company TEXT`;
-    // Mail stored while the automation was paused: kept, never decided (storeOnly).
-    await _sql`CREATE TABLE IF NOT EXISTS v2_store_only (message_id TEXT PRIMARY KEY, reason TEXT NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT now())`;
+    await ensureSchema(_sql);
     _ready = true;
   }
   return _sql;

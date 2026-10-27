@@ -13,6 +13,7 @@
 // amendment path composes its next version from.
 // ============================================================================
 import { neon, type NeonQueryFunction } from "@neondatabase/serverless";
+import { ensureSchema } from "./migrations";
 
 /**
  * How an order id came to be recorded. The distinction Phase 0 found missing, and the
@@ -113,46 +114,10 @@ function db(): NeonQueryFunction<false, false> | null {
 
 async function ensure(sql: NeonQueryFunction<false, false>): Promise<void> {
   if (_ready) return;
-  await sql`
-    CREATE TABLE IF NOT EXISTS order_records (
-      order_id      BIGINT NOT NULL,
-      thread_id     TEXT NOT NULL,
-      job_id        BIGINT,
-      order_number  TEXT,
-      sender_email  TEXT,
-      sender_domain TEXT,
-      company_id    INT,
-      place_id      INT,
-      shape_sent    JSONB NOT NULL,
-      block_count   INT NOT NULL,
-      crew_total    INT NOT NULL,
-      id_source     TEXT NOT NULL DEFAULT 'api_response',
-      verified_at   TIMESTAMPTZ,
-      created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
-      PRIMARY KEY (thread_id, order_id)
-    )`;
+  await ensureSchema(sql);
   // The CREATE above only runs on an empty database, so a column added later has to be
   // added here too or it exists in dev and nowhere else. Same rule, and the same comment,
   // as ticketsDb.ts — that repo learned it by shipping a column into one environment.
-  /**
-   * Migrate a table created under the old one-row-per-order key. Postgres names that
-   * constraint `order_records_pkey`, and dropping it is safe because the composite key
-   * added straight after is strictly weaker — every row that satisfied the old key
-   * satisfies the new one, so nothing can fail to migrate.
-   */
-  await sql`ALTER TABLE order_records DROP CONSTRAINT IF EXISTS order_records_pkey`;
-  await sql`ALTER TABLE order_records ADD COLUMN IF NOT EXISTS id_source TEXT NOT NULL DEFAULT 'api_response'`;
-  await sql`ALTER TABLE order_records ADD COLUMN IF NOT EXISTS verified_at TIMESTAMPTZ`;
-  await sql`
-    DO $$ BEGIN
-      IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'order_records_thread_order_pk') THEN
-        ALTER TABLE order_records ADD CONSTRAINT order_records_thread_order_pk PRIMARY KEY (thread_id, order_id);
-      END IF;
-    END $$`;
-  await sql`CREATE INDEX IF NOT EXISTS order_records_order ON order_records (order_id)`;
-  await sql`CREATE INDEX IF NOT EXISTS order_records_thread ON order_records (thread_id)`;
-  await sql`CREATE INDEX IF NOT EXISTS order_records_domain ON order_records (sender_domain)`;
-  await sql`CREATE INDEX IF NOT EXISTS order_records_unverified ON order_records (id_source) WHERE verified_at IS NULL`;
   _ready = true;
 }
 

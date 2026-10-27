@@ -15,6 +15,7 @@
 
 import { neon, type NeonQueryFunction } from "@neondatabase/serverless";
 import { TERMS_VERSION } from "./orgProfile";
+import { ensureSchema } from "./migrations";
 
 let _sql: NeonQueryFunction<false, false> | null = null;
 let _ready = false;
@@ -39,28 +40,7 @@ export function onboardingEnabled(): boolean {
 
 async function ensure(sql: NeonQueryFunction<false, false>): Promise<void> {
   if (_ready) return;
-  // org_key is the email DOMAIN — see orgProfile.ts for why that is the only
-  // organisation identity this app has.
-  await sql`
-    CREATE TABLE IF NOT EXISTS org_terms_acceptance (
-      org_key TEXT NOT NULL,
-      terms_version TEXT NOT NULL,
-      accepted_by TEXT NOT NULL,
-      accepted_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-      PRIMARY KEY (org_key, terms_version)
-    )`;
-  // The PRIMARY KEY carries the version, so bumping TERMS_VERSION re-prompts an
-  // organisation instead of treating an old signature as covering new terms. That is
-  // the whole reason the version is in the key.
-  await sql`
-    CREATE TABLE IF NOT EXISTS user_onboarding (
-      email TEXT PRIMARY KEY,
-      display_name TEXT NOT NULL,
-      contact_email TEXT,
-      organisation TEXT NOT NULL,
-      org_key TEXT NOT NULL,
-      completed_at TIMESTAMPTZ NOT NULL DEFAULT now()
-    )`;
+  await ensureSchema(sql);
   _ready = true;
 }
 

@@ -25,6 +25,7 @@ import { rowsOnCard, type V2Row } from "../feed/v2";
 import { V2_FROM } from "../feed/live";
 import { FEED_FROM } from "../feed/project";
 import { utcToLondon } from "./bot/ops";
+import { ensureSchema } from "../migrations";
 
 type Sql = NeonQueryFunction<false, false>;
 
@@ -53,7 +54,7 @@ function cached(w: World, now: () => number = Date.now): World {
 let ready = false;
 async function ensure(sql: Sql): Promise<void> {
   if (ready) return;
-  await sql`ALTER TABLE v2_decisions ADD COLUMN IF NOT EXISTS replan JSONB, ADD COLUMN IF NOT EXISTS replanned_at TIMESTAMPTZ`;
+  await ensureSchema(sql);
   ready = true;
 }
 

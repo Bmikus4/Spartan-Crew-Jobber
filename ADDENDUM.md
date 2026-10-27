@@ -6,7 +6,7 @@
   below as findings and status.
 - Every step updates this file: its status line, its measurement, and what moved.
 
-**Last updated:** 27 October 2026, R5 shipped (S-0239). R3's switch-over waits on CRON_SECRET. The baseline was 0f2dcef. App code changed since then in these
+**Last updated:** 27 October 2026, R6 shipped (S-0240). R3's switch-over waits on CRON_SECRET. The baseline was 0f2dcef. App code changed since then in these
 commits only:
 
 | commit | ticket | what |
@@ -21,6 +21,7 @@ commits only:
 | 057dbb6 | S-0237 | Prompt 10: vercel.json crons, the heartbeat, an honest sync, sync and labels on CRON_SECRET |
 | (R4) | S-0238 | Prompt 0: scripts/size-findings.mts (read-only); the scoreboard reads an email with no body |
 | (R5) | S-0239 | Prompt 5 and 5.10: combined changes, trade totals, direction words, schema check, F13, F14, F18, the op key |
+| (R6) | S-0240 | Prompt 11: the write and reply switches are an admin's, kept and reported; one migrations module |
 
 bd10dae (S-0213) moved the test suite onto PGlite. Line references below are at HEAD unless a line says "at 0f2dcef".
 
@@ -56,7 +57,7 @@ and §3 ends with the findings added after 23 Oct (F29 onward). §11 is the rebu
 | F4 creates go through the API | **DONE for the docs** S-0239: run.ts says creates go through the API. The phase is still logged as "browser" | run.ts:5 |
 | F5 two-week rule | **OPEN, owner decision** | plan.ts:54, :774-775 |
 | F6 unknown sender creates a client | **OPEN, owner decision** | plan.ts:499-500, :834 |
-| F7 suite writes to production | **DONE** S-0213 (PGlite). **OPEN: preview shares production's database** (F44) | test/fixtures/pg.ts |
+| F7 suite writes to production | **DONE** S-0213 (PGlite). **OPEN: preview shares production's database** (F44; steps in §11 Prompt 11) | test/fixtures/pg.ts |
 | F8 grounding checks presence, not selection | **DONE** S-0239: direction ("instead of", "rather than", "was X, make it Y", "make it") is read before membership; a reply's subject supplies no new value | test/v2EverydayRequests.ts [F8]; interpret.ts directed |
 | F9 "already booked" too loose / too strict | **OPEN** | evidence.ts:34-56; plan.ts:379-396 (exact beginning) |
 | F10 venue ignored on multi-venue orders | **OPEN** | plan.ts:379 bookedAt is location-blind; called :674, :730 |
@@ -97,7 +98,9 @@ and §3 ends with the findings added after 23 Oct (F29 onward). §11 is the rebu
 | F36 zone-less audit times | **DONE** S-0235 | test/zonelessIsUtc.ts |
 | F32 n8n runs this automation's heartbeats | **Code DONE** S-0237: vercel.json crons (sync every minute, heartbeat every 5), /api/health/heartbeat, the label workflow made webhook-triggered (scripts/install-sync-workflow.mjs), the watchdog installer refuses to run. **Switch-over OPEN: waits on CRON_SECRET** | test/cronEntryPoints.ts; test/heartbeat.ts |
 | F37 the sync reports success whatever happened | **DONE for the sync** S-0237 (ok only when every step succeeded, 500 otherwise). Labels still count as applied when handed out | test/cronEntryPoints.ts |
-| F33-F34, F38-F47 (added 26 Oct) | see §3, "Added 26 October" | |
+| F34 any staff member flips the switches | **DONE** S-0240: admin only (DECISIONS A1), a settings_history row per change, a settings-changed alert to the owner | test/settingsSwitchesGoverned.ts |
+| F44 schema at request time; preview on production's database | **DONE for the schema** S-0240: app/lib/migrations.ts, migrate() once per database, checked against production's schema. **OPEN: Preview's own branch** (needs access) | test/migrations.ts |
+| F33, F38-F43, F45-F47 (added 26 Oct) | see §3, "Added 26 October" | |
 
 ### Built and held (not deployed)
 Each held diff is mapped to the item it serves. They sit in `eval/patches/` and stack in this order on 305bf84. Applied
@@ -131,7 +134,7 @@ items-1-3-runtime, item-4-scoring, n1-write-judging and c-current-mail's C2 and 
      `gmail.readonly,gmail.modify`.
    - The steps are in app/api/mail-poll/route.ts.
    - This lets intake, labels and alarms leave n8n entirely.
-3. **A Neon branch for Preview** (F44).
+3. **A Neon branch for Preview** (F44). The steps are under Prompt 11 in §11.
 4. **Paz's answers** (F41, F42, held items 6 and 8).
 
 ### Dates
@@ -682,7 +685,7 @@ hand-out (10 minutes); a signal that cannot be read counts as stale. Each raises
 - It is now shut under v2 (paused.ts OLD_ENGINE_ROUTES; test/automationPaused.ts [6]).
 - The 16 tickets are inert. Marking them dead is a production write.
 
-**F34. Any signed-in staff member can flip the write and auto-reply switches, with no record (Safety, medium).**
+**F34. Any signed-in staff member can flip the write and auto-reply switches, with no record (Safety, medium). DONE S-0240.**
 - Settings writes bot_writes_enabled, replies_enabled and reply_delivery for any session (settings/route.ts:32-35).
 - The settings row keeps no actor or history.
 - isAdmin (session.ts:6) is checked nowhere.
@@ -738,7 +741,8 @@ hand-out (10 minutes); a signal that cannot be read counts as stale. Each raises
   fad7c0f found that mail-poll would give every existing conversation a second thread id.
 - It stays dormant until the Gmail grant.
 
-**F44. Preview shares the production database, and the schema is made at request time (Process, medium).**
+**F44. Preview shares the production database, and the schema is made at request time (Process, medium). DONE for the
+schema S-0240; Preview's branch OPEN (needs access).**
 - There are 33 CREATE TABLE IF NOT EXISTS and 18 ALTER statements in 25 files.
 - **Fix:**
   - one ordered migrations module with a schema_migrations table, idempotent on the current production schema;
@@ -958,7 +962,7 @@ If Spartan wants it automated:
 | skip dead decision-derived order ids (F14) | DONE S-0239 |
 | gate test-data cleanup (F15) | DONE |
 | tests on their own database (F7) | DONE |
-| preview on its own database (F44) | OPEN |
+| preview on its own database (F44) | OPEN: the steps are in §11 Prompt 11; the schema module is DONE S-0240 |
 | NOT_CLIENT by whole domain (F18) | DONE S-0239 |
 | measure lease duration (F17) | DONE S-0238: 0 of 159 over 180 s |
 | canonicalise the op key recursively | DONE S-0239: keys sorted at every depth; a flat op's key is unchanged, and runOp also asks for legacyOpKey, so no ledger row is orphaned |
@@ -1069,7 +1073,8 @@ list is true and the owner has reviewed the result. Don't run several at once: t
 | 8 | DONE (S-0236) |
 | 9 | DONE (S-0235) |
 | 10 | code DONE (S-0237); switch-over waits on CRON_SECRET |
-| 11-13 | new, §11 |
+| 11 | DONE (S-0240); Preview's branch waits on access |
+| 12-13 | new, §11 |
 
 **Rules for every task:**
 - Read ADDENDUM.md first. Re-find each line reference at HEAD before editing, and say what moved.
@@ -1260,7 +1265,7 @@ Still to come from §10: the identity owner (R8) and the old engine's retirement
 | R3 | **10** (new) | **No heartbeat in n8n** (F32): cron entry points, the heartbeat, honest sync status (F37), sync and labels on their own secret (F3), labels by webhook, the switch-over | **Code DONE S-0237.** Switch-over waits on CRON_SECRET |
 | R4 | 0 | Size the findings, read-only | **DONE S-0238** (§7) |
 | R5 | 5 + 5.10 | Everyday requests (F8, F24, F25, dates, schema validation) and the small fixes (F13, F14, F18, op key, run.ts:5, README). Re-cut held item 5 and n2-planner-ops | **DONE S-0239** |
-| R6 | **11** (new) | Govern the switches (F34). One migrations module (F44). A Preview branch when access exists | yes |
+| R6 | **11** (new) | Govern the switches (F34). One migrations module (F44). A Preview branch when access exists | **DONE S-0240**; the branch waits on access |
 | R7 | **12** (new) | Retire the old engine in stages (F45, §10): move the shared OnSinch client and helpers to app/lib/onsinch/, delete what nothing live reaches, then pipeline/compiler/deps and the shut routes, then the 145 old tests | yes, staged |
 | R8 | 4 | **One shared booking finder** (5.3), built once the old engine is gone, so there is one place for it. Brings in held C1 and item 7 | yes |
 | R9 | 6 | Resume interrupted plans (F26, F38, F39) | yes |
@@ -1335,7 +1340,28 @@ answers ok.
 - the sync reports a failed step as not ok;
 - after the switch-over, n8n lists no active Spartan schedule except the intake Gmail trigger, which waits for R14.
 
-### Prompt 11: govern the switches and the schema (F34, F44)
+### Prompt 11: govern the switches and the schema (F34, F44): **DONE**, S-0240
+**As built:** the admins are the break-glass session, the owner's two addresses and SPARTAN_ADMIN_EMAILS (a default,
+DECISIONS A1). The schema is 84 statements in app/lib/migrations.ts (83 moved from 27 files, plus settings_history),
+run by migrate() and recorded in schema_migrations; each store calls ensureSchema() before its first query.
+
+**Incident, 27 Oct 12:37Z (my error).** A bare `npx tsx test/sweepIsolation.ts` skips the PGlite preload, read
+.env.local's DATABASE_URL and ran the new migrate() against production before this shipped. Effect, checked by diffing
+production's schema before and after (read-only): three new empty tables (schema_migrations with the 84 ids,
+settings_history, mail_seen); no existing column or index removed or changed; the test's own rows deleted (0 left). It
+is what this ship's deploy does anyway, but it broke the rule that nothing runs against production. Fixed: the 7 test
+files that load .env.local now import ./fixtures/pg first. Run a single test as
+`npx tsx --require ./test/fixtures/pg.ts test/<file>.ts`.
+
+**Preview's own database: the steps** (whoever holds Neon and Vercel access; Vercel is refused to this agent):
+1. In Neon, branch `preview` off production's main branch. Prefer a schema-only branch if the plan offers one, so no
+   client mail lands in Preview.
+2. In Vercel, Project, Settings, Environment Variables: set DATABASE_URL, POSTGRES_URL and every other STORAGE_ and
+   POSTGRES_ name .env.example lists, **for Preview only**, to the branch's connection string.
+3. Redeploy one preview and check its /api/health/intake answers a different last inbound from production's.
+   migrate() makes any table the branch lacks on its first query.
+4. Neon's Vercel integration can make a branch per preview deployment; that is the same with less upkeep.
+
 1. bot_writes_enabled, replies_enabled and reply_delivery may be changed by an admin only. Find how isAdmin is set, or
    define the admin list.
 2. Every change is stored with actor and time, and raises reportError "settings-changed" to the owner.

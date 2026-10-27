@@ -26,6 +26,22 @@ export interface Caller {
   actor: string | null;
   /** the signer's display name, for a screen to show; the actor stays the audit identity */
   name?: string | null;
+  /** may change the write and reply switches (isSwitchAdmin); a service caller never may */
+  admin?: boolean;
+}
+
+/**
+ * WHO MAY TURN THE WRITE AND REPLY SWITCHES (addendum F34): the break-glass admin session, the
+ * owner's own addresses, and any address in SPARTAN_ADMIN_EMAILS. Until 27 Oct any signed-in staff
+ * member could, and isAdmin was read nowhere. The owner's addresses are the default; the env list is
+ * the dial (DECISIONS A1).
+ */
+const OWNER_EMAILS = ["ben@samuraisolutions.co.uk", "benjamintmikus@gmail.com"];
+export function isSwitchAdmin(email: string | null | undefined, sessionIsAdmin = false): boolean {
+  if (sessionIsAdmin) return true;
+  const e = (email || "").trim().toLowerCase();
+  const extra = (process.env.SPARTAN_ADMIN_EMAILS || "").toLowerCase().split(",").map((s) => s.trim()).filter(Boolean);
+  return !!e && (OWNER_EMAILS.includes(e) || extra.includes(e));
 }
 
 export interface CallerInputs {
@@ -66,15 +82,17 @@ export async function authorizeAction(request: Request): Promise<Caller> {
 
   let sessionName: string | null = null;
   let sessionEmail: string | null = null;
+  let sessionIsAdmin = false;
   try {
     const session = await getIronSession<SessionData>(await cookies(), sessionOptions);
     sessionName = session.name || null;
     sessionEmail = session.email || null;
+    sessionIsAdmin = session.isAdmin === true;
   } catch {
     /* no or undecryptable cookie - treated as no session */
   }
 
-  return decideCaller({
+  const caller = decideCaller({
     secretMatches: Boolean(secret && presented && safeEqual(presented, secret)),
     secretConfigured: Boolean(secret),
     sessionName,
@@ -82,6 +100,7 @@ export async function authorizeAction(request: Request): Promise<Caller> {
     authRequired: process.env.AUTH_REQUIRED === "true",
     isProduction: process.env.NODE_ENV === "production",
   });
+  return { ...caller, admin: caller.kind === "human" && isSwitchAdmin(sessionEmail, sessionIsAdmin) };
 }
 
 /**

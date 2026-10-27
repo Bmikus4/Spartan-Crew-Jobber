@@ -37,7 +37,7 @@ export type Severity = "alert" | "log";
  * not running cannot report that it is not running. It is asked from outside on a schedule —
  * see app/api/health/intake. The other three are the engine reporting on itself.
  */
-export type Route = "booking-lost" | "write-unconfirmed" | "engine-threw" | "intake-quiet" | "mail-undeliverable" | "mail-pull-failed" | "label-failed" | "help-report" | "system-failed" | "heartbeat";
+export type Route = "booking-lost" | "write-unconfirmed" | "engine-threw" | "intake-quiet" | "mail-undeliverable" | "mail-pull-failed" | "label-failed" | "help-report" | "system-failed" | "heartbeat" | "settings-changed";
 
 const ROUTE_TITLE: Record<Route, string> = {
   "booking-lost": "A BOOKING WAS LOST",
@@ -64,6 +64,8 @@ const ROUTE_TITLE: Record<Route, string> = {
   // request. Staff see it as a need; until this route, the owner never heard of it.
   // The automation stopped somewhere: intake, the sweep, the minute sync or the labels (heartbeat.ts).
   heartbeat: "THE AUTOMATION'S HEARTBEAT IS STALE",
+  // A write or reply switch was changed: the owner hears of every change, with who and when (routes/settings.ts).
+  "settings-changed": "A SWITCH WAS CHANGED",
   "system-failed": "THE SYSTEM FAILED ON ITS OWN PART OF AN EMAIL",
 };
 
@@ -229,6 +231,7 @@ export class InMemoryErrorStore implements ErrorStore {
 
 import { neon, type NeonQueryFunction } from "@neondatabase/serverless";
 import { after } from "next/server";
+import { ensureSchema } from "./migrations";
 
 let _sql: NeonQueryFunction<false, false> | null = null;
 let _ready = false;
@@ -239,19 +242,7 @@ function connString(): string {
 
 async function ensure(sql: NeonQueryFunction<false, false>): Promise<void> {
   if (_ready) return;
-  await sql`
-    CREATE TABLE IF NOT EXISTS error_reports (
-      fingerprint      TEXT PRIMARY KEY,
-      where_at         TEXT NOT NULL,
-      what             TEXT NOT NULL,
-      first_seen_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
-      last_seen_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
-      occurrences      BIGINT NOT NULL DEFAULT 1,
-      last_emailed_at  TIMESTAMPTZ,
-      last_detail      TEXT,
-      deploy_sha       TEXT
-    )`;
-  await sql`CREATE INDEX IF NOT EXISTS error_reports_last_seen ON error_reports (last_seen_at DESC)`;
+  await ensureSchema(sql);
   _ready = true;
 }
 

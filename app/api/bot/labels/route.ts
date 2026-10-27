@@ -7,6 +7,7 @@ import { serveFeed } from "../../../lib/feed/serve";
 import { liveFeedDeps } from "../../../lib/feed/live";
 import type { FeedCard } from "../../../lib/feed/project";
 import { changes, labelsFor, COLOURS, FOLLOW_UP, ORDER_LABELS, RENAMES, STRIP } from "../../../lib/mail/threadLabels";
+import { ensureSchema } from "../../../lib/migrations";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
@@ -32,7 +33,7 @@ export async function POST(request: Request): Promise<Response> {
   const live = body.mode === "live";
   const now = Date.now();
   const sql = neon((process.env.DATABASE_URL || process.env.POSTGRES_URL || "").trim());
-  await sql`CREATE TABLE IF NOT EXISTS thread_labels (thread_id TEXT PRIMARY KEY, order_label TEXT, follow_up BOOLEAN NOT NULL DEFAULT false, applied_at TIMESTAMPTZ NOT NULL DEFAULT now())`;
+  await ensureSchema(sql);
 
   // Threads Gmail refused (n8n's "Refused threads"): forgotten, so the next minute sends them
   // again. Remembering them as applied left them unlabelled until the hourly full resend.

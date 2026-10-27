@@ -1,0 +1,2023 @@
+{
+ "taken": "2026-10-27",
+ "columns": [
+  {
+   "t": "app_settings",
+   "c": "id",
+   "type": "text",
+   "nullable": "NO",
+   "dflt": null
+  },
+  {
+   "t": "app_settings",
+   "c": "value",
+   "type": "jsonb",
+   "nullable": "NO",
+   "dflt": null
+  },
+  {
+   "t": "app_settings",
+   "c": "updated_at",
+   "type": "timestamp with time zone",
+   "nullable": "NO",
+   "dflt": "now()"
+  },
+  {
+   "t": "bot_lease",
+   "c": "id",
+   "type": "integer",
+   "nullable": "NO",
+   "dflt": null
+  },
+  {
+   "t": "bot_lease",
+   "c": "holder",
+   "type": "text",
+   "nullable": "YES",
+   "dflt": null
+  },
+  {
+   "t": "bot_lease",
+   "c": "until",
+   "type": "timestamp with time zone",
+   "nullable": "NO",
+   "dflt": "'1970-01-01 00:00:00+00'::timestamp with time zone"
+  },
+  {
+   "t": "bot_ledger",
+   "c": "op_key",
+   "type": "text",
+   "nullable": "NO",
+   "dflt": null
+  },
+  {
+   "t": "bot_ledger",
+   "c": "source",
+   "type": "text",
+   "nullable": "NO",
+   "dflt": null
+  },
+  {
+   "t": "bot_ledger",
+   "c": "kind",
+   "type": "text",
+   "nullable": "NO",
+   "dflt": null
+  },
+  {
+   "t": "bot_ledger",
+   "c": "op",
+   "type": "jsonb",
+   "nullable": "NO",
+   "dflt": null
+  },
+  {
+   "t": "bot_ledger",
+   "c": "status",
+   "type": "text",
+   "nullable": "NO",
+   "dflt": null
+  },
+  {
+   "t": "bot_ledger",
+   "c": "detail",
+   "type": "jsonb",
+   "nullable": "YES",
+   "dflt": null
+  },
+  {
+   "t": "bot_ledger",
+   "c": "created_at",
+   "type": "timestamp with time zone",
+   "nullable": "NO",
+   "dflt": "now()"
+  },
+  {
+   "t": "bot_ledger",
+   "c": "updated_at",
+   "type": "timestamp with time zone",
+   "nullable": "NO",
+   "dflt": "now()"
+  },
+  {
+   "t": "bot_session",
+   "c": "id",
+   "type": "integer",
+   "nullable": "NO",
+   "dflt": null
+  },
+  {
+   "t": "bot_session",
+   "c": "state",
+   "type": "text",
+   "nullable": "NO",
+   "dflt": null
+  },
+  {
+   "t": "bot_session",
+   "c": "saved_at",
+   "type": "timestamp with time zone",
+   "nullable": "NO",
+   "dflt": "now()"
+  },
+  {
+   "t": "conversation_state",
+   "c": "thread_id",
+   "type": "text",
+   "nullable": "NO",
+   "dflt": null
+  },
+  {
+   "t": "conversation_state",
+   "c": "status",
+   "type": "text",
+   "nullable": "YES",
+   "dflt": null
+  },
+  {
+   "t": "conversation_state",
+   "c": "needs_human",
+   "type": "boolean",
+   "nullable": "YES",
+   "dflt": null
+  },
+  {
+   "t": "conversation_state",
+   "c": "onsinch_order_id",
+   "type": "bigint",
+   "nullable": "YES",
+   "dflt": null
+  },
+  {
+   "t": "conversation_state",
+   "c": "updated_at",
+   "type": "timestamp with time zone",
+   "nullable": "NO",
+   "dflt": "now()"
+  },
+  {
+   "t": "conversation_state",
+   "c": "state",
+   "type": "jsonb",
+   "nullable": "NO",
+   "dflt": null
+  },
+  {
+   "t": "conversation_state",
+   "c": "swept_at",
+   "type": "timestamp with time zone",
+   "nullable": "YES",
+   "dflt": null
+  },
+  {
+   "t": "entity_aliases",
+   "c": "kind",
+   "type": "text",
+   "nullable": "NO",
+   "dflt": null
+  },
+  {
+   "t": "entity_aliases",
+   "c": "alias_norm",
+   "type": "text",
+   "nullable": "NO",
+   "dflt": null
+  },
+  {
+   "t": "entity_aliases",
+   "c": "entity_id",
+   "type": "integer",
+   "nullable": "NO",
+   "dflt": null
+  },
+  {
+   "t": "entity_aliases",
+   "c": "source",
+   "type": "text",
+   "nullable": "NO",
+   "dflt": null
+  },
+  {
+   "t": "entity_aliases",
+   "c": "seen_count",
+   "type": "integer",
+   "nullable": "NO",
+   "dflt": "1"
+  },
+  {
+   "t": "entity_aliases",
+   "c": "raw_example",
+   "type": "text",
+   "nullable": "YES",
+   "dflt": null
+  },
+  {
+   "t": "entity_aliases",
+   "c": "first_seen",
+   "type": "timestamp with time zone",
+   "nullable": "NO",
+   "dflt": "now()"
+  },
+  {
+   "t": "entity_aliases",
+   "c": "last_seen",
+   "type": "timestamp with time zone",
+   "nullable": "NO",
+   "dflt": "now()"
+  },
+  {
+   "t": "error_reports",
+   "c": "fingerprint",
+   "type": "text",
+   "nullable": "NO",
+   "dflt": null
+  },
+  {
+   "t": "error_reports",
+   "c": "where_at",
+   "type": "text",
+   "nullable": "NO",
+   "dflt": null
+  },
+  {
+   "t": "error_reports",
+   "c": "what",
+   "type": "text",
+   "nullable": "NO",
+   "dflt": null
+  },
+  {
+   "t": "error_reports",
+   "c": "first_seen_at",
+   "type": "timestamp with time zone",
+   "nullable": "NO",
+   "dflt": "now()"
+  },
+  {
+   "t": "error_reports",
+   "c": "last_seen_at",
+   "type": "timestamp with time zone",
+   "nullable": "NO",
+   "dflt": "now()"
+  },
+  {
+   "t": "error_reports",
+   "c": "occurrences",
+   "type": "bigint",
+   "nullable": "NO",
+   "dflt": "1"
+  },
+  {
+   "t": "error_reports",
+   "c": "last_emailed_at",
+   "type": "timestamp with time zone",
+   "nullable": "YES",
+   "dflt": null
+  },
+  {
+   "t": "error_reports",
+   "c": "last_detail",
+   "type": "text",
+   "nullable": "YES",
+   "dflt": null
+  },
+  {
+   "t": "error_reports",
+   "c": "deploy_sha",
+   "type": "text",
+   "nullable": "YES",
+   "dflt": null
+  },
+  {
+   "t": "feed_marks",
+   "c": "item_key",
+   "type": "text",
+   "nullable": "NO",
+   "dflt": null
+  },
+  {
+   "t": "feed_marks",
+   "c": "thread_id",
+   "type": "text",
+   "nullable": "NO",
+   "dflt": null
+  },
+  {
+   "t": "feed_marks",
+   "c": "mark",
+   "type": "text",
+   "nullable": "NO",
+   "dflt": null
+  },
+  {
+   "t": "feed_marks",
+   "c": "by",
+   "type": "text",
+   "nullable": "YES",
+   "dflt": null
+  },
+  {
+   "t": "feed_marks",
+   "c": "evidence",
+   "type": "jsonb",
+   "nullable": "YES",
+   "dflt": null
+  },
+  {
+   "t": "feed_marks",
+   "c": "at",
+   "type": "timestamp with time zone",
+   "nullable": "NO",
+   "dflt": "now()"
+  },
+  {
+   "t": "feed_meta",
+   "c": "id",
+   "type": "integer",
+   "nullable": "NO",
+   "dflt": null
+  },
+  {
+   "t": "feed_meta",
+   "c": "last_verify_at",
+   "type": "timestamp with time zone",
+   "nullable": "YES",
+   "dflt": null
+  },
+  {
+   "t": "feed_meta",
+   "c": "timeline_last_id",
+   "type": "bigint",
+   "nullable": "YES",
+   "dflt": null
+  },
+  {
+   "t": "feed_meta",
+   "c": "verify_note",
+   "type": "text",
+   "nullable": "YES",
+   "dflt": null
+  },
+  {
+   "t": "followup_suppressions",
+   "c": "thread_id",
+   "type": "text",
+   "nullable": "NO",
+   "dflt": null
+  },
+  {
+   "t": "followup_suppressions",
+   "c": "waiting_since_iso",
+   "type": "text",
+   "nullable": "NO",
+   "dflt": null
+  },
+  {
+   "t": "followup_suppressions",
+   "c": "suppressed_by",
+   "type": "text",
+   "nullable": "YES",
+   "dflt": null
+  },
+  {
+   "t": "followup_suppressions",
+   "c": "reason",
+   "type": "text",
+   "nullable": "YES",
+   "dflt": null
+  },
+  {
+   "t": "followup_suppressions",
+   "c": "suppressed_at",
+   "type": "timestamp with time zone",
+   "nullable": "NO",
+   "dflt": "now()"
+  },
+  {
+   "t": "inbound_raw",
+   "c": "id",
+   "type": "bigint",
+   "nullable": "NO",
+   "dflt": "nextval('inbound_raw_id_seq'::regclass)"
+  },
+  {
+   "t": "inbound_raw",
+   "c": "dedup_key",
+   "type": "text",
+   "nullable": "NO",
+   "dflt": null
+  },
+  {
+   "t": "inbound_raw",
+   "c": "source",
+   "type": "text",
+   "nullable": "YES",
+   "dflt": null
+  },
+  {
+   "t": "inbound_raw",
+   "c": "thread_id",
+   "type": "text",
+   "nullable": "YES",
+   "dflt": null
+  },
+  {
+   "t": "inbound_raw",
+   "c": "message_id",
+   "type": "text",
+   "nullable": "YES",
+   "dflt": null
+  },
+  {
+   "t": "inbound_raw",
+   "c": "payload",
+   "type": "jsonb",
+   "nullable": "YES",
+   "dflt": null
+  },
+  {
+   "t": "inbound_raw",
+   "c": "received_at",
+   "type": "timestamp with time zone",
+   "nullable": "NO",
+   "dflt": "now()"
+  },
+  {
+   "t": "inbound_raw",
+   "c": "message_ids",
+   "type": "ARRAY",
+   "nullable": "YES",
+   "dflt": null
+  },
+  {
+   "t": "inbound_raw",
+   "c": "envelope",
+   "type": "jsonb",
+   "nullable": "YES",
+   "dflt": null
+  },
+  {
+   "t": "job_links",
+   "c": "thread_id",
+   "type": "text",
+   "nullable": "NO",
+   "dflt": null
+  },
+  {
+   "t": "job_links",
+   "c": "order_id",
+   "type": "bigint",
+   "nullable": "NO",
+   "dflt": null
+  },
+  {
+   "t": "job_links",
+   "c": "r_number",
+   "type": "text",
+   "nullable": "YES",
+   "dflt": null
+  },
+  {
+   "t": "job_links",
+   "c": "job_id",
+   "type": "bigint",
+   "nullable": "YES",
+   "dflt": null
+  },
+  {
+   "t": "job_links",
+   "c": "company_id",
+   "type": "integer",
+   "nullable": "YES",
+   "dflt": null
+  },
+  {
+   "t": "job_links",
+   "c": "state",
+   "type": "text",
+   "nullable": "NO",
+   "dflt": "'linked'::text"
+  },
+  {
+   "t": "job_links",
+   "c": "source",
+   "type": "text",
+   "nullable": "YES",
+   "dflt": null
+  },
+  {
+   "t": "job_links",
+   "c": "shifts",
+   "type": "jsonb",
+   "nullable": "YES",
+   "dflt": null
+  },
+  {
+   "t": "job_links",
+   "c": "first_seen",
+   "type": "timestamp with time zone",
+   "nullable": "NO",
+   "dflt": "now()"
+  },
+  {
+   "t": "job_links",
+   "c": "last_checked",
+   "type": "timestamp with time zone",
+   "nullable": "YES",
+   "dflt": null
+  },
+  {
+   "t": "job_links",
+   "c": "held_since",
+   "type": "timestamp with time zone",
+   "nullable": "YES",
+   "dflt": null
+  },
+  {
+   "t": "job_links",
+   "c": "note",
+   "type": "text",
+   "nullable": "YES",
+   "dflt": null
+  },
+  {
+   "t": "mail_cursor",
+   "c": "mailbox",
+   "type": "text",
+   "nullable": "NO",
+   "dflt": null
+  },
+  {
+   "t": "mail_cursor",
+   "c": "history_id",
+   "type": "text",
+   "nullable": "NO",
+   "dflt": null
+  },
+  {
+   "t": "mail_cursor",
+   "c": "updated_at",
+   "type": "timestamp with time zone",
+   "nullable": "NO",
+   "dflt": "now()"
+  },
+  {
+   "t": "mail_cursor",
+   "c": "last_run_at",
+   "type": "timestamp with time zone",
+   "nullable": "YES",
+   "dflt": null
+  },
+  {
+   "t": "mail_cursor",
+   "c": "last_count",
+   "type": "integer",
+   "nullable": "NO",
+   "dflt": "0"
+  },
+  {
+   "t": "message_ledger",
+   "c": "message_id",
+   "type": "text",
+   "nullable": "NO",
+   "dflt": null
+  },
+  {
+   "t": "message_ledger",
+   "c": "thread_id",
+   "type": "text",
+   "nullable": "YES",
+   "dflt": null
+  },
+  {
+   "t": "message_ledger",
+   "c": "subject",
+   "type": "text",
+   "nullable": "YES",
+   "dflt": null
+  },
+  {
+   "t": "message_ledger",
+   "c": "from_address",
+   "type": "text",
+   "nullable": "YES",
+   "dflt": null
+  },
+  {
+   "t": "message_ledger",
+   "c": "first_seen_at",
+   "type": "timestamp with time zone",
+   "nullable": "NO",
+   "dflt": "now()"
+  },
+  {
+   "t": "message_ledger",
+   "c": "last_seen_at",
+   "type": "timestamp with time zone",
+   "nullable": "NO",
+   "dflt": "now()"
+  },
+  {
+   "t": "message_ledger",
+   "c": "seen_count",
+   "type": "integer",
+   "nullable": "NO",
+   "dflt": "1"
+  },
+  {
+   "t": "message_ledger",
+   "c": "note",
+   "type": "text",
+   "nullable": "YES",
+   "dflt": null
+  },
+  {
+   "t": "metric_events",
+   "c": "id",
+   "type": "bigint",
+   "nullable": "NO",
+   "dflt": "nextval('metric_events_id_seq'::regclass)"
+  },
+  {
+   "t": "metric_events",
+   "c": "kind",
+   "type": "text",
+   "nullable": "NO",
+   "dflt": null
+  },
+  {
+   "t": "metric_events",
+   "c": "ts",
+   "type": "timestamp with time zone",
+   "nullable": "NO",
+   "dflt": "now()"
+  },
+  {
+   "t": "metric_events",
+   "c": "thread_id",
+   "type": "text",
+   "nullable": "YES",
+   "dflt": null
+  },
+  {
+   "t": "metric_events",
+   "c": "meta",
+   "type": "jsonb",
+   "nullable": "YES",
+   "dflt": null
+  },
+  {
+   "t": "onsinch_professions",
+   "c": "id",
+   "type": "integer",
+   "nullable": "NO",
+   "dflt": null
+  },
+  {
+   "t": "onsinch_professions",
+   "c": "name",
+   "type": "text",
+   "nullable": "NO",
+   "dflt": null
+  },
+  {
+   "t": "onsinch_professions",
+   "c": "alias",
+   "type": "text",
+   "nullable": "YES",
+   "dflt": null
+  },
+  {
+   "t": "onsinch_professions",
+   "c": "description",
+   "type": "text",
+   "nullable": "YES",
+   "dflt": null
+  },
+  {
+   "t": "onsinch_professions",
+   "c": "deleted",
+   "type": "boolean",
+   "nullable": "NO",
+   "dflt": "false"
+  },
+  {
+   "t": "onsinch_professions",
+   "c": "synced_at",
+   "type": "timestamp with time zone",
+   "nullable": "NO",
+   "dflt": "now()"
+  },
+  {
+   "t": "order_archive",
+   "c": "id",
+   "type": "bigint",
+   "nullable": "NO",
+   "dflt": "nextval('order_archive_id_seq'::regclass)"
+  },
+  {
+   "t": "order_archive",
+   "c": "thread_id",
+   "type": "text",
+   "nullable": "NO",
+   "dflt": null
+  },
+  {
+   "t": "order_archive",
+   "c": "order_id",
+   "type": "bigint",
+   "nullable": "NO",
+   "dflt": null
+  },
+  {
+   "t": "order_archive",
+   "c": "order_number",
+   "type": "text",
+   "nullable": "YES",
+   "dflt": null
+  },
+  {
+   "t": "order_archive",
+   "c": "job_id",
+   "type": "bigint",
+   "nullable": "YES",
+   "dflt": null
+  },
+  {
+   "t": "order_archive",
+   "c": "replaced_by_order_id",
+   "type": "bigint",
+   "nullable": "YES",
+   "dflt": null
+  },
+  {
+   "t": "order_archive",
+   "c": "replaced_by_order_number",
+   "type": "text",
+   "nullable": "YES",
+   "dflt": null
+  },
+  {
+   "t": "order_archive",
+   "c": "replaced_by_job_id",
+   "type": "bigint",
+   "nullable": "YES",
+   "dflt": null
+  },
+  {
+   "t": "order_archive",
+   "c": "live_order",
+   "type": "jsonb",
+   "nullable": "YES",
+   "dflt": null
+  },
+  {
+   "t": "order_archive",
+   "c": "slot_teams",
+   "type": "jsonb",
+   "nullable": "NO",
+   "dflt": "'[]'::jsonb"
+  },
+  {
+   "t": "order_archive",
+   "c": "slot_teams_are_reconstruction",
+   "type": "boolean",
+   "nullable": "NO",
+   "dflt": "true"
+  },
+  {
+   "t": "order_archive",
+   "c": "reason",
+   "type": "text",
+   "nullable": "YES",
+   "dflt": null
+  },
+  {
+   "t": "order_archive",
+   "c": "created",
+   "type": "timestamp with time zone",
+   "nullable": "YES",
+   "dflt": null
+  },
+  {
+   "t": "order_archive",
+   "c": "deleted_at",
+   "type": "timestamp with time zone",
+   "nullable": "NO",
+   "dflt": "now()"
+  },
+  {
+   "t": "order_records",
+   "c": "order_id",
+   "type": "bigint",
+   "nullable": "NO",
+   "dflt": null
+  },
+  {
+   "t": "order_records",
+   "c": "thread_id",
+   "type": "text",
+   "nullable": "NO",
+   "dflt": null
+  },
+  {
+   "t": "order_records",
+   "c": "job_id",
+   "type": "bigint",
+   "nullable": "YES",
+   "dflt": null
+  },
+  {
+   "t": "order_records",
+   "c": "order_number",
+   "type": "text",
+   "nullable": "YES",
+   "dflt": null
+  },
+  {
+   "t": "order_records",
+   "c": "sender_email",
+   "type": "text",
+   "nullable": "YES",
+   "dflt": null
+  },
+  {
+   "t": "order_records",
+   "c": "sender_domain",
+   "type": "text",
+   "nullable": "YES",
+   "dflt": null
+  },
+  {
+   "t": "order_records",
+   "c": "company_id",
+   "type": "integer",
+   "nullable": "YES",
+   "dflt": null
+  },
+  {
+   "t": "order_records",
+   "c": "place_id",
+   "type": "integer",
+   "nullable": "YES",
+   "dflt": null
+  },
+  {
+   "t": "order_records",
+   "c": "shape_sent",
+   "type": "jsonb",
+   "nullable": "NO",
+   "dflt": null
+  },
+  {
+   "t": "order_records",
+   "c": "block_count",
+   "type": "integer",
+   "nullable": "NO",
+   "dflt": null
+  },
+  {
+   "t": "order_records",
+   "c": "crew_total",
+   "type": "integer",
+   "nullable": "NO",
+   "dflt": null
+  },
+  {
+   "t": "order_records",
+   "c": "id_source",
+   "type": "text",
+   "nullable": "NO",
+   "dflt": "'api_response'::text"
+  },
+  {
+   "t": "order_records",
+   "c": "verified_at",
+   "type": "timestamp with time zone",
+   "nullable": "YES",
+   "dflt": null
+  },
+  {
+   "t": "order_records",
+   "c": "created_at",
+   "type": "timestamp with time zone",
+   "nullable": "NO",
+   "dflt": "now()"
+  },
+  {
+   "t": "org_terms_acceptance",
+   "c": "org_key",
+   "type": "text",
+   "nullable": "NO",
+   "dflt": null
+  },
+  {
+   "t": "org_terms_acceptance",
+   "c": "terms_version",
+   "type": "text",
+   "nullable": "NO",
+   "dflt": null
+  },
+  {
+   "t": "org_terms_acceptance",
+   "c": "accepted_by",
+   "type": "text",
+   "nullable": "NO",
+   "dflt": null
+  },
+  {
+   "t": "org_terms_acceptance",
+   "c": "accepted_at",
+   "type": "timestamp with time zone",
+   "nullable": "NO",
+   "dflt": "now()"
+  },
+  {
+   "t": "rate_cards",
+   "c": "company_id",
+   "type": "integer",
+   "nullable": "NO",
+   "dflt": null
+  },
+  {
+   "t": "rate_cards",
+   "c": "card",
+   "type": "integer",
+   "nullable": "NO",
+   "dflt": null
+  },
+  {
+   "t": "rate_cards",
+   "c": "source",
+   "type": "text",
+   "nullable": "NO",
+   "dflt": "'history'::text"
+  },
+  {
+   "t": "rate_cards",
+   "c": "share",
+   "type": "real",
+   "nullable": "YES",
+   "dflt": null
+  },
+  {
+   "t": "rate_cards",
+   "c": "n",
+   "type": "integer",
+   "nullable": "YES",
+   "dflt": null
+  },
+  {
+   "t": "rate_cards",
+   "c": "updated_at",
+   "type": "timestamp with time zone",
+   "nullable": "NO",
+   "dflt": "now()"
+  },
+  {
+   "t": "run_marks",
+   "c": "name",
+   "type": "text",
+   "nullable": "NO",
+   "dflt": null
+  },
+  {
+   "t": "run_marks",
+   "c": "at",
+   "type": "timestamp with time zone",
+   "nullable": "NO",
+   "dflt": null
+  },
+  {
+   "t": "run_marks",
+   "c": "ok",
+   "type": "boolean",
+   "nullable": "NO",
+   "dflt": null
+  },
+  {
+   "t": "run_marks",
+   "c": "detail",
+   "type": "jsonb",
+   "nullable": "YES",
+   "dflt": null
+  },
+  {
+   "t": "sender_ledger",
+   "c": "addr",
+   "type": "text",
+   "nullable": "NO",
+   "dflt": null
+  },
+  {
+   "t": "sender_ledger",
+   "c": "threads_seen",
+   "type": "integer",
+   "nullable": "NO",
+   "dflt": "0"
+  },
+  {
+   "t": "sender_ledger",
+   "c": "jobs_seen",
+   "type": "integer",
+   "nullable": "NO",
+   "dflt": "0"
+  },
+  {
+   "t": "sender_ledger",
+   "c": "override",
+   "type": "text",
+   "nullable": "YES",
+   "dflt": null
+  },
+  {
+   "t": "sender_ledger",
+   "c": "last_seen",
+   "type": "timestamp with time zone",
+   "nullable": "NO",
+   "dflt": "now()"
+  },
+  {
+   "t": "sender_ledger",
+   "c": "first_seen",
+   "type": "timestamp with time zone",
+   "nullable": "NO",
+   "dflt": "now()"
+  },
+  {
+   "t": "sender_ledger",
+   "c": "last_subject",
+   "type": "text",
+   "nullable": "YES",
+   "dflt": null
+  },
+  {
+   "t": "sender_ledger_threads",
+   "c": "addr",
+   "type": "text",
+   "nullable": "NO",
+   "dflt": null
+  },
+  {
+   "t": "sender_ledger_threads",
+   "c": "thread_id",
+   "type": "text",
+   "nullable": "NO",
+   "dflt": null
+  },
+  {
+   "t": "sender_ledger_threads",
+   "c": "was_job",
+   "type": "boolean",
+   "nullable": "NO",
+   "dflt": "false"
+  },
+  {
+   "t": "sweep_labels",
+   "c": "thread_id",
+   "type": "text",
+   "nullable": "NO",
+   "dflt": null
+  },
+  {
+   "t": "sweep_labels",
+   "c": "model",
+   "type": "text",
+   "nullable": "NO",
+   "dflt": null
+  },
+  {
+   "t": "sweep_labels",
+   "c": "classification",
+   "type": "text",
+   "nullable": "YES",
+   "dflt": null
+  },
+  {
+   "t": "sweep_labels",
+   "c": "is_cancellation",
+   "type": "boolean",
+   "nullable": "NO",
+   "dflt": "false"
+  },
+  {
+   "t": "sweep_labels",
+   "c": "priority",
+   "type": "text",
+   "nullable": "YES",
+   "dflt": null
+  },
+  {
+   "t": "sweep_labels",
+   "c": "job_summary",
+   "type": "text",
+   "nullable": "YES",
+   "dflt": null
+  },
+  {
+   "t": "sweep_labels",
+   "c": "company_name",
+   "type": "text",
+   "nullable": "YES",
+   "dflt": null
+  },
+  {
+   "t": "sweep_labels",
+   "c": "location_text",
+   "type": "text",
+   "nullable": "YES",
+   "dflt": null
+  },
+  {
+   "t": "sweep_labels",
+   "c": "blocks",
+   "type": "jsonb",
+   "nullable": "NO",
+   "dflt": "'[]'::jsonb"
+  },
+  {
+   "t": "sweep_labels",
+   "c": "first_start",
+   "type": "timestamp with time zone",
+   "nullable": "YES",
+   "dflt": null
+  },
+  {
+   "t": "sweep_labels",
+   "c": "last_end",
+   "type": "timestamp with time zone",
+   "nullable": "YES",
+   "dflt": null
+  },
+  {
+   "t": "sweep_labels",
+   "c": "crew_peak",
+   "type": "integer",
+   "nullable": "YES",
+   "dflt": null
+  },
+  {
+   "t": "sweep_labels",
+   "c": "error",
+   "type": "text",
+   "nullable": "YES",
+   "dflt": null
+  },
+  {
+   "t": "sweep_labels",
+   "c": "labelled_at",
+   "type": "timestamp with time zone",
+   "nullable": "NO",
+   "dflt": "now()"
+  },
+  {
+   "t": "sweep_labels",
+   "c": "crew_days",
+   "type": "integer",
+   "nullable": "YES",
+   "dflt": null
+  },
+  {
+   "t": "sweep_threads",
+   "c": "thread_id",
+   "type": "text",
+   "nullable": "NO",
+   "dflt": null
+  },
+  {
+   "t": "sweep_threads",
+   "c": "mailbox",
+   "type": "text",
+   "nullable": "YES",
+   "dflt": null
+  },
+  {
+   "t": "sweep_threads",
+   "c": "message_count",
+   "type": "integer",
+   "nullable": "NO",
+   "dflt": "0"
+  },
+  {
+   "t": "sweep_threads",
+   "c": "first_date",
+   "type": "timestamp with time zone",
+   "nullable": "YES",
+   "dflt": null
+  },
+  {
+   "t": "sweep_threads",
+   "c": "last_date",
+   "type": "timestamp with time zone",
+   "nullable": "YES",
+   "dflt": null
+  },
+  {
+   "t": "sweep_threads",
+   "c": "subject",
+   "type": "text",
+   "nullable": "YES",
+   "dflt": null
+  },
+  {
+   "t": "sweep_threads",
+   "c": "participants",
+   "type": "jsonb",
+   "nullable": "YES",
+   "dflt": null
+  },
+  {
+   "t": "sweep_threads",
+   "c": "payload",
+   "type": "jsonb",
+   "nullable": "YES",
+   "dflt": null
+  },
+  {
+   "t": "sweep_threads",
+   "c": "swept_at",
+   "type": "timestamp with time zone",
+   "nullable": "NO",
+   "dflt": "now()"
+  },
+  {
+   "t": "test_data_clears",
+   "c": "at",
+   "type": "timestamp with time zone",
+   "nullable": "NO",
+   "dflt": "now()"
+  },
+  {
+   "t": "test_data_clears",
+   "c": "trigger",
+   "type": "text",
+   "nullable": "NO",
+   "dflt": null
+  },
+  {
+   "t": "test_data_clears",
+   "c": "result",
+   "type": "jsonb",
+   "nullable": "NO",
+   "dflt": null
+  },
+  {
+   "t": "thread_labels",
+   "c": "thread_id",
+   "type": "text",
+   "nullable": "NO",
+   "dflt": null
+  },
+  {
+   "t": "thread_labels",
+   "c": "order_label",
+   "type": "text",
+   "nullable": "YES",
+   "dflt": null
+  },
+  {
+   "t": "thread_labels",
+   "c": "follow_up",
+   "type": "boolean",
+   "nullable": "NO",
+   "dflt": "false"
+  },
+  {
+   "t": "thread_labels",
+   "c": "applied_at",
+   "type": "timestamp with time zone",
+   "nullable": "NO",
+   "dflt": "now()"
+  },
+  {
+   "t": "thread_messages",
+   "c": "message_id",
+   "type": "text",
+   "nullable": "NO",
+   "dflt": null
+  },
+  {
+   "t": "thread_messages",
+   "c": "thread_id",
+   "type": "text",
+   "nullable": "NO",
+   "dflt": null
+  },
+  {
+   "t": "thread_messages",
+   "c": "from_address",
+   "type": "text",
+   "nullable": "YES",
+   "dflt": null
+  },
+  {
+   "t": "thread_messages",
+   "c": "to_addresses",
+   "type": "jsonb",
+   "nullable": "YES",
+   "dflt": null
+  },
+  {
+   "t": "thread_messages",
+   "c": "date_iso",
+   "type": "text",
+   "nullable": "YES",
+   "dflt": null
+  },
+  {
+   "t": "thread_messages",
+   "c": "subject",
+   "type": "text",
+   "nullable": "YES",
+   "dflt": null
+  },
+  {
+   "t": "thread_messages",
+   "c": "body",
+   "type": "text",
+   "nullable": "YES",
+   "dflt": null
+  },
+  {
+   "t": "thread_messages",
+   "c": "is_from_spartan",
+   "type": "boolean",
+   "nullable": "NO",
+   "dflt": "false"
+  },
+  {
+   "t": "thread_messages",
+   "c": "first_seen_at",
+   "type": "timestamp with time zone",
+   "nullable": "NO",
+   "dflt": "now()"
+  },
+  {
+   "t": "thread_messages",
+   "c": "archived_at",
+   "type": "timestamp with time zone",
+   "nullable": "YES",
+   "dflt": null
+  },
+  {
+   "t": "thread_messages",
+   "c": "rfc_message_id",
+   "type": "text",
+   "nullable": "YES",
+   "dflt": null
+  },
+  {
+   "t": "thread_messages",
+   "c": "in_reply_to",
+   "type": "ARRAY",
+   "nullable": "YES",
+   "dflt": null
+  },
+  {
+   "t": "thread_messages",
+   "c": "reference_ids",
+   "type": "ARRAY",
+   "nullable": "YES",
+   "dflt": null
+  },
+  {
+   "t": "thread_messages",
+   "c": "cc_addresses",
+   "type": "jsonb",
+   "nullable": "YES",
+   "dflt": null
+  },
+  {
+   "t": "thread_messages",
+   "c": "attachment_names",
+   "type": "jsonb",
+   "nullable": "YES",
+   "dflt": null
+  },
+  {
+   "t": "ticket_events",
+   "c": "id",
+   "type": "bigint",
+   "nullable": "NO",
+   "dflt": "nextval('ticket_events_id_seq'::regclass)"
+  },
+  {
+   "t": "ticket_events",
+   "c": "thread_id",
+   "type": "text",
+   "nullable": "NO",
+   "dflt": null
+  },
+  {
+   "t": "ticket_events",
+   "c": "kind",
+   "type": "text",
+   "nullable": "NO",
+   "dflt": null
+  },
+  {
+   "t": "ticket_events",
+   "c": "meta",
+   "type": "jsonb",
+   "nullable": "YES",
+   "dflt": null
+  },
+  {
+   "t": "ticket_events",
+   "c": "ts",
+   "type": "timestamp with time zone",
+   "nullable": "NO",
+   "dflt": "now()"
+  },
+  {
+   "t": "tickets",
+   "c": "thread_id",
+   "type": "text",
+   "nullable": "NO",
+   "dflt": null
+  },
+  {
+   "t": "tickets",
+   "c": "subject",
+   "type": "text",
+   "nullable": "YES",
+   "dflt": null
+  },
+  {
+   "t": "tickets",
+   "c": "contact",
+   "type": "text",
+   "nullable": "YES",
+   "dflt": null
+  },
+  {
+   "t": "tickets",
+   "c": "company_id",
+   "type": "integer",
+   "nullable": "YES",
+   "dflt": null
+  },
+  {
+   "t": "tickets",
+   "c": "user_id",
+   "type": "integer",
+   "nullable": "YES",
+   "dflt": null
+  },
+  {
+   "t": "tickets",
+   "c": "place_id",
+   "type": "integer",
+   "nullable": "YES",
+   "dflt": null
+  },
+  {
+   "t": "tickets",
+   "c": "onsinch_order_id",
+   "type": "bigint",
+   "nullable": "YES",
+   "dflt": null
+  },
+  {
+   "t": "tickets",
+   "c": "onsinch_order_number",
+   "type": "text",
+   "nullable": "YES",
+   "dflt": null
+  },
+  {
+   "t": "tickets",
+   "c": "classification",
+   "type": "text",
+   "nullable": "YES",
+   "dflt": null
+  },
+  {
+   "t": "tickets",
+   "c": "status",
+   "type": "text",
+   "nullable": "YES",
+   "dflt": null
+  },
+  {
+   "t": "tickets",
+   "c": "is_client_inquiry",
+   "type": "boolean",
+   "nullable": "YES",
+   "dflt": null
+  },
+  {
+   "t": "tickets",
+   "c": "gate_reason",
+   "type": "text",
+   "nullable": "YES",
+   "dflt": null
+  },
+  {
+   "t": "tickets",
+   "c": "priority",
+   "type": "text",
+   "nullable": "YES",
+   "dflt": null
+  },
+  {
+   "t": "tickets",
+   "c": "crew_size",
+   "type": "integer",
+   "nullable": "YES",
+   "dflt": null
+  },
+  {
+   "t": "tickets",
+   "c": "dates",
+   "type": "jsonb",
+   "nullable": "YES",
+   "dflt": null
+  },
+  {
+   "t": "tickets",
+   "c": "location",
+   "type": "text",
+   "nullable": "YES",
+   "dflt": null
+  },
+  {
+   "t": "tickets",
+   "c": "reply_state",
+   "type": "text",
+   "nullable": "YES",
+   "dflt": null
+  },
+  {
+   "t": "tickets",
+   "c": "reply_draft_id",
+   "type": "text",
+   "nullable": "YES",
+   "dflt": null
+  },
+  {
+   "t": "tickets",
+   "c": "ai_replied",
+   "type": "boolean",
+   "nullable": "YES",
+   "dflt": null
+  },
+  {
+   "t": "tickets",
+   "c": "needs_human",
+   "type": "boolean",
+   "nullable": "YES",
+   "dflt": null
+  },
+  {
+   "t": "tickets",
+   "c": "extracted",
+   "type": "jsonb",
+   "nullable": "YES",
+   "dflt": null
+  },
+  {
+   "t": "tickets",
+   "c": "notes",
+   "type": "jsonb",
+   "nullable": "YES",
+   "dflt": null
+  },
+  {
+   "t": "tickets",
+   "c": "created_at",
+   "type": "timestamp with time zone",
+   "nullable": "NO",
+   "dflt": "now()"
+  },
+  {
+   "t": "tickets",
+   "c": "updated_at",
+   "type": "timestamp with time zone",
+   "nullable": "NO",
+   "dflt": "now()"
+  },
+  {
+   "t": "tickets",
+   "c": "onsinch_job_id",
+   "type": "bigint",
+   "nullable": "YES",
+   "dflt": null
+  },
+  {
+   "t": "user_onboarding",
+   "c": "email",
+   "type": "text",
+   "nullable": "NO",
+   "dflt": null
+  },
+  {
+   "t": "user_onboarding",
+   "c": "display_name",
+   "type": "text",
+   "nullable": "NO",
+   "dflt": null
+  },
+  {
+   "t": "user_onboarding",
+   "c": "contact_email",
+   "type": "text",
+   "nullable": "YES",
+   "dflt": null
+  },
+  {
+   "t": "user_onboarding",
+   "c": "organisation",
+   "type": "text",
+   "nullable": "NO",
+   "dflt": null
+  },
+  {
+   "t": "user_onboarding",
+   "c": "org_key",
+   "type": "text",
+   "nullable": "NO",
+   "dflt": null
+  },
+  {
+   "t": "user_onboarding",
+   "c": "completed_at",
+   "type": "timestamp with time zone",
+   "nullable": "NO",
+   "dflt": "now()"
+  },
+  {
+   "t": "v2_decisions",
+   "c": "message_id",
+   "type": "text",
+   "nullable": "NO",
+   "dflt": null
+  },
+  {
+   "t": "v2_decisions",
+   "c": "thread_id",
+   "type": "text",
+   "nullable": "YES",
+   "dflt": null
+  },
+  {
+   "t": "v2_decisions",
+   "c": "from_address",
+   "type": "text",
+   "nullable": "YES",
+   "dflt": null
+  },
+  {
+   "t": "v2_decisions",
+   "c": "sent_at",
+   "type": "text",
+   "nullable": "YES",
+   "dflt": null
+  },
+  {
+   "t": "v2_decisions",
+   "c": "kind",
+   "type": "text",
+   "nullable": "NO",
+   "dflt": null
+  },
+  {
+   "t": "v2_decisions",
+   "c": "interpretation",
+   "type": "jsonb",
+   "nullable": "YES",
+   "dflt": null
+  },
+  {
+   "t": "v2_decisions",
+   "c": "decision",
+   "type": "jsonb",
+   "nullable": "NO",
+   "dflt": null
+  },
+  {
+   "t": "v2_decisions",
+   "c": "executed",
+   "type": "jsonb",
+   "nullable": "YES",
+   "dflt": null
+  },
+  {
+   "t": "v2_decisions",
+   "c": "code_version",
+   "type": "text",
+   "nullable": "YES",
+   "dflt": null
+  },
+  {
+   "t": "v2_decisions",
+   "c": "created_at",
+   "type": "timestamp with time zone",
+   "nullable": "NO",
+   "dflt": "now()"
+  },
+  {
+   "t": "v2_decisions",
+   "c": "company_id",
+   "type": "integer",
+   "nullable": "YES",
+   "dflt": null
+  },
+  {
+   "t": "v2_decisions",
+   "c": "company",
+   "type": "text",
+   "nullable": "YES",
+   "dflt": null
+  },
+  {
+   "t": "v2_decisions",
+   "c": "replan",
+   "type": "jsonb",
+   "nullable": "YES",
+   "dflt": null
+  },
+  {
+   "t": "v2_decisions",
+   "c": "replanned_at",
+   "type": "timestamp with time zone",
+   "nullable": "YES",
+   "dflt": null
+  },
+  {
+   "t": "v2_store_only",
+   "c": "message_id",
+   "type": "text",
+   "nullable": "NO",
+   "dflt": null
+  },
+  {
+   "t": "v2_store_only",
+   "c": "reason",
+   "type": "text",
+   "nullable": "NO",
+   "dflt": null
+  },
+  {
+   "t": "v2_store_only",
+   "c": "created_at",
+   "type": "timestamp with time zone",
+   "nullable": "NO",
+   "dflt": "now()"
+  }
+ ],
+ "indexes": [
+  {
+   "t": "app_settings",
+   "i": "app_settings_pkey"
+  },
+  {
+   "t": "bot_lease",
+   "i": "bot_lease_pkey"
+  },
+  {
+   "t": "bot_ledger",
+   "i": "bot_ledger_pkey"
+  },
+  {
+   "t": "bot_session",
+   "i": "bot_session_pkey"
+  },
+  {
+   "t": "conversation_state",
+   "i": "conversation_state_pkey"
+  },
+  {
+   "t": "conversation_state",
+   "i": "conversation_state_status"
+  },
+  {
+   "t": "conversation_state",
+   "i": "conversation_state_swept"
+  },
+  {
+   "t": "entity_aliases",
+   "i": "entity_aliases_entity"
+  },
+  {
+   "t": "entity_aliases",
+   "i": "entity_aliases_pkey"
+  },
+  {
+   "t": "entity_aliases",
+   "i": "entity_aliases_source"
+  },
+  {
+   "t": "error_reports",
+   "i": "error_reports_last_seen"
+  },
+  {
+   "t": "error_reports",
+   "i": "error_reports_pkey"
+  },
+  {
+   "t": "feed_marks",
+   "i": "feed_marks_pkey"
+  },
+  {
+   "t": "feed_meta",
+   "i": "feed_meta_pkey"
+  },
+  {
+   "t": "followup_suppressions",
+   "i": "followup_suppressions_pkey"
+  },
+  {
+   "t": "inbound_raw",
+   "i": "inbound_raw_dedup_key_key"
+  },
+  {
+   "t": "inbound_raw",
+   "i": "inbound_raw_pkey"
+  },
+  {
+   "t": "inbound_raw",
+   "i": "inbound_raw_received"
+  },
+  {
+   "t": "inbound_raw",
+   "i": "inbound_raw_thread"
+  },
+  {
+   "t": "job_links",
+   "i": "job_links_pkey"
+  },
+  {
+   "t": "mail_cursor",
+   "i": "mail_cursor_pkey"
+  },
+  {
+   "t": "message_ledger",
+   "i": "message_ledger_first_seen"
+  },
+  {
+   "t": "message_ledger",
+   "i": "message_ledger_pkey"
+  },
+  {
+   "t": "message_ledger",
+   "i": "message_ledger_thread"
+  },
+  {
+   "t": "metric_events",
+   "i": "metric_events_kind_ts"
+  },
+  {
+   "t": "metric_events",
+   "i": "metric_events_pkey"
+  },
+  {
+   "t": "onsinch_professions",
+   "i": "onsinch_professions_pkey"
+  },
+  {
+   "t": "order_archive",
+   "i": "order_archive_job"
+  },
+  {
+   "t": "order_archive",
+   "i": "order_archive_number"
+  },
+  {
+   "t": "order_archive",
+   "i": "order_archive_pkey"
+  },
+  {
+   "t": "order_archive",
+   "i": "order_archive_thread"
+  },
+  {
+   "t": "order_records",
+   "i": "order_records_domain"
+  },
+  {
+   "t": "order_records",
+   "i": "order_records_order"
+  },
+  {
+   "t": "order_records",
+   "i": "order_records_thread"
+  },
+  {
+   "t": "order_records",
+   "i": "order_records_thread_order_pk"
+  },
+  {
+   "t": "order_records",
+   "i": "order_records_unverified"
+  },
+  {
+   "t": "org_terms_acceptance",
+   "i": "org_terms_acceptance_pkey"
+  },
+  {
+   "t": "rate_cards",
+   "i": "rate_cards_pkey"
+  },
+  {
+   "t": "run_marks",
+   "i": "run_marks_pkey"
+  },
+  {
+   "t": "sender_ledger",
+   "i": "sender_ledger_jobs"
+  },
+  {
+   "t": "sender_ledger",
+   "i": "sender_ledger_pkey"
+  },
+  {
+   "t": "sender_ledger",
+   "i": "sender_ledger_seen"
+  },
+  {
+   "t": "sender_ledger_threads",
+   "i": "sender_ledger_threads_pkey"
+  },
+  {
+   "t": "sweep_labels",
+   "i": "sweep_labels_class"
+  },
+  {
+   "t": "sweep_labels",
+   "i": "sweep_labels_pkey"
+  },
+  {
+   "t": "sweep_labels",
+   "i": "sweep_labels_start"
+  },
+  {
+   "t": "sweep_threads",
+   "i": "sweep_threads_count"
+  },
+  {
+   "t": "sweep_threads",
+   "i": "sweep_threads_last"
+  },
+  {
+   "t": "sweep_threads",
+   "i": "sweep_threads_pkey"
+  },
+  {
+   "t": "thread_labels",
+   "i": "thread_labels_pkey"
+  },
+  {
+   "t": "thread_messages",
+   "i": "thread_messages_pkey"
+  },
+  {
+   "t": "thread_messages",
+   "i": "thread_messages_rfc"
+  },
+  {
+   "t": "thread_messages",
+   "i": "thread_messages_seen"
+  },
+  {
+   "t": "thread_messages",
+   "i": "thread_messages_thread"
+  },
+  {
+   "t": "ticket_events",
+   "i": "ticket_events_pkey"
+  },
+  {
+   "t": "ticket_events",
+   "i": "ticket_events_thread"
+  },
+  {
+   "t": "tickets",
+   "i": "tickets_order"
+  },
+  {
+   "t": "tickets",
+   "i": "tickets_pkey"
+  },
+  {
+   "t": "tickets",
+   "i": "tickets_status"
+  },
+  {
+   "t": "tickets",
+   "i": "tickets_updated"
+  },
+  {
+   "t": "user_onboarding",
+   "i": "user_onboarding_pkey"
+  },
+  {
+   "t": "v2_decisions",
+   "i": "v2_decisions_pkey"
+  },
+  {
+   "t": "v2_store_only",
+   "i": "v2_store_only_pkey"
+  }
+ ]
+}

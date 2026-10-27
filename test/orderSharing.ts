@@ -22,6 +22,7 @@
 //
 // Run: npx tsx test/orderSharing.ts
 // ============================================================================
+import "./fixtures/pg"; // first: a run of this file alone must reach PGlite, never the database .env.local names
 import { neon } from "@neondatabase/serverless";
 import { loadEnv, requireEnv } from "../scripts/_env.mjs";
 import { upsertTicketFromState } from "../app/lib/ticketsDb";

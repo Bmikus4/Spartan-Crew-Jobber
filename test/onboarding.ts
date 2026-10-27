@@ -102,7 +102,8 @@ async function main() {
   // The acceptance table is keyed on the version, which is the only thing that makes a
   // bump re-ask. A version that is not in the key silently treats an old signature as
   // covering new text.
-  ok(/PRIMARY KEY \(org_key, terms_version\)/.test(db), "and it is part of the acceptance key");
+  // The table is made in the migrations module since 27 Oct (addendum F44).
+  ok(/PRIMARY KEY \(org_key, terms_version\)/.test(read("app/lib/migrations.ts")), "and it is part of the acceptance key");
 }
 
 main().then(() => {

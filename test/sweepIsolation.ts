@@ -16,9 +16,11 @@
 //
 // Run: npx tsx test/sweepIsolation.ts
 // ============================================================================
+import "./fixtures/pg"; // first: a run of this file alone must reach PGlite, never the database .env.local names
 import { neon } from "@neondatabase/serverless";
 import { loadEnv, requireEnv } from "../scripts/_env.mjs";
 import { storeSweptThread, sweepStats } from "../app/lib/sweepDb";
+import { migrate } from "../app/lib/migrations";
 
 loadEnv();
 const sql = neon(requireEnv("DATABASE_URL"));
@@ -45,7 +47,8 @@ const thread = (id: string, n: number) => ({
 
 async function counts() {
   // On the suite's in-memory database (test/all.ts) nothing has made these yet; only their counts are read.
-  for (const t of ["inbound_raw", "tickets", "conversation_state"]) await sql(`CREATE TABLE IF NOT EXISTS ${t} (id BIGSERIAL PRIMARY KEY)`);
+  // The real schema, so the counts are of the tables the app writes (stub tables broke its indexes).
+  await migrate(sql);
   const [a] = (await sql`SELECT count(*)::int AS n FROM inbound_raw`) as any[];
   const [b] = (await sql`SELECT count(*)::int AS n FROM tickets`) as any[];
   const [c] = (await sql`SELECT count(*)::int AS n FROM conversation_state`) as any[];

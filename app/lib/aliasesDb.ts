@@ -22,6 +22,7 @@
 // human to accept, and until someone does, they change nothing.
 // ============================================================================
 import { neon, type NeonQueryFunction } from "@neondatabase/serverless";
+import { ensureSchema } from "./migrations";
 
 // "profession" is the third kind and needs nothing else: the table already keys on
 // (kind, alias_norm), so a learned wording for a profession inherits the whole
@@ -43,20 +44,7 @@ function db(): NeonQueryFunction<false, false> | null {
 
 async function ensure(sql: NeonQueryFunction<false, false>): Promise<void> {
   if (_ready) return;
-  await sql`
-    CREATE TABLE IF NOT EXISTS entity_aliases (
-      kind        TEXT NOT NULL,
-      alias_norm  TEXT NOT NULL,
-      entity_id   INT  NOT NULL,
-      source      TEXT NOT NULL,
-      seen_count  INT  NOT NULL DEFAULT 1,
-      raw_example TEXT,
-      first_seen  TIMESTAMPTZ NOT NULL DEFAULT now(),
-      last_seen   TIMESTAMPTZ NOT NULL DEFAULT now(),
-      PRIMARY KEY (kind, alias_norm)
-    )`;
-  await sql`CREATE INDEX IF NOT EXISTS entity_aliases_entity ON entity_aliases (kind, entity_id)`;
-  await sql`CREATE INDEX IF NOT EXISTS entity_aliases_source ON entity_aliases (source)`;
+  await ensureSchema(sql);
   _ready = true;
 }
 

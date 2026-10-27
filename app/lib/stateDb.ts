@@ -7,6 +7,7 @@ import { neon, type NeonQueryFunction } from "@neondatabase/serverless";
 import type { StateStore } from "./engine/store";
 import type { ConversationState } from "./engine/types";
 import { MAX_ATTEMPTS } from "./engine/retryHeld";
+import { ensureSchema } from "./migrations";
 
 let _sql: NeonQueryFunction<false, false> | null = null;
 let _ready = false;
@@ -23,24 +24,7 @@ function db(): NeonQueryFunction<false, false> | null {
 }
 async function ensure(sql: NeonQueryFunction<false, false>): Promise<void> {
   if (_ready) return;
-  await sql`
-    CREATE TABLE IF NOT EXISTS conversation_state (
-      thread_id TEXT PRIMARY KEY,
-      status TEXT,
-      needs_human BOOLEAN,
-      onsinch_order_id BIGINT,
-      updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-      state JSONB NOT NULL
-    )`;
-  await sql`CREATE INDEX IF NOT EXISTS conversation_state_status ON conversation_state (status)`;
-  // When this thread was last RECONCILED, which is not when it was last written.
-  // updated_at moves every time the engine touches a thread, so ordering a sweep by it
-  // means the busiest conversations are swept repeatedly and the quiet ones never --
-  // and a quiet thread bound to a deleted order is exactly the drift the sweep exists
-  // to find. NULL means never swept, and NULLS FIRST is what makes a new thread jump
-  // the queue rather than sit behind 250 rows that were done yesterday.
-  await sql`ALTER TABLE conversation_state ADD COLUMN IF NOT EXISTS swept_at TIMESTAMPTZ`;
-  await sql`CREATE INDEX IF NOT EXISTS conversation_state_swept ON conversation_state (swept_at NULLS FIRST)`;
+  await ensureSchema(sql);
   _ready = true;
 }
 

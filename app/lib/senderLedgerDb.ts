@@ -27,6 +27,7 @@
 // read one costs $0.019.
 // ============================================================================
 import { neon, type NeonQueryFunction } from "@neondatabase/serverless";
+import { ensureSchema } from "./migrations";
 
 /** Threads with zero jobs before an address is parked. Deliberately not 2 or 3. */
 export const PARK_AFTER = 6;
@@ -44,20 +45,7 @@ function db(): NeonQueryFunction<false, false> | null {
 
 async function ensure(sql: NeonQueryFunction<false, false>): Promise<void> {
   if (_ready) return;
-  await sql`
-    CREATE TABLE IF NOT EXISTS sender_ledger (
-      addr         TEXT PRIMARY KEY,
-      threads_seen INT NOT NULL DEFAULT 0,
-      jobs_seen    INT NOT NULL DEFAULT 0,
-      -- A human decision, and the only thing that outranks the counters in either
-      -- direction: 'trusted' pins a sender open, 'parked' pins one shut.
-      override     TEXT,
-      last_seen    TIMESTAMPTZ NOT NULL DEFAULT now(),
-      first_seen   TIMESTAMPTZ NOT NULL DEFAULT now(),
-      last_subject TEXT
-    )`;
-  await sql`CREATE INDEX IF NOT EXISTS sender_ledger_jobs ON sender_ledger (jobs_seen DESC)`;
-  await sql`CREATE INDEX IF NOT EXISTS sender_ledger_seen ON sender_ledger (threads_seen DESC)`;
+  await ensureSchema(sql);
   _ready = true;
 }
 
@@ -106,14 +94,7 @@ export async function recordSender(a: {
   if (!sql || !addr) return;
   try {
     await ensure(sql);
-    // One row per (addr, thread) is what makes "threads_seen" honest under re-processing:
-    // the same thread is compiled again on every new message and a naive counter would
-    // climb on each pass.
-    await sql`
-      CREATE TABLE IF NOT EXISTS sender_ledger_threads (
-        addr TEXT NOT NULL, thread_id TEXT NOT NULL, was_job BOOLEAN NOT NULL DEFAULT false,
-        PRIMARY KEY (addr, thread_id)
-      )`;
+    await ensureSchema(sql);
     const claimed = (await sql`
       INSERT INTO sender_ledger_threads (addr, thread_id, was_job)
       VALUES (${addr}, ${a.thread_id}, ${a.wasJob})

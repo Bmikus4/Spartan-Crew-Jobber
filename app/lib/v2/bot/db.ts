@@ -14,6 +14,7 @@
 // ============================================================================
 import { neon, type NeonQueryFunction } from "@neondatabase/serverless";
 import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
+import { ensureSchema } from "../../migrations";
 
 let _sql: NeonQueryFunction<false, false> | null = null;
 let _ready = false;
@@ -29,20 +30,8 @@ function need(): NeonQueryFunction<false, false> {
 async function ready(): Promise<NeonQueryFunction<false, false>> {
   const sql = need();
   if (_ready) return sql;
-  await sql`CREATE TABLE IF NOT EXISTS bot_session (id INT PRIMARY KEY, state TEXT NOT NULL, saved_at TIMESTAMPTZ NOT NULL DEFAULT now())`;
-  await sql`CREATE TABLE IF NOT EXISTS bot_lease (id INT PRIMARY KEY, holder TEXT, until TIMESTAMPTZ NOT NULL DEFAULT 'epoch')`;
+  await ensureSchema(sql);
   await sql`INSERT INTO bot_lease (id) VALUES (1) ON CONFLICT (id) DO NOTHING`;
-  await sql`
-    CREATE TABLE IF NOT EXISTS bot_ledger (
-      op_key     TEXT PRIMARY KEY,
-      source     TEXT NOT NULL,
-      kind       TEXT NOT NULL,
-      op         JSONB NOT NULL,
-      status     TEXT NOT NULL,
-      detail     JSONB,
-      created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-      updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
-    )`;
   _ready = true;
   return sql;
 }

@@ -10,6 +10,7 @@
 // Runs against the real database with tagged rows, and removes them.
 // Run: npx tsx test/threadMessages.ts
 // ============================================================================
+import "./fixtures/pg"; // first: a run of this file alone must reach PGlite, never the database .env.local names
 import { neon } from "@neondatabase/serverless";
 import { loadEnv, requireEnv } from "../scripts/_env.mjs";
 import { messagesFromPayload, storeThreadMessages, rebuildThread } from "../app/lib/threadMessagesDb";

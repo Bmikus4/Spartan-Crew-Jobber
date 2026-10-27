@@ -10,6 +10,7 @@
 // ============================================================================
 import { neon, type NeonQueryFunction } from "@neondatabase/serverless";
 import type { FeedMark, MarkKind } from "./project";
+import { ensureSchema } from "../migrations";
 
 let _sql: NeonQueryFunction<false, false> | null = null;
 let _ready = false;
@@ -23,23 +24,7 @@ function db(): NeonQueryFunction<false, false> | null {
 }
 async function ensure(sql: NeonQueryFunction<false, false>): Promise<void> {
   if (_ready) return;
-  await sql`
-    CREATE TABLE IF NOT EXISTS feed_marks (
-      item_key  TEXT NOT NULL,
-      thread_id TEXT NOT NULL,
-      mark      TEXT NOT NULL,
-      by        TEXT,
-      evidence  JSONB,
-      at        TIMESTAMPTZ NOT NULL DEFAULT now(),
-      PRIMARY KEY (item_key, mark)
-    )`;
-  await sql`
-    CREATE TABLE IF NOT EXISTS feed_meta (
-      id               INT PRIMARY KEY,
-      last_verify_at   TIMESTAMPTZ,
-      timeline_last_id BIGINT,
-      verify_note      TEXT
-    )`;
+  await ensureSchema(sql);
   await sql`INSERT INTO feed_meta (id) VALUES (1) ON CONFLICT (id) DO NOTHING`;
   _ready = true;
 }
