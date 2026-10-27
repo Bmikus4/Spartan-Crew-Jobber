@@ -6,7 +6,7 @@
   below as findings and status.
 - Every step updates this file: its status line, its measurement, and what moved.
 
-**Last updated:** 27 October 2026, R3 code shipped (S-0237); its switch-over waits on CRON_SECRET. The baseline was 0f2dcef. App code changed since then in these
+**Last updated:** 27 October 2026, R4 shipped (S-0238). R3's switch-over waits on CRON_SECRET. The baseline was 0f2dcef. App code changed since then in these
 commits only:
 
 | commit | ticket | what |
@@ -18,7 +18,8 @@ commits only:
 | 6988aa0 | S-0232 | /api/confirm-order shut under v2 |
 | 40f7ca5 | S-0235 | Prompt 9: in-call retry, retryUnread, owner alerts, replay guard, UTC audit times, pause stores only |
 | 4757c27 | S-0236 | Prompt 8: docs and ruling ids in comments only |
-| (R3) | S-0237 | Prompt 10: vercel.json crons, the heartbeat, an honest sync, sync and labels on CRON_SECRET |
+| 057dbb6 | S-0237 | Prompt 10: vercel.json crons, the heartbeat, an honest sync, sync and labels on CRON_SECRET |
+| (R4) | S-0238 | Prompt 0: scripts/size-findings.mts (read-only); the scoreboard reads an email with no body |
 
 bd10dae (S-0213) moved the test suite onto PGlite. Line references below are at HEAD unless a line says "at 0f2dcef".
 
@@ -63,8 +64,8 @@ and §3 ends with the findings added after 23 Oct (F29 onward). §11 is the rebu
 | F13 failed company list → duplicate company | **OPEN** | apiCreate.ts:109 |
 | F14 deleted linked order blocks forever | **OPEN** | threadOrder.ts:16-30 |
 | F15 test-data clear on one setting | **DONE** S-0214 (pause, both write keys, logged) | testData.ts:285-288; sync/route.ts:39 |
-| F16 J is the first Job only | OPEN, measure first | links.ts |
-| F17 lease can lapse | OPEN, measure first | run.ts, bot/db.ts |
+| F16 J is the first Job only | **Measured** S-0238: 3 of 338 staff-built orders in 30 days have more than one Job. Left as is | links.ts |
+| F17 lease can lapse | **Measured** S-0238: 0 of 159 ledger runs over 180 s (longest 51 s). Not a problem | run.ts, bot/db.ts |
 | F18 NOT_CLIENT by substring | **OPEN** | process.ts:161 |
 | F19 dates dd/mm | OPEN (right for UK clients; a decision, not a bug) | ground.ts:255 |
 | F20 re-plan cache and limits | known behaviour | replan.ts:32 |
@@ -986,21 +987,25 @@ Write the answers into DECISIONS.md so the planner and harness can cite them.
 - Vercel access for this agent is refused (403 on the project's team).
 - What is still needed: CRON_SECRET, the Gmail grant and a Preview branch (§0).
 
-**What Prompt 0 counts.** These are the counts known on 26 Oct; the rest are "run Prompt 0".
+**What Prompt 0 counts. Measured 27 Oct (S-0238),** over the 30 days to 27 Oct 02:49Z, by `scripts/size-findings.mts`
+(READ ONLY on the database, GETs only on OnSinch; F8/F9 also reads `scripts/ops-truth.mts`'s output, passed as
+`--truth`). Re-run both to refresh. No address, name or body is printed.
 
-| Count | Sizes | Known 26 Oct |
+| Count | Sizes | Measured 27 Oct (how) |
 |---|---|---|
-| Client thread_messages with no v2_decisions row | F1 | 10 of 958 since 9 Oct, all non-client mail from before the 11 Oct fix; 0 in the strict week |
-| Threads where a handoff was followed by a newer handoff and the first was never booked | F2 | not counted |
-| covered / already-as-asked decisions later changed by staff on that order | F8, F9 | not counted; none_already_booked was 17 of the strict week's handoffs |
-| Audit rows where a bot edit landed on a different venue's shift than the email named | F10 | not counted |
-| Same-name companies created by user 2257 | F13 | not counted |
-| Staff-built orders with more than one Job | F16 | not counted |
-| Ledger finished - started above 180 s | F17 | not counted |
-| Decisions with kind "not a client" from addresses containing noreply/onsinch | F18 | not counted |
-| Model-picked decisions on days when the client had more than one booking | F23 | not counted (F23 fixed) |
-| Rows with no extraction, and plans with fewer verified runs than ops | F26 | 7 system-failure handoffs of 223 (1 OpenRouter 429); 3 of 61 bot runs stopped part-way |
-| Handoff reasons, tallied by code | 5.3, 5.4 | strict week: reading_unproven 34, none_already_booked 17, policy 9, replies 18 |
+| Client thread_messages with no v2_decisions row | F1 | 10 of 958 since 9 Oct, all non-client mail from before the 11 Oct fix; 0 in the strict week (26 Oct audit) |
+| Threads with two or more handoffs, and of those, threads no order was ever linked to | F2 | **46 threads; 18 with no order linked** (job_links). A proxy for "the first was never booked" |
+| "Already booked" / "already as asked" decisions that staff then acted on | F8, F9 | **41 such decisions (34 / 7); staff created (3) or updated (15) an order of that client within 36 h after 18 of them** (ops-truth). An upper bound: the action need not be on the same shift |
+| Bot edits that landed on a different venue's shift than the email named | F10 | **0.** 116 verified bot edits; 20 tie to a client email's plan (the rest are bench and test runs); none was on an order with more than one venue |
+| Companies sharing a name | F13 | **3 name groups, 6 companies, of 814.** OnSinch's company record carries no creator, so the bot's share cannot be read from it |
+| Orders with more than one Job | F16 | **3 of 338 staff-built orders created in the period (0.9%);** 0 of the 2 bot-built |
+| Ledger runs longer than 180 s from claim to last update | F17 | **0 of 159.** Longest 51 s, median 17 s: the 240 s lease has not lapsed |
+| "Not a client" decisions the substring rule set aside that a whole-domain rule would not | F18 | **1 of 64** (51 of the 64 were noreply or OnSinch mail) |
+| Readings that picked an R number, and picks the email's own words do not hold | F23 | **95 decisions with a pick; in 75 the number is not in the email; 19 of those were writes** (before S-0215's rule). Days with two bookings not counted |
+| Decisions with no reading; the system's own read failures | F26 | **148 with no reading** (filtered or carded before a read); **0 "could not read"** in the period. 3 of 61 bot runs stopped part-way (26 Oct audit) |
+| Every decision by its code (derived from the reason before codes were stamped) | 5.3, 5.4 | **994 decisions: 680 none, 227 handoff, 87 write.** Handoffs: reading_unproven 76, reply_detail_missing 33, other 23, policy_lead_days 19, reply_quote 15, reply_unclear 13, client_unknown 13, request_unsupported 12, venue_not_identified 7, booking_not_identified 6, booking_link_unreadable 4, request_inconsistent 3, system_failed 2, partly_booked 1 |
+| The real-email scoreboard (scripts/real-email-scoreboard.mts, every stored email since 9 Oct re-planned by HEAD) | 5.1 | **837 emails; 194 needing action; 27 written; 37 reply needed; 130 orders left for a person (83% of order work).** Its tally: reading_unproven 57, write 27, policy_lead_days 23, reply_detail_missing 22, policy_confirmed_proposal 13, reply_unclear 12, booking_link_unreadable 8, booking_not_identified 7, request_unsupported 6, request_inconsistent 5, client_unknown 5, booking_not_found 3, reply_quote 3, policy_past_day 2, venue_not_identified 1 |
+| SPARTAN_INTERPRET_MODEL in production | | **Not readable here** (Vercel 403). Every stored reading since 16 Oct names openai/gpt-6.1-sol with prompt extract@f3e1a862322b (388 of 388), which is also the code's default, so set-or-unset cannot be told from the data |
 
 ---
 
@@ -1040,7 +1045,7 @@ list is true and the owner has reviewed the result. Don't run several at once: t
 
 | prompt | status |
 |---|---|
-| 0 | partly known (§7); run |
+| 0 | DONE (S-0238); §7 |
 | 1 | DONE (S-0214) |
 | 2 | DONE (S-0215) |
 | 3 | DONE (S-0216, S-0217) |
@@ -1065,7 +1070,7 @@ list is true and the owner has reviewed the result. Don't run several at once: t
 - Ship only through scripts/session.py. Then update this file: the item's status line, §0's table, and any measurement.
 - Finish with: what changed, the tests added, the commands you ran and their output, and anything left undone.
 
-### Prompt 0: size the findings (read-only, run first)
+### Prompt 0: size the findings (read-only, run first): **DONE**, S-0238 (§7)
 **Goal:** measure how often each finding actually happens, without changing anything.
 1. Connect read-only (scripts/_readonly.mts proves it with a refused UPDATE).
 2. For the last 30 days, compute each count in §7's table that is still "not counted". SELECT only.
@@ -1240,7 +1245,7 @@ Still to come from §10: the identity owner (R8) and the old engine's retirement
 | R1 | **9** (new) | **Stop losing work, part 2:** F29 (in-call retry), F26 re-read (retryUnread), F30 owner alerts, F35 replay guard, F36 UTC times, F31 pause stores mail. Held items-1-3-runtime, plus C3 and C2 / item-4 / n1 scoring | **DONE S-0235** |
 | R2 | 8 | Re-map the repo: CLAUDE.md, engine README, docs index, rulings into DECISIONS.md | **DONE S-0236** |
 | R3 | **10** (new) | **No heartbeat in n8n** (F32): cron entry points, the heartbeat, honest sync status (F37), sync and labels on their own secret (F3), labels by webhook, the switch-over | **Code DONE S-0237.** Switch-over waits on CRON_SECRET |
-| R4 | 0 | Size the findings, read-only | report |
+| R4 | 0 | Size the findings, read-only | **DONE S-0238** (§7) |
 | R5 | 5 + 5.10 | Everyday requests (F8, F24, F25, dates, schema validation) and the small fixes (F13, F14, F18, op key, run.ts:5, README). Re-cut held item 5 and n2-planner-ops | yes |
 | R6 | **11** (new) | Govern the switches (F34). One migrations module (F44). A Preview branch when access exists | yes |
 | R7 | **12** (new) | Retire the old engine in stages (F45, §10): move the shared OnSinch client and helpers to app/lib/onsinch/, delete what nothing live reaches, then pipeline/compiler/deps and the shut routes, then the 145 old tests | yes, staged |

@@ -5147,5 +5147,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0238",
+  "ts": "2026-10-27T03:01:37+00:00",
+  "kind": "measurement",
+  "headline": "R4 (Prompt 0): every finding sized over 30 days by scripts/size-findings.mts; \u00a77 filled",
+  "subject": "Prompt 0's counts come from one read-only script that anyone can re-run",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 232,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]

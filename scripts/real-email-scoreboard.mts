@@ -25,7 +25,7 @@ const rows = (await sql`SELECT d.message_id, d.kind, d.decision, d.interpretatio
 const out: any[] = [];
 const priorBy = new Map<string, any[]>();
 for (const r of rows) {
-  const text = latestText(r.body);
+  const text = latestText(String(r.body ?? ""));
   const g = ground(r.x, `${r.subject}\n${text}`, r.date_iso, { subject: r.subject ?? "", prior: priorBy.get(r.thread_id) ?? [] });
   priorBy.set(r.thread_id, [...(priorBy.get(r.thread_id) ?? []), ...g.requests]);
   // The thread's link as production reads it (threadOrder.ts); conversation_state was retired 10-21.
