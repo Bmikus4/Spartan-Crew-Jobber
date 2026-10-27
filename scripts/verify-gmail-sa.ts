@@ -16,7 +16,7 @@
 // ============================================================================
 import { serviceAccountToken } from "../app/lib/mail/serviceAccountToken";
 import { GMAIL_READ_SCOPES, GMAIL_WRITE_SCOPES, BOOKINGS_MAILBOX } from "../app/lib/mail/gmailAuth";
-import { THE_FOUR } from "../app/lib/mail/gmailWrite";
+import { ORDER_LABELS } from "../app/lib/mail/threadLabels";
 
 const API = "https://gmail.googleapis.com/gmail/v1/users/me";
 
@@ -89,7 +89,7 @@ async function main() {
 
     if (list.ok) {
       const names = new Set((lb.labels || []).map((l: any) => String(l.name)));
-      const present = THE_FOUR.filter((n) => names.has(n));
+      const present = ORDER_LABELS.filter((n) => names.has(n));
       // Not a failure: the poller creates whichever are missing on first use. Reported
       // because "all four already there" and "none of them yet" are worth telling apart.
       console.log(`     the four labels present today: ${present.length}/4${present.length ? " — " + present.join(", ") : ""}`);

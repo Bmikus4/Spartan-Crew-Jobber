@@ -110,7 +110,7 @@ async function links(): Promise<Map<string, LiveLink>> {
 
 export function liveFeedDeps(): FeedDeps {
   return {
-    states: async () => [], portedStates: pausedStates, inbound, marks: allMarks, v2, from: FEED_FROM, held,
+    portedStates: pausedStates, inbound, marks: allMarks, v2, from: FEED_FROM, held,
     // Every job the board ever held (948 tickets, 457 client jobs on 2026-10-11), not its first 300.
     jobs: () => listTickets(5000),
     replies: followupsEnabled() ? replies : null,

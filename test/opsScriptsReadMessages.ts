@@ -6,14 +6,14 @@
 // exists, so every one of them reads null and reports "no enquiries" rather than
 // crashing. This asserts the reconstruction instead of trusting it.
 //
-// Run: npx tsx test/opsScriptsReadMessages.ts
+// Run: npx tsx --require ./test/fixtures/pg.ts test/opsScriptsReadMessages.ts
 // ============================================================================
 import "./fixtures/pg"; // first: a run of this file alone must reach PGlite, never the database .env.local names
 import { neon } from "@neondatabase/serverless";
 import { loadEnv, requireEnv } from "../scripts/_env.mjs";
 import { payloadFor } from "../scripts/_thread.mjs";
 import { captureInboundRaw } from "../app/lib/inboundRawDb";
-import { coerceThread } from "../app/lib/engine/intake";
+import { messagesFromPayload } from "../app/lib/threadMessagesDb";
 
 loadEnv();
 const sql = neon(requireEnv("DATABASE_URL"));
@@ -48,10 +48,10 @@ async function main() {
   ok(rebuilt.messages[1].body === "Make it nine.", "with their bodies");
   ok(rebuilt.n8n?.verdict?.gate === "priceable", "and the n8n verdict the envelope kept");
 
-  const a = coerceThread(rebuilt);
-  const b = coerceThread(original);
+  const a = messagesFromPayload(rebuilt);
+  const b = messagesFromPayload(original);
   ok(JSON.stringify(a) === JSON.stringify(b),
-     "coerceThread cannot tell the reconstruction from the original");
+     "the reader intake uses cannot tell the reconstruction from the original");
 
   // A pre-restructure row must still be returned exactly as stored.
   const legacy = await payloadFor(sql, "whatever", original, null);

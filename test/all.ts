@@ -25,7 +25,7 @@ import { fileURLToPath } from "node:url";
 const HERE = dirname(fileURLToPath(import.meta.url));
 
 /** Not tests: shared fixtures, and this runner itself. */
-const NOT_A_TEST = new Set(["mocks.ts", "all.ts"]);
+const NOT_A_TEST = new Set(["all.ts"]);
 
 const files = readdirSync(HERE)
   .filter((f) => f.endsWith(".ts") && !NOT_A_TEST.has(f))

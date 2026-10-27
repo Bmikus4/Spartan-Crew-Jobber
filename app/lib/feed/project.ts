@@ -1,23 +1,13 @@
 // ============================================================================
 // The live feed: what the engine processed that is still waiting on a person.
 // ----------------------------------------------------------------------------
-// A PROJECTION, and a pure one. Everything on the TV is derived from the state rows,
-// the stored messages, the feed's own marks and the follow-up board at one instant;
-// nothing here is remembered between refreshes except the marks. So the TV can never
-// hold an opinion the engine does not.
-//
-// THE STATUS IS THE GMAIL LABEL, read through the engine's own predicates
-// (cannotBeBooked, needsLabelFor, CHANGED_A_STANDING_ORDER) and never re-derived. A
-// screen that worked out "needs created" for itself would drift from the label within a
-// fortnight, and then the office TV and the mailbox would disagree with nobody able to
-// say which was right. The Gmail send flags (built_flagged, needs_label, ...) are NOT
-// read: they record what was posted to Gmail, and posting failed for a day on
-// 2026-10-02 while the state itself was right.
+// A PROJECTION, and a pure one. Everything on the TV is derived from the engine's decisions
+// (v2.ts sources), the stored messages, the feed's own marks and the follow-up board at one
+// instant; nothing here is remembered between refreshes except the marks. So the TV can never
+// hold an opinion the engine does not. The paused engine's states were a second source until
+// 27 Oct (addendum Prompt 12); the projection tests still describe cases that way, through
+// test/fixtures/stateSource.ts.
 // ============================================================================
-import { cannotBeBooked, needsLabelFor, CHANGED_A_STANDING_ORDER } from "../engine/pipeline";
-import type { ConversationState, DesiredSlotTeam } from "../engine/types";
-import { rNumbersIn } from "../engine/resolve";
-import { PLACEHOLDER_PLACE_IDS } from "../engine/resolver";
 import { FOLLOW_UP_MS, londonDay, orderCards, QUIET_MS } from "./order";
 
 export type FeedKind = "needs-created" | "needs-updated" | "created-check" | "updated-check" | "needs-reply";
@@ -168,32 +158,10 @@ export interface FeedWant {
   sender: string | null;
 }
 
-/** "EAV6695", "HP1263": a client's own job reference. Postcodes ("SE9") are too short to match. */
-const REF = /\b[A-Z]{2,5}-?\d{3,6}\b/g;
 
-function wantOf(s: ConversationState): FeedWant {
-  const subject = s.subject ?? "";
-  const r_numbers = rNumbersIn(subject);
-  const refs = new Set<string>();
-  const cref = str((s.facts as { customer_reference?: unknown } | undefined)?.customer_reference);
-  if (cref) refs.add(cref);
-  for (const m of subject.matchAll(REF)) if (!/^R-?\d+$/i.test(m[0])) refs.add(m[0]);
-  const teams: DesiredSlotTeam[] = s.desired_order?.slot_teams?.length ? s.desired_order.slot_teams : s.last_ordered_teams ?? [];
-  const real = (v: unknown) => { const n = Number(v); return n > 0 && !PLACEHOLDER_PLACE_IDS.has(n) ? n : null; };
-  const shifts = teams
-    .map((t) => ({ b: Date.parse(String(t?.beginning ?? "")), e: Date.parse(String(t?.end ?? "")), p: real((t as { place_id?: unknown })?.place_id) }))
-    .filter((x) => Number.isFinite(x.b) && Number.isFinite(x.e));
-  return { r_numbers, refs: [...refs], place_id: real(s.place_id), shifts, sender: str(s.sender_email) };
-}
 
 export { londonDay, QUIET_MS };
 
-function jobDays(s: ConversationState): string[] {
-  const days = new Set<string>();
-  for (const r of s.facts?.requests ?? []) if (r?.date && /^\d{4}-\d{2}-\d{2}/.test(r.date)) days.add(r.date.slice(0, 10));
-  for (const t of s.desired_order?.slot_teams ?? []) if (t?.beginning && /^\d{4}-\d{2}-\d{2}/.test(t.beginning)) days.add(t.beginning.slice(0, 10));
-  return [...days].sort();
-}
 
 /** A London wall-clock time as an instant: the offset is London's on that day, so BST is right. */
 export function londonInstant(day: string, hhmm: string): number {
@@ -204,44 +172,12 @@ export function londonInstant(day: string, hhmm: string): number {
   return guess - (wall - guess);
 }
 
-/**
- * When the job next starts. The ordered blocks carry real instants; a request's date and
- * start time are London wall-clock. A day with no time counts from its first minute, so
- * the countdown never promises more time than there is.
- */
-function nextStart(s: ConversationState, now: number): number | null {
-  const at: number[] = [];
-  for (const t of s.desired_order?.slot_teams ?? []) { const v = Date.parse(String(t?.beginning ?? "")); if (Number.isFinite(v)) at.push(v); }
-  for (const r of s.facts?.requests ?? []) if (r?.date && /^\d{4}-\d{2}-\d{2}/.test(r.date)) { const v = londonInstant(r.date.slice(0, 10), r.start_time ?? "00:00"); if (Number.isFinite(v)) at.push(v); }
-  const future = at.filter((v) => v >= now).sort((a, b) => a - b);
-  return future[0] ?? null;
-}
 
-/**
- * The busiest single day, not the sum of every block: a three-day job of eight would
- * otherwise read "24 crew" on the TV, which is nobody's headcount.
- */
-function crewOf(s: ConversationState): number | null {
-  const teams: DesiredSlotTeam[] = s.desired_order?.slot_teams?.length ? s.desired_order.slot_teams : s.last_ordered_teams ?? [];
-  if (!teams.length) return null;
-  const perDay = new Map<string, number>();
-  for (const t of teams) {
-    const d = String(t?.beginning ?? "").slice(0, 10);
-    perDay.set(d, (perDay.get(d) ?? 0) + (Number(t?.size) || 0));
-  }
-  const max = Math.max(...perDay.values());
-  return max > 0 ? max : null;
-}
 
 const str = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim() : null);
 const firstName = (v: unknown) => str(v)?.split(/\s+/)[0] ?? null;
-const epochMs = (n: unknown) => { const v = Number(n); return !Number.isFinite(v) || v <= 0 ? 0 : v < 1e12 ? v * 1000 : v; };
 
-/**
- * One thread as the TV draws it, from either engine: the paused engine's state
- * (stateSource) or the rebuild's newest decision (v2.ts). The card, the green rules, the
- * memory and the verifier's wants are the same for both, so the TV reads one way.
- */
+/** One thread as the TV draws it: the engine's newest decision on it (v2.ts). */
 export interface FeedSource {
   thread_id: string;
   days: string[];
@@ -266,65 +202,7 @@ export interface FeedSource {
   resolvedText: string;
 }
 
-function stateSource(s: ConversationState, lastInbound: Map<string, number>, now: number): FeedSource {
-  return {
-    thread_id: s.thread_id,
-    days: jobDays(s),
-    /**
-     * `not-a-job` yields nothing EXCEPT where the engine's own predicate still holds: a client
-     * calling a booked job off reads to the model as not-a-job, and cannotBeBooked keeps
-     * that thread as a need on purpose (pipeline.ts, verified 2026-10-01). Dropping it here
-     * would hide the most dangerous update there is.
-     */
-    item: s.classification === "not-a-job" && !cannotBeBooked(s) ? null : orderItem(s, lastInbound.get(s.thread_id)),
-    order_id: Number(s.onsinch_order_id) > 0 ? Number(s.onsinch_order_id) : null,
-    r_number: str(s.onsinch_order_number) ? `R${String(s.onsinch_order_number).replace(/^R/i, "")}` : null,
-    j_number: Number(s.onsinch_job_id) > 0 ? `J${s.onsinch_job_id}` : null,
-    company_id: Number(s.company_id) > 0 ? Number(s.company_id) : null,
-    company: str(s.facts?.company_name),
-    contact: firstName(s.facts?.contact_name),
-    venue: str(s.facts?.location_text),
-    subject: s.subject ?? "",
-    crew: crewOf(s),
-    starts_at: nextStart(s, now),
-    last_write: Math.max(0, ...(s.order_action_log ?? []).filter((a) => a.ok).map((a) => epochMs(a.ts))),
-    want: wantOf(s),
-    note: null,
-    resolvedText: resolvedText(s),
-  };
-}
 
-/**
- * A thread's one order item, or null: a need while the engine's own predicate says a
- * person is required, otherwise the latest write it made, to be checked.
- *
- * The two are exclusive for the same reason the four labels are: a failure outranks a
- * success (flagBuiltIfNeeded), so a thread that needs a person shows the need and not
- * the order it also holds.
- */
-function orderItem(s: ConversationState, lastInbound: number | undefined): Omit<FeedItem, "green"> & { order_id: number | null } | null {
-  const order_id = Number(s.onsinch_order_id) > 0 ? Number(s.onsinch_order_id) : null;
-  if (cannotBeBooked(s)) {
-    const kind: FeedKind = needsLabelFor(s) === "Order Needs Built" ? "needs-created" : "needs-updated";
-    /**
-     * The client's latest email is part of the key. Without it a tick on "needs updated"
-     * would outlive the next change the client sends, and the card for that change would
-     * arrive already green.
-     */
-    return {
-      item_key: `${kind}:${s.thread_id}:${order_id ?? 0}:${lastInbound ?? 0}`,
-      kind, status: STATUS_TEXT[kind],
-      at: lastInbound ?? epochMs(s.last_processed_epoch),
-      order_id,
-    };
-  }
-  if (!order_id) return null; // nothing booked to check; a cleared order is not "was created"
-  const latest = [...(s.order_action_log ?? [])].reverse().find((a) => a.ok && (a.kind === "create" || CHANGED_A_STANDING_ORDER.has(a.kind)));
-  if (!latest) return null;
-  const kind: FeedKind = latest.kind === "create" ? "created-check" : "updated-check";
-  const oid = Number(latest.order_id) > 0 ? Number(latest.order_id) : order_id;
-  return { item_key: `${kind}:${oid}:${latest.ts}`, kind, status: STATUS_TEXT[kind], at: epochMs(latest.ts), order_id: oid };
-}
 
 /**
  * The feed at `now`.
@@ -334,7 +212,6 @@ function orderItem(s: ConversationState, lastInbound: number | undefined): Omit<
  * must not erase the edit — and the earliest decides when the item went green.
  */
 export function project(
-  states: ConversationState[],
   lastInbound: Map<string, number>,
   marks: FeedMark[],
   replies: ReplyNeed[] | null,
@@ -386,10 +263,8 @@ export function project(
     if (m.at >= (lastOpen.get(m.thread_id)?.at ?? -Infinity)) lastOpen.set(m.thread_id, m);
   }
 
-  // The rebuild's decision on a thread replaces the paused engine's state for it: the state
-  // stopped moving when the engine was paused, and the decision is about a newer email.
+  // A later source for a thread replaces an earlier one.
   const sources = new Map<string, FeedSource>();
-  for (const s of states) if (s?.thread_id) sources.set(s.thread_id, stateSource(s, lastInbound, now));
   for (const v of v2) sources.set(v.thread_id, v);
 
   /**
@@ -532,10 +407,4 @@ export function project(
   return { cards: orderCards([...cards.values()], now), counts, wants, remember };
 }
 
-/** What the resolved card says happened. The engine wrote nothing, so this reads its state. */
-function resolvedText(s: ConversationState): string {
-  if (s.classification === "not-a-job") return "Read as not a job by the system";
-  if (Number(s.onsinch_order_id) > 0) return "Linked to an order by the system";
-  return "No order needed any more, per the system";
-}
 

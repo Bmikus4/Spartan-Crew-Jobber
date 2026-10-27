@@ -12,7 +12,6 @@ const ok = (c: boolean, m: string, d = "") => { console.log(`  ${c ? "PASS" : "F
 
 (async () => {
   for (const k of ["DATABASE_URL", "POSTGRES_URL", "STORAGE_DATABASE_URL"]) delete process.env[k];
-  process.env.SPARTAN_ENGINE = "v2";
   const { botWrites } = await import("../app/lib/v2/process");
   process.env.SPARTAN_WRITES = "off";
   ok(await botWrites() === false, "the server switch off: no writes, whatever Settings says");

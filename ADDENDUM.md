@@ -6,7 +6,7 @@
   below as findings and status.
 - Every step updates this file: its status line, its measurement, and what moved.
 
-**Last updated:** 27 October 2026, R7 stage 2 shipped (S-0241). R3's switch-over waits on CRON_SECRET. The baseline was 0f2dcef. App code changed since then in these
+**Last updated:** 27 October 2026, R7 stages 3 and 4 shipped (S-0242): the old engine is deleted. R3's switch-over waits on CRON_SECRET. The baseline was 0f2dcef. App code changed since then in these
 commits only:
 
 | commit | ticket | what |
@@ -23,6 +23,7 @@ commits only:
 | (R5) | S-0239 | Prompt 5 and 5.10: combined changes, trade totals, direction words, schema check, F13, F14, F18, the op key |
 | (R6) | S-0240 | Prompt 11: the write and reply switches are an admin's, kept and reported; one migrations module |
 | (R7.2) | S-0241 | Prompt 12 stage 2: the 12 files nothing reaches, deleted with the tests and scripts that existed only for them |
+| (R7.3) | S-0242 | Prompt 12 stages 3 and 4: the old engine, its routes and SPARTAN_ENGINE deleted with their tests; a failed test file can no longer exit 0 (F48) |
 
 bd10dae (S-0213) moved the test suite onto PGlite. Line references below are at HEAD unless a line says "at 0f2dcef".
 
@@ -101,7 +102,9 @@ and §3 ends with the findings added after 23 Oct (F29 onward). §11 is the rebu
 | F37 the sync reports success whatever happened | **DONE for the sync** S-0237 (ok only when every step succeeded, 500 otherwise). Labels still count as applied when handed out | test/cronEntryPoints.ts |
 | F34 any staff member flips the switches | **DONE** S-0240: admin only (DECISIONS A1), a settings_history row per change, a settings-changed alert to the owner | test/settingsSwitchesGoverned.ts |
 | F44 schema at request time; preview on production's database | **DONE for the schema** S-0240: app/lib/migrations.ts, migrate() once per database, checked against production's schema. **OPEN: Preview's own branch** (needs access) | test/migrations.ts |
-| F33, F38-F43, F45-F47 (added 26 Oct) | see §3, "Added 26 October" | |
+| F45 the old engine is 40% of the app | **DONE except the move** S-0241, S-0242: 53 app files (14,624 lines) deleted, 122 of 226 test files with them; app/lib/engine keeps the 7 files v2 imports, which move to app/lib/onsinch/ last (R7 stage 1) | test/automationPaused.ts; scripts as in Prompt 12 |
+| F48 a failed test file passed the gate | **DONE** S-0242 | test/exitCodeSurvivesPglite.ts |
+| F33, F38-F43, F46, F47 (added 26 Oct) | see §3, "Added 26 October" | |
 
 ### Built and held (not deployed)
 Each held diff is mapped to the item it serves. They sit in `eval/patches/` and stack in this order on 305bf84. Applied
@@ -755,6 +758,20 @@ medium).**
 - 12 files are reachable from nothing.
 - See §10.
 
+**F48. A failed test file passed the gate (Process, high). DONE S-0242.** Added 27 Oct.
+- test/all.ts counts a file failed only by its exit code. PGlite's start-up ends in Postgres's own exit, and
+  emscripten writes that 0 to process.exitCode. So from S-0213, when the suite moved onto PGlite, a file whose
+  failure was recorded before or during the start-up exited 0 and the gate counted it passed. 58 of 226 files report
+  failure that way.
+- **Measured:** one file was hiding a failure: routeHandlers' settings case, red since R6 (S-0240) made the switches
+  an admin's. The test was wrong, not the code (it posted a switch change with no caller).
+- **Fix:** harness/sim/pg.ts starts PGlite on first use, and for the start-up the global `process` is a view on which
+  a 0 cannot overwrite a failure (Node will not let exitCode itself be redefined). test/exitCodeSurvivesPglite.ts
+  runs a file failing before and during the start-up: red on the old sim, green now.
+- Also: package.json had 36 one-file test scripts that ran tsx without the preload, so a single run could reach the
+  database .env.local names (the 27 Oct incident's path). They are gone; `npm test -- test/x.ts` runs one file on
+  PGlite.
+
 **F46. In-Reply-To and References are stored but read nowhere on the v2 path (Matching, low).**
 - They have been stored since 23 Oct.
 - They are the cheapest thread-to-order signal there is (5.7).
@@ -1217,7 +1234,7 @@ writes exactly what was shown.
 - docs/README.md marks each file in docs/ current, reference or superseded;
 - DECISIONS.md carries O1-O5 (§0's rulings) and V1-V35 (every ruling found in a v2 code comment), and each of the 68
   comment lines names its id.
-Still to come from §10: the identity owner (R8) and the old engine's retirement (R7).
+Still to come from §10: the identity owner (R8), and the move of what the old engine left to app/lib/onsinch/ (R7 stage 1).
 
 **Nico's findings (code-verified at 0f2dcef, all still true):**
 - **CLAUDE.md describes the legacy engine.** It never mentions v2, the harness, the two write keys or the refusal rules.
@@ -1267,7 +1284,7 @@ Still to come from §10: the identity owner (R8) and the old engine's retirement
 | R4 | 0 | Size the findings, read-only | **DONE S-0238** (§7) |
 | R5 | 5 + 5.10 | Everyday requests (F8, F24, F25, dates, schema validation) and the small fixes (F13, F14, F18, op key, run.ts:5, README). Re-cut held item 5 and n2-planner-ops | **DONE S-0239** |
 | R6 | **11** (new) | Govern the switches (F34). One migrations module (F44). A Preview branch when access exists | **DONE S-0240**; the branch waits on access |
-| R7 | **12** (new) | Retire the old engine in stages (F45, §10): move the shared OnSinch client and helpers to app/lib/onsinch/, delete what nothing live reaches, then pipeline/compiler/deps and the shut routes, then the 145 old tests | **Stage 2 DONE S-0241**; stages 3, 4 and 1 (in that order) open |
+| R7 | **12** (new) | Retire the old engine in stages (F45, §10): move the shared OnSinch client and helpers to app/lib/onsinch/, delete what nothing live reaches, then pipeline/compiler/deps and the shut routes, then the 145 old tests | **Stages 2, 3 and 4 DONE** S-0241, S-0242; stage 1 (the move to app/lib/onsinch/) open |
 | R8 | 4 | **One shared booking finder** (5.3), built once the old engine is gone, so there is one place for it. Brings in held C1 and item 7 | yes |
 | R9 | 6 | Resume interrupted plans (F26, F38, F39) | yes |
 | R10 | **13** (new) | **The email-to-board harness** (the owner's design, below), then its case study | report + test |
@@ -1376,7 +1393,28 @@ files that load .env.local now import ./fixtures/pg first. Run a single test as
 - the alert fires;
 - both migration tests pass.
 
-### Prompt 12: retire the old engine (F45): **stage 2 DONE**, S-0241
+### Prompt 12: retire the old engine (F45): **stages 2, 3 and 4 DONE**, S-0241, S-0242; stage 1 open
+**As run, stages 3 and 4 together (S-0242).** A test of a deleted file cannot stay, so the two went as one.
+- **The old engine's routes and switch:** /api/confirm-order, /api/reconcile, /api/sweep-ingest and /api/mail-inbound,
+  with routes/confirmOrder.ts and routes/reconcile.ts. SPARTAN_ENGINE is read by nothing: paused.ts keeps
+  SHUT_ROUTES (/api/mail-poll alone, F43), v2Writes and automationPausedFlag. n8nInbound.ts is capture, the SP-12
+  shape report, the pause's store-only path, then decideDelivery. /api/mail-poll stores and decides nothing until R14.
+- **The TV's old-state branch:** feed/project.ts takes FeedSource[] only; serve.ts takes `sources` in place of
+  `states`. The feed tests build their cards through test/fixtures/stateSource.ts, the same projection moved
+  into the tests.
+- **What then reached nothing:** 47 app files (pipeline, compiler, deps, the reasoner, sweeps, venue matching,
+  amend and replace, stateDb and seven other old stores, mail/gmailWrite, providers, threading). The import walk
+  from every route, page and middleware now leaves only app/manifest.ts, a Next.js entry it does not count.
+- **Tests and scripts:** 122 of the 226 test files went (the 145 the plan counted, less those already gone or
+  rewritten). threadMessages and opsScriptsReadMessages read through messagesFromPayload instead of the old
+  coerceThread. Also gone: 28 scripts, and sim/ and study/ (39 files, the old engine's study rigs, last changed 4 Oct).
+  verify-gmail-sa reads the four labels from threadLabels.ts. .env.example lists 44 names, down from 70.
+- **Measured:** 243 files deleted; 48,288 lines out, 349 in. tsc clean. The real-mail replay (harness/real/writes-run.ts
+  --set dev-2, $0, offline) is unchanged: 22 writes, 11 completed, 2 partial, 9 wrong.
+- **Found on the way:** F48, a failed test file passed the gate.
+- **Production:** SPARTAN_ENGINE and the old engine's variables (REASONER_*, SPARTAN_MODEL, the venue and link
+  settings) are still set in Vercel and read by nothing. Removing them is the owner's call; nothing depends on it.
+
 **As run:** stage 2 first. Deleted (an import-graph walk from every route, page and middleware reaches none of them):
 engine/fold, jobMigration, orderLink, score, verifyWrite; match/facts, match, ngram, score; sweepLabelsDb; v2/bot/parity;
 v2/draft (V6's code; the ruling stands). With them went the 8 tests and 9 scripts that existed only for them

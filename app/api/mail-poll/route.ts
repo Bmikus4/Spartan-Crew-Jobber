@@ -67,12 +67,8 @@ import { gmailClient, getRawMessage } from "../../lib/mail/gmailClient";
 import { fetchSince } from "../../lib/mail/gmailCursor";
 import { readCursor, writeCursor, touchRun, unseenIds, markSeen } from "../../lib/mail/cursorDb";
 import { BOOKINGS_MAILBOX, tokenSource } from "../../lib/mail/gmailAuth";
-import { storeMessage, rebuildThread, rowFromGmail } from "../../lib/threadMessagesDb";
+import { storeMessage, rowFromGmail } from "../../lib/threadMessagesDb";
 import { captureInboundRaw } from "../../lib/inboundRawDb";
-import { coerceThread } from "../../lib/engine/intake";
-import { handleThread } from "../../lib/engine/pipeline";
-import { buildDeps } from "../../lib/deps";
-import { upsertTicketFromState } from "../../lib/ticketsDb";
 import { activeIntake, mayRunEngine } from "../../lib/intakePath";
 import { reportError } from "../../lib/errorReport";
 
@@ -151,22 +147,10 @@ async function poll(): Promise<Response> {
       if (isFromSpartan) { results.push({ id, thread: threadId, engine: "outbound" }); continue; }
       if (!mayRunEngine("routing")) { results.push({ id, thread: threadId, engine: `shadow (INTAKE_PATH=${activeIntake()})` }); continue; }
 
-      try {
-        const thread = await rebuildThread(threadId);
-        const coerced = thread ? coerceThread(thread) : null;
-        if (!coerced) { results.push({ id, thread: threadId, engine: "not coercible" }); continue; }
-        const state = await handleThread(coerced, await buildDeps());
-        await upsertTicketFromState(state);
-        results.push({ id, thread: threadId, engine: `${state.classification}/${state.status}` });
-      } catch (err) {
-        // One bad thread does not stop the batch: the rest of the mailbox is still waiting.
-        void reportError({
-          route: "engine-threw", where: "api/mail-poll",
-          what: String((err as Error)?.message ?? err),
-          detail: `thread ${threadId} (gmail ${id})`,
-        });
-        results.push({ id, thread: threadId, engine: "failed" });
-      }
+      // STORED, NOT DECIDED. The old engine's pipeline this called is gone (addendum Prompt 12), and the
+      // v2 engine decides only once Gmail's threadId maps to the thread id n8n's intake stored: without
+      // that every conversation would get a second thread (fad7c0f). That is R14 (addendum F43).
+      results.push({ id, thread: threadId, engine: "stored; the v2 decision waits on R14 (F43)" });
     }
 
     await markSeen(mailbox, handled);

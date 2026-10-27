@@ -33,7 +33,7 @@ for (const k of ["DATABASE_URL", "POSTGRES_URL", "ONSINCH_API_KEY", "OPENROUTER_
   if (process.env[k] && !/^sim/.test(process.env[k]!)) { console.error(`refusing to run: ${k} is set in this process (start without --env-file)`); process.exit(2); }
 }
 Object.assign(process.env, {
-  SPARTAN_ENGINE: "v2", SPARTAN_WRITES: "live", DATABASE_URL: "sim://pglite", ONSINCH_BASE_URL: "https://spartancrew.onsinch.com/api/v1", ONSINCH_API_KEY: "sim",
+  SPARTAN_WRITES: "live", DATABASE_URL: "sim://pglite", ONSINCH_BASE_URL: "https://spartancrew.onsinch.com/api/v1", ONSINCH_API_KEY: "sim",
   OPENROUTER_API_KEY: "sim", N8N_WEBHOOK_SECRET: "sim-secret", BOT_SECRET: "sim", SPARTAN_INTERPRET_MODEL: "recorded",
   // Not "local": the TV hides a workstation's decisions, and every simulated one would vanish.
   VERCEL_GIT_COMMIT_SHA: "sim",

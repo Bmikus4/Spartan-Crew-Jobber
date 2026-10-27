@@ -13,6 +13,7 @@ import { serveFeed } from "../app/lib/feed/serve";
 import { verify, __resetVerifyCache } from "../app/lib/feed/verify";
 import type { Transport } from "../app/lib/engine/onsinch";
 import type { ConversationState } from "../app/lib/engine/types";
+import { fromStates } from "./fixtures/stateSource";
 
 let fails = 0;
 const ok = (cond: boolean, label: string, extra = "") => {
@@ -46,7 +47,7 @@ void (async () => {
     };
     const own: string[] = [];
     const r = await serveFeed({
-      states: async () => states,
+      sources: async (inb, at) => fromStates(states, inb, at),
       inbound: async () => ({ byThread: new Map(), latest: NOW }),
       marks: async () => [],
       replies: null,

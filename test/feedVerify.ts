@@ -17,6 +17,7 @@ import { verify, changeOf, readOnly, __resetVerifyCache, type VerifyDeps } from 
 import { project, type FeedMark } from "../app/lib/feed/project";
 import type { Transport } from "../app/lib/engine/onsinch";
 import type { ConversationState } from "../app/lib/engine/types";
+import { fromStates } from "./fixtures/stateSource";
 
 let fails = 0;
 const ok = (cond: boolean, label: string, extra = "") => {
@@ -77,7 +78,7 @@ void (async () => {
   const wrote = NOW - 5 * H;
   const states = [needUpdate("a", 16345, "11312", 13925), needUpdate("b", 16400, "11400", 14001), needUpdate("c", 16500, "11500", 14100)];
   const inbound = new Map(states.map((s) => [s.thread_id, wrote]));
-  const cards = project(states, inbound, [], null, NOW).cards;
+  const cards = project(inbound, [], null, NOW, new Map(), [...fromStates(states, inbound, NOW)]).cards;
   // Every item's history already read, so a case can isolate the timeline.
   const historyRead: FeedMark[] = cards.map((c) => ({ item_key: c.items[0].item_key, thread_id: c.thread_id, mark: "stamps", by: null, evidence: null, at: NOW }));
 
@@ -112,7 +113,7 @@ void (async () => {
     ok((keys.get("b")?.evidence as { text: string } | undefined)?.text === "crew 2 → 1", "order b: green on a Slot change found through its blocks");
     ok(!keys.has("c"), "order c: an edit before the client's email and the engine's own edit are not evidence");
     ok(r.wrote === 2 && saved[0]?.id === 23, "the cursor moves to the newest row read", JSON.stringify(saved));
-    const after = project(states, inbound, marks, null, NOW).cards;
+    const after = project(inbound, marks, null, NOW, new Map(), [...fromStates(states, inbound, NOW)]).cards;
     ok(after.filter((c) => c.green).length === 2, "and the projection shows two green cards");
   }
 
@@ -152,7 +153,7 @@ void (async () => {
   console.log("\n[6] a needed order somebody raised by hand");
   {
     __resetVerifyCache();
-    const need = project([needCreated("n", 77), needCreated("undated", 78)], new Map(), [], null, NOW).cards;
+    const need = project(new Map(), [], null, NOW, new Map(), [...fromStates([needCreated("n", 77), needCreated("undated", 78)], new Map(), NOW)]).cards;
     need[1].dates = [];
     const on = fakeOnsinch([[]], { orders: { "77": [{ id: 16600, number: "11081", happening: "2026-10-16T08:00:00+01:00", Job: [{ id: 14200 }] }] } });
     const { d, marks } = deps(on.t);
@@ -215,7 +216,7 @@ void (async () => {
     };
     const run = async (states: ConversationState[], orders: Record<string, unknown[]>, marks: FeedMark[] = [], at = sent) => {
       __resetVerifyCache();
-      const p = project(states, new Map(states.map((s) => [s.thread_id, at])), marks, null, NOW);
+      const p = project(new Map(states.map((s) => [s.thread_id, at])), marks, null, NOW, new Map(), [...fromStates(states, new Map(states.map((s) => [s.thread_id, at])), NOW)]);
       const nestedById: Record<number, unknown> = {};
       for (const list of Object.values(orders)) for (const o of list as Array<{ id: number }>) nestedById[o.id] = o;
       const on = fakeOnsinch([[]], { orders, nested: nestedById });
@@ -237,7 +238,7 @@ void (async () => {
     ok(move.some((m) => m.mark === "matched" && ev(m) === "R10954, found by venue"), "three orders that day: the one at the thread's venue", move.map((m) => `${m.mark}:${ev(m)}`).join(" | "));
     ok(ev(move.find((m) => m.mark === "staff-edit")) === "order, job, a block edited after the client's email", "an update goes green only on a person's edit after the email");
     ok(ev(w.find((m) => m.thread_id === "po" && m.mark === "order-found")) === "order R10954 is in OnSinch", "a needed order that already exists is found");
-    const shown = project([unbound("move", "update"), unbound("po", "new-job")], new Map([["move", sent], ["po", sent]]), w, null, NOW).cards;
+    const shown = project(new Map([["move", sent], ["po", sent]]), w, null, NOW, new Map(), [...fromStates([unbound("move", "update"), unbound("po", "new-job")], new Map([["move", sent], ["po", sent]]), NOW)]).cards;
     // Since 10-21 a card's numbers are its thread's own (the link the planner keeps): the
     // verifier's find closes a card, it never names its order on the TV.
     ok(shown.every((c) => c.r_number === null && c.order_id === null), "the verifier's find puts no numbers on the screen and binds nothing", shown.map((c) => `${c.r_number}/${c.order_id}`).join(","));

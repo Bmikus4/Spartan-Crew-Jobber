@@ -20,7 +20,7 @@ const calls: string[] = [];
   calls.push(`${init?.method ?? "GET"} ${String(url).replace(/^https?:\/\/[^/]+/, "")}`);
   return new Response(JSON.stringify({ data: [] }), { status: 200, headers: { "content-type": "application/json" } });
 };
-Object.assign(process.env, { SPARTAN_ENGINE: "v2", SPARTAN_WRITES: "live", VERCEL_GIT_COMMIT_SHA: "test", N8N_WEBHOOK_SECRET: "test-secret", ONSINCH_API_KEY: "test" });
+Object.assign(process.env, { SPARTAN_WRITES: "live", VERCEL_GIT_COMMIT_SHA: "test", N8N_WEBHOOK_SECRET: "test-secret", ONSINCH_API_KEY: "test" });
 delete process.env.SPARTAN_PAUSED;
 const { saveSettings } = require("../app/lib/settingsDb.ts");
 const { retryStopped } = require("../app/lib/v2/process.ts");

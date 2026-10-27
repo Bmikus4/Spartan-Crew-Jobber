@@ -12,6 +12,7 @@
 import { project, type FeedMark } from "../app/lib/feed/project";
 import { v2Sources, rowsOnCard, type V2Row } from "../app/lib/feed/v2";
 import { labelsFor } from "../app/lib/mail/threadLabels";
+import { fromStates } from "./fixtures/stateSource";
 
 let fails = 0;
 const ok = (c: boolean, m: string, d?: unknown) => { console.log(`  ${c ? "PASS" : "FAIL"}  ${m}${c ? "" : "  " + JSON.stringify(d)}`); if (!c) fails++; };
@@ -28,7 +29,7 @@ const booking = (id: string, hoursAgo: number, date: string, crew: number) =>
 const question = (id: string, hoursAgo: number) =>
   row(id, hoursAgo, { grounded: { intent: "quote_request", requests: [], problems: [] }, decision: { kind: "handoff", reasons: ["the client asked for a quote"] } });
 const card = (rows: V2Row[], out = new Map<string, number>(), marks: FeedMark[] = []) =>
-  project([], new Map(), marks, null, NOW, out, v2Sources(rows, NOW)).cards.find((c) => c.thread_id === "T");
+  project(new Map(), marks, null, NOW, out, v2Sources(rows, NOW)).cards.find((c) => c.thread_id === "T");
 const keyOf = (c: ReturnType<typeof card>, id: string) => c?.items.find((i) => i.item_key.endsWith(`:${id}`));
 
 const A = booking("mA", 3, "2026-10-14", 4);

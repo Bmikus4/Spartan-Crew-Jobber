@@ -11,7 +11,7 @@
 // ============================================================================
 import type { Job } from "../jobsDb";
 import { portedCards } from "./ported";
-import { project, type FeedCard, type FeedMark, type FeedWant, type ReplyNeed } from "./project";
+import { project, type FeedCard, type FeedMark, type FeedSource, type FeedWant, type ReplyNeed } from "./project";
 import { v2Sources, type V2Row } from "./v2";
 import { intakeHealth } from "../intakeHealth";
 import type { ConversationState } from "../engine/types";
@@ -24,7 +24,12 @@ export type LiveLink = { order_id: number; r_number: string | null; job_id: numb
 
 export interface FeedDeps {
   held?: () => Promise<HeldLink[]>;
-  states(): Promise<ConversationState[]>;
+  /**
+   * Cards from elsewhere than the engine's decisions, drawn under them (a decision on the same thread
+   * wins). Production passes none; the projection tests describe cases as old-engine states
+   * (test/fixtures/stateSource.ts).
+   */
+  sources?: (lastInbound: Map<string, number>, now: number) => Promise<FeedSource[]>;
   /** Newest client message per thread, and the newest message of any kind (intake). */
   inbound(): Promise<{ byThread: Map<string, number>; outByThread?: Map<string, number>; latest: number | null }>;
   marks(): Promise<FeedMark[]>;
@@ -45,7 +50,7 @@ export interface FeedDeps {
   intakePaused?: () => Promise<boolean>;
   /** Every thread's live link: the jobs board's carried-over tiles take their numbers from it (ported.ts). */
   links?: () => Promise<Map<string, LiveLink>>;
-  /** The paused engine's threads, read only for the jobs board's company names (ported.ts); `states` is what the TV draws. */
+  /** The paused engine's threads, read only for the jobs board's company names (ported.ts). */
   portedStates?: () => Promise<ConversationState[]>;
 }
 
@@ -57,18 +62,19 @@ export interface FeedDeps {
  * Created / Updated label within the minute.
  */
 export async function serveFeed(deps: FeedDeps, now: number): Promise<{ status: number; body: Record<string, unknown>; all?: FeedCard[] }> {
-  let states: ConversationState[], inbound: Awaited<ReturnType<FeedDeps["inbound"]>>, marks: FeedMark[], replies: ReplyNeed[] | null, v2rows: V2Row[];
+  let other: FeedSource[], inbound: Awaited<ReturnType<FeedDeps["inbound"]>>, marks: FeedMark[], replies: ReplyNeed[] | null, v2rows: V2Row[];
   try {
-    [states, inbound, marks, replies, v2rows] = await Promise.all([
-      deps.states(), deps.inbound(), deps.marks(), deps.replies ? deps.replies() : Promise.resolve(null), deps.v2 ? deps.v2() : Promise.resolve([]),
+    [inbound, marks, replies, v2rows] = await Promise.all([
+      deps.inbound(), deps.marks(), deps.replies ? deps.replies() : Promise.resolve(null), deps.v2 ? deps.v2() : Promise.resolve([]),
     ]);
+    other = deps.sources ? await deps.sources(inbound.byThread, now) : [];
   } catch (err) {
     console.error("[feed] read failed", err);
     return { status: 500, body: { ok: false, error: "could not read the feed" } };
   }
 
-  const v2 = v2Sources(v2rows, now);
-  let p = project(states, inbound.byThread, marks, replies, now, inbound.outByThread, v2, deps.from);
+  const v2 = [...other, ...v2Sources(v2rows, now)];
+  let p = project(inbound.byThread, marks, replies, now, inbound.outByThread, v2, deps.from);
   let reread = false;
 
   // Like verification, memory is extra: a failed write leaves a resolved need off the list
@@ -92,13 +98,13 @@ export async function serveFeed(deps: FeedDeps, now: number): Promise<{ status: 
       verify = { ran: true, wrote: 0, note: `verify failed: ${String((err as Error)?.message ?? err).slice(0, 160)}` };
     }
   }
-  if (reread) p = project(states, inbound.byThread, await deps.marks(), replies, now, inbound.outByThread, v2, deps.from);
+  if (reread) p = project(inbound.byThread, await deps.marks(), replies, now, inbound.outByThread, v2, deps.from);
   const status = deps.verifyStatus ? await deps.verifyStatus().catch(() => null) : null;
 
   // The board's history is extra: if it cannot be read the live list is still the live list.
   const jobs = deps.jobs ? await deps.jobs().catch((err) => { console.error("[feed] jobs board read failed", err); return [] as Job[]; }) : [];
   const links = deps.links ? await deps.links().catch(() => new Map<string, LiveLink>()) : new Map<string, LiveLink>();
-  const ported = portedCards(jobs, deps.portedStates ? await deps.portedStates().catch(() => states) : states, new Set(p.cards.map((c) => c.thread_id)), links, now);
+  const ported = portedCards(jobs, deps.portedStates ? await deps.portedStates().catch(() => []) : [], new Set(p.cards.map((c) => c.thread_id)), links, now);
 
   // THE TV SHOWS ONLY WHAT THE SYSTEM COULD NOT DO (Ben, 10-13: "Only those cases should be [DECISIONS V12]
   // moved to the display TV"). An order the bot made or changed is the system's own work and a

@@ -9,6 +9,7 @@ import { readFileSync } from "node:fs";
 import { serveFeed, type FeedDeps, type HeldLink } from "../app/lib/feed/serve";
 import type { ConversationState } from "../app/lib/engine/types";
 import type { FeedCard, FeedMark } from "../app/lib/feed/project";
+import { fromStates } from "./fixtures/stateSource";
 
 let fails = 0;
 const ok = (cond: boolean, label: string, extra = "") => {
@@ -26,7 +27,7 @@ const created = {
 
 function deps(over: Partial<FeedDeps> = {}): FeedDeps {
   return {
-    states: async () => [created],
+    sources: async (inb, at) => fromStates([created], inb, at),
     inbound: async () => ({ byThread: new Map(), latest: NOW - 10 * 60_000 }),
     marks: async () => [],
     replies: null,
@@ -37,7 +38,7 @@ const boom = async (): Promise<never> => { throw new Error("connection refused")
 
 void (async () => {
   console.log("\n[1] a failing read is a 500, never an empty list");
-  for (const which of ["states", "inbound", "marks"] as const) {
+  for (const which of ["sources", "inbound", "marks"] as const) {
     const r = await serveFeed(deps({ [which]: boom }), NOW);
     ok(r.status === 500 && r.body.ok === false && !("items" in r.body), `${which} fails -> 500, ok:false, no items`);
   }
@@ -92,7 +93,7 @@ void (async () => {
     const marks: FeedMark[] = [];
     const need = { ...created, classification: "update", status: "error", order_action_log: [] } as unknown as ConversationState;
     const g = await serveFeed(deps({
-      states: async () => [need],
+      sources: async (inb, at) => fromStates([need], inb, at),
       marks: async () => marks,
       verify: async () => { marks.push({ item_key: "needs-updated:c:901:0", thread_id: "c", mark: "staff-edit", by: null, evidence: null, at: NOW }); return { ran: true, wrote: 1, note: "ok" }; },
     }), NOW);
@@ -104,13 +105,13 @@ void (async () => {
     const marks: FeedMark[] = [];
     const remember = async (ms: Array<Omit<FeedMark, "at">>) => { for (const m of ms) if (!marks.some((x) => x.item_key === m.item_key && x.mark === m.mark)) marks.push({ ...m, at: NOW }); };
     const need = { ...created, thread_id: "n", status: "needs-info", onsinch_order_id: undefined, order_action_log: [] } as unknown as ConversationState;
-    await serveFeed(deps({ states: async () => [need], marks: async () => [...marks], remember }), NOW);
+    await serveFeed(deps({ sources: async (inb, at) => fromStates([need], inb, at), marks: async () => [...marks], remember }), NOW);
     ok(marks.length === 1 && marks[0].mark === "open", "first refresh: the need is remembered");
     const gone = { ...need, status: "ordered" } as ConversationState;
-    const r = await serveFeed(deps({ states: async () => [gone], marks: async () => [...marks], remember }), NOW + 60_000);
+    const r = await serveFeed(deps({ sources: async (inb, at) => fromStates([gone], inb, at), marks: async () => [...marks], remember }), NOW + 60_000);
     const items = r.body.items as FeedCard[];
     ok(items.length === 1 && items[0].green && items[0].items[0].green?.mark === "resolved", "resolved: green on the same refresh, not gone");
-    const failing = await serveFeed(deps({ states: async () => [need], remember: boom }), NOW);
+    const failing = await serveFeed(deps({ sources: async (inb, at) => fromStates([need], inb, at), remember: boom }), NOW);
     ok(failing.status === 200 && (failing.body.items as unknown[]).length === 1, "a failed memory write never costs the feed");
     ok(/remember: async/.test(readFileSync("app/lib/feed/live.ts", "utf8")), "production wires memory to addMark");
   }
@@ -124,7 +125,7 @@ void (async () => {
       { thread_id: "h", r_number: "11562", company: "EMS Events", subject: "J46434", since: new Date(NOW - 2 * H).toISOString(), note: null, days: ["2026-10-02"] },
       { thread_id: "h2", r_number: "11600", company: "Later", subject: "x", since: new Date(NOW - 2 * H).toISOString(), note: null, days: ["2026-10-09"] },
     ];
-    const r = await serveFeed(deps({ states: async () => [numbered, bare], inbound: async () => ({ byThread: lastIn, latest: NOW - 10 * 60_000 }), held: async () => held }), NOW);
+    const r = await serveFeed(deps({ sources: async (inb, at) => fromStates([numbered, bare], inb, at), inbound: async () => ({ byThread: lastIn, latest: NOW - 10 * 60_000 }), held: async () => held }), NOW);
     const items = r.body.items as FeedCard[];
     const counts = r.body.counts as Record<string, number>;
     ok(items.some((c) => c.thread_id === "n") && items.some((c) => c.thread_id === "b"), "the job with its numbers and the one still without are both listed: no job is hidden for lacking them", items.map((c) => c.thread_id).join());
@@ -133,11 +134,11 @@ void (async () => {
     ok(!items.some((c) => c.thread_id === "h") && !!h2 && h2.r_number === null && /R11600 is no longer in OnSinch/.test(h2.note ?? ""), "a held link's job that is over leaves; one still to come shows no R: the number is a gone order's, and may be reused", JSON.stringify(h2));
     // The jobs board's tiles: numbers from the thread's live link, or no tile.
     const tickets = [{ thread_id: "p1", classification: "new-job", status: "ordered", order_id: 1, order_number: "999", job_id: 5, dates: [], subject: "s" }, { thread_id: "p2", classification: "new-job", status: "ordered", order_id: 2, order_number: "11029", job_id: 6, dates: [], subject: "s" }] as any[];
-    const p = await serveFeed(deps({ states: async () => [], jobs: async () => tickets, links: async () => new Map([["p2", { order_id: 16100, r_number: "11777", job_id: 16200 }]]) }), NOW);
+    const p = await serveFeed(deps({ sources: async (inb, at) => fromStates([], inb, at), jobs: async () => tickets, links: async () => new Map([["p2", { order_id: 16100, r_number: "11777", job_id: 16200 }]]) }), NOW);
     const tiles = (p.body.items as FeedCard[]).filter((c) => /^ported:/.test(c.items[0].item_key));
     ok(tiles.length === 1 && tiles[0].thread_id === "p2" && tiles[0].r_number === "R11777" && tiles[0].j_number === "J16200", "a carried-over tile shows its order's numbers as OnSinch has them now, and one with no live order is not shown", JSON.stringify(tiles.map((c) => [c.thread_id, c.r_number, c.j_number])));
     const live = readFileSync("app/lib/feed/live.ts", "utf8");
-    ok(/states: async \(\) => \[\]/.test(live) && /portedStates: pausedStates/.test(live) && /\blinks,/.test(live), "production draws nothing from the paused engine (approved 10-20, Q4) and gives the tiles the live links");
+    ok(!/states:/.test(live) && /portedStates: pausedStates/.test(live) && /\blinks,/.test(live), "production draws nothing from the paused engine (approved 10-20, Q4) and gives the tiles the live links");
   }
 
   console.log("\n[5] the route is guarded and serves through serveFeed");

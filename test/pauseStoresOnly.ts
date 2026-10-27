@@ -1,13 +1,13 @@
 // ============================================================================
-// A pause under v2 stores the mail it receives and decides none of it, now or later.
+// A pause stores the mail it receives and decides none of it, now or later.
 // ----------------------------------------------------------------------------
 // Addendum F31 (26 Oct): SPARTAN_PAUSED=1 answered 503 at /api/n8n-inbound and /api/dedupe before
 // capture, so the 10-21 pause left 40 client emails unstored, beyond intake's 72 h catch-up. The
 // owner ruled those 40 are stored, not decided (decisions/2026-10-25-pause-window-store-only.md).
-// Now a pause under v2 keeps intake open, stores each delivery and marks its new messages store-only,
+// Now a pause keeps intake open, stores each delivery and marks its new messages store-only,
 // and the undecided sweep never decides a marked message after the pause lifts.
 // Against PGlite (fixtures/pg.ts); no model is called.
-// npx tsx test/pauseStoresOnly.ts
+// npx tsx --require ./test/fixtures/pg.ts test/pauseStoresOnly.ts
 // ============================================================================
 import { sql, clock, syncSqlClock } from "./fixtures/pg";
 import type { InboundIO } from "../app/lib/n8nInbound";
@@ -29,12 +29,11 @@ const post = (body: unknown) => new Request("http://localhost/api/n8n-inbound", 
 const at = async (ms: number) => { clock.set(ms); await syncSqlClock(); };
 
 (async () => {
-  process.env.SPARTAN_ENGINE = "v2";
-
-  console.log("\n[door] a pause under v2 leaves intake and its dedupe claim open");
-  ok(!automationPaused("/api/n8n-inbound", "1", "v2") && !automationPaused("/api/dedupe", "1", "v2"), "intake and dedupe answer while paused under v2");
-  ok(automationPaused("/api/n8n-inbound", "1", "") && automationPaused("/api/dedupe", "1", ""), "control: under the old engine a pause still shuts them");
-  ok(automationPaused("/api/mail-poll", "1", "v2") && automationPaused("/api/confirm-order", "1", "v2"), "the old engine's routes stay shut");
+  console.log("\n[door] a pause leaves intake and its dedupe claim open");
+  process.env.SPARTAN_PAUSED = "1";
+  ok(!automationPaused("/api/n8n-inbound") && !automationPaused("/api/dedupe"), "intake and dedupe answer while paused");
+  ok(automationPaused("/api/mail-poll"), "control: the middleware still shuts the route it lists");
+  delete process.env.SPARTAN_PAUSED;
 
   console.log("\n[paused] the delivery is stored and marked, and nothing decides it");
   await at(T0);

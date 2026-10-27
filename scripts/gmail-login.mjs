@@ -132,4 +132,3 @@ if (who.emailAddress && !/bookings@spartancrew\.co\.uk/i.test(who.emailAddress))
   console.log(`\nNOTE: that is not bookings@spartancrew.co.uk. Re-run and pick the right account`);
   console.log(`      before sweeping, or the corpus will be the wrong mailbox.`);
 }
-console.log(`\nNext: npx tsx scripts/sweep-gmail.ts --months 12 --dry\n`);

@@ -9,6 +9,7 @@ import { readFileSync } from "node:fs";
 import { applyCheck, type CheckStore } from "../app/lib/feed/check";
 import { project, type FeedMark } from "../app/lib/feed/project";
 import type { ConversationState } from "../app/lib/engine/types";
+import { fromStates } from "./fixtures/stateSource";
 
 let fails = 0;
 const ok = (cond: boolean, label: string, extra = "") => {
@@ -44,7 +45,7 @@ void (async () => {
     ok(r.status === 200, "accepted");
     const row = [...s.rows.values()][0];
     ok(s.rows.size === 1 && row.mark === "checked" && row.by === "kate@spartancrew.co.uk", "one 'checked' row, by the signed-in person");
-    ok(project([state], new Map(), [...s.rows.values()], null, NOW).cards[0]?.green === true, "and the card is green");
+    ok(project(new Map(), [...s.rows.values()], null, NOW, new Map(), [...fromStates([state], new Map(), NOW)]).cards[0]?.green === true, "and the card is green");
   }
 
   console.log("\n[1b] the tick carries the signer's display name; the email stays the audit identity");
@@ -67,7 +68,7 @@ void (async () => {
     const t = memStore();
     await applyCheck({ item_key: KEY, thread_id: "c", checked: true }, "kate", t.store);
     await applyCheck({ item_key: KEY, thread_id: "c", checked: false }, "kate", t.store);
-    ok(t.rows.size === 0 && project([state], new Map(), [], null, NOW).cards[0]?.green === false, "a tick alone, undone, leaves the card open");
+    ok(t.rows.size === 0 && project(new Map(), [], null, NOW, new Map(), [...fromStates([state], new Map(), NOW)]).cards[0]?.green === false, "a tick alone, undone, leaves the card open");
   }
 
   console.log("\n[3] what it refuses");

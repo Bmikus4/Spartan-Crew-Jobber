@@ -7,15 +7,14 @@
 // 6,644 copies of 1,354 messages. This asserts the fix: re-delivering a thread
 // inserts only what is new.
 //
-// Runs against the real database with tagged rows, and removes them.
-// Run: npx tsx test/threadMessages.ts
+// Runs on PGlite (fixtures/pg.ts) with tagged rows, and removes them.
+// Run: npx tsx --require ./test/fixtures/pg.ts test/threadMessages.ts
 // ============================================================================
 import "./fixtures/pg"; // first: a run of this file alone must reach PGlite, never the database .env.local names
 import { neon } from "@neondatabase/serverless";
 import { loadEnv, requireEnv } from "../scripts/_env.mjs";
 import { messagesFromPayload, storeThreadMessages, rebuildThread } from "../app/lib/threadMessagesDb";
 import { captureInboundRaw } from "../app/lib/inboundRawDb";
-import { coerceThread } from "../app/lib/engine/intake";
 
 loadEnv();
 const sql = neon(requireEnv("DATABASE_URL"));
@@ -62,28 +61,13 @@ async function main() {
     SELECT count(*)::int n FROM thread_messages WHERE thread_id = ${TAG + "-t"}`) as { n: number }[];
   ok(n === 3, "three messages stored for a thread delivered three times", String(n));
 
-  console.log("\nthe thread rebuilds into the shape coerceThread accepts");
+  console.log("\nthe thread rebuilds from storage");
   const rebuilt = await rebuildThread(`${TAG}-t`);
   ok(!!rebuilt, "a stored thread rebuilds");
   ok(rebuilt!.messages.length === 3, "with all three messages", String(rebuilt!.messages.length));
   ok(rebuilt!.messages[0].date_iso < rebuilt!.messages[2].date_iso, "in date order");
   ok((await rebuildThread(`${TAG}-nope`)) === null, "an unknown thread rebuilds to null");
 
-  // This section was named after coerceThread and never called it, so "the shape
-  // coerceThread accepts" was an assertion about nothing. It was not: rebuildThread emits
-  // the COLUMN names from_address/to_addresses and coerceThread read only from/fromAddress,
-  // so every rebuilt message coerced with an empty sender and was filtered before the model
-  // as "no sender or no body". It survived because nothing fed one through until
-  // /api/mail-inbound, whose whole design is to rebuild a thread from storage — and a
-  // replay of any stored thread had the same hole.
-  const coerced = coerceThread(rebuilt);
-  ok(!!coerced, "and the rebuilt thread coerces");
-  ok(coerced!.messages.length === 3, "keeping all three messages", String(coerced!.messages.length));
-  ok(coerced!.messages.every((m) => m.from.includes("@")),
-     "EVERY message keeps its sender — an empty one is filtered before the model",
-     coerced!.messages.map((m) => m.from || "(none)").join(", "));
-  ok(coerced!.messages.every((m) => m.to.length > 0), "and its recipients");
-  ok(coerced!.messages.every((m) => m.body.length > 0), "and its body");
 
   console.log("\nthe bodies leave the ledger row; the envelope stays");
   const enveloped = { ...thread(5), n8n: { verdict: { from: "c@example.com", gate: "priceable" } } };

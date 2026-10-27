@@ -5203,5 +5203,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0242",
+  "ts": "2026-10-27T21:54:59+00:00",
+  "kind": "measurement",
+  "headline": "Old engine deleted (243 files, R7 stages 3-4); a failed test file can no longer exit 0 (F48)",
+  "subject": "The old engine is deleted, and a failed test file can no longer pass the gate",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 105,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]

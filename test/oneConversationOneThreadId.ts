@@ -8,10 +8,10 @@
 // existing conversation opened a thread with no state and no order link, and a
 // message both routes read was stored twice.
 //
-// The RFC Message-ID is still kept, in its own column, because /api/mail-inbound
-// threads by In-Reply-To/References and has nothing else to join on.
+// The RFC Message-ID is still kept, in its own column: n8n's payload carries it with the reply
+// chain (SP-18), and header threading joins on it.
 //
-// Run: npx tsx test/oneConversationOneThreadId.ts
+// Run: npx tsx --require ./test/fixtures/pg.ts test/oneConversationOneThreadId.ts
 // ============================================================================
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -84,16 +84,13 @@ console.log("\n[3] the labels still reach the draft guard");
   ok(Array.isArray(r.labelIds) && r.labelIds.includes("DRAFT"), "labelIds carried", JSON.stringify(r.labelIds));
 }
 
-console.log("\n[4] both live routes use the rule rather than minting their own");
+console.log("\n[4] the Gmail-API route uses the rule rather than minting its own");
 {
   // A route that builds its row by hand is how the prefix got in. Pinned in source so
   // a later tidy-up cannot put it back without this failing.
   const poll = src("app/api/mail-poll/route.ts");
   ok(poll.includes("rowFromGmail("), "mail-poll builds its row with rowFromGmail");
   ok(!/`gmail:\$\{/.test(poll), "mail-poll mints no gmail:-prefixed id");
-  const inbound = src("app/api/mail-inbound/route.ts");
-  ok(inbound.includes("rfc_message_id"), "mail-inbound stores the RFC id in its own column too");
-  ok(inbound.includes("in_reply_to") && inbound.includes("reference_ids"), "and the reply chain");
   const db = src("app/lib/threadMessagesDb.ts");
   ok(!/ON CONFLICT \(message_id\) DO NOTHING/.test(db),
     "inserts yield on ANY unique key, so a message held under one key is not stored again under the other");

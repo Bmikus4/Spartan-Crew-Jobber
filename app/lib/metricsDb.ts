@@ -8,7 +8,6 @@ import { neon, type NeonQueryFunction } from "@neondatabase/serverless";
 import type { MetricEvent, MetricSink, MetricType } from "./engine/metrics";
 import { aggregate, type DashboardStats } from "./engine/metrics";
 import { ticketStateCounts, type TicketStateCounts } from "./ticketsDb";
-import { v2Engine } from "./paused";
 import { ensureSchema } from "./migrations";
 
 let _sql: NeonQueryFunction<false, false> | null = null;
@@ -125,7 +124,7 @@ export async function metricsSummary(days = 90): Promise<MetricsSummary> {
     let events: MetricEvent[] = rows.map((r) => ({ type: r.kind as MetricType, thread_id: r.thread_id, ts: Number(r.ts), meta: r.meta }));
     // Under the rebuild, metric_events stopped at the cutover (only the paused engine writes
     // it). From then the same events are derived from the rebuild's own records (v2/metrics.ts).
-    const v2 = v2Engine() ? await import("./v2/metrics") : null;
+    const v2 = await import("./v2/metrics");
     if (v2) {
       const cut = Date.parse(v2.V2_CUTOVER);
       events = [...events.filter((e) => e.ts < cut), ...(await v2.v2MetricEvents(sql, Date.now() - days * 864e5))].sort((a, b) => a.ts - b.ts);

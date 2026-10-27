@@ -5,13 +5,12 @@
 // not at all; the routes' own decisions (which status, what is reported, what fails open)
 // were never run. Each handler is in app/lib/routes with its IO injected; the routes keep
 // only their auth gate (pinned by test/writeRoutesAuthorised.ts and machineRouteAuth.ts).
-// n8n-inbound and reconcile have their own files.
+// n8n-inbound has its own file. confirm-order and reconcile went with the old engine (addendum Prompt 12).
 //
 // Offline.  npx tsx test/routeHandlers.ts
 // ============================================================================
 import { handleIntakeHealth } from "../app/lib/routes/healthIntake";
 import { handleSettingsGet, handleSettingsPost } from "../app/lib/routes/settings";
-import { handleConfirmOrder } from "../app/lib/routes/confirmOrder";
 import { handleDedupe } from "../app/lib/routes/dedupe";
 import { DEFAULT_SETTINGS } from "../app/lib/engine/types";
 
@@ -44,18 +43,10 @@ async function main() {
     const down = { get: async () => { throw new Error("neon down"); }, save: async () => { throw new Error("neon down"); } };
     ok((await handleSettingsGet(down as any)).status === 500, "GET 500 when the read fails");
     ok((await handleSettingsPost(req("http://x/api/settings", { replies_enabled: true }), down as any)).status === 500, "POST 500 when the write fails");
-    const up = { get: async () => ({ ...DEFAULT_SETTINGS }), save: async (n: any) => ({ ...DEFAULT_SETTINGS, ...n }) };
-    const saved = await (await handleSettingsPost(req("http://x/api/settings", { replies_enabled: true, nonsense: 1 }), up as any)).json() as any;
+    const up = { get: async () => ({ ...DEFAULT_SETTINGS }), save: async (n: any) => ({ ...DEFAULT_SETTINGS, ...n }), history: async () => {}, report: async () => false };
+    // As an admin: replies_enabled is a switch, which no one else may change (test/settingsSwitchesGoverned.ts).
+    const saved = await (await handleSettingsPost(req("http://x/api/settings", { replies_enabled: true, nonsense: 1 }), up as any, { actor: "test", admin: true })).json() as any;
     ok(saved.ok === true && saved.settings.replies_enabled === true && !("nonsense" in saved.settings), "POST saves through the whitelist", JSON.stringify(saved.settings));
-  }
-
-  console.log("\n[3] confirm-order: 400, 404 and the audit trail");
-  {
-    const io = (state: any) => ({ buildDeps: async () => ({}) as any, confirmOrder: async () => state, upsertTicket: async () => {} });
-    ok((await handleConfirmOrder(req("http://x", {}), "ben", io(undefined) as any)).status === 400, "no thread_id: 400");
-    ok((await handleConfirmOrder(req("http://x", { thread_id: "t" }), "ben", io(undefined) as any)).status === 404, "unknown thread: 404");
-    const body = await (await handleConfirmOrder(req("http://x", { thread_id: "t" }), "ben@samurai", io({ thread_id: "t", status: "ordered", notes: [] }) as any)).json() as any;
-    ok(body.ok === true && body.confirmed_by === "ben@samurai", "confirmed, with who approved it", JSON.stringify(body));
   }
 
   console.log("\n[4] dedupe: fails open on a missing id, and passes the claim through");

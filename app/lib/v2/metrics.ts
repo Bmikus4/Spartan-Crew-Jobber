@@ -60,8 +60,8 @@ export async function v2MetricEvents(sql: NeonQueryFunction<false, false>, since
 export async function queueNow(sql: NeonQueryFunction<false, false>): Promise<TicketStateCounts> {
   const deps = liveFeedDeps();
   const now = Date.now();
-  const [states, inbound, marks, replies, rows] = await Promise.all([deps.states(), deps.inbound(), deps.marks(), deps.replies ? deps.replies() : Promise.resolve(null), deps.v2 ? deps.v2() : Promise.resolve([])]);
-  const p = project(states, inbound.byThread, marks, replies, now, inbound.outByThread, v2Sources(rows, now), FEED_FROM);
+  const [inbound, marks, replies, rows] = await Promise.all([deps.inbound(), deps.marks(), deps.replies ? deps.replies() : Promise.resolve(null), deps.v2 ? deps.v2() : Promise.resolve([])]);
+  const p = project(inbound.byThread, marks, replies, now, inbound.outByThread, v2Sources(rows, now), FEED_FROM);
   const open = p.cards.filter((c) => !c.green && c.items.some((i) => i.kind !== "needs-reply"));
   const failed = (await sql`
     SELECT count(*)::int AS n FROM v2_decisions

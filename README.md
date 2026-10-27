@@ -1,7 +1,7 @@
 # Spartan Crew Enquiry Engine
 
 Spartan Crew's booking mailbox, read by code: each client email is matched to an OnSinch order and planned, and the
-office TV shows what still needs a person. The live system is the v2 engine (SPARTAN_ENGINE=v2), in shadow: it
+office TV shows what still needs a person. The live system is the v2 engine, the only one since 27 Oct, in shadow: it
 decides every email and records the decision, and its writes to OnSinch are off (the Settings switch). The plan
 and its status are in `ADDENDUM.md`; the map for an agent is `CLAUDE.md`.
 
@@ -12,7 +12,6 @@ and its status are in `ADDENDUM.md`; the map for an agent is `CLAUDE.md`.
   store-only, and nothing decides it.
 - **Reader.** One model call per email: `app/lib/v2/interpret/extract.ts`, model `openai/gpt-6.1-sol`
   (`SPARTAN_INTERPRET_MODEL`) via OpenRouter, tried up to 3 times on a rate limit or an outage.
-  `SPARTAN_MODEL` belongs to the paused old engine and v2 does not read it.
 - **Grounding and planning.** `app/lib/v2/interpret/` proves every value against the email's words and finds the
   booking (`plan.ts`). Each email ends in one `v2_decisions` row.
 - **Writes.** The bot in `app/lib/v2/bot/`, behind two keys: `SPARTAN_WRITES=live` and the Settings switch.
@@ -21,7 +20,7 @@ and its status are in `ADDENDUM.md`; the map for an agent is `CLAUDE.md`.
   raises a stalled intake, sweep, sync or labels to the owner.
 - **TV and labels.** `/api/feed` (`app/lib/feed/`); Gmail labels from `/api/bot/labels`, applied by n8n.
 - **Alarms.** `app/lib/errorReport.ts`, sent through the n8n workflow "Spartan Alarms".
-- **The old engine** (`app/lib/engine/`) is paused; see `app/lib/engine/README.md`.
+- **The old engine** is deleted (ADDENDUM Prompt 12). `app/lib/engine/` keeps only what v2 uses; see its README.
 
 ## Routes (`app/api`)
 
@@ -36,7 +35,7 @@ and its status are in `ADDENDUM.md`; the map for an agent is `CLAUDE.md`.
 | `health/intake` | n8n watchdog | is mail arriving |
 | `settings` | Settings screen | the write switch, replies, delivery |
 | `feed`, `jobs`, `metrics`, `followups` | dashboard, TV | read models |
-| `reconcile`, `confirm-order`, `mail-inbound`, `mail-poll`, `sweep-ingest` | the old engine | shut under v2 (503) |
+| `mail-poll` | nothing yet | the Gmail-API intake: shut (503) until R14 (ADDENDUM F43) |
 | `auth`, `onboarding` | browser | sign-in and terms |
 
 ## Working in this repo
@@ -47,7 +46,7 @@ npm run test:all      # the suite: every test/*.ts, on PGlite, then the payload 
 npx tsc --noEmit
 ```
 
-`npm test` runs ONE file (`test/run.ts`); the suite is `npm run test:all`.
+`npm test -- test/x.ts` runs ONE file, on PGlite; the suite is `npm run test:all`.
 
 Commits and pushes go only through `python scripts/session.py` (see `CLAUDE.md`). A push
 to `main` is a production release on Vercel.

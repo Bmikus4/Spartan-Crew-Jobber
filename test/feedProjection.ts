@@ -10,6 +10,7 @@
 import { project, STATUS_TEXT, DONE_DWELL_MS, STALE_UNDATED_MS, QUIET_MS, dismissKey, londonInstant, type FeedMark } from "../app/lib/feed/project";
 import type { ConversationState } from "../app/lib/engine/types";
 import { v2Sources, type V2Row } from "../app/lib/feed/v2";
+import { fromStates } from "./fixtures/stateSource";
 
 let fails = 0;
 const ok = (cond: boolean, label: string, extra = "") => {
@@ -40,7 +41,7 @@ console.log("\n[1] the four phrases, byte for byte");
   ok(STATUS_TEXT["needs-updated"] === "Order needs updated", "needs updated");
   ok(STATUS_TEXT["created-check"] === "Order was created, check to verify", "created, check");
   ok(STATUS_TEXT["updated-check"] === "Order was updated, check to verify", "updated, check");
-  const p = project([needsCreated("a"), needsUpdated("b"), created("c", NOW - H), updated("d", NOW - H)], new Map(), [], null, NOW);
+  const p = project(new Map(), [], null, NOW, new Map(), [...fromStates([needsCreated("a"), needsUpdated("b"), created("c", NOW - H), updated("d", NOW - H)], new Map(), NOW)]);
   const by = new Map(p.cards.map((c) => [c.thread_id, c]));
   ok(by.get("a")?.items[0].status === "Order needs created", "a held new job reads needs created");
   ok(by.get("b")?.items[0].status === "Order needs updated", "a failed update on an order reads needs updated");
@@ -50,7 +51,7 @@ console.log("\n[1] the four phrases, byte for byte");
 
 console.log("\n[2] red and blue come from the need: created is red, updated is blue");
 {
-  const p = project([needsCreated("x", { classification: "update" }), needsUpdated("y"), created("z", NOW - H)], new Map(), [], null, NOW);
+  const p = project(new Map(), [], null, NOW, new Map(), [...fromStates([needsCreated("x", { classification: "update" }), needsUpdated("y"), created("z", NOW - H)], new Map(), NOW)]);
   const by = new Map(p.cards.map((c) => [c.thread_id, c]));
   // Needs UPDATED because an update's booking exists (needsLabelFor, 2026-10-04), so blue
   // although no order is bound: the colour must agree with the label beside it.
@@ -58,26 +59,26 @@ console.log("\n[2] red and blue come from the need: created is red, updated is b
   ok(by.get("y")?.colour === "blue", "a need on an order is blue");
   ok(by.get("z")?.colour === "red", "a created order is red, a new job");
   ok(by.get("x")?.r_number === null && by.get("y")?.r_number === "R11312" && by.get("y")?.j_number === "J13925", "R and J numbers only where an order exists");
-  const held = project([st({ thread_id: "h", status: "proposed", pending_order: {} as never })], new Map(), [], null, NOW);
+  const held = project(new Map(), [], null, NOW, new Map(), [...fromStates([st({ thread_id: "h", status: "proposed", pending_order: {} as never })], new Map(), NOW)]);
   ok(held.cards[0]?.items[0].kind === "needs-created", "a held write is a need with no special case");
 }
 
 console.log("\n[3] what the engine made stays open until somebody checks it (Ben, 2026-10-05)");
 {
-  const p = project([created("c", NOW - H), updated("d", NOW - 2 * H)], new Map(), [], null, NOW);
+  const p = project(new Map(), [], null, NOW, new Map(), [...fromStates([created("c", NOW - H), updated("d", NOW - 2 * H)], new Map(), NOW)]);
   const c = p.cards.find((x) => x.thread_id === "c")!;
   ok(!c.green && c.lane === "need" && c.items[0].green === null && c.items[0].status === "Order was created, check to verify", "a create is open, reading check to verify");
   ok(p.counts.to_check === 2 && p.counts.done === 0 && p.counts.needs_created === 0 && p.counts.needs_updated === 0, "both counted to check, not done and not as needs");
-  const ed = project([updated("d", NOW - 2 * H)], new Map(), [{ ...mark(`updated-check:902:${NOW - 2 * H}`, "d", NOW - H, "staff-edit"), by: null }], null, NOW);
+  const ed = project(new Map(), [{ ...mark(`updated-check:902:${NOW - 2 * H}`, "d", NOW - H, "staff-edit"), by: null }], null, NOW, new Map(), [...fromStates([updated("d", NOW - 2 * H)], new Map(), NOW)]);
   ok(ed.cards[0].green && ed.cards[0].items[0].green?.mark === "staff-edit", "a staff edit after the write closes it");
-  const t = project([created("c", NOW - H)], new Map(), [mark(`created-check:901:${NOW - H}`, "c", NOW - 60_000)], null, NOW);
+  const t = project(new Map(), [mark(`created-check:901:${NOW - H}`, "c", NOW - 60_000)], null, NOW, new Map(), [...fromStates([created("c", NOW - H)], new Map(), NOW)]);
   ok(t.cards[0].items[0].green?.mark === "checked" && t.cards[0].items[0].green?.by === "kate@spartancrew.co.uk", "a tick on it shows who checked it");
   ok(t.cards[0].items[0].green?.at === NOW - 60_000 && t.counts.done === 1, "and it went green when it was checked");
 }
 
 console.log("\n[4] keys");
 {
-  const p = project([needsCreated("a"), needsUpdated("b"), created("c", NOW - H)], new Map([["a", NOW - 2 * H]]), [], null, NOW);
+  const p = project(new Map([["a", NOW - 2 * H]]), [], null, NOW, new Map(), [...fromStates([needsCreated("a"), needsUpdated("b"), created("c", NOW - H)], new Map([["a", NOW - 2 * H]]), NOW)]);
   const keys = p.cards.map((c) => c.items[0].item_key);
   ok(keys.includes(`needs-created:a:0:${NOW - 2 * H}`), "needs key: kind, thread, no order, latest client email", keys.join(" "));
   ok(keys.includes("needs-updated:b:900:0"), "needs key carries the order");
@@ -87,9 +88,7 @@ console.log("\n[4] keys");
 console.log("\n[5] ordering: a day-long reply wait first, then needs by job date, then done newest first");
 {
   const inbound = new Map([["n-old", NOW - 9 * H], ["n-new", NOW - 1 * H]]);
-  const p = project(
-    [created("c-old", NOW - 8 * H), needsCreated("n-new"), created("c-new", NOW - 2 * H), needsUpdated("n-old")],
-    inbound, [], [{ thread_id: "r", since_iso: new Date(NOW - 30 * H).toISOString(), company: "Acme", contact: "Jo Bloggs", subject: "Re: quote" }], NOW);
+  const p = project(inbound, [], [{ thread_id: "r", since_iso: new Date(NOW - 30 * H).toISOString(), company: "Acme", contact: "Jo Bloggs", subject: "Re: quote" }], NOW, new Map(), [...fromStates([created("c-old", NOW - 8 * H), needsCreated("n-new"), created("c-new", NOW - 2 * H), needsUpdated("n-old")], inbound, NOW)]);
   const order = p.cards.map((c) => c.thread_id).join(",");
   // n-old is an update on a booked job, so it has no clock (Ben, 2026-10-06) and no wait to
   // rank by; on the same job day the enquiry still waiting on a reply goes first.
@@ -99,7 +98,7 @@ console.log("\n[5] ordering: a day-long reply wait first, then needs by job date
 
 console.log("\n[6] one card carries two needs");
 {
-  const p = project([needsUpdated("b")], new Map(), [], [{ thread_id: "b", since_iso: new Date(NOW - 30 * H).toISOString(), company: null, contact: null, subject: "s" }], NOW);
+  const p = project(new Map(), [], [{ thread_id: "b", since_iso: new Date(NOW - 30 * H).toISOString(), company: null, contact: null, subject: "s" }], NOW, new Map(), [...fromStates([needsUpdated("b")], new Map(), NOW)]);
   ok(p.cards.length === 1, "one card for the thread");
   ok(p.cards[0].items.map((i) => i.kind).join("+") === "needs-updated+needs-reply", "carrying the order need and the reply");
   ok(p.cards[0].colour === "blue" && p.cards[0].lane === "reply", "keeps its order colour and rises with the replies");
@@ -109,26 +108,26 @@ console.log("\n[6] one card carries two needs");
 console.log("\n[7] green needs, and how long done work stays");
 {
   const key = `needs-updated:b:900:${NOW - 3 * H}`;
-  let p = project([needsUpdated("b")], new Map([["b", NOW - 3 * H]]), [mark(key, "b", NOW - 10 * 60_000, "staff-edit")], null, NOW);
+  let p = project(new Map([["b", NOW - 3 * H]]), [mark(key, "b", NOW - 10 * 60_000, "staff-edit")], null, NOW, new Map(), [...fromStates([needsUpdated("b")], new Map([["b", NOW - 3 * H]]), NOW)]);
   ok(p.cards[0]?.green === true && p.cards[0].lane === "done" && p.counts.done === 1 && p.counts.needs_updated === 0, "a staff edit closes a need");
-  p = project([needsUpdated("b")], new Map([["b", NOW - 3 * H]]), [mark(key, "b", NOW - DONE_DWELL_MS - 1)], null, NOW);
+  p = project(new Map([["b", NOW - 3 * H]]), [mark(key, "b", NOW - DONE_DWELL_MS - 1)], null, NOW, new Map(), [...fromStates([needsUpdated("b")], new Map([["b", NOW - 3 * H]]), NOW)]);
   ok(p.cards.length === 0, "a done card leaves after a day");
-  p = project([created("c", NOW - DONE_DWELL_MS + H)], new Map(), [], null, NOW);
+  p = project(new Map(), [], null, NOW, new Map(), [...fromStates([created("c", NOW - DONE_DWELL_MS + H)], new Map(), NOW)]);
   ok(p.cards.length === 1, "a create from 23 hours ago is still on the list");
-  p = project([needsUpdated("b")], new Map([["b", NOW - 3 * H]]), [mark(key, "b", NOW - H, "stamps")], null, NOW);
+  p = project(new Map([["b", NOW - 3 * H]]), [mark(key, "b", NOW - H, "stamps")], null, NOW, new Map(), [...fromStates([needsUpdated("b")], new Map([["b", NOW - 3 * H]]), NOW)]);
   ok(p.cards[0]?.green === false, "a history record is not evidence of anything");
 }
 
 console.log("\n[8] a tick on one event does not turn a later event green");
 {
   const n1 = `needs-updated:b:900:${NOW - 5 * H}`;
-  const q = project([needsUpdated("b")], new Map([["b", NOW - H]]), [mark(n1, "b", NOW - 4 * H)], null, NOW);
+  const q = project(new Map([["b", NOW - H]]), [mark(n1, "b", NOW - 4 * H)], null, NOW, new Map(), [...fromStates([needsUpdated("b")], new Map([["b", NOW - H]]), NOW)]);
   ok(q.cards[0]?.green === false, "a need ticked before the client's next email is open again after it");
 }
 
 console.log("\n[9] what is left out");
 {
-  const p = project([
+  const p = project(new Map([["undated", NOW - 2 * 86_400_000], ["stale", NOW - STALE_UNDATED_MS - H], ["stale-dated", NOW - STALE_UNDATED_MS - H]]), [{ item_key: dismissKey("test"), thread_id: "test", mark: "dismissed", by: "audit", evidence: { reason: "test enquiry" }, at: NOW }], null, NOW, new Map(), [...fromStates([
     needsCreated("past", { facts: { requests: [{ date: "2026-09-30" }] } }),
     needsCreated("undated", { facts: { requests: [{}] } }),
     needsCreated("stale", { facts: { requests: [{}] } }),
@@ -137,8 +136,7 @@ console.log("\n[9] what is left out");
     st({ thread_id: "naj", classification: "not-a-job", status: "error" }),
     st({ thread_id: "cancel", classification: "not-a-job", cancellation: true, onsinch_order_id: 77 }),
     st({ thread_id: "unbooked-ok", status: "ordered" }),
-  ], new Map([["undated", NOW - 2 * 86_400_000], ["stale", NOW - STALE_UNDATED_MS - H], ["stale-dated", NOW - STALE_UNDATED_MS - H]]),
-  [{ item_key: dismissKey("test"), thread_id: "test", mark: "dismissed", by: "audit", evidence: { reason: "test enquiry" }, at: NOW }], null, NOW);
+  ], new Map([["undated", NOW - 2 * 86_400_000], ["stale", NOW - STALE_UNDATED_MS - H], ["stale-dated", NOW - STALE_UNDATED_MS - H]]), NOW)]);
   const ids = p.cards.map((c) => c.thread_id);
   ok(!ids.includes("past"), "a job whose dates have passed");
   ok(ids.includes("undated"), "an undated job the client wrote about recently stays");
@@ -153,7 +151,7 @@ console.log("\n[9] what is left out");
 console.log("\n[10] crew is the busiest day, not the sum");
 {
   const teams = (d: string, n: number) => ({ name: "", profession_id: 1, beginning: `${d}T08:00:00+01:00`, end: `${d}T18:00:00+01:00`, size: n, place_id: 1 });
-  const p = project([created("c", NOW - H, { desired_order: { slot_teams: [teams("2026-10-16", 6), teams("2026-10-16", 2), teams("2026-10-17", 5)] } as never })], new Map(), [], null, NOW);
+  const p = project(new Map(), [], null, NOW, new Map(), [...fromStates([created("c", NOW - H, { desired_order: { slot_teams: [teams("2026-10-16", 6), teams("2026-10-16", 2), teams("2026-10-17", 5)] } as never })], new Map(), NOW)]);
   ok(p.cards[0]?.crew === 8, "two blocks on the 16th (6+2) beat five on the 17th", String(p.cards[0]?.crew));
 }
 
@@ -162,24 +160,20 @@ console.log("\n[11] when the job starts, for the countdown");
   ok(londonInstant("2026-10-16", "08:00") === Date.parse("2026-10-16T07:00:00Z"), "08:00 in October is 07:00 UTC (BST)");
   ok(londonInstant("2026-12-07", "08:00") === Date.parse("2026-12-07T08:00:00Z"), "08:00 in December is 08:00 UTC (GMT)");
   const team = (iso: string) => ({ name: "", profession_id: 1, beginning: iso, end: iso, size: 2, place_id: 1 });
-  const p = project([created("c", NOW - H, { desired_order: { slot_teams: [team("2026-10-03T09:00:00+01:00"), team("2026-10-04T07:30:00+01:00")] } as never })], new Map(), [], null, NOW);
+  const p = project(new Map(), [], null, NOW, new Map(), [...fromStates([created("c", NOW - H, { desired_order: { slot_teams: [team("2026-10-03T09:00:00+01:00"), team("2026-10-04T07:30:00+01:00")] } as never })], new Map(), NOW)]);
   ok(p.cards[0]?.starts_at === Date.parse("2026-10-04T06:30:00Z"), "the first block not yet started, not one already under way", String(p.cards[0]?.starts_at));
-  const q = project([needsCreated("n", { facts: { requests: [{ date: "2026-10-05", start_time: "06:00" }] } })], new Map(), [], null, NOW);
+  const q = project(new Map(), [], null, NOW, new Map(), [...fromStates([needsCreated("n", { facts: { requests: [{ date: "2026-10-05", start_time: "06:00" }] } })], new Map(), NOW)]);
   ok(q.cards[0]?.starts_at === Date.parse("2026-10-05T05:00:00Z"), "a request's date and time are London's");
 }
 
 console.log("\n[12] how long the client has waited for a reply");
 {
-  const p = project([needsCreated("w"), needsCreated("r"), needsCreated("silent")],
-    new Map([["w", NOW - 5 * H], ["r", NOW - 5 * H]]), [], null, NOW,
-    new Map([["r", NOW - 2 * H], ["w", NOW - 9 * H]]));
+  const p = project(new Map([["w", NOW - 5 * H], ["r", NOW - 5 * H]]), [], null, NOW, new Map([["r", NOW - 2 * H], ["w", NOW - 9 * H]]), [...fromStates([needsCreated("w"), needsCreated("r"), needsCreated("silent")], new Map([["w", NOW - 5 * H], ["r", NOW - 5 * H]]), NOW)]);
   const by = new Map(p.cards.map((c) => [c.thread_id, c]));
   ok(by.get("w")?.awaiting_reply_since === NOW - 5 * H, "our last email was before theirs: waiting since theirs");
   ok(by.get("r")?.awaiting_reply_since === null, "we replied after their email: not waiting");
   ok(by.get("silent")?.awaiting_reply_since === null, "no client email on record: no clock");
-  const jobs = project([needsUpdated("u"), created("c", NOW - 6 * H), needsUpdated("m", { onsinch_order_id: undefined, onsinch_order_number: undefined, onsinch_job_id: undefined })],
-    new Map([["u", NOW - 5 * H], ["c", NOW - 5 * H], ["m", NOW - 5 * H]]),
-    [{ item_key: `needs-updated:m:0:${NOW - 5 * H}`, thread_id: "m", mark: "matched", by: null, evidence: { r_number: "11029", j_number: "J16100" }, at: NOW - H }], null, NOW);
+  const jobs = project(new Map([["u", NOW - 5 * H], ["c", NOW - 5 * H], ["m", NOW - 5 * H]]), [{ item_key: `needs-updated:m:0:${NOW - 5 * H}`, thread_id: "m", mark: "matched", by: null, evidence: { r_number: "11029", j_number: "J16100" }, at: NOW - H }], null, NOW, new Map(), [...fromStates([needsUpdated("u"), created("c", NOW - 6 * H), needsUpdated("m", { onsinch_order_id: undefined, onsinch_order_number: undefined, onsinch_job_id: undefined })], new Map([["u", NOW - 5 * H], ["c", NOW - 5 * H], ["m", NOW - 5 * H]]), NOW)]);
   const jb = new Map(jobs.cards.map((c) => [c.thread_id, c]));
   ok(jb.get("u")?.awaiting_reply_since === null && jb.get("c")?.awaiting_reply_since === null, "a job has no clock, whether it needs updating or the engine wrote it (Ben, 2026-10-06)");
   // The verifier's find never puts numbers on a card: they come from the thread's link (v2.ts).
@@ -190,7 +184,7 @@ console.log("\n[12] how long the client has waited for a reply");
 console.log("\n[13] the order of the list (Ben, 2026-10-04 and 10-05)");
 {
   const day = (d: string) => ({ facts: { company_name: "X", requests: [{ date: d }] } });
-  const p = project([
+  const p = project(new Map([["soon", NOW - 2 * H], ["later", NOW - 3 * H], ["later-longer", NOW - 5 * H], ["red-wait", NOW - 30 * H], ["undated", NOW - H], ["quiet", NOW - QUIET_MS - H]]), [mark(`created-check:901:${NOW - 5 * H}`, "done-old", NOW - 3 * H), mark(`created-check:901:${NOW - H}`, "done-new", NOW - 30 * 60_000)], null, NOW, new Map(), [...fromStates([
     created("done-old", NOW - 5 * H, { facts: { company_name: "X", requests: [{ date: "2026-10-16" }] } }),
     created("check-old", NOW - 6 * H),
     created("check-new", NOW - 2 * H),
@@ -201,17 +195,16 @@ console.log("\n[13] the order of the list (Ben, 2026-10-04 and 10-05)");
     created("done-new", NOW - 1 * H),
     needsCreated("later-longer", day("2026-10-16")),
     needsCreated("red-wait", day("2026-10-20")),
-  ], new Map([["soon", NOW - 2 * H], ["later", NOW - 3 * H], ["later-longer", NOW - 5 * H], ["red-wait", NOW - 30 * H], ["undated", NOW - H], ["quiet", NOW - QUIET_MS - H]]),
-    [mark(`created-check:901:${NOW - 5 * H}`, "done-old", NOW - 3 * H), mark(`created-check:901:${NOW - H}`, "done-new", NOW - 30 * 60_000)], null, NOW);
+  ], new Map([["soon", NOW - 2 * H], ["later", NOW - 3 * H], ["later-longer", NOW - 5 * H], ["red-wait", NOW - 30 * H], ["undated", NOW - H], ["quiet", NOW - QUIET_MS - H]]), NOW)]);
   const order = p.cards.map((c) => c.thread_id).join(",");
   ok(order === "red-wait,soon,later-longer,later,check-old,check-new,undated,quiet,done-new,done-old", "red wait, nearest job, longer wait on a tie, undated, quiet, then done newest first", order);
   const by = new Map(p.cards.map((c) => [c.thread_id, c]));
   ok(by.get("quiet")?.quiet === true && by.get("red-wait")?.quiet === false && by.get("done-old")?.quiet === false, "quiet only on an open need silent for QUIET_MS");
   ok(by.has("quiet") && p.counts.needs_created === 6 && p.counts.to_check === 2, "sunk, never hidden, and still counted");
-  const stale = project([created("c", NOW - 20 * 86_400_000)], new Map([["c", NOW - H]]), [], null, NOW);
+  const stale = project(new Map([["c", NOW - H]]), [], null, NOW, new Map(), [...fromStates([created("c", NOW - 20 * 86_400_000)], new Map([["c", NOW - H]]), NOW)]);
   ok(stale.cards[0]?.quiet === false, "a client who wrote an hour ago keeps a card off quiet, however old the write");
   const W = 8 * 86_400_000;
-  const reset = project([created("c", NOW - H), needsCreated("n"), needsCreated("q")], new Map([["c", NOW - W], ["n", NOW - W], ["q", NOW - W]]), [], null, NOW, new Map([["n", NOW - 2 * H]]));
+  const reset = project(new Map([["c", NOW - W], ["n", NOW - W], ["q", NOW - W]]), [], null, NOW, new Map([["n", NOW - 2 * H]]), [...fromStates([created("c", NOW - H), needsCreated("n"), needsCreated("q")], new Map([["c", NOW - W], ["n", NOW - W], ["q", NOW - W]]), NOW)]);
   const rs = new Map(reset.cards.map((c) => [c.thread_id, c]));
   ok(rs.get("c")?.quiet === false, "an engine write after a week of silence takes the card off quiet (Ben, 2026-10-06)");
   ok(rs.get("n")?.quiet === false, "so does an email of ours");
@@ -222,32 +215,32 @@ console.log("\n[14] a need that resolves without an engine write turns green ins
 {
   const inbound = new Map([["a", NOW - 2 * H]]);
   const key = `needs-created:a:0:${NOW - 2 * H}`;
-  let p = project([needsCreated("a")], inbound, [], null, NOW);
+  let p = project(inbound, [], null, NOW, new Map(), [...fromStates([needsCreated("a")], inbound, NOW)]);
   ok(p.remember.length === 1 && p.remember[0].mark === "open" && p.remember[0].item_key === key, "a need on screen is remembered as open");
   const open = mark(key, "a", NOW - H, "open");
-  ok(project([needsCreated("a")], inbound, [open], null, NOW).remember.length === 0, "and remembered once");
+  ok(project(inbound, [open], null, NOW, new Map(), [...fromStates([needsCreated("a")], inbound, NOW)]).remember.length === 0, "and remembered once");
   const gone = st({ thread_id: "a", status: "ordered" });
-  p = project([gone], inbound, [open], null, NOW);
+  p = project(inbound, [open], null, NOW, new Map(), [...fromStates([gone], inbound, NOW)]);
   ok(p.cards.length === 0 && p.remember.length === 1 && p.remember[0].mark === "resolved" && p.remember[0].item_key === key, "when the thread stops yielding it, the projection asks for a resolved mark");
   const res: FeedMark = { item_key: key, thread_id: "a", mark: "resolved", by: null, evidence: p.remember[0].evidence, at: NOW - 60_000 };
-  p = project([gone], inbound, [open, res], null, NOW);
+  p = project(inbound, [open, res], null, NOW, new Map(), [...fromStates([gone], inbound, NOW)]);
   const c = p.cards[0];
   ok(c?.green === true && c.lane === "done" && c.items[0].kind === "needs-created" && c.colour === "red" && c.items[0].green?.mark === "resolved", "then it is a done card, as the need it was");
   ok(c?.items[0].green?.at === NOW - 60_000 && p.counts.done === 1 && p.counts.needs_created === 0, "green from when it resolved, and counted done");
   ok((c?.items[0].green?.evidence as { text?: string })?.text === "No order needed any more, per the system", "saying what happened");
-  ok(project([gone], inbound, [open, { ...res, at: NOW - DONE_DWELL_MS - 1 }], null, NOW).cards.length === 0, "it leaves after a day like any done card");
+  ok(project(inbound, [open, { ...res, at: NOW - DONE_DWELL_MS - 1 }], null, NOW, new Map(), [...fromStates([gone], inbound, NOW)]).cards.length === 0, "it leaves after a day like any done card");
   const naj = st({ thread_id: "a", classification: "not-a-job", status: "ordered" });
-  ok((project([naj], inbound, [open], null, NOW).remember[0]?.evidence as { text?: string })?.text === "Read as not a job by the system", "a reclassified thread says so");
-  p = project([created("a", NOW - 5 * H)], inbound, [open], null, NOW);
+  ok((project(inbound, [open], null, NOW, new Map(), [...fromStates([naj], inbound, NOW)]).remember[0]?.evidence as { text?: string })?.text === "Read as not a job by the system", "a reclassified thread says so");
+  p = project(inbound, [open], null, NOW, new Map(), [...fromStates([created("a", NOW - 5 * H)], inbound, NOW)]);
   ok(p.remember[0]?.mark === "resolved" && (p.remember[0].evidence as { text?: string }).text === "Linked to an order by the system", "a thread left holding only a write OLDER than the need resolved it");
-  p = project([created("a", NOW - 30 * 60_000)], inbound, [open], null, NOW);
+  p = project(inbound, [open], null, NOW, new Map(), [...fromStates([created("a", NOW - 30 * 60_000)], inbound, NOW)]);
   ok(p.remember.length === 0 && p.cards[0]?.items[0].kind === "created-check" && !p.cards[0].green, "a write AFTER the need is the engine doing it: a check, not resolved");
-  const twice = project([created("a", NOW - 30 * 60_000)], inbound, [open, mark(`created-check:901:${NOW - 30 * 60_000}`, "a", NOW - 10 * 60_000, "open")], null, NOW);
+  const twice = project(inbound, [open, mark(`created-check:901:${NOW - 30 * 60_000}`, "a", NOW - 10 * 60_000, "open")], null, NOW, new Map(), [...fromStates([created("a", NOW - 30 * 60_000)], inbound, NOW)]);
   ok(twice.remember.length === 0 && twice.cards[0]?.items[0].kind === "created-check" && !twice.cards[0].green, "a check never resolves itself");
-  ok(project([gone], inbound, [], null, NOW).cards.length === 0, "a thread the TV never showed as a need stays off: no backfill");
-  ok(project([gone], inbound, [open, res, { item_key: dismissKey("a"), thread_id: "a", mark: "dismissed", by: "x", evidence: null, at: NOW }], null, NOW).cards.length === 0, "a dismissed thread stays gone");
+  ok(project(inbound, [], null, NOW, new Map(), [...fromStates([gone], inbound, NOW)]).cards.length === 0, "a thread the TV never showed as a need stays off: no backfill");
+  ok(project(inbound, [open, res, { item_key: dismissKey("a"), thread_id: "a", mark: "dismissed", by: "x", evidence: null, at: NOW }], null, NOW, new Map(), [...fromStates([gone], inbound, NOW)]).cards.length === 0, "a dismissed thread stays gone");
   const ticked = mark(key, "a", NOW - 30 * 60_000);
-  p = project([gone], inbound, [open, ticked], null, NOW);
+  p = project(inbound, [open, ticked], null, NOW, new Map(), [...fromStates([gone], inbound, NOW)]);
   ok(p.remember.length === 0 && p.cards[0]?.items[0].green?.mark === "checked", "a need ticked before it resolved stays in done as ticked");
 }
 
@@ -263,7 +256,7 @@ console.log("\n[15] the rebuild's decisions reach ops on the TV and nowhere else
   const ops = [{ source: "m-w#0", op: { kind: "set_position_times" as const, order_id: 950, slot_id: 5, date: "2026-10-10", start: "11:00", end: "15:00" } }];
   const shadow = row("w", { kind: "write", decision: { kind: "write", ops, why: ["R11275 shift 41719: times to 11:00-15:00"] }, subject: "Saturday" });
   const written = row("x", { kind: "write", decision: { kind: "write", ops, why: ["R11275 shift 41719: times to 11:00-15:00"] }, executed: [{ op_key: "k", status: "verified", reasons: [] }] });
-  const p = project([], new Map(), [], null, NOW, new Map(), v2Sources([quote, change, shadow, written], NOW));
+  const p = project(new Map(), [], null, NOW, new Map(), v2Sources([quote, change, shadow, written], NOW));
   const by = new Map(p.cards.map((c) => [c.thread_id, c]));
   // A quote is answered by a reply, not an order (Ben, 10-11), and the line is cardNote's.
   ok(by.get("q")?.items[0].kind === "needs-reply" && /Price it and send the quote$/.test(by.get("q")?.note ?? "") && by.get("q")?.company === "Impact Collective", "a quote is a reply for a person, with what to do on the card", by.get("q")?.note ?? "");
@@ -284,9 +277,9 @@ console.log("\n[15] the rebuild's decisions reach ops on the TV and nowhere else
   const po14 = row("b79", { ...po20, decision: { kind: "write", ops: [{ source: "s", op: { kind: "set_position_times", order_id: 950, slot_id: 1, date: "2026-10-14", start: "10:00", end: "16:00" } }], why: ["R11475 shift 1: times to 10:00-16:00"] } });
   ok(v2Sources([need14, po14], NOW)[0].item?.kind === "updated-check", "a newer write on the need's own day is its answer: a check");
   const state = needsUpdated("c");
-  const merged = project([state], new Map(), [], null, NOW, new Map(), v2Sources([change], NOW));
+  const merged = project(new Map(), [], null, NOW, new Map(), [...fromStates([state], new Map(), NOW), ...v2Sources([change], NOW)]);
   ok(merged.cards.length === 1 && /6 crew/.test(merged.cards[0].note ?? ""), "the rebuild's decision replaces the paused engine's state for the same thread");
-  ok(project([state], new Map(), [], null, NOW).cards[0]?.note === null, "the paused engine's own cards carry no note");
+  ok(project(new Map(), [], null, NOW, new Map(), [...fromStates([state], new Map(), NOW)]).cards[0]?.note === null, "the paused engine's own cards carry no note");
   const create = { source: "m-n#100", op: { kind: "create_order" as const, company_id: "343", company_name: "Impact Collective", client_email: "sam@impact.example", job_name: "Impact @ Roundhouse", shifts: [{ name: "Crew", date: "2026-10-14", start: "04:00", end: "08:00", place_id: "11", place_label: "Roundhouse", positions: [{ size: 3, profession_id: "1" }] }] } };
   const made = v2Sources([row("n", { kind: "write", decision: { kind: "write", ops: [create], why: ["new order: 1 shift(s) at Roundhouse"] }, executed: [{ op_key: "k", status: "verified", reasons: [], detail: { order_id: 16600, number: 11520 } }] })], NOW)[0];
   ok(made.item?.kind === "created-check" && made.order_id === 16600 && made.r_number === null, "an order the bot created carries its id for the verifier; its R and J come with its link, made within the minute (links.ts backfillLinks)");
@@ -297,11 +290,11 @@ console.log("\n[15] the rebuild's decisions reach ops on the TV and nowhere else
   ok(own.r_number === "R11000" && own.order_id === 16000, "the thread's link wins over the order the decision wrote: the sweep moves it when that order is rebuilt or deleted (R11615 -> R11617)");
   const unlinked = v2Sources([row("U", { kind: "write", decision: { kind: "write", ops: [create], why: [] }, executed: [{ op_key: "k", status: "verified", reasons: [], detail: { order_id: 16600, number: 11520 } }] })], NOW)[0];
   ok(unlinked.r_number === null && unlinked.order_id === 16600, "with no link yet, the order the decision wrote is watched, and no unchecked number is shown");
-  const fresh = project([], new Map(), [], null, NOW, new Map(), v2Sources([quote, change], NOW), NOW - 2 * H);
-  const cut = project([], new Map(), [], null, NOW, new Map(), v2Sources([quote, change], NOW), NOW - 30 * 60_000);
+  const fresh = project(new Map(), [], null, NOW, new Map(), v2Sources([quote, change], NOW), NOW - 2 * H);
+  const cut = project(new Map(), [], null, NOW, new Map(), v2Sources([quote, change], NOW), NOW - 30 * 60_000);
   ok(fresh.cards.length === 2 && cut.cards.length === 0, "the TV starts from a given moment: older emails are not shown (Ben, 2026-10-10)");
   const past = row("old", { grounded: { intent: "change", requests: [{ action: "change_times", date: "2026-09-30", problems: [] }], problems: [] } });
-  ok(project([], new Map(), [], null, NOW, new Map(), v2Sources([past], NOW)).cards.length === 0, "a job that is over leaves the TV");
+  ok(project(new Map(), [], null, NOW, new Map(), v2Sources([past], NOW)).cards.length === 0, "a job that is over leaves the TV");
 }
 
 console.log("\n[F] needs follow up: a day with nothing on the job, either side (Ben, 2026-10-10)");
@@ -309,12 +302,7 @@ console.log("\n[F] needs follow up: a day with nothing on the job, either side (
   // a: the client wrote 30h ago, nobody since. b: we wrote 30h ago, the client has not answered.
   // c: client wrote 2h ago. d: silent 30h on its own thread, but the same order (902) had an
   // email 1h ago on another thread. e: done, never raised.
-  const p = project(
-    [needsCreated("a"), needsCreated("b"), needsCreated("c"), updated("d", NOW - 40 * H), updated("d2", NOW - 40 * H), created("e", NOW - 40 * H)],
-    new Map([["a", NOW - 30 * H], ["c", NOW - 2 * H], ["d", NOW - 30 * H], ["d2", NOW - H]]),
-    [mark("created-check:901:" + (NOW - 40 * H), "e", NOW - 2 * H)], null, NOW,
-    new Map([["b", NOW - 30 * H]]),
-  );
+  const p = project(new Map([["a", NOW - 30 * H], ["c", NOW - 2 * H], ["d", NOW - 30 * H], ["d2", NOW - H]]), [mark("created-check:901:" + (NOW - 40 * H), "e", NOW - 2 * H)], null, NOW, new Map([["b", NOW - 30 * H]]), [...fromStates([needsCreated("a"), needsCreated("b"), needsCreated("c"), updated("d", NOW - 40 * H), updated("d2", NOW - 40 * H), created("e", NOW - 40 * H)], new Map([["a", NOW - 30 * H], ["c", NOW - 2 * H], ["d", NOW - 30 * H], ["d2", NOW - H]]), NOW)]);
   const by = new Map(p.cards.map((c) => [c.thread_id, c]));
   ok(by.get("a")?.follow_up === true, "client waiting on us for a day: follow up");
   ok(by.get("b")?.follow_up === true, "us waiting on the client for a day: follow up");

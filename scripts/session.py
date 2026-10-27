@@ -29,8 +29,8 @@
 #
 #     git log --grep "Ticket S-0007"
 #
-# THE SUITE IS `npm run test:all`, NOT `npm test`. `npm test` is `tsx test/run.ts`
-# and runs exactly ONE file. The 117-file discovery runner is test/all.ts. Three
+# THE SUITE IS `npm run test:all`, NOT `npm test`. `npm test -- test/x.ts` runs exactly
+# ONE file (on PGlite). The 117-file discovery runner is test/all.ts. Three
 # handoffs have claimed "117 test files, npm test ALL PASS"; that sentence names
 # a command which does not run them. Changing this line back re-tells that lie.
 #
@@ -106,7 +106,7 @@ def confirm(skip_suite=False):
     if r.returncode != 0:
         # WHICH FILE FAILED IS THE ONLY LINE THAT MATTERS, and the first time this
         # gate went red it was buried: the tail showed a stack trace from a test that
-        # throws ON PURPOSE (venueAdjudicate proves a judge that throws falls back),
+        # throws ON PURPOSE,
         # and the runner's own verdict line had scrolled past. It goes LAST: die()
         # keeps only the final 4,000 characters, which cut a banner put first (the
         # first run of ticket S-0239 failed with no file named).

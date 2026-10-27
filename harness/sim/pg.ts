@@ -30,16 +30,31 @@ export function installDate(): void {
   (globalThis as any).Date = SimDate;
 }
 
-export const db = new PGlite(undefined as any, { parsers: { 20: (x: string) => x, 1700: (x: string) => x } } as any);
+let db: PGlite;
 let ready: Promise<void> | null = null;
 
 export async function boot(): Promise<void> {
   ready ??= (async () => {
-    await db.exec(`
-      CREATE TABLE IF NOT EXISTS public.sim_clock (t timestamptz NOT NULL);
-      INSERT INTO public.sim_clock SELECT now() WHERE NOT EXISTS (SELECT 1 FROM public.sim_clock);
-      CREATE OR REPLACE FUNCTION public.now() RETURNS timestamptz LANGUAGE sql STABLE AS 'SELECT t FROM public.sim_clock LIMIT 1';
-      SET search_path TO public, pg_catalog;`);
+    // PGlite's start-up ends in Postgres's own exit, and emscripten's quit_ writes that 0 to
+    // process.exitCode. A test that had failed before or during the start-up then exited 0 and
+    // test/all.ts counted it passed (test/exitCodeSurvivesPglite.ts).
+    // Node will not let exitCode be redefined, but quit_ reaches it through the global `process`, so
+    // for the start-up the global is a view on which a 0 cannot overwrite a failure.
+    const real = process;
+    (globalThis as any).process = new Proxy(real, {
+      get: (t, k) => { const v = Reflect.get(t, k, t); return typeof v === "function" ? v.bind(t) : v; },
+      set: (t, k, v) => (k === "exitCode" && !Number(v) && Number(t.exitCode) ? true : Reflect.set(t, k, v, t)),
+    });
+    try {
+      db = new PGlite(undefined as any, { parsers: { 20: (x: string) => x, 1700: (x: string) => x } } as any);
+      await db.exec(`
+        CREATE TABLE IF NOT EXISTS public.sim_clock (t timestamptz NOT NULL);
+        INSERT INTO public.sim_clock SELECT now() WHERE NOT EXISTS (SELECT 1 FROM public.sim_clock);
+        CREATE OR REPLACE FUNCTION public.now() RETURNS timestamptz LANGUAGE sql STABLE AS 'SELECT t FROM public.sim_clock LIMIT 1';
+        SET search_path TO public, pg_catalog;`);
+    } finally {
+      (globalThis as any).process = real;
+    }
   })();
   return ready;
 }

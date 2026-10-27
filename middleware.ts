@@ -39,13 +39,13 @@ import { automationPaused } from "./app/lib/paused";
 //    POSTs a fixed request shape and cannot add a custom header — so it authenticates on
 //    a secret inside the webhook URL (HTTP Basic, or ?k=) and the route does that check
 //    itself. Same fail-closed-in-production rule as the others.
-const SKIP = ["/api/auth", "/api/bot", "/api/n8n-inbound", "/api/mail-inbound", "/api/mail-poll", "/api/dedupe", "/api/sweep-ingest", "/api/health", "/api/reconcile"];
+const SKIP = ["/api/auth", "/api/bot", "/api/n8n-inbound", "/api/mail-poll", "/api/dedupe", "/api/health"];
 
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
   if (!pathname.startsWith("/api/")) return NextResponse.next();
   // Before the auth switch below, which is off by default: a pause must hold whatever AUTH_REQUIRED says.
-  if (automationPaused(pathname)) return NextResponse.json({ ok: false, paused: true, error: "automation paused (SPARTAN_PAUSED=1, or an old-engine route under SPARTAN_ENGINE=v2)" }, { status: 503 });
+  if (automationPaused(pathname)) return NextResponse.json({ ok: false, paused: true, error: "this route is shut (app/lib/paused.ts SHUT_ROUTES)" }, { status: 503 });
   /**
    * A PREVIEW IS NEVER A PLACE TO BE OPEN, WHATEVER THE SWITCH SAYS.
    *

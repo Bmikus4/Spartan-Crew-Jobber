@@ -4,7 +4,7 @@ Client emails to Spartan's bookings mailbox are read, matched to OnSinch orders 
 TV shows what a person must do. **The plan and the status of every item: ADDENDUM.md. Read it first, and after
 every step update its status line, its §0 table and any measurement.**
 
-## The live pipeline (SPARTAN_ENGINE=v2)
+## The live pipeline
 1. **Intake.** n8n posts each thread to `/api/n8n-inbound`: `app/lib/n8nInbound.ts` stores it first
    (`app/lib/inboundRawDb.ts`, `app/lib/threadMessagesDb.ts`), then `decideDelivery` (`app/lib/v2/process.ts`).
    While paused, it stores and marks the mail store-only, and nothing decides it.
@@ -25,7 +25,8 @@ every step update its status line, its §0 table and any measurement.**
    **Labels:** `/api/bot/labels` from `app/lib/mail/threadLabels.ts`, applied by n8n with the mailbox's Gmail
    credential after each sync. **Alarms:** `app/lib/errorReport.ts`.
 
-`app/lib/engine/` is the paused old engine; v2 imports a few of its files (`app/lib/engine/README.md`).
+The old engine is deleted (ADDENDUM Prompt 12). `app/lib/engine/` holds only what v2 imports: the OnSinch client and
+its types and helpers (`app/lib/engine/README.md`).
 
 ## Safety rules (ADDENDUM §2): build around them, never loosen them
 - Capture before deciding. A throw before Save is blocked; after Save it is unknown and never retried.
@@ -35,7 +36,7 @@ every step update its status line, its §0 table and any measurement.**
 - A failed read or plan becomes a card. A failed TV read is a 500, never an empty list.
 
 ## Tests and data
-- **The suite is `npm run test:all`** (`test/all.ts` finds every file). `npm test` runs one file.
+- **The suite is `npm run test:all`** (`test/all.ts` finds every file). `npm test -- test/x.ts` runs one file.
 - Every test runs on PGlite (`test/fixtures/pg.ts`). **Never run anything against the production DATABASE_URL;**
   read production only through `scripts/_readonly.mts`. Never call OnSinch write paths, /api/bot/* or the canary.
 - Never print email bodies, addresses or client names. Counts, ids and code locations only.

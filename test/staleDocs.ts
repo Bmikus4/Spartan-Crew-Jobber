@@ -21,12 +21,6 @@ const GONE: Array<[file: string, phrase: string, why: string]> = [
   ["CLAUDE.md", "117-file", "the runner finds its own files; any count goes stale"],
   ["docs/JOB-IDENTITY-DESIGN-2026-09-29.md", "Nothing here is built", "steps 1-5 and 6.1 are built"],
   ["app/lib/engine/reconcile.ts", "the ONLY working", "the nested order read expands blocks too"],
-  ["app/lib/engine/amendOrder.ts", "simply cannot be read through this API", "orderWithBlocks reads the SlotLocation"],
-  ["app/lib/deps.ts", "Still a DRAFT and never a send", "sending exists, gated by replySendArmed"],
-  ["app/lib/mail/gmailWrite.ts", "A DRAFT, never a send", "sendDraft exists, gated by replySendArmed"],
-  ["app/lib/engine/pipeline.ts", "An ASSUMED rate is never written hands-free", "an assumed rate books with a flag since 08-27"],
-  ["app/lib/engine/pipeline.ts", "The ONE case that still holds is money", "the money hold went on 08-27"],
-  ["app/lib/engine/compiler.ts", "staging it is the whole point", "orders go to OnSinch as To Confirm (Q1)"],
   ["app/api/mail-poll/route.ts", "\"/api/reconcile\",      \"schedule\"", "a cron GET of /api/reconcile is a dry run"],
 ];
 
