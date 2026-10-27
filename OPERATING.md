@@ -1,3 +1,5 @@
+> **History from 26 Oct: superseded by ADDENDUM.md, the one plan** (the owner, 26 Oct). Its findings and measurements are folded into the addendum. Do not work from this file.
+
 # OPERATING.md — Inquiry Automation: Foundational Audit, Sandbox Rebuild, Path to 99%
 
 >This document is the complete specification of the engagement. It is long

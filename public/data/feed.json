@@ -5088,5 +5088,22 @@
   "sources": [
    "audit/STATE.md"
   ]
+ },
+ {
+  "id": "S-0234",
+  "ts": "2026-10-27T02:19:34+00:00",
+  "kind": "decision",
+  "headline": "ADDENDUM.md: F1-F28 status at HEAD, F29-F47 added, rebuild R1-R15; OPERATING.md is history",
+  "subject": "The review addendum is the repo's one plan, with every finding's status checked at HEAD",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 219,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  },
+  "sources": [
+   "ADDENDUM.md"
+  ]
  }
 ]

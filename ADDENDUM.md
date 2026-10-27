@@ -1,0 +1,1388 @@
+# Spartan Crew booking engine: technical addendum
+
+**The one plan for Spartan.** Written by Nico on 23 October 2026, and maintained since then by Claude for Ben.
+- It is the only document the work runs from.
+- OPERATING.md (24-26 Oct) and fleet/resume/Spartan-Handoff-2026-10-26.md are history. What they found is folded in
+  below as findings and status.
+- Every step updates this file: its status line, its measurement, and what moved.
+
+**Last updated:** 26 October 2026, against HEAD 41f6ee7. The baseline was 0f2dcef. App code changed since then in five
+commits only:
+
+| commit | ticket | what |
+|---|---|---|
+| 1f3ae9a | S-0214 | Prompt 1 |
+| fb01342 | S-0215 | Prompt 2 |
+| 83e4972 | S-0216 | Prompt 3a |
+| 6a98170 | S-0217 | Prompt 3b |
+| 6988aa0 | S-0232 | /api/confirm-order shut under v2 |
+
+bd10dae (S-0213) moved the test suite onto PGlite. Line references below are at HEAD unless a line says "at 0f2dcef".
+
+**Read §0 first.** Nico's original text follows it unchanged in substance. Each item carries a **Status 26 Oct** line,
+and §3 ends with the findings added after 23 Oct (F29 onward). §11 is the rebuild plan.
+
+---
+
+## 0. State at 26 October (read first)
+
+### Production
+- **The v2 engine decides every client email, in shadow:**
+  - n8n posts each email to /api/n8n-inbound;
+  - one model call reads it (openai/gpt-6.1-sol, prompt extract@f3e1a862322b, since 16 Oct);
+  - code grounds and plans it;
+  - the decision lands in v2_decisions.
+- The office TV shows the open cards, and Gmail labels follow the TV every minute.
+- **Writes to OnSinch are off:** bot_writes_enabled=false since 25 Oct 13:21Z, the owner's ruling.
+  - Checked 26 Oct: none of the 15,049 OnSinch audit rows since 21 Oct were made by the system's user (2257).
+  - 28 planned writes were never run.
+- **The TV is current and accounts for every write and handoff since 23 Oct** (audit/verification-2026-10-26.md). Two
+  faults remain: F29 and F42.
+- **A push to main deploys production.** Work in C:/Users/thera/spartan-v2, branch v2 → origin/main. The only commit and
+  push is `python -u scripts/session.py` (about 15 minutes).
+
+### Status of every item
+
+| item | status 26 Oct | where |
+|---|---|---|
+| F1 lost emails | **DONE** S-0214 | test/everyEmailDecided.ts; sweepUndecided (process.ts) |
+| F2 open work drops off the TV | **DONE for the leak** S-0214 (every open need kept; outbound clears only Needs Reply). **OPEN: the Needs Reply lane** (F41) | test/feedKeepsEveryNeed.ts; feed/v2.ts rowsOnCard |
+| F3 pause doesn't stop everything | **DONE for retries, the sweep, test-data and labels** S-0214. **OPEN: sync and labels still accept the intake secret** | test/pauseStopsSync.ts; sync/route.ts:26, labels/route.ts:25 |
+| F4 creates go through the API | **OPEN** (docs): run.ts:5 still says "The API is used only to read" | run.ts:5, :258-268 |
+| F5 two-week rule | **OPEN, owner decision** | plan.ts:54, :774-775 |
+| F6 unknown sender creates a client | **OPEN, owner decision** | plan.ts:499-500, :834 |
+| F7 suite writes to production | **DONE** S-0213 (PGlite). **OPEN: preview shares production's database** (F44) | test/fixtures/pg.ts |
+| F8 grounding checks presence, not selection | **OPEN** | interpret.ts:129 accepts on membership before the instead-of logic at :130-138 |
+| F9 "already booked" too loose / too strict | **OPEN** | evidence.ts:34-56; plan.ts:379-396 (exact beginning) |
+| F10 venue ignored on multi-venue orders | **OPEN** | plan.ts:379 bookedAt is location-blind; called :674, :730 |
+| F11 lone R/J links the thread | **OPEN** | threadState.ts:60-90 |
+| F12 CC'd addresses widen the pool | **OPEN** | plan.ts:215 evidenceOf |
+| F13 failed company list → duplicate company | **OPEN** | apiCreate.ts:109 |
+| F14 deleted linked order blocks forever | **OPEN** | threadOrder.ts:16-30 |
+| F15 test-data clear on one setting | **DONE** S-0214 (pause, both write keys, logged) | testData.ts:285-288; sync/route.ts:39 |
+| F16 J is the first Job only | OPEN, measure first | links.ts |
+| F17 lease can lapse | OPEN, measure first | run.ts, bot/db.ts |
+| F18 NOT_CLIENT by substring | **OPEN** | process.ts:161 |
+| F19 dates dd/mm | OPEN (right for UK clients; a decision, not a bug) | ground.ts:255 |
+| F20 re-plan cache and limits | known behaviour | replan.ts:32 |
+| F21 docs behind the code | **OPEN** (Prompt 8) | README.md:54; harness/STATE.md:9,32 |
+| F22 duration beside an end dropped | **DONE** S-0215 | test/v2WrongBookingPaths.ts |
+| F23 model pick on the day alone | **DONE** S-0215 | same test |
+| F24 time change + crew total refused | **OPEN** | plan.ts:558 splits only crew_add/crew_remove |
+| F25 trade totals/reductions refused | **OPEN** | plan.ts:599-602 |
+| F26 failed reads / interrupted plans never recovered | **OPEN in production.** A bounded re-read is built and held (retryUnread); resuming interrupted plans is not built | replan.ts:62, :102; process.ts:124 |
+| F27 "yes, book that" is a card | policy: the owner ruled on 20 Oct that it hands off. An acceptance card is built and held (held item 6) | plan.ts |
+| F28 create read-back skips the venue | **DONE** S-0215 | run.ts createMismatches :124 |
+| 5.1 scoring | **DONE** S-0216, S-0217 (strict scorer, context forwarded, reason codes, four numbers). Extended 25-26 Oct by the real-mail harness (§4) | app/lib/v2/score.ts; harness/real/ |
+| 5.2 live trace | **OPEN** | process.ts:519, replan.ts:114 pass noTrace |
+| 5.3 one shared finder | **OPEN** (the main coverage lever) | Prompt 4 |
+| 5.4 faithful requests | **OPEN** (part held: a parser fix, held item 5) | Prompt 5 |
+| 5.5 recover interrupted work | **PART:** F1 done; re-read held; resume open | Prompt 6 |
+| 5.6 every request visible | **PART:** every need kept (S-0214); the Needs Reply lane is open | F41 |
+| 5.7 R number in our subjects | **OPEN**, test first | |
+| 5.8 assisted mode | **OPEN**, design after the numbers | Prompt 7 |
+| 5.9 acceptance | policy, see F27 | |
+| 5.10 small fixes | F15 DONE. F13, F14, F18, op key, run.ts:5, README, harness STATE **OPEN** | |
+| §6 rules | **OPEN, owner** | |
+| §10 / Prompt 8 docs | **OPEN** | |
+| F29-F46 (added 26 Oct) | see §3, "Added 26 October" | |
+
+### Built and held (not deployed)
+Each held diff is mapped to the item it serves. They sit in `eval/patches/` and stack in this order on 305bf84. Applied
+together in worktree C:/Users/thera/spartan-v2-n1, they pass tsc and all 227 test files.
+
+| diff | serves | in the rebuild |
+|---|---|---|
+| items-1-3-runtime | F30 owner alert, F35 replay guard, F36 UTC audit times | R1 |
+| item-4-scoring, n1-write-judging | 5.1: the scorer judges a staff-built order once; write judging agrees with a hand reading on 21/23 | R1 (harness only) |
+| n2-planner-ops | F47: re-timing one named role moves only that role; a crew change with its own hours, or two changes to one shift, hand off | re-cut in R5 |
+| c-current-mail | C1: a create books the client's or the one fitting OnSinch venue (F9 / 5.3 territory). C2: the harness counts the bot's own runs. C3: retryUnread (F26) | C3 → R1; C1 → R5; C2 → R1 |
+| p1-fixes items 5-8 (stale for 1-4) | 5: parser (5.4); 6: quote acceptance (5.9); 7: shared-domain client (F12 / 5.3); 8: reply cards listed (F41) | re-cut in R4, R5 and R9; 6 and 8 need the owner and Paz |
+
+### Owner rulings since 23 Oct (each binds the rebuild)
+- **No heartbeat for this automation runs in n8n, ever** (26 Oct). It is in the repo's CLAUDE.md.
+- **Writes stay off.** Model confidence alone is not an execution gate. No prompt change and no paid run without the
+  owner's yes.
+- **The 40 emails from the 21 Oct pause are stored, not decided** (decisions/2026-10-25-pause-window-store-only.md).
+  - Run `scripts/backfill-pause-window.mts`: `plan` first, then `store`.
+  - Only on or after **28 Oct 16:06Z**.
+- **Display and TV changes** go only with the owner's and Paz's yes. The Paz draft is audit/paz-acceptance-examples.md,
+  and the owner sends it.
+- **Quote acceptances hand off** (20 Oct).
+
+### Blocked outside the code
+1. **CRON_SECRET in Vercel's production environment.** It is needed for any Vercel cron (F32). The Vercel connector is
+   refused for the project's team (403), so the owner sets it.
+2. **Gmail domain-wide delegation.**
+   - A spartancrew.co.uk super-admin grants Client ID 104025308997865565766 the scopes
+     `gmail.readonly,gmail.modify`.
+   - The steps are in app/api/mail-poll/route.ts.
+   - This lets intake, labels and alarms leave n8n entirely.
+3. **A Neon branch for Preview** (F44).
+4. **Paz's answers** (F41, F42, held items 6 and 8).
+
+### Dates
+- **28 Oct 16:06Z:** the pause-window store.
+- **29 Oct:** two blind readers label the 26-28 Oct mail (W2). Mail from 29 Oct (E3) stays untouched until a fix is
+  frozen, as the held-out week 5.1 asks for.
+- **Before 30 Oct:** ship R1, so retryUnread can still re-read the 23 Oct 429 card. Its window is 7 days.
+
+---
+
+## How to use this document
+
+**Baseline.** Nico's references were to Bmikus4/Spartan-Crew-Jobber at commit 0f2dcef750cc951e29b2a22ed6d465e3a6bb51b8,
+paths relative to the repo root. The status lines above give HEAD's locations. Re-verify each line before acting.
+
+**Method (Nico's).**
+- This was a static review only. Nico read the code, the change log (public/data/feed.json), the systems overview PDF
+  and the 21 Oct call transcript with Claude (Opus).
+- Then a second model (Claude Fable) independently tried to disprove every finding.
+- A third, GPT-6 Astra, audited the code separately before reading Nico's, and Fable checked its claims.
+- Nothing was run and no endpoint was called. Production, the database, OnSinch, n8n and OpenRouter were not accessed.
+
+**Labels:**
+- Code-verified: the mechanism is visible in code at this commit.
+- Reported: from the PDF or the call.
+- Hypothesis: frequency or impact is unproven.
+- Runtime-verified: none at the time of writing. Section 7 now carries the counts measured since.
+
+**Ground rules for an agent acting on this:**
+- Write the failing fixture first, then the fix, then show the fixture passing.
+- Don't run npm run test:all while DATABASE_URL points at production (F7; the suite now runs on PGlite).
+- Keep every item in section 2 intact.
+- Items marked "owner decision" need Ben and Steven, not code.
+
+---
+
+## 1. Summary
+
+**Can this work? Yes.**
+- **The information is usually there.** In the study of 102 real emails (harness/STATE.md), 84 needed no question back,
+  15 were unclear or missing a detail, and only 3 were unclear about which booking. So most handoffs aren't caused by
+  missing information.
+- **The hard, risky part already works.** Writing to OnSinch is guarded by the ledger, read-back, refusal rules and To
+  Confirm (section 2).
+- **The gap is in the middle, and it's engineering, not a limit of AI.** The system turns away common requests it can't
+  represent (F22, F24, F25). Several components decide "which booking" with different rules (F9, F10, F23). Both are
+  fixable with known techniques (5.3, 5.4).
+- **Clients don't need to quote order numbers.** They rarely do (4 of 49 missed threads, per the context.ts header),
+  and requiring it would push work back onto Spartan's clients. Date, venue and time pin down most bookings once one
+  shared finder weighs them together (5.3). Spartan's own subject lines can carry the number for replies (5.7).
+- **A realistic target:** the system completes routine requests itself, and pre-fills the rest so staff confirm with one
+  click (5.8). How large "routine" is will come from the repaired weekly scoreboard (5.1). Nico put no percentage on it
+  before that exists.
+
+### What the records and the code show
+The write path (bot, ledger, read-back, To Confirm) is the best-defended code in the repo. The measuring tools
+(scripts/ops-truth.mts, score-vs-ops.mts, real-email-scoreboard.mts, week-review.mts) grade the system against what staff
+actually did in OnSinch, which is the hard idea to get right.
+
+**As of 23 Oct:**
+- **Most work goes to staff.** Live week 9 to 14 Oct: 75 of 80 not done by the system (S-0177). That is a per-email
+  verdict, not a count of staff actions.
+- **Wrong writes are rare, but not zero.**
+  - The v2 era had some:
+    - an added shift on R11500 on 10-14;
+    - creates losing their crew chief;
+    - a shift written for the wrong day;
+    - duplicates (S-0193, S-0197).
+  - Their causes were fixed. Two live paths remained (F22, F23).
+- **The scoring tools over-credited** (section 4).
+
+**Status 26 Oct:**
+- F22 and F23 are closed.
+- The strict scorer's first week (14-21 Oct, S-0217) measured:
+  - wrong writes 2;
+  - coverage 7 of 108 emails with booking work;
+  - missed changes 32;
+  - lost emails 0.
+- On the current reader's mail (16-25 Oct, labelled blind), 90 of 107 real inquiries produce an item on the TV (84.1%).
+  The 17 misses split:
+  - 7 are the reader reading "nothing asked for";
+  - 7 are Needs Reply cards the TV does not list (F41);
+  - the rest are single cases.
+
+**Nico's read:** the rebuild is careful where it writes, but it can't yet represent or match ordinary requests well
+enough to take them on. That is why most emails become handoffs, and some of those handoffs then disappeared (F1, F2).
+The lever is request representation and candidate matching, not loosening the safeguards.
+
+**Priorities** (Nico's order; status in §0):
+1. Close the leaks (F1, F2, F3), so every handoff stays visible until someone deals with it. **Done, except F41.**
+2. Repair the scoring, then run it weekly on held-out mail (5.1). **Done; weekly runs not yet scheduled.**
+3. Close the two live wrong-write paths (F22, F23). **Done.**
+4. Give the reader and planner one shared, corroborated candidate list (5.3).
+5. Represent requests faithfully: durations, combined changes, trade counts (5.4).
+6. Recover interrupted work safely (5.5).
+7. Settle the business rules with Spartan (section 6), then decide on assisted mode (5.8) from the corrected tally.
+
+---
+
+## 2. Working components to preserve
+
+These hold up in code and back the PDF's safety rules. Fixes go around them. References are at 0f2dcef.
+- **Status 26 Oct:** all still hold.
+- builder.ts, ops.ts and bot/db.ts are unchanged since.
+- run.ts changed in 11 lines: createMismatches is still :124; auditExtras is now :184.
+- process.ts moved substantially: retryStopped :124, decideDelivery :187, decideMessage :359, botWrites :33.
+
+The components:
+- **Capture before deciding.** Insert-once storage before engine work (app/lib/n8nInbound.ts:61-62;
+  app/lib/inboundRawDb.ts:89-126).
+- **Pre-click vs post-click outcomes.** A throw before Save means blocked; after Save it means unknown, which is never
+  retried (app/lib/v2/bot/builder.ts:67-79,180-188; app/lib/v2/bot/run.ts:253-255,359-363; app/lib/v2/process.ts:115-154).
+- **Op ledger idempotency.** A seen key never runs again (app/lib/v2/bot/ops.ts:39-43; run.ts:249-257;
+  app/lib/v2/bot/db.ts:124-131). The key drops nested fields, but per-op sources keep it collision-free today (5.10).
+- **Verification for edits.** Read-back plus an OnSinch audit-row diff that rejects extra changed fields
+  (run.ts:84-142,181-232). Creates get read-back only (F28; the venue is now compared).
+- **Form contract and concurrent-edit guard** for builder edits (builder.ts:120-194). This covers edits only (F4).
+- **Two write keys, failing closed.** SPARTAN_WRITES=live and the Settings switch (process.ts:26-34;
+  app/lib/paused.ts:31-33).
+- **Planner refusals:**
+  - whole email or nothing (app/lib/v2/interpret/plan.ts:463);
+  - never the day alone in the deterministic finder (:176-207). The model-pick path now follows the same rule (F23,
+    done);
+  - past days refused (:504-515);
+  - staff precedence on re-plan (:246-266);
+  - ambiguous shifts refused (:88-117);
+  - DST-ambiguous times refused (ops.ts:59-69).
+- **TV failure posture.** A failed read returns 500, never an empty list (app/lib/feed/serve.ts:61-68). Labels skip a
+  minute instead of stripping (app/api/bot/labels/route.ts:41).
+- **Read failures become cards.** Model and planner exceptions inside decideMessage become a handoff
+  (process.ts:299-312,323-330). Since S-0214, any throw before the record does too.
+- **The harness itself.** Preflight isolation, a fake OnSinch, record/replay, a mutant control and binary scoring. Since
+  S-0216 it is in the gate (test/harnessGate.ts). Since 25 Oct, harness/real/ replays real mail on the time-correct
+  world at $0.
+- **Added 26 Oct:** the strict scorer (app/lib/v2/score.ts) and the reason codes (app/lib/v2/reasons.ts). A reason
+  reworded without its code fails the gate.
+
+---
+
+## 3. Findings
+
+Each finding has the same parts: the mechanism (code-verified), why it matters, a candidate fix, and the fixture that
+proves it. Severity reflects business effect if frequent; frequency is unmeasured unless stated.
+
+### F1. A client email can be stored but never decided, with no card and no alarm (Leak, high)
+**Status 26 Oct: DONE**, S-0214 (1f3ae9a).
+- Each path below was reproduced first by test/everyEmailDecided.ts, red at 0f2dcef.
+- storeThreadMessages returns the ids it did insert. captureInboundRaw returns ok:false and intake alarms.
+- Any throw before the record becomes a handoff. Earlier messages are settled after the newest.
+- sweepUndecided runs every minute: client mail stored 10 min to 24 h ago, sent in the last 7 days, with no decision.
+- **Measured:**
+  - 948 of 958 captured emails since 9 Oct have a decision; the 10 without are non-client mail from before the 11 Oct
+    fix (the system audit, on the 26 Oct copy);
+  - lost emails in the strict week: 0 (S-0217).
+
+Three paths (at 0f2dcef):
+- **(a) Partial insert, silent.** storeThreadMessages (app/lib/threadMessagesDb.ts:266-296) inserts row by row.
+  - On a throw it returned { ok:false, inserted:0, ids:[] } even when earlier rows were already inserted.
+  - captureInboundRaw never read msgs.ok (app/lib/inboundRawDb.ts:100,120-121) and returned ok:true with empty ids.
+  - Those rows were stored, never "new" again, and never decided. The response was HTTP 200 with no alarm.
+- **(b) Throw inside decide.** There were unguarded awaits in decideMessage:
+  - deps.world.companies() at process.ts:292;
+  - await deps.threadOrderId(), evaluated as a plan(...) argument at :325, outside the .catch at :330;
+  - db() and deps.record at :410-417.
+
+  Any throw went to n8nInbound.ts:77-79, which sent an alarm email and returned 500, but wrote no v2_decisions row.
+- **(c) Earlier messages marked first.** decideDelivery recorded earlier messages in a delivery as none ("read
+  together") at process.ts:206-214, before the newest was processed at :215-217. If the newest then threw, all of them
+  were left undecided.
+
+**Why it stayed lost:**
+- new_message_ids contains only first-time inserts, so the 30-minute coverage re-post and later replies never re-offer
+  the message.
+- Every reader starts from v2_decisions (app/lib/feed/live.ts:79; app/lib/v2/replan.ts:79).
+- Nothing queried for client messages with no decision.
+- This contradicts PDF p4 rule 3, "every email ends in a recorded outcome".
+
+**Candidate fix (as built):**
+- Return the inserted ids, and alarm on ok:false.
+- Record the earlier messages' none only after the newest is decided.
+- Wrap the remaining awaits.
+- Add the undecided sweep.
+
+**Fixtures:** storeThreadMessages throws on row 2 of 3; threadOrderId throws; record throws. Each must end in exactly
+one decision or a visible card.
+
+### F2. Open work can drop off the TV (Leak, high)
+**Status 26 Oct: the leak is DONE**, S-0214 (test/feedKeepsEveryNeed.ts).
+- A thread's card carries every older need that no later decision answered (feed/v2.ts rowsOnCard), and our email
+  clears a Needs Reply and nothing beside it.
+- **Still OPEN: "list Needs Reply, or give it its own lane"** (F41). Reply cards are still unlisted (feed/v2.ts:90,
+  serve.ts), and they are 7 of the current reader's 17 misses.
+
+Mechanism (at 0f2dcef):
+- The TV showed one decision per thread (app/lib/feed/v2.ts:171-174). An older need was kept only beneath a newer write
+  (openNeedUnder, :183-200), so a newer handoff replaced it.
+- The TV lists only needs-created and needs-updated (app/lib/feed/serve.ts:110,115), so a newer Needs Reply is unlisted.
+- Any outbound email at or after a Needs Reply cleared it (app/lib/feed/project.ts:431).
+- The older need's key was never marked resolved, because it exists (:417-426).
+- Re-plan rebuilds the same projection every 5 minutes (replan.ts:83).
+
+Trigger:
+1. Email A says "book Tue" and becomes a handoff (needs-created).
+2. Email B says "what's the rate?" and becomes Needs Reply.
+3. Staff answer B.
+4. A's need leaves the TV and the labels without being booked.
+
+This matches PDF p6 #6, where 12 of 33 Needs Reply threads were later booked by staff.
+
+**Candidate fix:**
+- The TV keeps every unresolved need per thread (done).
+- An outbound email clears only Needs Reply (done).
+- List Needs Reply, or give it its own lane (open; F41).
+
+**Fixture:** replay case R15 (A, then B, then outbound). A must stay visible.
+
+### F3. The pause switch doesn't stop everything (Safety, high)
+**Status 26 Oct: DONE in part**, S-0214 (test/pauseStopsSync.ts). SPARTAN_PAUSED=1 now stops:
+- retryStopped;
+- sweepUndecided;
+- the test-data clear;
+- /api/bot/labels.
+
+**Still OPEN:** /api/bot/sync and /api/bot/labels still accept the intake secret through authorizeMachineCall
+(sync/route.ts:26, labels/route.ts:25), against the comment in apiAuth.ts that the intake secret alone must not drive
+the bot. Separately, a pause still refuses intake at the door and loses mail (F31).
+
+Mechanism (at 0f2dcef):
+- SPARTAN_PAUSED=1 gated only AUTOMATION_ROUTES (app/lib/paused.ts:11,35-38).
+- middleware.ts:42 skips /api/bot, and the pause check at :48 runs after the skip.
+- /api/bot/sync kept running retryStopped and maybeSweep, which includes the test-data clear
+  (app/api/bot/sync/route.ts:27-37). n8n hits it every minute (scripts/install-sync-workflow.mjs:28-29).
+- /api/bot/sync and /api/bot/labels accept the intake secret through authorizeMachineCall (app/lib/apiAuth.ts:106-115).
+
+Bounds:
+- Retries need both write keys, a 6-hour window and the same codeVersion() (process.ts:126-130).
+- /api/bot/run is test-only.
+- /api/bot/process with execute reaches runOp behind BOT_SECRET.
+
+**Candidate fix:**
+- Pause short-circuits retries and the clear (done).
+- Move sync and labels to authorizeBotCall, or a dedicated secret (open; in R3, where the cron needs its own auth
+  anyway).
+
+### F4. Creates go through the OnSinch API, not the staff screens (Description gap)
+**Status 26 Oct: OPEN.**
+- run.ts:5 still says "The API is used only to read"; the phase is still logged as "browser" (run.ts:258-268).
+- F28's venue check is DONE.
+
+Mechanism (at 0f2dcef):
+- Creates go through run.ts:262-294 to apiCreateOrder (app/lib/v2/bot/apiCreate.ts:103-131), which calls
+  OnsinchClient.createOrder, createCompany and createPlace.
+- Test-data deletes and the canary also use the API.
+
+Why it matters: the PDF (p4 rule 13) tells the business owner every write goes through the staff screens with the form
+and concurrent-edit guard. That is true for edits only.
+- Creates have read-back and To Confirm (request_approval: true), but not the audit diff.
+- Duplicate prevention and venue checks matter more for a create (F13, F28).
+
+**Candidate fix:** correct run.ts:5 and the PDF wording.
+
+### F5. The two-week rule isn't agreed between call, PDF and code (Rules, owner decision)
+**Status 26 Oct: OPEN, owner decision.** Code at plan.ts:54 (CREATE_LEAD_DAYS = 14) and :774-775.
+
+**Code:**
+- The rule is daysBetween(sentDay, earliest) <= lead. Settings can override 0–365 or switch it off.
+- It applies to brand-new orders only. Additions to named or found orders bypass it.
+- The clock is the email's sent date, not decision time.
+
+**Sources:**
+- On the call, nothing inside two weeks is created or updated.
+- The PDF says new orders only.
+- DECISIONS.md has no ruling on the clock.
+
+**Why the clock matters:** after a pause, backlog emails are decided days late. A booking 16 days after its email but 9
+days from today would be auto-created.
+
+**Decision needed:** which actions the rule covers, and which clock it counts from. Treat this together with F6.
+
+### F6. An unknown sender can create a company and an order (Rules, owner decision)
+**Status 26 Oct: OPEN, owner decision.** The newClient path is at plan.ts:499-500; `new:` company ids are emitted at
+:834.
+- The only gates are the 14-day lead and To Confirm.
+- The invoice-domain fallback (resolve.ts, S-0207) narrows it. Held item 7 (a shared-domain rule) would narrow it again.
+
+**Decision needed:** may the system ever create a brand-new client's first order, or does a new client always go to a
+person?
+
+### F7. The release test suite writes to whatever database the env names (Process safety)
+**Status 26 Oct: DONE for the suite**, S-0213 (bd10dae).
+- test/all.ts loads test/fixtures/pg.ts, which replaces the Neon driver with PGlite in memory and sets every database
+  variable to "sim://pglite", which the real driver refuses.
+- The suite had been emptying old bodies through bodyArchive --apply: a time bomb for 24-27 Oct, defused.
+
+**Still OPEN:** "Give preview its own branch too" (F44).
+
+Mechanism (at 0f2dcef):
+- test/all.ts ran every test against .env.local's database.
+- Ten tests called neon(requireEnv("DATABASE_URL")).
+- middleware.ts:50-57 notes that preview and production share one database.
+
+### F8. Grounding checks that a value is present, not that it's the right one (Matching)
+**Status 26 Oct: OPEN.** interpret.ts:129 still accepts a value on membership (`among(g.quote).has(g.value)`) before
+the "instead of / rather than" direction at :130-138. "Make it" and "was X" have no direction rule.
+
+Mechanism:
+- A value is accepted when it is among the quote's values.
+- timesIn returns every time in the quote.
+- For change requests, start, end, duration and count ground only against the subject plus the newest message. Date
+  and venue still ground against the whole thread.
+
+Failure:
+1. The newest message (or a reply subject) says "was 08:00, make it 09:00", so both values ground.
+2. The model picks 08:00, and grounding passes.
+3. The planner skips unchanged slots and records "already as asked".
+4. The result is a silent no-op.
+
+Grounding catches invented values. It can't catch the wrong selection among quoted ones.
+
+**Candidate fix:** carry message and span provenance per value. Read "instead of / rather than / make it" direction
+before the membership check, and keep reply subjects from supplying new values.
+
+**Fixtures:** "was X, make it Y" in one message; a reply subject that holds the old time.
+
+### F9. "Already booked" is too loose in one path and too strict in another (Matching)
+**Status 26 Oct: OPEN.**
+- evidence.ts:34-56 still takes venue, start or crew count as the second fact.
+- bookedAt (plan.ts:379-396) still matches by exact beginning.
+- Held C1 (a create books the client's or the one fitting venue) narrows the duplicate-venue side; it belongs in 5.3's
+  resolver.
+
+**Too loose:** evidence.ts accepts venue, start time or crew count as the second fact beside the day. coveredBy
+(threadState.ts:166) and plan.ts:264 then settle a handoff as "covered". A client with two 4-crew bookings on the same
+day at different venues can be told the second is already booked.
+
+**Too strict:** bookedAt matches by exact beginning. The unnamed path needs exact start plus place. A staff-built 07:30
+against an asked 08:00 counts as "fresh", which can lead to a duplicate To Confirm order.
+
+**Root:** the evidence stack has no single notion of identity.
+
+**Candidate fix:** one rule for both.
+- A match counts only when the evidence picks out exactly one candidate among the client's orders and shifts that day.
+- If two fit, hand off and list both.
+- If none fit exactly but one is near (same day and venue, start within a tolerance), hand off as "possible duplicate".
+
+**Fixtures:** R5 (two orders, same day), R16 (07:30 vs 08:00), and two same-crew bookings at different venues.
+
+### F10. Shift matching ignores the venue on multi-venue orders (Matching)
+**Status 26 Oct: OPEN.** bookedAt (plan.ts:379) is location-blind, called at :674 for a named order and :730 for the
+unnamed path.
+
+Mechanism: on a named order, new shifts are checked with bookedAt, which is location-blind. atPlace is used afterwards
+to choose where an added shift goes; it doesn't narrow bookedAt.
+
+Failure: the client asks for venue Y's shift in the same window as an existing venue-X shift. The planner treats it as
+already booked, or turns it into change_crew/change_times on venue X's shift. That is an edit to the wrong venue's
+shift.
+
+**Candidate fix:** include location in bookedAt, targetShift and writer verification whenever the order has more than
+one location (5.3).
+
+**Fixture:** a two-venue order with an identical window, where the email asks for the second venue.
+
+### F11. A lone R or J number anywhere in the thread links it (Matching)
+**Status 26 Oct: OPEN** (threadState.ts:60-90: `holds` is true when no days are asked; R/J is read from the whole
+thread).
+
+Mechanism: R/J is searched across the whole thread, including Spartan-authored and quoted text. "Thanks, see R12345 for
+the other job" attaches this thread to R12345.
+
+**Candidate fix:** weigh R/J by provenance.
+- A reference in the client's newest words, or in Spartan's own reply on this thread, is strong.
+- One in quoted text about another job is weak.
+- When references disagree with other facts, hand off (see 5.7).
+
+### F12. CC'd addresses widen the company pool (Matching)
+**Status 26 Oct: OPEN** (plan.ts:215 evidenceOf). Held item 7 (shared mail domains) is related.
+
+Mechanism: evidenceOf collects the companies of every non-Spartan from/to address, and to_addresses stores To and Cc
+together. Sender matching comes first, so the risk is the fallback when the sender is unmatched: a CC'd venue contact or
+second client can then supply the company.
+
+**Candidate fix:** in that fallback, hand off when recipients yield more than one company, and never let a
+recipient-only company override a contradicting sender domain.
+
+### F13. A failed company-list read creates a duplicate company (Matching)
+**Status 26 Oct: OPEN** (apiCreate.ts:109 `allCompanies().catch(() => [])`).
+
+**Candidate fix:** treat a list failure as blocked, not as an empty list.
+
+**Count first:** same-name companies created by bot user 2257.
+
+### F14. A deleted linked order blocks new shifts on that thread forever (Fail-safe, burden)
+**Status 26 Oct: OPEN** (threadOrder.ts:16-30 linkedOrderId takes pri-2 ids from old decisions without checking they
+exist).
+
+**Candidate fix:** when a decision-derived id is unreadable, skip it and fall through to evidence.
+
+Related, measured (the system audit): 4 of the 7 system-failure handoffs recorded so far were "linked order
+unreadable".
+
+### F15. Test-data cleanup runs automatically in the live tenant on one setting (Safety)
+**Status 26 Oct: DONE**, S-0214.
+- maybeSweep runs only with both write keys and no pause (testData.ts:285-288; sync/route.ts:39).
+- Every clear is logged (testData.ts:256-261).
+
+### F22. A duration beside an end time is dropped (Wrong write, live path)
+**Status 26 Oct: DONE**, S-0215 (test/v2WrongBookingPaths.ts). A length in words reads as one, and a grounded end with
+a length sets start = end - length. "six hours ending 18:00" books 12:00-18:00, for a new shift and a change.
+
+### F23. A model-picked shift can stand on the day alone (Wrong write, possible)
+**Status 26 Oct: DONE**, S-0215.
+- A pick on a change stands on its R number in the client's words, on the thread's link, or on its day plus one more
+  fact with no rival that day.
+- Otherwise it becomes a card naming every booking that day.
+- The day alone never settles which booking a change is for.
+
+### F24. A time change plus a new crew total in one email is refused (Blocked)
+**Status 26 Oct: OPEN.** plan.ts:558 splits only crew_add/crew_remove beside a time change. "Move it to 10:00 and make
+it 8 crew" becomes a card.
+
+### F25. Trade totals and reductions are refused (Blocked)
+**Status 26 Oct: OPEN.**
+- plan.ts:599-602 refuses anything but adding to a trade, although set_position_size and cancel_position exist.
+- Trade-only shift additions on existing orders are also blocked.
+
+### F26. Extraction failures and interrupted plans are never recovered (Missed)
+**Status 26 Oct: OPEN in production.**
+- **Re-plan:** it still skips rows with no extraction (replan.ts:62) and passes run: null (:102).
+- **Built and held:** a bounded re-read, retryUnread (eval/patches/c-current-mail.diff, test/retryUnread.ts 8 checks).
+  It reads again at 5, 15 and 45 minutes, at most 3 times, from the minute sync. It goes in with R1.
+- **Not built:** resuming a plan interrupted after some ops verified.
+- **Measured** (the system audit, on the 26 Oct copy):
+  - 7 of 223 handoffs are the system failing: 1 OpenRouter 429, 2 OnSinch 404 while planning, 4 linked order
+    unreadable.
+  - Of 61 bot runs from 12 to 20 Oct, 3 stopped part-way.
+  - The 429 card (1a144c619a140ea6, 23 Oct) sat on the TV as Needs Created for 3 days.
+
+### F27. "Yes, book that" always becomes a card (Blocked by design)
+**Status 26 Oct: policy.**
+- The owner ruled on 20 Oct that acceptances hand off.
+- Held item 6 makes them a "confirm the order" card instead of "Needs Created". It needs the owner's and Paz's yes.
+- Measured on dev: 88 fires, 1 false positive (eval/acceptance-study.md).
+
+### F28. Create read-back doesn't check location, and creates skip the audit diff (Verification gap)
+**Status 26 Oct: DONE for the venue**, S-0215. The create read-back compares each position's venue, and a position read
+back with none does not match. Creates still skip the audit diff: by design, since there is nothing to diff.
+
+### Lower priority, recorded for completeness
+- **F16.** J is the order's first Job only (links.ts). Bot-created orders are single-Job, so only staff-built multi-Job
+  orders are affected. **Status:** count them (Prompt 0).
+- **F17.** Lease can lapse mid-operation. The 240 s lease is set against builder timeouts and up to three logins.
+  **Status:** measure from the ledger (Prompt 0).
+- **F18.** NOT_CLIENT filters by substring (process.ts:161). **Status: OPEN.**
+- **F19.** Dates are parsed dd/mm (ground.ts:255). That is right for UK clients. **Status:** keep, unless a US-format
+  sender appears.
+- **F20.** Re-plan has a 5-minute cache (replan.ts:32), a 20-card limit and a time budget. The TV can lag a staff edit.
+- **F21.** Docs that have fallen behind the code. **Status: OPEN** (Prompt 8).
+  - README.md:54 still names anthropic/claude-opus-4.6.
+  - harness/STATE.md:9 still names opus-4.8.
+  - app/lib/match/ is reachable from no live route.
+
+### Added 26 October (found by the 24-26 Oct audits; each is code-verified at HEAD)
+
+**F29. A failed model read is tried once and then never again (Missed, high).**
+- extract.ts:114-123 makes one attempt with a 60 s timeout. The old engine tried three times with backoff on 429/5xx
+  (engine/reason.ts:245-285).
+- A failed read becomes a red booking card that nothing reads again. The 23 Oct 429 card sat for 3 days.
+- **Fix:**
+  - three attempts in the call, backing off 400 ms then 1,200 ms with jitter, on 429, 5xx except 501, a timeout or a
+    dropped connection;
+  - never on 400, 401 or 402;
+  - no attempt starts after 120 s;
+  - plus retryUnread (F26).
+- **Do not touch the prompt** (PROMPT_ID is its hash).
+- **Fixture:** a stubbed fetch giving 429 then 200 makes 2 calls; three 5xx throw after 3; 402 makes 1 call.
+
+**F30. The v2 path never tells the owner when the system itself fails (Alert, high).**
+- app/lib/v2, feed, mail and api/bot contain no reportError, apart from intake's capture-failed and decide-threw.
+- **Built and held:** systemFailureOf plus the system-failed alert (items-1-3-runtime). It covers:
+  - a write stopped part-way;
+  - the bot failing on OnSinch's page;
+  - a contact OnSinch does not hold;
+  - "could not read, plan or decide".
+- **Fixture:** test/systemFailureToOwner.ts.
+
+**F31. A pause throws mail away (Leak, high).**
+- SPARTAN_PAUSED=1 answers 503 at /api/n8n-inbound and /api/dedupe, before capture. The 21 Oct pause left 40 client
+  emails unstored, beyond intake's 72 h catch-up.
+- **Fix:**
+  - under the v2 engine a pause keeps intake and dedupe open;
+  - handleInbound captures and then marks the new ids store-only (a v2_store_only table), and decides nothing;
+  - sweepUndecided skips store-only rows, so pause-time mail is never decided after the pause lifts. That matches the
+    owner's store-only ruling.
+- **Fixture:**
+  - while paused, decide is never called and the mark exists;
+  - after unpausing, the sweep skips marked mail and decides unmarked mail;
+  - test/automationPaused.ts [5] reverses its intake check.
+
+**F32. n8n is the single point of failure, and it runs this automation's heartbeats (Ops, high; owner ruling).**
+- n8n carries intake, the minute sync, labels, the watchdog and the alarm channel itself. If it stops, the owner hears
+  nothing; staff see the TV's sync dot turn red after 90 quiet minutes.
+- **The owner ruled on 26 Oct: no heartbeat for this automation runs in n8n, ever.**
+- n8n schedules that break the rule:
+
+  | workflow | id | schedule |
+  |---|---|---|
+  | Spartan Intake Watchdog | baVlgOkVMCpvj1N7 | every 15 min |
+  | Spartan Sync | rfYGsZULF4PehLPm | every minute: sync, then labels |
+  | the intake Gmail trigger | CPIRu7CpezvKjU8d | every 1 and 3 min, plus a 30-min sweep |
+- **Fix:**
+  1. Add `GET` with authorizeCronCall on /api/bot/sync, and a new /api/health/heartbeat. It checks:
+     - last capture;
+     - capture-to-decision lag;
+     - the last sync finish;
+     - the last label run.
+  2. Add `vercel.json` crons: sync every minute, heartbeat every 5. September's crons ran here (6f9fd0e); the Pro plan
+     allows per-minute.
+  3. The sync stops answering ok:true over errors.
+  4. **Labels** need the mailbox's Gmail credential, which only n8n holds until the Gmail grant. Until then the n8n Sync
+     workflow becomes webhook-triggered, called by the cron after the sync. A webhook is not a heartbeat.
+  5. **Order of the switch:**
+     1. CRON_SECRET is set.
+     2. Deploy.
+     3. Three cron firings are seen.
+     4. Deactivate the Watchdog.
+     5. Convert Sync to the webhook form.
+     6. Labels are seen to apply.
+- **Blind spot until the Gmail grant:** alarms still go out through the n8n alarm webhook.
+- Never run scripts/install-intake-watchdog-workflow.mjs again.
+
+**F33. The old engine's one-click confirm wrote to OnSinch past the write switch (Safety, high).**
+- **Status: DONE**, S-0232.
+- /api/confirm-order (create, amend, delete-and-repost) never read bot_writes_enabled or SPARTAN_WRITES. 16 stale
+  "proposed" tickets carried its button, 12 of them on live orders.
+- It is now shut under v2 (paused.ts OLD_ENGINE_ROUTES; test/automationPaused.ts [6]).
+- The 16 tickets are inert. Marking them dead is a production write.
+
+**F34. Any signed-in staff member can flip the write and auto-reply switches, with no record (Safety, medium).**
+- Settings writes bot_writes_enabled, replies_enabled and reply_delivery for any session (settings/route.ts:32-35).
+- The settings row keeps no actor or history.
+- isAdmin (session.ts:6) is checked nowhere.
+- **Fix:**
+  - admin-only;
+  - a history row with actor and time;
+  - an owner alert on every change.
+
+**F35. Deciding an email again erased the record of what was sent (Record, medium).**
+- The decision upsert writes executed as JSON null, and coalesce keeps it, so a replay through /api/bot/process erased
+  the only account of what reached OnSinch.
+- **Built and held** in items-1-3-runtime: processMessage refuses an email with something sent.
+- **Fixture:** test/replayKeepsWriteRecord.ts.
+
+**F36. OnSinch's zone-less audit times were read in the machine's zone (Scoring).**
+- OnSinch writes "2026-10-23 07:30:00" in UTC: 1,810 of 1,813 in summer time.
+- **Built and held** in items-1-3-runtime. It affects scoring only.
+- **Fixture:** test/zonelessIsUtc.ts.
+
+**F37. The minute sync reports success whatever happened, and labels count as applied before Gmail applies them
+(Observability, medium).**
+- The sync's errors are folded under ok:true (sync/route.ts).
+- A label is marked applied when handed out (labels/route.ts:55-60).
+- The hourly full resend is capped at 150 threads.
+
+**F38. A deploy within 6 hours of a stopped write cancels its retry, with no record (Missed, medium).**
+- retryStopped re-runs only decisions made by the current build (process.ts:124-130).
+
+**F39. A write that stops part-way raises no alarm (Alert, medium).**
+- By design an unknown is never re-sent. But 3 of 61 runs stopped part-way, and nobody was told.
+- F30's systemFailureOf covers it once shipped.
+
+**F40. Most mail is set aside by one model reading (Recall, high).**
+- 419 of 958 decisions (44%) are "no change asked for", and never reach the TV (the system audit, on the 26 Oct copy).
+- On the current reader's labelled mail, 7 of 17 silent misses are such readings (eval/reader-diagnostic/).
+- **Fix:** a prompt change. It needs the owner's yes and a capped paid run (about $1-3).
+- **Measure first** with the email-to-board harness (R10) to see whether a better reading fixes the board.
+
+**F41. Needs Reply cards that carry booking work are not listed (Recall, high; F2's open half).**
+- They are 7 of the current reader's 17 misses.
+- Held item 8 lists reply cards that ask for crew. That is a TV change, so it needs the owner's and Paz's yes.
+
+**F42. Old open needs never age off the TV (Display, medium).**
+- Needs from 13, 15 and 19 Oct are still open.
+- The proposal is audit/display-proposals.md §A:
+  - every exit is marked;
+  - a passed day with an open need counts as a miss.
+- It needs the owner's and Paz's yes.
+
+**F43. The Gmail-API intake already written feeds only the old engine (Intake, medium).**
+- mail-poll/route.ts calls handleThread.
+- **Fix:** call decideDelivery, keep the INTAKE_PATH interlock, and map Gmail's threadId to the stored thread id first.
+  fad7c0f found that mail-poll would give every existing conversation a second thread id.
+- It stays dormant until the Gmail grant.
+
+**F44. Preview shares the production database, and the schema is made at request time (Process, medium).**
+- There are 33 CREATE TABLE IF NOT EXISTS and 18 ALTER statements in 25 files.
+- **Fix:**
+  - one ordered migrations module with a schema_migrations table, idempotent on the current production schema;
+  - a Neon branch for Preview, which needs access.
+
+**F45. The paused old engine is 40% of the app (16,095 lines), and 145 of 219 test files guard it (Maintainability,
+medium).**
+- v2 imports it in 26 places: the OnSinch client, the resolver, the verifier helpers.
+- 12 files are reachable from nothing.
+- See §10.
+
+**F46. In-Reply-To and References are stored but read nowhere on the v2 path (Matching, low).**
+- They have been stored since 23 Oct.
+- They are the cheapest thread-to-order signal there is (5.7).
+
+**F47. Planner faults on current mail (Wrong write, measured in replay).**
+
+Of 20 writes replayed on the current reader's mail (dev-2):
+- at HEAD: 7 completed, 2 partial, 11 wrong;
+- with the held stack: 10 / 2 / 8.
+
+What is still wrong:
+- **shift shapes, 3:** three 1 h shifts for staff's two 2 h; an end of 01:00 for 03:00; "15th" read as this month;
+- **crew mix or venue, 3**;
+- **the crew-chief rule, 1:** "add 3" to a shift of 1. A §6 question;
+- **a cancel staff did not make, 1.**
+
+Held n2-planner-ops hands 4 dev writes to a person instead of writing them wrong:
+- re-timing one named role moves only that role;
+- a crew change with its own hours hands off;
+- two changes to one shift hand off.
+
+Creates go to To Confirm, where staff complete them.
+
+---
+
+## 4. What the change log says about accuracy, and the limits of the scoring
+
+| Measure | Result | Source |
+|---|---|---|
+| Harness, 500 generated emails, production model | 494/500, 0 wrong writes | harness/STATE.md, S-0155 |
+| Harness, 1,000 complex generated emails, perfect reader | 500/500 each set | S-0157 |
+| Shadow day 1 vs ops | 3/3 writes match, 0 wrong | S-0149 |
+| Real emails 9–11 Oct | 14 written, all match ops; 24 Needs Reply; 8 left for a person | S-0163 |
+| Re-planned vs ops 9–13 Oct | 36/58 raw, then 45/50 and 47/53 after labelling truth-noise | S-0172, S-0175 |
+| Live week 9–14 Oct (week-review) | 75 of 80 not done by the system | S-0177 |
+| After switching the reader to GPT-6.1 Sol | 9/22 vs ops (9/15 allowed), up from 2/22 | S-0189 |
+| Dead or wrong order numbers on the TV | 184 → 0 of 201 | S-0205 |
+| **Added 26 Oct.** Harness with the world fixed, perfect reader | simple 304/500, create 171, update 154 (expected answers predate four rulings; floors in the gate) | S-0216 |
+| **Strict scorer, live week 14–21 Oct** | wrong writes 2; coverage 7/108; missed changes 32; lost emails 0. Largest handoff codes: reading_unproven 34, none_already_booked 17 | S-0217 |
+| Real mail, labelled blind by two readers (799 emails) | dev recall: production 65.2%, HEAD 71.2% | S-0224, S-0225 |
+| Prospective set, mail after 22 Oct, locked before any step read it (79 emails) | 20 of 24 inquiries produce an item, in every column; all 4 misses are the reader's "nothing asked for" | S-0226 |
+| Current reader's dev window, 16-25 Oct (107 inquiries) | 90/107 = 84.1% produce an item (CI 75.8-90.5) | eval/dev-windows.md |
+| item_correctness (items shown with the right order and change) | 8/152 at HEAD: cards carry no change, and writes are off | eval/item-correctness.md |
+| Replayed writes on current mail (dev-2, 20) | HEAD 7 completed / 2 partial / 11 wrong; with the held stack 10 / 2 / 8 | eval/phase-c.md |
+
+**Why the numbers to 23 Oct were hard to compare** (Nico; status per point):
+- **score-vs-ops credited the shape of a plan, not its values.** DONE S-0217: app/lib/v2/score.ts judges by value.
+- **Replays read a retired link table** (conversation_state), and saw today's state of older orders. DONE S-0217 for
+  the links. The time-correct world is DONE in harness/real (25 Oct), which rolls OnSinch back to each email's arrival.
+- **week-review could call a half-finished plan done.** DONE S-0217 (fullyWritten shared with metrics.ts).
+- **The recorded harness dropped the reader's context.** DONE S-0216. The 500 recorded readings need re-recording with
+  context: a paid run, the owner's call.
+- **The same weeks were used to tune and to score.** DONE in method since 25 Oct:
+  - dev and test splits;
+  - a prospective set locked before use;
+  - W2 is next, and E3 (from 29 Oct) is held out.
+- **The live model** is openai/gpt-6.1-sol, confirmed by the stored decisions since 16 Oct.
+
+---
+
+## 5. Solutions, in order
+
+These aren't only bug fixes. Together they change how the system decides what an email means and which booking it's
+about.
+
+**Today:** the reader extracts values, a separate grounding step re-checks them with its own narrower parsers, and four
+components each answer "which booking" with their own rules. Any one refusal vetoes the whole email.
+
+**Target:**
+- One request model that can hold what clients actually ask for: duration, combined changes, trade counts (5.4).
+- One candidate resolver that every step shares (5.3).
+- Every unresolved request tracked until it's done (5.6).
+- Near-misses turned into one-click confirms (5.8), and every confirm or correction fed back as a test case.
+
+**What stays:** the write path and its safeguards don't change.
+
+### 5.1 Repair the scoring, then run it weekly on held-out mail (prerequisite)
+**Status 26 Oct: DONE** (S-0216, S-0217).
+- **Not yet:** the weekly run on last week's untouched mail.
+- **Add:** report the real-mail harness's recall beside the four numbers.
+
+What was built:
+- Score exact operations, not shapes.
+- Read links from linkedOrderId.
+- Share metrics.ts's full-execution check with week-review.
+- Forward the fifth context argument.
+- Report four numbers separately: wrong writes (target 0), coverage, missed changes, lost emails.
+- Count policy handoffs and defaults separately.
+- Write stable reason codes into each decision.
+- Read only inside READ ONLY transactions (scripts/_readonly.mts).
+
+**Proves it:** planted wrong-count, wrong-venue, extra-op and half-executed cases fail the scorer (test/scoreStrict.ts).
+
+### 5.2 Switch on the live trace
+**Status 26 Oct: OPEN.** process.ts:519 and replan.ts:114 pass noTrace.
+
+harness/DATA_POLICY.md already defines a safe live mode: hashed senders, no email text, quotes kept, 90-day retention.
+With it on, each weekly miss shows which step chose wrong: extract, ground, plan or run.
+
+### 5.3 One shared, corroborated candidate list (F9, F10, F11, F23; the main coverage lever)
+**Status 26 Oct: OPEN.**
+- F23's half is DONE: a pick needs its day plus one fact.
+- Held C1 (the venue rule) and held item 7 (shared domains) belong inside this resolver, not beside it.
+
+Today the model pick, findOrder evidence, threadOrder links, bookedAt and coveredBy each answer "which order or shift is
+this" with different rules. The reader also sees at most 20 nearby bookings, and none at all when the company is
+unmatched.
+
+The fix:
+- Before the model call, pull reference, day and venue evidence from the email.
+- Always include explicitly referenced and validly linked orders in the candidate list, then fill the rest up to the
+  cap.
+- Resolve written venue names to place ids before scoring.
+- Use the same typed result for validating the model's pick and for planner targeting.
+- Include location in bookedAt, targetShift and create read-back whenever an order has more than one location.
+- If two candidates fit, hand off and list both on the card. If none fits exactly but one is near, hand off as
+  "possible duplicate" instead of creating.
+- Keep "staff already did this" separate from "the exact request is complete".
+
+**Risk:** a wider pool can create false links, so generic venues like "No Location" must never count as evidence.
+
+**Proves it:**
+- competing same-day jobs;
+- the same crew at different venues;
+- a referenced order beyond the 20 cap;
+- a known venue with no start or count;
+- moved or deleted links.
+
+Then fewer identity handoffs on the held-out week, with no new wrong targets.
+
+### 5.4 Represent requests faithfully (F22, F24, F25)
+**Status 26 Oct:**
+- F22 is DONE.
+- F24, F25, the schema validation and F8 are OPEN.
+- Held item 5 (the parser: crew in words, "Duration: N", ordinal months, ranges; 1,336 stored quotes, +13 grounded, 0
+  lost) is re-cut here.
+
+The fix:
+- Keep duration as its own fact.
+- Split combined changes.
+- Allow trade totals and reductions on a uniquely matched trade position.
+- Add narrow date formats such as 20-Nov.
+- Validate the extraction schema before grounding.
+
+**Proves it:**
+- "six hours ending 18:00" gives 12:00–18:00 (passes);
+- "move to 10:00 and make it 8 crew";
+- "make it 3 forkies";
+- 20-Nov.
+
+### 5.5 Recover interrupted work safely (F1, F26)
+**Status 26 Oct:**
+- The ingestion half is DONE (F1).
+- The bounded re-read is built and held (retryUnread → R1).
+- Reconcile-and-resume is OPEN.
+
+The rest of the fix: after an interruption, reconcile planned ops against the ledger, and resume only definitely-unsent
+ops after re-reading the target, staff edits and policy. An unknown is reconciled, never replayed.
+
+### 5.6 Keep every unresolved request visible (F2)
+**Status 26 Oct:**
+- Every need is kept per card (S-0214).
+- An outbound email clears only Needs Reply (S-0214).
+- The pause covers sync and test cleanup (S-0214).
+- **OPEN:** the Needs Reply lane (F41) and aging (F42), both TV changes for the owner and Paz.
+- Per-obligation storage with supersession is not built. The card-level rowsOnCard does the job for now.
+
+### 5.7 Let Spartan's own emails carry the order number (test first)
+**Status 26 Oct: OPEN.**
+- Headers are stored since 23 Oct (F46).
+- A change to outbound mail needs the owner's yes.
+- **Test first:** from the "order not identified" cases, count how many were replies to a Spartan email versus fresh
+  threads.
+
+### 5.8 Assisted mode and the learning loop, if the corrected tally supports it
+**Status 26 Oct: OPEN** (design after the weekly numbers). audit/workflow-proposal.md has related groundwork: a tick
+today only adds a mark.
+
+If most handoffs turn out to be "a likely candidate, not proven", a card with the change pre-filled and a Confirm button
+turns them into completed work through the same runOp path. The ledger, read-back and To Confirm stay unchanged. Each
+Confirm, Edit or Reject is a labelled example. Before any prompt or model change ships, it must pass every past case.
+
+### 5.9 Explicit acceptance of a proposal (policy, F27)
+**Status 26 Oct:** policy. The owner ruled on 20 Oct that acceptances hand off; held item 6 is the card form.
+
+If Spartan wants it automated:
+1. Link the acceptance to one stored, unfulfilled proposal.
+2. Check it wasn't superseded or already booked.
+3. Apply current policy.
+4. Agree it with Spartan first.
+
+### 5.10 Smaller code improvements
+**Status 26 Oct:**
+
+| item | status |
+|---|---|
+| comments and docs: run.ts:5, README, harness STATE | OPEN |
+| paused.ts header | updated S-0214, S-0232 |
+| allCompanies().catch(() => []) should block (F13) | OPEN |
+| skip dead decision-derived order ids (F14) | OPEN |
+| gate test-data cleanup (F15) | DONE |
+| tests on their own database (F7) | DONE |
+| preview on its own database (F44) | OPEN |
+| NOT_CLIENT by whole domain (F18) | OPEN |
+| measure lease duration (F17) | OPEN, measure |
+| canonicalise the op key recursively | OPEN. ops.ts:6 is still `JSON.stringify(op, Object.keys(op).sort())`; migrate so old ledger rows stay recognised |
+| business rules as data | after §6 |
+
+---
+
+## 6. Rules to settle with Spartan (one short session)
+
+**Status 26 Oct:** all OPEN; none is in DECISIONS.md yet.
+1. **The two-week rule:** new orders only, or changes too? Counted from the email's date or from today? (F5)
+2. **New clients:** can the system ever create a brand-new client's first order, or does a new client always go to a
+   person? (F6)
+3. **Start-only moves:** when a change moves only the start, the code keeps the shift's length (S-0186). Confirm that's
+   what Spartan wants.
+4. **"Yes, book that":** should an explicit acceptance of a Spartan proposal be automated (5.9)? Ruled 20 Oct to hand
+   off; still open for Spartan.
+5. **Always a person:** what goes to a person regardless of confidence? For example: same-day changes, crew-chief
+   changes, cancellations.
+6. **CCs and old threads:** what should happen when a client CCs another company, or replies on an old thread about a
+   new job?
+7. **Added 26 Oct, the crew chief:** does a client's "add 3" to a shift of 1 get a crew chief? It is the only wrong
+   write that reached production (20 Oct).
+8. **Added 26 Oct, direct booking:** may the system book directly when confident, and what should a tick on the TV do
+   in OnSinch?
+9. **Added 26 Oct, crew notices:** do edits or new positions notify crew? An admin can read OnSinch's notification
+   settings at $0.
+
+Write the answers into DECISIONS.md so the planner and harness can cite them.
+
+---
+
+## 7. What would help
+
+**Before 31 Oct: renew the n8n key.** The overview flags it. It is still open, and still needed while intake runs on n8n.
+
+**Status 26 Oct:**
+- Read-only database access is solved by scripts/_readonly.mts: READ ONLY transactions, proven by a refused UPDATE.
+- Vercel access for this agent is refused (403 on the project's team).
+- What is still needed: CRON_SECRET, the Gmail grant and a Preview branch (§0).
+
+**What Prompt 0 counts.** These are the counts known on 26 Oct; the rest are "run Prompt 0".
+
+| Count | Sizes | Known 26 Oct |
+|---|---|---|
+| Client thread_messages with no v2_decisions row | F1 | 10 of 958 since 9 Oct, all non-client mail from before the 11 Oct fix; 0 in the strict week |
+| Threads where a handoff was followed by a newer handoff and the first was never booked | F2 | not counted |
+| covered / already-as-asked decisions later changed by staff on that order | F8, F9 | not counted; none_already_booked was 17 of the strict week's handoffs |
+| Audit rows where a bot edit landed on a different venue's shift than the email named | F10 | not counted |
+| Same-name companies created by user 2257 | F13 | not counted |
+| Staff-built orders with more than one Job | F16 | not counted |
+| Ledger finished - started above 180 s | F17 | not counted |
+| Decisions with kind "not a client" from addresses containing noreply/onsinch | F18 | not counted |
+| Model-picked decisions on days when the client had more than one booking | F23 | not counted (F23 fixed) |
+| Rows with no extraction, and plans with fewer verified runs than ops | F26 | 7 system-failure handoffs of 223 (1 OpenRouter 429); 3 of 61 bot runs stopped part-way |
+| Handoff reasons, tallied by code | 5.3, 5.4 | strict week: reading_unproven 34, none_already_booked 17, policy 9, replies 18 |
+
+---
+
+## 8. What Nico was confident about, and what not
+
+**How it was checked:**
+- Claude Opus did the first pass.
+- Claude Fable tried to disprove it, corrected F10, and added F4, F6, F8 and F11 to F15.
+- GPT-6 Astra audited the code separately.
+- Fable checked Astra's 14 claims: 12 confirmed, 2 partly, none refuted.
+
+**Confident:** the mechanisms in F1 to F15 and F22 to F28 exist at 0f2dcef, and the scoring tools over-credit as listed
+in section 4.
+
+**Status 26 Oct:**
+- Every mechanism was confirmed. Those fixed since each had a test that failed at 0f2dcef first.
+- Of the "not yet known" list:
+  - **whether the live system runs this commit:** answered. Production ran 305bf84's app code until S-0232.
+  - **frequency:** partly answered (§7).
+  - **how much 5.3 and 5.4 recover:** still unknown. The email-to-board harness (R10) will measure it.
+
+**Plainly (Nico):**
+- The leak fixes (F1 to F3), the process fixes (F7, F15) and the two wrong-write paths (F22, F23) were clear and worth
+  making now. **All are done, except F3's auth half.**
+- 5.3 and 5.4 are the most likely route to the system doing more of the work, and the corrected scorer is what proves
+  it.
+- This is not a redesign, and nothing here argues for loosening the write safeguards.
+
+---
+
+## 9. Prompts for your agent
+
+Give your agent this whole file, then one prompt at a time, in the order of §11. Each prompt ends when its "Done when"
+list is true and the owner has reviewed the result. Don't run several at once: they touch the same files.
+
+**Prompt status 26 Oct:**
+
+| prompt | status |
+|---|---|
+| 0 | partly known (§7); run |
+| 1 | DONE (S-0214) |
+| 2 | DONE (S-0215) |
+| 3 | DONE (S-0216, S-0217) |
+| 4 | OPEN |
+| 5 | OPEN |
+| 6 | half held (re-read), half OPEN (resume) |
+| 7 | OPEN (design) |
+| 8 | OPEN |
+| 9-13 | new, §11 |
+
+**Rules for every task:**
+- Read ADDENDUM.md first. Re-find each line reference at HEAD before editing, and say what moved.
+- Treat every finding as a claim to verify. If the code disagrees with the addendum, stop and report the difference
+  instead of fixing.
+- Write the failing test or harness case first, show it failing, then fix, then show it passing.
+- Keep every safeguard in section 2 of the addendum. Never loosen a refusal to raise coverage.
+- Never run tests or scripts against the production DATABASE_URL. Use a Neon branch, PGlite or scripts/_readonly.mts.
+  Never call OnSinch write paths, /api/bot/*, or the canary.
+- Never print email bodies, addresses or client names. Report counts, ids and code locations only.
+- Ship only through scripts/session.py. Then update this file: the item's status line, §0's table, and any measurement.
+- Finish with: what changed, the tests added, the commands you ran and their output, and anything left undone.
+
+### Prompt 0: size the findings (read-only, run first)
+**Goal:** measure how often each finding actually happens, without changing anything.
+1. Connect read-only (scripts/_readonly.mts proves it with a refused UPDATE).
+2. For the last 30 days, compute each count in §7's table that is still "not counted". SELECT only.
+3. Run scripts/real-email-scoreboard.mts, which reads only (S-0217), and include the handoff-code tally.
+4. Report whether SPARTAN_INTERPRET_MODEL is set in production: set or unset, never a value.
+
+**Done when:** §7's table is complete, with the query and period for each count. No email text, addresses or names
+appear anywhere.
+
+### Prompt 1: stop losing work (F1, F2, F3, F15): **DONE**, S-0214
+
+### Prompt 2: close the two wrong-booking paths (F22, F23, F28): **DONE**, S-0215
+
+### Prompt 3: make the scoreboard strict (5.1): **DONE**, S-0216, S-0217
+
+### Prompt 4: one shared booking finder (5.3, F9, F10, F11, F12)
+**Goal:** every step answers "which order and shift is this?" with the same rule, so fewer emails are handed off and
+none are matched loosely.
+1. Map every place that resolves an order or shift today:
+   - model-pick validation (interpret.ts);
+   - findOrder evidence (evidence.ts, threadState.ts);
+   - threadOrder links;
+   - bookedAt (plan.ts:379);
+   - coveredBy;
+   - the unnamed path;
+   - the paused old engine's matchers, which are never to be copied.
+
+   **Show the owner the map before changing anything.**
+2. Build one resolver, in its own module (app/lib/v2/identity/), that returns a typed result: exactly one candidate,
+   several (with the list), near-miss, or none. Use it everywhere in the map.
+3. Before the model call, pull reference, day and venue evidence from the email. Always include explicitly referenced
+   and validly linked orders in the candidate list, then fill to the cap.
+4. Resolve written venue names to place ids before matching. Include location whenever an order has more than one.
+   - Never count generic venues such as "No Location" as evidence.
+   - Bring in held C1's venue rule here.
+5. Weigh R and J numbers by where they appear. The client's newest words, or Spartan's reply on this thread, count;
+   quoted text about another job doesn't.
+6. Sender first. A recipient-only company never overrides the sender's domain (F12). Bring in held item 7 here.
+7. Keep "staff already did this" separate from "the exact request is complete".
+
+**Done when:**
+- tests cover:
+  - competing same-day jobs;
+  - the same crew at two venues;
+  - a referenced order beyond the 20-booking cap;
+  - 07:30 booked against an asked 08:00 (a near-miss handoff, not a duplicate create);
+  - a passing R number in quoted text;
+- on held-out mail, identity handoffs fall and wrong targets stay at zero (the strict scorer and the email-to-board
+  harness).
+
+### Prompt 5: understand everyday requests (5.4, F8, F24, F25)
+**Goal:** the system can represent the common requests it refuses today, without guessing.
+1. Handle a time change plus a new absolute crew total against one target state.
+2. Allow trade totals and reductions on a uniquely matched trade position, using set_position_size and cancel_position.
+   Keep the attendance protection.
+3. Add narrow date formats such as 20-Nov. Bring in held item 5's parser cases.
+4. Validate the model's extraction against a schema before grounding, so malformed output becomes a recorded handoff
+   instead of a throw.
+5. **F8:** read "instead of / rather than / make it / was X" direction before the membership check, and keep reply
+   subjects from supplying new values.
+
+**Done when:**
+- each of these plans correctly in tests: "move to 10:00 and make it 8 crew", "make it 3 forkies", "drop one forklift",
+  "20-Nov" and "was 08:00, make it 09:00";
+- a malformed extraction becomes one recorded handoff;
+- wrong writes on held-out mail stay at zero.
+
+### Prompt 6: recover interrupted work (5.5, F26, F38, F39)
+**Goal:** a model outage or an interrupted plan never leaves a permanent manual card when the work could safely finish.
+1. The bounded re-read ships in Prompt 9 (retryUnread).
+2. After an interruption, reconcile planned ops against the ledger. Resume only ops that definitely never started, and
+   only after re-reading the target, staff edits and current policy. Never replay an op whose outcome is unknown.
+3. A deploy does not cancel a stopped write's retry silently (F38): it is retried under the new build after the same
+   re-reads, or recorded as cancelled.
+
+**Done when:** fault-injected runs at partial capture, a model timeout, and after each verified op each end in exactly
+one final result with no duplicated effect.
+
+### Prompt 7: design the one-click confirm and learning loop (5.8, design only)
+**Goal:** a written design, not code, for assisted cards and the learning loop. Build it only after the weekly numbers
+show most remaining handoffs are near-misses.
+
+**Cover:**
+- what a card shows: the proposed change and why;
+- how Confirm, Edit and Reject call the existing runOp path, with the ledger, read-back and To Confirm unchanged;
+- how each decision is stored as an anonymised harness case under harness/DATA_POLICY.md;
+- how the week's disagreements join the regression set that every prompt or model change must pass.
+
+**Done when:** the design names the files it would touch, the data it stores, and the test that proves a confirmed card
+writes exactly what was shown.
+
+### Prompt 8: re-map the repo for the agent (docs only)
+**Goal:** the files an agent reads first describe the live v2 system accurately. Change no runtime code.
+1. Read CLAUDE.md, README.md, DECISIONS.md, harness/STATE.md, docs/ and section 10.
+2. Draft a new CLAUDE.md of at most about 80 lines. It covers:
+   - the v2 pipeline, with the folder for each stage;
+   - the safety rules in section 2;
+   - tests never run against production;
+   - **ADDENDUM.md as the one plan;**
+   - where rulings, numbers and state live.
+
+   Keep the gate rules and the invariants that still hold, including **no heartbeat in n8n**. Move the legacy-engine
+   invariants, unchanged, into app/lib/engine/README.md, and state there which engine files v2 imports.
+3. Add docs/README.md listing every file in docs/ as current or superseded, with one line each. Move nothing. Mark
+   OPERATING.md, RUNBOOK.md and audit/STATE.md as history, superseded by ADDENDUM.md.
+4. Copy each ruling found in v2 code comments (search for "approved", "ruling", "Ben") into DECISIONS.md with an id, and
+   add that id beside the comment. Add the rulings listed in §0.
+5. Update README.md and harness/STATE.md so neither contradicts the code (live model, engine).
+
+**Done when:**
+- the diff touches only .md files and comment lines;
+- every statement in the new CLAUDE.md points to a file that exists;
+- an agent asked "where is the booking matched?" is pointed to v2, not app/lib/engine.
+
+### Prompts 9-13: see §11
+
+---
+
+## 10. Organising the repo for the AI that builds it
+
+**Status 26 Oct: OPEN** (Prompt 8). One change since:
+- the repo CLAUDE.md now carries the no-n8n-heartbeat rule;
+- it still describes the legacy engine and has no map of v2.
+
+**Nico's findings (code-verified at 0f2dcef, all still true):**
+- **CLAUDE.md describes the legacy engine.** It never mentions v2, the harness, the two write keys or the refusal rules.
+- **The session gate runs the suite.** Since S-0213 it runs on PGlite, so that point is DONE.
+- **Current truth is spread across many places:**
+  - README.md (legacy);
+  - harness/STATE.md (an outdated model);
+  - DECISIONS.md (September's D1 to D6);
+  - public/data/feed.json;
+  - fleet/resume/;
+  - 28 dated plans in docs/ with no index.
+  - Since 24 Oct also OPERATING.md, RUNBOOK.md and audit/. **From 26 Oct, ADDENDUM.md is the one plan.**
+- **v2 rulings live in code comments,** not in DECISIONS.md.
+- **Old and new code share one folder.** app/lib/engine/ has 47 files, 16,095 lines. v2 imports a handful (F45).
+- **No single owner for "which booking is this"** (5.3).
+
+**The fix** (documentation and labelling first, no risky moves):
+- Rewrite CLAUDE.md as a short map of the live system.
+- Move the legacy invariants into app/lib/engine/README.md and mark the legacy engine.
+- Give every kind of truth one home:
+  - rulings in DECISIONS.md;
+  - measured numbers in feed.json;
+  - **the plan and its status in ADDENDUM.md;**
+  - the system's map in CLAUDE.md;
+  - plans in docs/ with an index.
+- Copy the v2 rulings out of code comments.
+- Name the owner of identity: app/lib/v2/identity/ when 5.3 lands.
+- Retire the old engine once SPARTAN_ENGINE can no longer select it (Prompt 12).
+
+---
+
+## 11. The rebuild, in order (from 26 Oct)
+
+**The owner, 26 Oct:** "pivot to rebuilding the entire system using the addendum alone."
+
+**Read as:** the whole system is rebuilt to the target in §5, one prompt at a time, in the order below.
+- That target is one request model, one shared resolver, every request tracked to completion, near-misses as one-click
+  confirms, and **no heartbeat in n8n**.
+- The §2 write path and its safeguards are kept and built around, as Nico asks. Everything else moves to the target.
+- Each step ships through the gate and updates this file.
+
+| step | prompt | what | ships |
+|---|---|---|---|
+| R1 | **9** (new) | **Stop losing work, part 2:** F29 (in-call retry), F26 re-read (retryUnread), F30 owner alerts, F35 replay guard, F36 UTC times, F31 pause stores mail. Held items-1-3-runtime, plus C3 and C2 / item-4 / n1 scoring | yes. **Before 30 Oct** |
+| R2 | 8 | Re-map the repo: CLAUDE.md, engine README, docs index, rulings into DECISIONS.md | yes (docs) |
+| R3 | **10** (new) | **No heartbeat in n8n** (F32): cron entry points, the heartbeat, honest sync status (F37), sync and labels on their own secret (F3), labels by webhook, the switch-over | yes. Live when CRON_SECRET is set |
+| R4 | 0 | Size the findings, read-only | report |
+| R5 | 5 + 5.10 | Everyday requests (F8, F24, F25, dates, schema validation) and the small fixes (F13, F14, F18, op key, run.ts:5, README). Re-cut held item 5 and n2-planner-ops | yes |
+| R6 | **11** (new) | Govern the switches (F34). One migrations module (F44). A Preview branch when access exists | yes |
+| R7 | **12** (new) | Retire the old engine in stages (F45, §10): move the shared OnSinch client and helpers to app/lib/onsinch/, delete what nothing live reaches, then pipeline/compiler/deps and the shut routes, then the 145 old tests | yes, staged |
+| R8 | 4 | **One shared booking finder** (5.3), built once the old engine is gone, so there is one place for it. Brings in held C1 and item 7 | yes |
+| R9 | 6 | Resume interrupted plans (F26, F38, F39) | yes |
+| R10 | **13** (new) | **The email-to-board harness** (the owner's design, below), then its case study | report + test |
+| R11 | 5.2, 5.7 | Live trace; R number in our subjects (test first) | yes; 5.7 needs the owner's yes for outbound mail |
+| R12 | TV | F41 Needs Reply lane, F42 aging, held items 6 and 8 | **owner and Paz** |
+| R13 | 7 | Assisted mode design, from R10's numbers | design |
+| R14 | | Mail intake through v2 (F43), live with the Gmail grant; then intake, labels and alarms leave n8n entirely | dormant until the grant |
+| R15 | | **The V1 review:** a thorough review of the whole system (code cleanliness, what works and what doesn't, what to do next), by me and by an independent agent. Published and opened in the owner's browser | report |
+
+### Prompt 9: stop losing work, part 2 (F26, F29, F30, F31, F35, F36)
+**Goal:** a failed read heals itself, the owner hears of the system's own failures, and a pause loses no mail.
+1. **F29.** In extract.ts extractWithMeta:
+   - 3 attempts; backoff 400 ms then 1,200 ms, plus up to 50% jitter;
+   - retry on 429, 5xx except 501, and timeout or network errors;
+   - never retry 400, 401 or 402;
+   - no attempt starts after 120 s;
+   - keep the thrown message as `extract: OpenRouter <status>`;
+   - do not touch SYSTEM or userPrompt.
+2. Apply eval/patches/items-1-3-runtime.diff (it applies cleanly at HEAD). That brings F30, F35 and F36 with their
+   tests.
+3. **F26.** Port retryUnread from eval/patches/c-current-mail.diff: the process.ts hunk, the sync route hook and
+   test/retryUnread.ts. Not the planner hunks.
+4. **F31.** Under v2, a pause keeps intake and dedupe open:
+   - handleInbound captures, then marks the new ids in v2_store_only and decides nothing;
+   - sweepUndecided skips marked rows.
+5. Ship item-4-scoring, n1-write-judging and c-current-mail's C2. They are harness only, with no runtime effect.
+
+**Done when:** each of these passes, red first:
+- test/extractRetry.ts: 429 then 200 makes 2 calls; three 5xx throw after 3; 402 makes 1 call; a dropped connection
+  then 200 makes 2 calls;
+- systemFailureToOwner, replayKeepsWriteRecord and zonelessIsUtc;
+- retryUnread;
+- test/pauseStoresOnly.ts.
+
+### Prompt 10: no heartbeat in n8n (F32, F37, F3's auth half)
+**Goal:** every timer for this automation lives in the app. n8n keeps no schedule.
+1. Add GET handlers on /api/bot/sync and a new /api/health/heartbeat, authorised by authorizeCronCall.
+   - Both paths are on the middleware SKIP list, so each checks its own secret; test/machineRouteAuth.ts must pass.
+   - Move sync and labels off the intake secret.
+2. The heartbeat checks:
+   - last capture (working hours);
+   - capture-to-decision lag (the oldest undecided client message past 15 minutes);
+   - the last sync finish (the sync records it);
+   - the last label run.
+
+   Anything stale raises reportError, route "heartbeat".
+3. The sync answers ok only when every step succeeded.
+4. vercel.json crons: /api/bot/sync every minute, /api/health/heartbeat every 5. Not /api/reconcile.
+5. The n8n Sync workflow becomes webhook-triggered:
+   - Webhook node in, the sync HTTP node out;
+   - _labelNodes.mjs steps unchanged: 5 at a time, a second apart;
+   - the cron calls it after the sync.
+6. **Switch-over, in one sitting:**
+   1. CRON_SECRET is set.
+   2. Deploy.
+   3. Three firings are seen in Vercel's logs.
+   4. Deactivate n8n baVlgOkVMCpvj1N7.
+   5. Convert rfYGsZULF4PehLPm.
+   6. Labels are seen to apply.
+
+**Done when:**
+- tests prove the GET entry points refuse without the secret and run with it;
+- the heartbeat raises on each stale signal;
+- the sync reports a failed step as not ok;
+- after the switch-over, n8n lists no active Spartan schedule except the intake Gmail trigger, which waits for R14.
+
+### Prompt 11: govern the switches and the schema (F34, F44)
+1. bot_writes_enabled, replies_enabled and reply_delivery may be changed by an admin only. Find how isAdmin is set, or
+   define the admin list.
+2. Every change is stored with actor and time, and raises reportError "settings-changed" to the owner.
+3. Move the 33 CREATE TABLE and 18 ALTER statements into one ordered, idempotent migrations module with a
+   schema_migrations table, run from one function. Test on PGlite from empty and from the current shape.
+4. Preview's own Neon branch: write the steps. Do it when access exists.
+
+**Done when:**
+- a non-admin is refused;
+- history rows are written;
+- the alert fires;
+- both migration tests pass.
+
+### Prompt 12: retire the old engine (F45)
+Stages, each gated, each followed by a check that the real-mail harness reproduces (the dev replay is unchanged):
+1. Move what v2 imports from app/lib/engine into app/lib/onsinch/ (or shared modules): the OnSinch client, the resolver
+   helpers, staffChangeSince and matchExistingOrder.
+2. Delete the 12 files reachable from nothing (app/lib/match/, engine/score.ts and the others in
+   audit/system-audit-2026-10-26.md §2), and the dead old-state branch of feed/project.ts.
+3. Delete pipeline, compiler, deps and the shut routes' handlers. Remove SPARTAN_ENGINE's old branch.
+4. Move or delete the 145 old-engine tests.
+
+Zero references is permission to delete, never a reason to.
+
+**Done when:** app/lib/engine is gone or holds only what v2 uses, and nothing live changed (the harness and the suite
+agree).
+
+### Prompt 13: the email-to-board harness (the owner's design, 26 Oct)
+**Goal:** for each email, show:
+- what came in;
+- what it asks for;
+- what the board showed;
+- what it should have shown;
+- the first stage where they part.
+
+The AI step is a Claude subagent on our own credits, using a cheap model (Haiku, or Sonnet if Haiku reads poorly). All
+other code is deterministic and costs $0. OpenRouter is never called.
+
+1. **The case set:** 20 emails from the current reader's labelled window (eval/dev-windows.md). Cover a new booking, a
+   change, a cancel, an acceptance, a reply asking for crew, and plain non-work mail. Add W2 once it is labelled.
+   **Never E3.**
+2. **Board gold:** what the board should show per email:
+   - card kind (none, needs-created, needs-updated, reply-with-work);
+   - target (an order, NEW or NONE);
+   - the change (op kinds and values);
+   - the Gmail label.
+
+   Derive it from the two-reader labels. Where they do not carry it, two blind label subagents fill it and a third
+   settles splits. Commit ids and codes only.
+3. **The AI step:**
+   - For each email the harness writes `.tmp-data/board/requests/<id>.json`: SYSTEM, PROMPT_ID and
+     `userPrompt(sent, from, subject, newest, contextText(read))`, with `read` from readContext against the
+     time-correct world, exactly as production would.
+   - A subagent (tools: Read and Write in that folder only) answers each with the JSON object alone, into `responses/`.
+   - Batches of about 10. Record the model and the brief hash.
+   - The folder is gitignored.
+4. **The deterministic run:** a `--reader stored|subagent` option on harness/real/replay.ts. Each reading goes through
+   the unchanged code:
+   1. ground;
+   2. plan;
+   3. harness/real/system.ts for the TV outcome;
+   4. feed/v2.ts rowsOnCard for the card;
+   5. mail/threadLabels.ts for the label.
+5. **Compare and attribute.** Stop at the first stage that differs from board gold:
+   1. client;
+   2. asks;
+   3. grounding;
+   4. target;
+   5. ops;
+   6. card kind;
+   7. card text;
+   8. label.
+
+   Then read the pattern:
+   - both readers fail at the same code stage: code;
+   - the subagent succeeds where production's reading failed: reader;
+   - both succeed but the card is wrong: display.
+
+   Report to `eval/board/<date>.md`, one row per email (ids and codes), with totals per stage.
+6. **In the gate, free:** test/boardCases.ts. About a dozen synthetic emails (no client data), each with a checked-in
+   reading, go end to end through ground, plan, card and label, asserting the board output.
+7. **Rules:**
+   - no production database; the fresh copy only, via HARNESS_GOLD;
+   - no email text in any committed file or in the session output;
+   - a subagent reading is not production's reader, so report them side by side.
+
+**Done when:**
+- the 20-email case study has run with both readers;
+- the report names, for every miss, the stage and whether the cause is the reader, the code or the display;
+- test/boardCases.ts is in the gate.
+
+### Hazards for whoever runs this
+- **Worktrees with junctions.** spartan-v2-p1, -i14 and -n1 link into this checkout's node_modules and .tmp-data.
+  - `git worktree remove --force` deletes through a junction: on 26 Oct it emptied .tmp-data.
+  - Unlink each junction, verify, then remove.
+  - Never let a subagent remove a worktree.
+- **The undecided sweep decides fresh mail.** Anything stored inside 24 h and sent within 7 days costs a model call.
+- **Privacy slips** have come through log tails. Filter every log first.
+- **A push is a deploy.**

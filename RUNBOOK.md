@@ -1,3 +1,5 @@
+> **History from 26 Oct: superseded by ADDENDUM.md, the one plan** (the owner, 26 Oct). Its findings and measurements are folded into the addendum. Do not work from this file.
+
 # RUNBOOK.md — How to execute OPERATING.md
 
 You have been given `OPERATING.md`. It is long by design. You are not

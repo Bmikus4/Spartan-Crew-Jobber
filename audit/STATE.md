@@ -1,3 +1,5 @@
+> **History from 26 Oct.** The plan and its status live in ADDENDUM.md at the repo root (the owner, 26 Oct: the addendum is the one document). This ledger served OPERATING.md, 24-26 Oct.
+
 # STATE.md
 
 Updated: 2026-10-26   Session: 6

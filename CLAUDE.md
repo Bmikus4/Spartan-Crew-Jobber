@@ -1,5 +1,8 @@
 # SpartanCrew Enquiry Engine — repo rules
 
+**The plan, and the status of every item in it, is ADDENDUM.md at the repo root: the one document the work runs from.**
+Read it first. After every step, update its status line, its section 0 table and any measurement.
+
 ## The session gate
 
 `scripts/session.py` is the only sanctioned `git commit` and `git push` in this repo.
