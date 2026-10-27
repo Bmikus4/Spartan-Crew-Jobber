@@ -29,7 +29,7 @@ export function v2Writes(flag: string | undefined = process.env.SPARTAN_WRITES):
 /**
  * SPARTAN_PAUSED=1, read where the automation acts: /api/bot/* is skipped by the middleware to
  * reach each route's own machine gate, so until 10-23 the minute sync kept retrying writes,
- * clearing test data and handing labels out while paused (addendum F3). retryStopped,
+ * clearing test data and handing labels out while paused (addendum F3). resumeStopped,
  * maybeSweep, sweepUndecided, retryUnread, the labels route and intake check it.
  */
 export function automationPausedFlag(flag: string | undefined = process.env.SPARTAN_PAUSED): boolean {

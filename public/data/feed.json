@@ -5273,5 +5273,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0247",
+  "ts": "2026-10-27T22:49:46+00:00",
+  "kind": "measurement",
+  "headline": "R9: stopped writes resumed or closed with one result, any build (F26, F38, F39)",
+  "subject": "A write that stopped part-way is resumed after planning it again, or closed",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 107,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]

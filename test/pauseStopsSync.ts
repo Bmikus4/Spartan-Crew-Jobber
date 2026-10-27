@@ -23,7 +23,6 @@ const calls: string[] = [];
 Object.assign(process.env, { SPARTAN_WRITES: "live", VERCEL_GIT_COMMIT_SHA: "test", N8N_WEBHOOK_SECRET: "test-secret", ONSINCH_API_KEY: "test" });
 delete process.env.SPARTAN_PAUSED;
 const { saveSettings } = require("../app/lib/settingsDb.ts");
-const { retryStopped } = require("../app/lib/v2/process.ts");
 const { maybeSweep } = require("../app/lib/testData.ts");
 const { POST: syncPOST } = require("../app/api/bot/sync/route.ts");
 const { POST: labelsPOST } = require("../app/api/bot/labels/route.ts");
@@ -33,7 +32,7 @@ const ok = (c: boolean, m: string, d?: unknown) => { console.log(`  ${c ? "PASS"
 const post = (fn: (r: Request) => Promise<Response>, body: unknown = {}) =>
   fn(new Request("https://x/api/bot", { method: "POST", headers: { "x-webhook-secret": "test-secret", "content-type": "application/json" }, body: JSON.stringify(body) }));
 
-/** A write the bot stopped before sending: retryStopped tries it again while writes are on. */
+/** A write the bot stopped before sending: the minute sync looks at it again while writes are on (v2/resume.ts). */
 async function stoppedWrite(id: string) {
   const day = new Date(Date.now() + 7 * 86_400_000).toISOString().slice(0, 10);
   const decision = { kind: "write", ops: [{ source: `${id}#0`, op: { kind: "set_position_times", order_id: 9, slot_id: 1, date: day, start: "09:00", end: "17:00" } }], why: [] };
@@ -66,7 +65,8 @@ async function stoppedWrite(id: string) {
     await sql`DELETE FROM v2_decisions WHERE message_id = 'r1'`;
     await stoppedWrite("r2");
     const body = await (await post(syncPOST)).json();
-    ok(ran.length === 1 && body.retry?.retried === 1, "the stopped write is tried again", { ran, retry: body.retry });
+    // It has no stored reading to plan again from, so it is closed rather than run (resume.ts).
+    ok(body.retry?.closed === 1 && !body.retry?.paused, "the stopped write is looked at again", { ran, retry: body.retry });
     ok(body.testData !== "paused" && body.testData !== "writes off", "and the test-data clear runs", body.testData);
   }
 

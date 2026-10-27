@@ -3,7 +3,7 @@
 // ----------------------------------------------------------------------------
 // 1a144c619a140ea6 (10-23): "the system could not read this email (extract: OpenRouter 429)" stayed on
 // the TV as Needs Created for three days, because nothing reads a failed email again (only writes that
-// stopped are retried, retryStopped). retryUnread reads it again 5, 15 and 45 minutes on, three times at
+// stopped are resumed, resume.ts). retryUnread reads it again 5, 15 and 45 minutes on, three times at
 // most, within the sweep's week. Against PGlite (fixtures/pg.ts); the reader is a stub, no model is called.
 // npx tsx test/retryUnread.ts
 // ============================================================================

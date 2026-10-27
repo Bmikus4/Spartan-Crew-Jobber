@@ -103,48 +103,6 @@ export async function readContext(world: World, companyId: number | null, sentIs
 }
 
 /**
- * WRITES THAT STOPPED BEFORE ANYTHING WAS SENT ARE TRIED AGAIN, up to twice, within 6 hours: a
- * browser timeout before the submit, the bot busy, an unreadable audit log (Lux Technical
- * 10-12 timed out waiting for the builder and nothing ever tried again). Only "blocked" and
- * "busy" are retried: nothing left the browser. "unknown" may have landed and is never re-sent.
- */
-const TRANSIENT = /bot error before submit|another operation holds the bot|audit log unreadable|Timeout|page raised|order read 5\d\d|net::|ECONNRESET|fetch failed/i;
-export async function retryStopped(): Promise<{ retried: number; results: string[]; paused?: true }> {
-  if (automationPausedFlag()) return { retried: 0, results: [], paused: true };
-  const sql = await db();
-  // Only a decision this build made is retried: an older build's plan is not re-run on its
-  // authority (10-13: ec938be had planned a Lux Technical shift on 1 October, already past).
-  const rows = (await sql`SELECT message_id, thread_id, decision, executed FROM v2_decisions
-    WHERE kind = 'write' AND jsonb_typeof(executed) = 'array' AND created_at > now() - interval '6 hours' AND code_version = ${codeVersion()} ORDER BY created_at`) as any[];
-  const results: string[] = [];
-  const today = utcToLondon(new Date().toISOString()).date;
-  const writing = await botWrites();
-  for (const d of rows) {
-    const ex = d.executed as RunResult[];
-    const last = ex[ex.length - 1];
-    const tries = Number(d.decision?.retries ?? 0);
-    // "busy" is answered before the ledger or the browser (runWhenFree waited 2 minutes for it).
-    const stopped = last && (last.status === "busy" || (last.status === "blocked" && TRANSIENT.test(last.reasons.join(" "))));
-    if (!stopped || tries >= 2 || !writing) continue;
-    // Never a day already gone.
-    if ((d.decision.ops as { op: any }[]).some(({ op }) => [op.date, ...(op.shifts ?? []).map((s: any) => s.date)].some((x) => typeof x === "string" && x < today))) continue;
-    const done = ex.slice(0, -1);
-    const todo = (d.decision.ops as { source: string; op: Op }[]).slice(done.length);
-    const out: RunResult[] = [...done];
-    for (const { source, op } of todo) {
-      const r = await runOp(`${source}:retry${tries + 1}`, op, { testOnly: !writing });
-      out.push(r);
-      if (r.status !== "verified") break;
-      const made = Number((r.detail as any)?.order_id) || ("order_id" in op ? Number(op.order_id) : 0);
-      if (made) await recordLink(sql, { thread_id: d.thread_id, order_id: made, source: "bot write (retry)" }).catch(() => {});
-    }
-    await sql`UPDATE v2_decisions SET executed = ${JSON.stringify(out)}::jsonb, decision = jsonb_set(decision, '{retries}', ${String(tries + 1)}::jsonb) WHERE message_id = ${d.message_id}`;
-    results.push(`${d.message_id}: ${out.map((r) => r.status).join(",")}`);
-  }
-  return { retried: results.length, results };
-}
-
-/**
  * AN EMAIL THE SYSTEM COULD NOT READ IS READ AGAIN, up to three times, 5, 15 and 45 minutes on, within the
  * week the sweep covers. A rate limit or a timeout is the system's own passing failure (addendum F26, F29),
  * yet it stayed on the TV as "Needs Created" for good: 1a144c619a140ea6, "OpenRouter 429" on 10-23, still

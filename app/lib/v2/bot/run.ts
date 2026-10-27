@@ -24,7 +24,8 @@ import { cancelNode, createChild, editNode, type EditOutcome } from "./builder";
 import { apiCreateOrder, firstRow, ORDER_MANAGER_ID } from "./apiCreate";
 import { readPage } from "../read";
 
-export type RunResult = { op_key: string; status: LedgerStatus | "busy" | "seen"; reasons: string[]; detail?: Record<string, unknown> };
+/** cancelled: a stopped write closed without running the rest, the plan having changed (v2/resume.ts). */
+export type RunResult = { op_key: string; status: LedgerStatus | "busy" | "seen" | "cancelled"; reasons: string[]; detail?: Record<string, unknown> };
 
 const CONTRACTS = contracts as unknown as Record<string, Contract>;
 

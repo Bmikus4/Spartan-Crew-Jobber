@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { authorizeCronCall } from "../../../lib/apiAuth";
 import { backfillBoardLinks, backfillLinks, sweepLinks } from "../../../lib/v2/links";
-import { botWrites, retryStopped, retryUnread, sweepUndecided } from "../../../lib/v2/process";
+import { botWrites, retryUnread, sweepUndecided } from "../../../lib/v2/process";
+import { resumeStopped } from "../../../lib/v2/resume";
 import { replanOpen } from "../../../lib/v2/replan";
 import { neon } from "@neondatabase/serverless";
 import { httpTransport } from "../../../lib/onsinch/onsinch";
@@ -35,7 +36,7 @@ async function sync(request: Request, labels: boolean): Promise<Response> {
     ["backfilled", () => backfillLinks(sql)],
     ["board", () => backfillBoardLinks(sql)],
     ["sweep", () => sweepLinks(sql)],
-    ["retry", () => retryStopped()],
+    ["retry", () => resumeStopped(sql)],
     // A stored client email with no decision is decided, or becomes a card (process.ts sweepUndecided).
     ["undecided", () => sweepUndecided()],
     // An email the reader could not read (a rate limit, a timeout) is read again with backoff (process.ts retryUnread).

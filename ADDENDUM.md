@@ -6,7 +6,7 @@
   below as findings and status.
 - Every step updates this file: its status line, its measurement, and what moved.
 
-**Last updated:** 27 October 2026, R8 DONE but e (S-0244 to S-0246): one booking finder for the planner and the TV; e waits on the owner's yes to a paid measurement. R3's switch-over waits on CRON_SECRET. The baseline was 0f2dcef. App code changed since then in these
+**Last updated:** 27 October 2026, R9 DONE (S-0247): a stopped write is finished or closed, never left. R8 DONE but e (S-0244 to S-0246); e waits on the owner's yes to a paid measurement. R3's switch-over waits on CRON_SECRET. The baseline was 0f2dcef. App code changed since then in these
 commits only:
 
 | commit | ticket | what |
@@ -28,6 +28,7 @@ commits only:
 | (R8.ab) | S-0244 | Prompt 4 steps a and b: app/lib/v2/identity, one ladder for the planner and the thread state; F11, F12, the F9 "covered" half, held item 7 |
 | (R8.c) | S-0245 | Prompt 4 step c: shifts by venue on multi-venue orders (F10), the near-miss hand-off (F9's strict half), held C1 |
 | (R8.d) | S-0246 | Prompt 4 step d: the TV verifier finds an unbound need's order by the planner's rule; the old engine's matcher is called by nothing |
+| (R9) | S-0247 | Prompt 6: v2/resume.ts resumes a write that stopped between or before operations after planning it again, or closes it with one result; any build (F38) |
 
 bd10dae (S-0213) moved the test suite onto PGlite. Line references below are at HEAD unless a line says "at 0f2dcef".
 
@@ -82,14 +83,14 @@ and §3 ends with the findings added after 23 Oct (F29 onward). §11 is the rebu
 | F23 model pick on the day alone | **DONE** S-0215 | same test |
 | F24 time change + crew total refused | **DONE** S-0239: a total written as one ("make it 8 crew") beside a time change is a second change; an added chief works the new times | test/v2EverydayRequests.ts [F24] |
 | F25 trade totals/reductions refused | **DONE** S-0239: a total or reduction sets or cancels the trade's one position; two such positions hand off. "Forkies" is a forklift | test/v2EverydayRequests.ts [F25] |
-| F26 failed reads / interrupted plans never recovered | **DONE for reads** S-0235 (retryUnread from the minute sync, after F29's in-call retry). **OPEN: resuming interrupted plans** (R9) | test/retryUnread.ts; process.ts retryUnread |
+| F26 failed reads / interrupted plans never recovered | **DONE for reads** S-0235 (retryUnread from the minute sync, after F29's in-call retry). **DONE for plans** S-0247 (v2/resume.ts) | test/retryUnread.ts; test/resumeStopped.ts |
 | F27 "yes, book that" is a card | policy: the owner ruled on 20 Oct that it hands off. An acceptance card is built and held (held item 6) | plan.ts |
 | F28 create read-back skips the venue | **DONE** S-0215 | run.ts createMismatches :124 |
 | 5.1 scoring | **DONE** S-0216, S-0217 (strict scorer, context forwarded, reason codes, four numbers). Extended 25-26 Oct by the real-mail harness (§4) | app/lib/v2/score.ts; harness/real/ |
 | 5.2 live trace | **OPEN** | process.ts:519, replan.ts:114 pass noTrace |
 | 5.3 one shared finder | **DONE but e** S-0244 to S-0246 (the planner, shifts, venues, the near miss, the TV verifier); e (the reader's list) held for a paid measurement | Prompt 4; map claude.ai/artifact/6VWRB2Ymd3pst5QTbdL4zG |
 | 5.4 faithful requests | **DONE** S-0239 (F24, F25, F8, "20-Nov" and held item 5's parser, schema check) | Prompt 5 |
-| 5.5 recover interrupted work | **PART:** F1 done; re-read DONE S-0235; resume open | Prompt 6 |
+| 5.5 recover interrupted work | **DONE:** F1; re-read S-0235; resume S-0247 | Prompt 6 |
 | 5.6 every request visible | **PART:** every need kept (S-0214); the Needs Reply lane is open | F41 |
 | 5.7 R number in our subjects | **OPEN**, test first | |
 | 5.8 assisted mode | **OPEN**, design after the numbers | Prompt 7 |
@@ -108,7 +109,9 @@ and §3 ends with the findings added after 23 Oct (F29 onward). §11 is the rebu
 | F44 schema at request time; preview on production's database | **DONE for the schema** S-0240: app/lib/migrations.ts, migrate() once per database, checked against production's schema. **OPEN: Preview's own branch** (needs access) | test/migrations.ts |
 | F45 the old engine is 40% of the app | **DONE** S-0241 to S-0243: 53 app files (14,624 lines) deleted, 122 of 226 test files with them; the 7 files v2 imports are app/lib/onsinch/ | test/automationPaused.ts; scripts as in Prompt 12 |
 | F48 a failed test file passed the gate | **DONE** S-0242 | test/exitCodeSurvivesPglite.ts |
-| F33, F38-F43, F46, F47 (added 26 Oct) | see §3, "Added 26 October" | |
+| F38 a deploy cancels a stopped write's retry | **DONE** S-0247: any build's stopped write is planned again and resumed or closed | test/resumeStopped.ts [5] |
+| F39 a part-way write raises no alarm | **DONE** S-0235 (systemFailureOf) and S-0247 (resume.ts closes each with one result, told to the owner) | test/resumeStopped.ts [3] [4] |
+| F33, F40-F43, F46, F47 (added 26 Oct) | see §3, "Added 26 October" | |
 
 ### Built and held (not deployed)
 Each held diff is mapped to the item it serves. They sit in `eval/patches/` and stack in this order on 305bf84. Applied
@@ -1232,7 +1235,21 @@ none are matched loosely.
 - a malformed extraction becomes one recorded handoff;
 - wrong writes on held-out mail stay at zero.
 
-### Prompt 6: recover interrupted work (5.5, F26, F38, F39)
+### Prompt 6: recover interrupted work (5.5, F26, F38, F39): **DONE**, S-0247
+**As run (S-0247):** app/lib/v2/resume.ts resumeStopped replaces process.ts retryStopped in the minute sync.
+- Three ways a write stops short: before the submit ("busy", or "blocked" by a passing fault: nothing sent); between
+  two operations (every result verified, fewer results than operations, no ledger row for the next, nothing moved for
+  10 minutes); inside one (a ledger row for the next operation and no result).
+- Inside one: never sent again; recorded "unknown", a person's, and the owner is told (F39).
+- The other two: the email is planned again from its stored reading against OnSinch now, with staff's edits and
+  today's settings (decideMessage with run: null, again: true). The rest runs only when that plan asks for exactly
+  the operations still to do; otherwise one "cancelled" result says why, and the owner is told. A day already over
+  closes it too.
+- F38: no build filter. A write stopped under an older build is planned again under the new one, never dropped.
+- Each decision ends in one final result; a second sweep does nothing (test/resumeStopped.ts, six fault-injected
+  cases on PGlite with the bot, ledger and planner injected). A model timeout is the re-read's (test/retryUnread.ts);
+  a capture that fails part-way keeps what it stored (test/noDataLoss.ts).
+- Writes are off (owner, 25 Oct), so this runs on nothing live until they are on.
 **Goal:** a model outage or an interrupted plan never leaves a permanent manual card when the work could safely finish.
 1. The bounded re-read ships in Prompt 9 (retryUnread).
 2. After an interruption, reconcile planned ops against the ledger. Resume only ops that definitely never started, and
@@ -1344,7 +1361,7 @@ Still to come from §10: the identity owner (R8), and the move of what the old e
 | R6 | **11** (new) | Govern the switches (F34). One migrations module (F44). A Preview branch when access exists | **DONE S-0240**; the branch waits on access |
 | R7 | **12** (new) | Retire the old engine in stages (F45, §10): move the shared OnSinch client and helpers to app/lib/onsinch/, delete what nothing live reaches, then pipeline/compiler/deps and the shut routes, then the 145 old tests | **DONE** S-0241 to S-0243 |
 | R8 | 4 | **One shared booking finder** (5.3), built once the old engine is gone, so there is one place for it. Brings in held C1 and item 7. **a to d DONE** S-0244 to S-0246; e held for the owner's yes to a paid measurement | yes |
-| R9 | 6 | Resume interrupted plans (F26, F38, F39) | yes |
+| R9 | 6 | Resume interrupted plans (F26, F38, F39). **DONE** S-0247 | yes |
 | R10 | **13** (new) | **The email-to-board harness** (the owner's design, below), then its case study | report + test |
 | R11 | 5.2, 5.7 | Live trace; R number in our subjects (test first) | yes; 5.7 needs the owner's yes for outbound mail |
 | R12 | TV | F41 Needs Reply lane, F42 aging, held items 6 and 8 | **owner and Paz** |

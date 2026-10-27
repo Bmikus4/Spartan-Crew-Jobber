@@ -21,7 +21,10 @@ const ok = (c: boolean, m: string, d = "") => { console.log(`  ${c ? "PASS" : "F
 
   const src = readFileSync("app/lib/v2/process.ts", "utf8");
   ok(!/testOnly: !v2Writes\(\)|execute: v2Writes\(\)|!v2Writes\(\)\) continue/.test(src), "no write path reads the server switch alone");
-  ok(/execute: await botWrites\(\)/.test(src) && /testOnly: !\(await botWrites\(\)\)/.test(src) && /testOnly: !writing/.test(src), "intake, the bot's runner and the minute retry all ask the master switch");
+  // The minute retry (resume.ts) runs nothing at all unless the master switch says yes.
+  const resume = readFileSync("app/lib/v2/resume.ts", "utf8");
+  ok(/execute: await botWrites\(\)/.test(src) && /testOnly: !\(await botWrites\(\)\)/.test(src) && /writes: \(\) => botWrites\(\)/.test(resume) && /if \(!\(await d0\.writes\(\)\)\) return/.test(resume),
+    "intake, the bot's runner and the minute retry all ask the master switch");
   ok(/\.catch\(\(\) => false\)/.test(src.slice(src.indexOf("export async function botWrites"), src.indexOf("export async function botWrites") + 400)), "a settings read that fails is off");
   const screen = readFileSync("app/components/SettingsScreen.tsx", "utf8");
   ok((screen.match(/label="Bot orders and updates"/g) ?? []).length === 1, "Settings shows the one master switch");
