@@ -5315,5 +5315,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0250",
+  "ts": "2026-10-27T23:14:45+00:00",
+  "kind": "measurement",
+  "headline": "R14: /api/mail-poll decides via v2 under INTAKE_PATH=routing, idle until the Gmail grant; R12 held",
+  "subject": "The Gmail poll decides through v2 when it is the live intake; dormant",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 110,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]

@@ -12,6 +12,7 @@ import { captureInboundRaw } from "./inboundRawDb";
 import { messagesFromPayload } from "./threadMessagesDb";
 import { reportError } from "./errorReport";
 import { automationPausedFlag } from "./paused";
+import { activeIntake, mayRunEngine } from "./intakePath";
 import type { decideDelivery, storeOnly } from "./v2/process";
 
 export interface InboundIO {
@@ -66,6 +67,9 @@ export async function handleInbound(request: Request, io: InboundIO = production
     }
     return Response.json({ ok: true, captured: cap.captured, engine: "v2", paused: true, stored_only: cap.new_message_ids.length });
   }
+  // The Gmail poll is the live intake (INTAKE_PATH=routing): stored here all the same, so a poll that fails
+  // loses nothing, and decided by the poll or, failing that, the undecided sweep (mail/pollIntake.ts).
+  if (!mayRunEngine("n8n")) return Response.json({ ok: true, captured: cap.captured, engine: "v2", stored: true, decided_by: activeIntake() });
   try {
     const r = await io.decide(cap.new_message_ids);
     return Response.json({ ok: true, captured: cap.captured, engine: "v2", decided: r.map((x) => ({ message_id: x.message_id, decision: x.decision?.kind ?? null, skipped: x.skipped ?? null })) });

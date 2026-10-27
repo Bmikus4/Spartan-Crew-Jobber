@@ -1,29 +1,19 @@
 // ============================================================================
-// WHICH DOOR THE ENGINE LISTENS AT.
+// WHICH INTAKE DECIDES.
 // ----------------------------------------------------------------------------
-// There are two intakes and they key a message differently: /api/n8n-inbound holds
-// Gmail's thread id, /api/mail-inbound rebuilds the thread from the RFC Message-ID. The
-// same enquiry arriving down both is two rows, two thread ids, two conversations — and
-// then two orders for one job.
+// Two intakes read the one mailbox: n8n's Gmail trigger posts each thread to /api/n8n-inbound,
+// and /api/mail-poll pulls it with the Gmail API (dormant until the domain-wide grant, addendum
+// R14). Both store a message under Gmail's own ids (test/oneConversationOneThreadId.ts), so
+// whichever stores first holds it and the other finds it held. Both always store. Only one
+// DECIDES: two deciders would race on one message, a model call each and a write each that only
+// the op ledger would catch. test/intakePath.ts pins that, for any value at all, exactly one
+// decides. Never both, never neither.
 //
-// CREDENTIAL-DURABILITY-PLAN §3b says cut over "in one change", but the two halves live
-// in different systems: the routing rule is a Google Workspace admin setting, the
-// trigger is an n8n workflow. Between the two clicks the system either double-runs or
-// does not run. Neither is acceptable at 16 orders a day — on 2026-09-16 three days of
-// live output had to be deleted, and 25 of those 39 were already duplicated by hand.
+//   INTAKE_PATH unset or "n8n"   n8n-inbound decides; the poll only stores    (today)
+//   INTAKE_PATH "routing"        the poll decides; n8n-inbound only stores    (after the grant)
 //
-// So the ordering is made irrelevant instead of being managed. This variable decides
-// which route may run the engine, and test/intakePath.ts pins the property that matters:
-// for any value at all, exactly one route is live. Never both, never neither.
-//
-// WHAT THAT BUYS, and it is the reason this exists rather than a runbook step: the
-// routing rule can be switched on EARLY and left in shadow mode. Real mail arrives, gets
-// stored, rebuilds real threads and feeds the intake watchdog — and runs nothing. You
-// watch it agree with the live path for as long as you want to, and only then flip. The
-// flip is one variable, it is atomic, there is no window, and it reverses in one edit.
-//
-//   INTAKE_PATH unset or "n8n"   the n8n Gmail trigger runs the engine   (today)
-//   INTAKE_PATH "routing"        /api/mail-inbound runs it, n8n is inert (after cutover)
+// The flip is one variable and reverses in one edit. While paused, neither decides and each
+// marks what it stored first as store-only.
 //
 // The default is deliberately TODAY'S WORLD. If the default were "routing", deploying
 // this file would itself be the cutover, performed by whoever merged it.

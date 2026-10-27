@@ -259,6 +259,15 @@ export async function oldestUndecidedAt(): Promise<number | null> {
 }
 
 /** Marks stored mail as never to be decided: what intake receives while the automation is paused (addendum F31). */
+/** Of these ids, the ones with no decision and no store-only mark: what the Gmail poll may still decide. */
+export async function undecidedOf(message_ids: string[]): Promise<string[]> {
+  if (!message_ids.length) return [];
+  const sql = await db();
+  return ((await sql`SELECT id FROM unnest(${message_ids}::text[]) AS id
+    WHERE NOT EXISTS (SELECT 1 FROM v2_decisions d WHERE d.message_id = id)
+      AND NOT EXISTS (SELECT 1 FROM v2_store_only s WHERE s.message_id = id)`) as any[]).map((r) => r.id);
+}
+
 export async function storeOnly(message_ids: string[], reason: string): Promise<void> {
   if (!message_ids.length) return;
   const sql = await db();

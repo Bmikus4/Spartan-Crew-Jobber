@@ -6,7 +6,7 @@
   below as findings and status.
 - Every step updates this file: its status line, its measurement, and what moved.
 
-**Last updated:** 27 October 2026, R11 DONE (S-0249): the live trace is on; 5.7 counted, its outbound change waits on the owner. R10 DONE (S-0248): the email-to-board harness and its 20-email case study. R9 DONE (S-0247). R8 DONE but e (S-0244 to S-0246); e waits on the owner's yes to a paid measurement. R3's switch-over waits on CRON_SECRET. The baseline was 0f2dcef. App code changed since then in these
+**Last updated:** 27 October 2026, R14 DONE, dormant (S-0250): the Gmail poll decides through v2 once the grant exists and INTAKE_PATH=routing. R12 held for the owner and Paz. R11 DONE (S-0249): the live trace is on; 5.7 counted, its outbound change waits on the owner. R10 DONE (S-0248): the email-to-board harness and its 20-email case study. R9 DONE (S-0247). R8 DONE but e (S-0244 to S-0246); e waits on the owner's yes to a paid measurement. R3's switch-over waits on CRON_SECRET. The baseline was 0f2dcef. App code changed since then in these
 commits only:
 
 | commit | ticket | what |
@@ -31,6 +31,7 @@ commits only:
 | (R9) | S-0247 | Prompt 6: v2/resume.ts resumes a write that stopped between or before operations after planning it again, or closes it with one result; any build (F38) |
 | (R10) | S-0248 | Prompt 13: harness/board (cases, gold, a subagent reader, stage attribution), eval/board/2026-10-27.md, test/boardCases.ts in the gate |
 | (R11) | S-0249 | 5.2: v2/traceLive.ts, v2_trace (migrations 085-087), intake and changed re-plans traced, 90-day prune in the minute sync; 5.7 counted |
+| (R14) | S-0250 | F43: /api/mail-poll decides through mail/pollIntake.ts; n8n-inbound stores only under INTAKE_PATH=routing; the middleware's shut list removed |
 
 bd10dae (S-0213) moved the test suite onto PGlite. Line references below are at HEAD unless a line says "at 0f2dcef".
 
@@ -754,7 +755,18 @@ hand-out (10 minutes); a signal that cannot be read counts as stale. Each raises
   - a passed day with an open need counts as a miss.
 - It needs the owner's and Paz's yes.
 
-**F43. The Gmail-API intake already written feeds only the old engine (Intake, medium).**
+**F43. The Gmail-API intake already written feeds only the old engine (Intake, medium). DONE, dormant, S-0250.**
+- **As built (R14):** the thread ids already matched: the poll stores Gmail's bare ids, as n8n does
+  (test/oneConversationOneThreadId.ts; 7,509 of the gold copy's 7,510 messages carry them, the other is test mail).
+  mail/pollIntake.ts settlePolled hands each thread's undecided client mail to decideDelivery, once per thread,
+  whichever intake stored it first. Paused, it marks what it stored store-only. In shadow it decides nothing.
+  n8n-inbound stores and decides nothing under INTAKE_PATH=routing. The middleware's shut list, which held
+  /api/mail-poll alone, is gone. Without GMAIL_SA_* the route still answers idle (test/mailPollIntake.ts).
+- **Switch-on:** the route's header lists it: grant, Gmail API, verify, env, a vercel.json cron for /api/mail-poll,
+  INTAKE_PATH=routing in the same deploy, then n8n's Gmail trigger off. A long shadow sends n8n's deliveries to the
+  undecided sweep, behind a card, because the poll stored their messages first.
+- **Still after the grant:** labels and alarms leave n8n (the labels workflow applies /api/bot/labels with n8n's
+  Gmail credential today).
 - mail-poll/route.ts calls handleThread.
 - **Fix:** call decideDelivery, keep the INTAKE_PATH interlock, and map Gmail's threadId to the stored thread id first.
   fad7c0f found that mail-poll would give every existing conversation a second thread id.
@@ -1383,9 +1395,9 @@ Still to come from §10: the identity owner (R8), and the move of what the old e
 | R9 | 6 | Resume interrupted plans (F26, F38, F39). **DONE** S-0247 | yes |
 | R10 | **13** (new) | **The email-to-board harness** (the owner's design, below), then its case study. **DONE** S-0248 | report + test |
 | R11 | 5.2, 5.7 | Live trace; R number in our subjects (test first). **DONE** S-0249; 5.7's change held for the owner | yes; 5.7 needs the owner's yes for outbound mail |
-| R12 | TV | F41 Needs Reply lane, F42 aging, held items 6 and 8 | **owner and Paz** |
+| R12 | TV | F41 Needs Reply lane, F42 aging, held items 6 and 8. **HELD 27 Oct:** nothing built; every piece changes what the TV shows, which needs the owner's and Paz's yes (§0 blocked item 4) | **owner and Paz** |
 | R13 | 7 | Assisted mode design, from R10's numbers | design |
-| R14 | | Mail intake through v2 (F43), live with the Gmail grant; then intake, labels and alarms leave n8n entirely | dormant until the grant |
+| R14 | | Mail intake through v2 (F43), live with the Gmail grant; then intake, labels and alarms leave n8n entirely. **DONE, dormant** S-0250; labels and alarms after the grant | dormant until the grant |
 | R15 | | **The V1 review:** a thorough review of the whole system (code cleanliness, what works and what doesn't, what to do next), by me and by an independent agent. Published and opened in the owner's browser | report |
 
 ### Prompt 9: stop losing work, part 2 (F26, F29, F30, F31, F35, F36): **DONE**, S-0235

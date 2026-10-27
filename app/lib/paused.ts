@@ -5,17 +5,10 @@
  * SPARTAN_PAUSED=1 stops the automation where it acts (automationPausedFlag): retries, the
  * undecided sweep, test-data clears, labels. It never shuts intake or its dedupe claim
  * (addendum F31): shut at the door, the 10-21 pause left 40 client emails unstored, beyond
- * intake's 72 h catch-up. Intake stores what arrives while paused and marks it store-only
- * (n8nInbound.ts), so nothing decides it, then or after (the owner's store-only ruling,
- * decisions/2026-10-25-pause-window-store-only.md). [DECISIONS O3]
+ * intake's 72 h catch-up. Both intakes store what arrives while paused and mark it store-only
+ * (n8nInbound.ts, mail/pollIntake.ts), so nothing decides it, then or after (the owner's store-only
+ * ruling, decisions/2026-10-25-pause-window-store-only.md). [DECISIONS O3]
  */
-
-/**
- * Routes that answer 503 whatever the switches say. /api/mail-poll is the Gmail-API intake: it
- * stores mail but decides none until R14 maps Gmail's thread ids to the stored ones (addendum F43),
- * and two intakes running at once would give every conversation a second thread.
- */
-export const SHUT_ROUTES = ["/api/mail-poll"];
 
 /**
  * SPARTAN_WRITES=live: the bot carries out the engine's decisions in OnSinch, for any client.
@@ -34,9 +27,4 @@ export function v2Writes(flag: string | undefined = process.env.SPARTAN_WRITES):
  */
 export function automationPausedFlag(flag: string | undefined = process.env.SPARTAN_PAUSED): boolean {
   return (flag || "").trim() === "1";
-}
-
-/** Whether the middleware answers 503 for this path before any auth or engine code runs. */
-export function automationPaused(pathname: string): boolean {
-  return SHUT_ROUTES.some((p) => pathname === p || pathname.startsWith(p + "/"));
 }

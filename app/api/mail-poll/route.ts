@@ -1,44 +1,27 @@
 export const runtime = "nodejs";
-export const maxDuration = 60;
+export const maxDuration = 300;
 
 // ============================================================================
-// THE PROJECT PULLS ITS OWN MAIL.
+// THE PROJECT PULLS ITS OWN MAIL (addendum R14, F43).
 // ----------------------------------------------------------------------------
-// Until now something else fetched the mail and pushed it in: n8n held a Gmail OAuth
-// credential, watched the mailbox, and POSTed threads to /api/n8n-inbound. That put the
-// one leg that must never fail outside the codebase, behind a credential a password
-// change revokes and a canvas nobody reviews.
+// n8n's Gmail trigger posts each thread to /api/n8n-inbound, which puts the one leg that must
+// never fail behind a credential a password change revokes and a canvas nobody reviews. This
+// route asks Gmail what is new since a cursor it owns, stores each message under Gmail's own ids
+// (the same ids n8n's intake stores: test/oneConversationOneThreadId.ts), and hands the client
+// mail to the v2 engine (mail/pollIntake.ts settlePolled). INTAKE_PATH says which intake decides
+// (intakePath.ts); a paused system stores and marks store-only.
 //
-// This route inverts it. A timer calls it, it asks Gmail what is new since a cursor it
-// owns, and it runs the engine itself. n8n is no longer a mail client — and once the
-// timers move to Vercel crons it is not needed at all.
-//
-// WHY THE ENGINE RUNS HERE RATHER THAN BEHIND ANOTHER HOP. /api/mail-inbound exists for
-// mail PUSHED by a provider webhook and rebuilds the thread from RFC headers because a
-// routing rule carries no thread id. We have Gmail's own `threadId`, which is
-// authoritative — measured, header threading splits 1 thread in 40 — so binding to it is
-// strictly better and there is nothing to gain from posting to ourselves over HTTP.
-//
-// SAFETY. Every message is stored BEFORE the engine sees it, the store dedupes on the
-// Gmail id and the RFC Message-ID, and the cursor advances only over a batch that
-// finished. Re-running this route is therefore free: the second pass finds everything already held and skips it.
-// The INTAKE_PATH interlock still governs whether the engine runs at all, so this can be
-// left polling in shadow — storing and threading, writing nothing to OnSinch — until it
-// is deliberately handed the engine.
+// SAFETY. Every message is stored BEFORE the engine sees it, the store dedupes on the Gmail id
+// and the RFC Message-ID, and the cursor advances only over a batch that finished. Re-running
+// this route is therefore free: the second pass finds everything already held, and decides only
+// what still has no decision.
 //
 // ----------------------------------------------------------------------------
-// DORMANT, 2026-09-17. NOT DEAD — BLOCKED ON ONE ADMIN GRANT.
+// DORMANT UNTIL ONE ADMIN GRANT.
 // ----------------------------------------------------------------------------
-// This whole path is built, tested and deployed, and it does nothing, because the
-// credential it needs cannot be created yet: domain-wide delegation must be granted by a
-// super-admin INSIDE spartancrew.co.uk, and a personal @gmail.com account cannot
-// administer that domain however much it owns the Cloud project. Until someone with a
-// @spartancrew.co.uk super-admin does it, n8n remains the intake and nothing here runs.
-//
-// It is gated by ABSENCE rather than by a switch, which is why nothing had to be
-// reverted: with GMAIL_SA_* unset, serviceAccountConfigured() is false, so this route
-// answers {idle:true}, deps.ts posts labels and drafts to the n8n webhooks exactly as
-// before, and gmailAuth falls back to the refresh token. There is no half-on state.
+// Domain-wide delegation must be granted by a super-admin INSIDE spartancrew.co.uk. It is gated
+// by ABSENCE: with GMAIL_SA_* unset, tokenSource() is not "service-account", so this route answers
+// {idle:true} and does nothing else. There is no half-on state.
 //
 // TO TURN IT ON, in this order:
 //   1. a @spartancrew.co.uk super-admin grants delegation for Client ID
@@ -48,17 +31,13 @@ export const maxDuration = 60;
 //        https://www.googleapis.com/auth/gmail.readonly,https://www.googleapis.com/auth/gmail.modify
 //   2. enable the Gmail API on the Cloud project (a separate click from the grant)
 //   3. npm run verify:gmail:sa   — proves read, impersonation and a real label change
-//   4. set GMAIL_SA_CLIENT_EMAIL, GMAIL_SA_PRIVATE_KEY, GMAIL_SUBJECT in Vercel
-//   5. restore vercel.json, which was REMOVED so these would not fire against the n8n
-//      workflows they duplicate — /api/health/intake is already driven by the Intake
-//      Watchdog, and two of each is worse than one:
-//        { "$schema": "https://openapi.vercel.sh/vercel.json",
-//          "crons": [ { "path": "/api/mail-poll",      "schedule": "*/2 * * * *"  },
-//                     { "path": "/api/health/intake",  "schedule": "*/15 * * * *" } ] }
-//      /api/reconcile stays on n8n's Reconciliation Sweep: a Vercel cron sends GET, and a
-//      GET of /api/reconcile is the DRY run, so a cron there would sweep daily and change nothing.
-//      and set CRON_SECRET, without which every cron 401s — fail-closed, deliberately.
-//   6. watch it in shadow, then INTAKE_PATH=routing to hand it the engine.
+//   4. set GMAIL_SA_CLIENT_EMAIL, GMAIL_SA_PRIVATE_KEY, GMAIL_SUBJECT in Vercel (CRON_SECRET too,
+//      without which every Vercel cron 401s)
+//   5. add { "path": "/api/mail-poll", "schedule": "*/2 * * * *" } to vercel.json's crons: a timer
+//      lives in the app, never in n8n
+//   6. INTAKE_PATH=routing in the same deploy, then turn off n8n's Gmail trigger. A long shadow
+//      (step 5 without 6) sends n8n's deliveries to the undecided sweep, behind a card, because
+//      the poll stored their messages first (pollIntake.ts).
 // ============================================================================
 
 import { authorizeCronCall } from "../../lib/apiAuth";
@@ -69,17 +48,20 @@ import { readCursor, writeCursor, touchRun, unseenIds, markSeen } from "../../li
 import { BOOKINGS_MAILBOX, tokenSource } from "../../lib/mail/gmailAuth";
 import { storeMessage, rowFromGmail } from "../../lib/threadMessagesDb";
 import { captureInboundRaw } from "../../lib/inboundRawDb";
-import { activeIntake, mayRunEngine } from "../../lib/intakePath";
+import { activeIntake } from "../../lib/intakePath";
+import { settlePolled, type Polled } from "../../lib/mail/pollIntake";
 import { reportError } from "../../lib/errorReport";
 
 /**
  * How many messages one tick will take.
  *
- * Bounded by the 60s function ceiling, not by politeness: each message is a Gmail read
+ * Bounded by the function ceiling, not by politeness: each message is a Gmail read
  * plus, for a client message, a model call and possibly an OnSinch write. A backlog
  * drains a batch per tick because the seen-set records progress — see cursorDb.
  */
 const BATCH = Math.max(1, Number(process.env.MAIL_POLL_BATCH || 20));
+/** Decisions stop here, 60 s inside maxDuration; a thread not reached is the undecided sweep's. */
+const DECIDE_FOR_MS = 240_000;
 
 async function poll(): Promise<Response> {
   const mailbox = BOOKINGS_MAILBOX;
@@ -119,6 +101,7 @@ async function poll(): Promise<Response> {
 
     const handled: string[] = [];
     const results: Array<{ id: string; thread: string; engine: string }> = [];
+    const polled: Polled[] = [];
 
     for (const id of batch) {
       const msg = await getRawMessage(get, id);
@@ -141,22 +124,19 @@ async function poll(): Promise<Response> {
       // failure on one thread must not make the poller re-read it every minute forever.
       handled.push(id);
 
-      if (!stored.inserted) { results.push({ id, thread: threadId, engine: "already held" }); continue; }
       // Our own replies are stored for continuity and never answered — the engine reads
       // the newest message, and the newest being ours would have it answer itself.
       if (isFromSpartan) { results.push({ id, thread: threadId, engine: "outbound" }); continue; }
-      if (!mayRunEngine("routing")) { results.push({ id, thread: threadId, engine: `shadow (INTAKE_PATH=${activeIntake()})` }); continue; }
-
-      // STORED, NOT DECIDED. The old engine's pipeline this called is gone (addendum Prompt 12), and the
-      // v2 engine decides only once Gmail's threadId maps to the thread id n8n's intake stored: without
-      // that every conversation would get a second thread (fad7c0f). That is R14 (addendum F43).
-      results.push({ id, thread: threadId, engine: "stored; the v2 decision waits on R14 (F43)" });
+      // Held already (n8n's intake stored it first) still goes on: settlePolled decides it if nothing has.
+      polled.push({ message_id: row.message_id, thread_id: threadId, inserted: stored.inserted });
     }
 
     await markSeen(mailbox, handled);
-    // THE CURSOR MOVES LAST, and only over a batch that finished. Truncated means the
+    // THE CURSOR MOVES before the decisions, and only over a batch that finished: what is stored is
+    // safe, and a decision this tick does not reach is the undecided sweep's. Truncated means the
     // backlog is still draining, so it stays where it is and the next tick continues.
     if (!truncated) await writeCursor(mailbox, found.nextCursor, handled.length);
+    const decided = await settlePolled(polled, undefined, { deadline: started + DECIDE_FOR_MS });
 
     return Response.json({
       ok: true,
@@ -172,6 +152,7 @@ async function poll(): Promise<Response> {
       intake_path: activeIntake(),
       ms: Date.now() - started,
       results,
+      decided,
     });
   } catch (err) {
     void reportError({

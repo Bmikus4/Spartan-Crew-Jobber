@@ -7,7 +7,9 @@ every step update its status line, its §0 table and any measurement.**
 ## The live pipeline
 1. **Intake.** n8n posts each thread to `/api/n8n-inbound`: `app/lib/n8nInbound.ts` stores it first
    (`app/lib/inboundRawDb.ts`, `app/lib/threadMessagesDb.ts`), then `decideDelivery` (`app/lib/v2/process.ts`).
-   While paused, it stores and marks the mail store-only, and nothing decides it.
+   While paused, it stores and marks the mail store-only, and nothing decides it. `/api/mail-poll` pulls the same
+   mail with the Gmail API (`app/lib/mail/pollIntake.ts`), dormant until the Gmail grant; `INTAKE_PATH`
+   (`app/lib/intakePath.ts`) says which of the two decides.
 2. **Read.** One model call: `app/lib/v2/interpret/extract.ts` (openai/gpt-6.1-sol, `SPARTAN_INTERPRET_MODEL`;
    PROMPT_ID is the prompt's hash). The context the reader sees: `interpret/context.ts`.
 3. **Ground.** Every value must be in the email's words: `interpret/interpret.ts`, `interpret/ground.ts`.

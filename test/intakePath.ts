@@ -1,23 +1,14 @@
 // ============================================================================
 // EXACTLY ONE INTAKE MAY RUN THE ENGINE. Not both, and not neither.
 // ----------------------------------------------------------------------------
-// The two intakes key a message differently — Gmail's id in /api/n8n-inbound, the RFC
-// Message-ID in /api/mail-inbound — so the same enquiry arriving down both paths is two
-// rows, two thread ids and two conversations, which becomes two orders for one job.
+// /api/n8n-inbound and the Gmail poll (/api/mail-poll) both store every message; two that
+// both decided would race on one message, a model call and a write each (app/lib/intakePath.ts).
+// On 2026-09-16 three days of live output had to be deleted, 25 of the 39 already duplicated
+// by hand: that is what two deciders produce, at 16 orders a day.
 //
-// CREDENTIAL-DURABILITY-PLAN §3b says to cut over "in one change". Nothing can be one
-// change here: the Workspace routing rule lives in Google's admin console and the n8n
-// trigger lives in n8n, and between the two clicks the system is either double-running
-// or not running at all. On 2026-09-16 the engine's three days of live output had to be
-// deleted, 25 of the 39 already duplicated by hand — that is what the double-running
-// window produces, at 16 orders a day.
-//
-// So the window is closed in code instead of in a runbook. One env var decides which
-// door is live, and this file asserts the property that makes the ordering irrelevant:
-// for ANY value of INTAKE_PATH, including nonsense, exactly one route may run the
-// engine. The routing rule can then be switched on early and left in SHADOW MODE —
-// storing real mail, rebuilding real threads, feeding the watchdog, running nothing —
-// for as long as it takes to believe it. The flip is one variable, atomic, reversible.
+// One env var decides which intake is live, and this file asserts the property that makes
+// the switch-over safe: for ANY value of INTAKE_PATH, including nonsense, exactly one route
+// may run the engine. The flip is one variable, atomic, reversible.
 //
 // Offline, no network, no database.  npx tsx test/intakePath.ts
 // ============================================================================
@@ -34,14 +25,14 @@ console.log("\n[1] unset is TODAY's behaviour — this ships long before the cut
   // The default has to be the world as it is, or deploying the interlock IS the cutover.
   ok(activeIntake({}) === "n8n", "no INTAKE_PATH means the n8n path", activeIntake({}));
   ok(mayRunEngine("n8n", {}) === true, "n8n-inbound runs the engine");
-  ok(mayRunEngine("routing", {}) === false, "mail-inbound stores but does not");
+  ok(mayRunEngine("routing", {}) === false, "the Gmail poll stores but does not");
 }
 
 console.log("\n[2] the flip, which is the whole cutover");
 {
   const env = { INTAKE_PATH: "routing" };
   ok(activeIntake(env) === "routing", "INTAKE_PATH=routing moves the engine");
-  ok(mayRunEngine("routing", env) === true, "mail-inbound now runs it");
+  ok(mayRunEngine("routing", env) === true, "the Gmail poll now runs it");
   ok(mayRunEngine("n8n", env) === false, "and n8n-inbound stops, whether or not n8n is still firing");
 }
 

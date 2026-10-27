@@ -3,7 +3,6 @@ import { NextRequest, NextResponse } from "next/server";
 import type { SessionData } from "./app/lib/session";
 import { sessionOptions } from "./app/lib/session";
 import { safeEqual } from "./app/lib/safeEqual";
-import { automationPaused } from "./app/lib/paused";
 
 // Gate /api/* behind a logged-in iron-session. Pages render the login screen
 // client-side; every data/action call goes through /api/*, so gating the API
@@ -44,8 +43,6 @@ const SKIP = ["/api/auth", "/api/bot", "/api/n8n-inbound", "/api/mail-poll", "/a
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
   if (!pathname.startsWith("/api/")) return NextResponse.next();
-  // Before the auth switch below, which is off by default: a pause must hold whatever AUTH_REQUIRED says.
-  if (automationPaused(pathname)) return NextResponse.json({ ok: false, paused: true, error: "this route is shut (app/lib/paused.ts SHUT_ROUTES)" }, { status: 503 });
   /**
    * A PREVIEW IS NEVER A PLACE TO BE OPEN, WHATEVER THE SWITCH SAYS.
    *

@@ -17,7 +17,6 @@ delete process.env.INTAKE_PATH;
 const { handleInbound, productionInboundIO } = require("../app/lib/n8nInbound.ts");
 const { captureInboundRaw } = require("../app/lib/inboundRawDb.ts");
 const { sweepUndecided } = require("../app/lib/v2/process.ts");
-const { automationPaused } = require("../app/lib/paused.ts");
 
 let fails = 0;
 const ok = (c: boolean, m: string, d?: unknown) => { console.log(`  ${c ? "PASS" : "FAIL"}  ${m}${c ? "" : "  " + JSON.stringify(d)}`); if (!c) fails++; };
@@ -29,12 +28,7 @@ const post = (body: unknown) => new Request("http://localhost/api/n8n-inbound", 
 const at = async (ms: number) => { clock.set(ms); await syncSqlClock(); };
 
 (async () => {
-  console.log("\n[door] a pause leaves intake and its dedupe claim open");
-  process.env.SPARTAN_PAUSED = "1";
-  ok(!automationPaused("/api/n8n-inbound") && !automationPaused("/api/dedupe"), "intake and dedupe answer while paused");
-  ok(automationPaused("/api/mail-poll"), "control: the middleware still shuts the route it lists");
-  delete process.env.SPARTAN_PAUSED;
-
+  // The door: no route is shut while paused (test/automationPaused.ts [1]).
   console.log("\n[paused] the delivery is stored and marked, and nothing decides it");
   await at(T0);
   const decided: string[][] = [];
