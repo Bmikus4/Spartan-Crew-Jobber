@@ -19,7 +19,7 @@
 // The TV and the labels read this, so they cannot disagree with each other or with OnSinch.
 // ============================================================================
 import { evidenceMatch, wantOf, BOT_USER } from "./evidence";
-import { CONSUMER_DOMAINS, domainOfEmail, type CompanyRec } from "../engine/resolve";
+import { CONSUMER_DOMAINS, domainOfEmail, type CompanyRec } from "../onsinch/resolve";
 
 export type ThreadMsg = { message_id: string; from: string; to: string[]; at: number; subject: string; body: string; ours: boolean };
 export type Grounded = { date?: string; start?: string; crew?: number; place_id?: number; venue?: string; target?: { date?: string; start?: string } };

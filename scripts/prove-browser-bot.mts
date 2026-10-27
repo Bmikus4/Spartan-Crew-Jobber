@@ -15,7 +15,7 @@
 // Writes .tmp-data/browser-proof.json (the evidence, step by step) and prints the table.
 // ============================================================================
 import { writeFileSync, mkdirSync } from "node:fs";
-import { httpTransport } from "../app/lib/engine/onsinch";
+import { httpTransport } from "../app/lib/onsinch/onsinch";
 import { plan, type World } from "../app/lib/v2/interpret/plan";
 import type { Interpretation, Request } from "../app/lib/v2/interpret/interpret";
 import { onsinchWorld } from "../app/lib/v2/process";

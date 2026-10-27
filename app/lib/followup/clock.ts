@@ -34,8 +34,8 @@
 // draft of ours would read as Spartan having answered and would silently turn "the
 // client is waiting on us" into "we are waiting on the client".
 // ============================================================================
-import { isMachineMessage } from "../engine/normalize";
-import type { ThreadMessage } from "../engine/types";
+import { isMachineMessage } from "../onsinch/normalize";
+import type { ThreadMessage } from "../onsinch/types";
 import { outstandingAsk } from "./compose";
 
 /**

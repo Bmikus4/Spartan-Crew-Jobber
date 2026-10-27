@@ -26,7 +26,7 @@
 import { readFileSync } from "node:fs";
 import { readHelpStream, trimHistory, MAX_HELP_TURNS, MAX_HELP_CHARS } from "../app/lib/help/stream";
 import { liveState } from "../app/lib/help/liveState";
-import { DEFAULT_SETTINGS } from "../app/lib/engine/types";
+import { DEFAULT_SETTINGS } from "../app/lib/onsinch/types";
 
 let fails = 0;
 const ok = (cond: boolean, label: string, extra = "") => {

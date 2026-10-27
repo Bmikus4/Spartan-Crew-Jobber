@@ -24,7 +24,7 @@
 //
 // Run: npx tsx test/companyMatch.ts
 // ============================================================================
-import { matchCompany, matchCompanyByDomain, matchCompanyBySender, type CompanyRec } from "../app/lib/engine/resolve";
+import { matchCompany, matchCompanyByDomain, matchCompanyBySender, type CompanyRec } from "../app/lib/onsinch/resolve";
 
 let fails = 0;
 const ok = (cond: boolean, label: string, extra = "") => {

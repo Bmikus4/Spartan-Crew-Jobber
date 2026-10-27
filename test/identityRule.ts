@@ -14,8 +14,8 @@
 //
 // Run: npx tsx test/identityRule.ts
 // ============================================================================
-import { matchExistingOrder, rNumbersIn, type OrderRec } from "../app/lib/engine/resolve";
-import type { PlaceCandidate } from "../app/lib/engine/types";
+import { matchExistingOrder, rNumbersIn, type OrderRec } from "../app/lib/onsinch/resolve";
+import type { PlaceCandidate } from "../app/lib/onsinch/types";
 
 let fails = 0;
 const ok = (cond: boolean, label: string, extra = "") => {

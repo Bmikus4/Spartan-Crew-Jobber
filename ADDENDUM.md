@@ -6,7 +6,7 @@
   below as findings and status.
 - Every step updates this file: its status line, its measurement, and what moved.
 
-**Last updated:** 27 October 2026, R7 stages 3 and 4 shipped (S-0242): the old engine is deleted. R3's switch-over waits on CRON_SECRET. The baseline was 0f2dcef. App code changed since then in these
+**Last updated:** 27 October 2026, R7 DONE (S-0243): the old engine is deleted, and what v2 kept is app/lib/onsinch/. R3's switch-over waits on CRON_SECRET. The baseline was 0f2dcef. App code changed since then in these
 commits only:
 
 | commit | ticket | what |
@@ -24,6 +24,7 @@ commits only:
 | (R6) | S-0240 | Prompt 11: the write and reply switches are an admin's, kept and reported; one migrations module |
 | (R7.2) | S-0241 | Prompt 12 stage 2: the 12 files nothing reaches, deleted with the tests and scripts that existed only for them |
 | (R7.3) | S-0242 | Prompt 12 stages 3 and 4: the old engine, its routes and SPARTAN_ENGINE deleted with their tests; a failed test file can no longer exit 0 (F48) |
+| (R7.1) | S-0243 | Prompt 12 stage 1: app/lib/engine renamed app/lib/onsinch; imports only |
 
 bd10dae (S-0213) moved the test suite onto PGlite. Line references below are at HEAD unless a line says "at 0f2dcef".
 
@@ -102,7 +103,7 @@ and §3 ends with the findings added after 23 Oct (F29 onward). §11 is the rebu
 | F37 the sync reports success whatever happened | **DONE for the sync** S-0237 (ok only when every step succeeded, 500 otherwise). Labels still count as applied when handed out | test/cronEntryPoints.ts |
 | F34 any staff member flips the switches | **DONE** S-0240: admin only (DECISIONS A1), a settings_history row per change, a settings-changed alert to the owner | test/settingsSwitchesGoverned.ts |
 | F44 schema at request time; preview on production's database | **DONE for the schema** S-0240: app/lib/migrations.ts, migrate() once per database, checked against production's schema. **OPEN: Preview's own branch** (needs access) | test/migrations.ts |
-| F45 the old engine is 40% of the app | **DONE except the move** S-0241, S-0242: 53 app files (14,624 lines) deleted, 122 of 226 test files with them; app/lib/engine keeps the 7 files v2 imports, which move to app/lib/onsinch/ last (R7 stage 1) | test/automationPaused.ts; scripts as in Prompt 12 |
+| F45 the old engine is 40% of the app | **DONE** S-0241 to S-0243: 53 app files (14,624 lines) deleted, 122 of 226 test files with them; the 7 files v2 imports are app/lib/onsinch/ | test/automationPaused.ts; scripts as in Prompt 12 |
 | F48 a failed test file passed the gate | **DONE** S-0242 | test/exitCodeSurvivesPglite.ts |
 | F33, F38-F43, F46, F47 (added 26 Oct) | see §3, "Added 26 October" | |
 
@@ -1284,7 +1285,7 @@ Still to come from §10: the identity owner (R8), and the move of what the old e
 | R4 | 0 | Size the findings, read-only | **DONE S-0238** (§7) |
 | R5 | 5 + 5.10 | Everyday requests (F8, F24, F25, dates, schema validation) and the small fixes (F13, F14, F18, op key, run.ts:5, README). Re-cut held item 5 and n2-planner-ops | **DONE S-0239** |
 | R6 | **11** (new) | Govern the switches (F34). One migrations module (F44). A Preview branch when access exists | **DONE S-0240**; the branch waits on access |
-| R7 | **12** (new) | Retire the old engine in stages (F45, §10): move the shared OnSinch client and helpers to app/lib/onsinch/, delete what nothing live reaches, then pipeline/compiler/deps and the shut routes, then the 145 old tests | **Stages 2, 3 and 4 DONE** S-0241, S-0242; stage 1 (the move to app/lib/onsinch/) open |
+| R7 | **12** (new) | Retire the old engine in stages (F45, §10): move the shared OnSinch client and helpers to app/lib/onsinch/, delete what nothing live reaches, then pipeline/compiler/deps and the shut routes, then the 145 old tests | **DONE** S-0241 to S-0243 |
 | R8 | 4 | **One shared booking finder** (5.3), built once the old engine is gone, so there is one place for it. Brings in held C1 and item 7 | yes |
 | R9 | 6 | Resume interrupted plans (F26, F38, F39) | yes |
 | R10 | **13** (new) | **The email-to-board harness** (the owner's design, below), then its case study | report + test |
@@ -1393,7 +1394,14 @@ files that load .env.local now import ./fixtures/pg first. Run a single test as
 - the alert fires;
 - both migration tests pass.
 
-### Prompt 12: retire the old engine (F45): **stages 2, 3 and 4 DONE**, S-0241, S-0242; stage 1 open
+### Prompt 12: retire the old engine (F45): **DONE**, S-0241 to S-0243
+**As run, stage 1 (S-0243):** one rename, app/lib/engine to app/lib/onsinch, as the re-sequencing said. 117 relative
+imports in 87 files rewritten by resolving each one, and the docs that are instructions (CLAUDE.md, README, the folder's
+README) follow; dated plans keep the old path as history. Only import paths and path mentions changed. tsc clean; the import walk leaves
+only app/manifest.ts; the dev-2 replay is unchanged (22 writes: 11 completed, 2 partial, 9 wrong). Production after
+S-0242: the deploy went live at 21:55:51Z, and the minute sync and labels after it recorded ok (21:56:57Z).
+**Done when** is met: app/lib/engine is gone, and the harness and the suite agree that nothing live changed.
+
 **As run, stages 3 and 4 together (S-0242).** A test of a deleted file cannot stay, so the two went as one.
 - **The old engine's routes and switch:** /api/confirm-order, /api/reconcile, /api/sweep-ingest and /api/mail-inbound,
   with routes/confirmOrder.ts and routes/reconcile.ts. SPARTAN_ENGINE is read by nothing: paused.ts keeps

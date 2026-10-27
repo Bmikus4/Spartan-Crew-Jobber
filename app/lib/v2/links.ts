@@ -18,7 +18,7 @@
 // that stopped before anything was sent.
 // ============================================================================
 import type { NeonQueryFunction } from "@neondatabase/serverless";
-import { httpTransport } from "../engine/onsinch";
+import { httpTransport } from "../onsinch/onsinch";
 import { readRows } from "./read";
 import { ensureSchema } from "../migrations";
 

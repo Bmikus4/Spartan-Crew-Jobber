@@ -19,7 +19,7 @@
 // Progress: .tmp-data/vercel-bot-100.jsonl (one line per job). Result: .tmp-data/vercel-bot-100.json
 // ============================================================================
 import { appendFileSync, existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
-import { httpTransport } from "../app/lib/engine/onsinch";
+import { httpTransport } from "../app/lib/onsinch/onsinch";
 import { plan, type World } from "../app/lib/v2/interpret/plan";
 import type { Interpretation, Request } from "../app/lib/v2/interpret/interpret";
 import { onsinchWorld } from "../app/lib/v2/process";

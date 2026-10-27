@@ -1,5 +1,5 @@
 import fs from "node:fs";
-import { rNumbersIn } from "../../../app/lib/engine/resolve.ts";
+import { rNumbersIn } from "../../../app/lib/onsinch/resolve.ts";
 const J = (p: string) => JSON.parse(fs.readFileSync(p, "utf8"));
 const list: string[] = J(".tmp-v2/reads/none-inquiries.json").none_not_client;
 const msgs: any[] = J(".tmp-data/gold/messages.json");

@@ -11,7 +11,7 @@
 // verifier, so the dashboard and the TV can never disagree about what is open.
 // ============================================================================
 import type { NeonQueryFunction } from "@neondatabase/serverless";
-import type { MetricEvent } from "../engine/metrics";
+import type { MetricEvent } from "../onsinch/metrics";
 import type { TicketStateCounts } from "../ticketsDb";
 import { V2_FROM, liveFeedDeps } from "../feed/live";
 import { project, FEED_FROM } from "../feed/project";

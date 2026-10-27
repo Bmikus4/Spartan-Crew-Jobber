@@ -23,7 +23,7 @@
 //   npx tsx scripts/verify-mail-inbound-engine.ts --write [base-url]
 // ============================================================================
 import { neon } from "@neondatabase/serverless";
-import { OnsinchClient, httpTransport } from "../app/lib/engine/onsinch";
+import { OnsinchClient, httpTransport } from "../app/lib/onsinch/onsinch";
 import { loadEnv, requireEnv, onsinchBase } from "./_env.mjs";
 
 loadEnv();

@@ -1,7 +1,7 @@
 // For the 26 no-reply requests: resolve a company by the production sender rule, then look for a staff
 // act on that company's orders within 72 h whose order has a shift on a day the readers named. Counts and ids only.
 import fs from "node:fs";
-import { matchCompanyBySender } from "../../../app/lib/engine/resolve.ts";
+import { matchCompanyBySender } from "../../../app/lib/onsinch/resolve.ts";
 const J = (p: string) => JSON.parse(fs.readFileSync(p, "utf8"));
 const list: string[] = J(".tmp-v2/reads/none-inquiries.json").none_not_client;
 const msgs = new Map(J(".tmp-data/gold/messages.json").map((m: any) => [m.message_id, m]));

@@ -36,7 +36,7 @@
 // rules above, so a body this accepts is not proof the real tenant would. Every
 // claim in the report that rests on "OnSinch accepted it" is marked as such.
 // ============================================================================
-import type { Transport } from "../app/lib/engine/onsinch";
+import type { Transport } from "../app/lib/onsinch/onsinch";
 
 export interface CompanyRow {
   id: number;

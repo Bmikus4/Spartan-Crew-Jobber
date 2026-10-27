@@ -22,9 +22,9 @@
 // the engine wrote, so it would turn every check green the moment it appeared. That is
 // why (c) counts only blocks whose creator is not the engine.
 // ============================================================================
-import { OnsinchClient, type Transport } from "../engine/onsinch";
-import { matchExistingOrder, type OrderRec } from "../engine/resolve";
-import { staffChangeSince } from "../engine/reconcile";
+import { OnsinchClient, type Transport } from "../onsinch/onsinch";
+import { matchExistingOrder, type OrderRec } from "../onsinch/resolve";
+import { staffChangeSince } from "../onsinch/reconcile";
 import { londonDay, type FeedCard, type FeedItem, type FeedMark, type FeedWant } from "./project";
 
 /** Once a minute since the bot writes for real (Ben, 2026-10-10: "synced there more often"). One round reads 1-2 timeline pages. [DECISIONS V35] */

@@ -14,8 +14,8 @@
 //
 // Run: npx tsx scripts/venue-duplicates.ts [topN]
 // ============================================================================
-import { matchPlace, placeContext, normAddr } from "../app/lib/engine/resolve";
-import type { PlaceCandidate } from "../app/lib/engine/types";
+import { matchPlace, placeContext, normAddr } from "../app/lib/onsinch/resolve";
+import type { PlaceCandidate } from "../app/lib/onsinch/types";
 import { readFileSync } from "node:fs";
 
 const TOP = Number(process.argv[2] || 10);

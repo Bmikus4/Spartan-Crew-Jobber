@@ -26,7 +26,7 @@
 //   npx tsx scripts/probe-onsinch-clock.ts [--keep]
 // ============================================================================
 import { writeFileSync, mkdirSync, readFileSync } from "node:fs";
-import { OnsinchClient, httpTransport } from "../app/lib/engine/onsinch";
+import { OnsinchClient, httpTransport } from "../app/lib/onsinch/onsinch";
 
 const KEEP = process.argv.includes("--keep");
 const TEST_COMPANY = 515;

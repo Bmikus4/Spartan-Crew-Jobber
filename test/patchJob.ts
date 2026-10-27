@@ -19,7 +19,7 @@
 //
 // Run: npx tsx test/patchJob.ts
 // ============================================================================
-import { OnsinchClient, type Transport } from "../app/lib/engine/onsinch";
+import { OnsinchClient, type Transport } from "../app/lib/onsinch/onsinch";
 
 let fails = 0;
 const ok = (cond: boolean, label: string, extra = "") => {

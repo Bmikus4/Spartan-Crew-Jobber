@@ -17,7 +17,7 @@ import { checkContract, type Contract, type Verdict } from "./contract";
 import { openNode, openCreateForm, harvestFields } from "./builder";
 import { openBot, versionSignals, BASE, activeRole, AGENCY_ROLE_LABEL } from "./session";
 import { WIZARD_HOOKS } from "./wizard";
-import { httpTransport, OnsinchClient } from "../../engine/onsinch";
+import { httpTransport, OnsinchClient } from "../../onsinch/onsinch";
 import { shiftWindow } from "./ops";
 import { readRows } from "../read";
 

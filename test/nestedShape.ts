@@ -10,7 +10,7 @@
 // Offline.  npx tsx test/nestedShape.ts
 // ============================================================================
 import { readFileSync } from "node:fs";
-import { nestedShape, compareShapes, type LiveShape } from "../app/lib/engine/reconcile";
+import { nestedShape, compareShapes, type LiveShape } from "../app/lib/onsinch/reconcile";
 
 let fails = 0;
 const ok = (cond: boolean, label: string, extra = "") => {

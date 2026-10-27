@@ -10,7 +10,7 @@
 // Anything else is stored in inbound_raw and never reaches the pipeline. This
 // node builds that contract from the Gmail data already in the branch.
 //
-// Bodies are handed over RAW and uncleaned on purpose: app/lib/engine/normalize.ts
+// Bodies are handed over RAW and uncleaned on purpose: app/lib/onsinch/normalize.ts
 // is a faithful port of the workflow's own cleaner and runs on our side, so
 // cleaning here would only give us two cleaners to keep in step.
 //

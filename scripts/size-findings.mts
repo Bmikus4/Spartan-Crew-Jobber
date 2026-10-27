@@ -10,7 +10,7 @@
 // ============================================================================
 import { readFileSync } from "node:fs";
 import { readOnlySql, proveReadOnly } from "./_readonly.mts";
-import { httpTransport, OnsinchClient } from "../app/lib/engine/onsinch";
+import { httpTransport, OnsinchClient } from "../app/lib/onsinch/onsinch";
 import { readRows } from "../app/lib/v2/read";
 import { codeOfReason } from "../app/lib/v2/reasons";
 

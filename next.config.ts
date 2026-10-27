@@ -1,7 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  // The engine lives in app/lib/engine and is pure TS; nothing special needed.
+  // The engine lives in app/lib/v2 and is pure TS; nothing special needed.
   reactStrictMode: true,
   // The bot's Chromium ships as brotli packs that a bundler cannot follow; both stay external,
   // and the packs are traced by hand into every route that drives the browser: the bot routes,

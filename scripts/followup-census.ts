@@ -15,7 +15,7 @@
 // ============================================================================
 import { sql } from "./_q.mjs";
 import { waitingPeriod, isOverdue, isDormant, DORMANT_AFTER_DAYS, type WaitingPeriod } from "../app/lib/followup/clock";
-import type { ThreadMessage } from "../app/lib/engine/types";
+import type { ThreadMessage } from "../app/lib/onsinch/types";
 
 const PAUSE = new Date("2026-09-18T13:33:00.000Z");
 const NOW = new Date();

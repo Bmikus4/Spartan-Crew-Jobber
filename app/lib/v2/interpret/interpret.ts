@@ -6,7 +6,7 @@
 import type { Extraction, Grounded, RawRequest } from "./extract";
 import { addMinutes, amountIn, countsIn, datesIn, durationsIn, londonDay, norm, oneIn, parseCount, parseDate, parseDuration, parseNewDate, parseTime, poAfterLabel, quoteIn, subjectDate, timesIn } from "./ground";
 import { quotable, type Booking, type BookingShift, type ReadContext } from "./context";
-import { rNumbersIn } from "../../engine/resolve";
+import { rNumbersIn } from "../../onsinch/resolve";
 
 /** What the client's own words say about which booked shift is meant. */
 type PickWords = { days: Set<string>; starts: Set<string>; crew?: number; venueIn: (venue: string) => boolean };

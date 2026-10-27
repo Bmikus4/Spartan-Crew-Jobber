@@ -8,7 +8,7 @@
 import { readFileSync } from "node:fs";
 import { applyCheck, type CheckStore } from "../app/lib/feed/check";
 import { project, type FeedMark } from "../app/lib/feed/project";
-import type { ConversationState } from "../app/lib/engine/types";
+import type { ConversationState } from "../app/lib/onsinch/types";
 import { fromStates } from "./fixtures/stateSource";
 
 let fails = 0;

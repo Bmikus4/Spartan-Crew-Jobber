@@ -17,7 +17,7 @@
 // ============================================================================
 import { neon } from "@neondatabase/serverless";
 import { mkdirSync, writeFileSync } from "node:fs";
-import { httpTransport } from "../../app/lib/engine/onsinch";
+import { httpTransport } from "../../app/lib/onsinch/onsinch";
 import { readPage, readRows } from "../../app/lib/v2/read";
 
 const arg = (k: string, d: string) => { const i = process.argv.indexOf(k); return i > 0 ? process.argv[i + 1] : d; };

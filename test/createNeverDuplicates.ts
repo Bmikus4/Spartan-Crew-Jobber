@@ -22,8 +22,8 @@
 //
 // Run: npx tsx test/createNeverDuplicates.ts
 // ============================================================================
-import { OnsinchClient, httpTransport, type Transport } from "../app/lib/engine/onsinch";
-import type { OnsinchOrderBody } from "../app/lib/engine/format";
+import { OnsinchClient, httpTransport, type Transport } from "../app/lib/onsinch/onsinch";
+import type { OnsinchOrderBody } from "../app/lib/onsinch/format";
 
 let fails = 0;
 const ok = (cond: boolean, label: string, extra = "") => {

@@ -22,7 +22,7 @@
 //   npx tsx scripts/amendment-arrival.ts
 // ============================================================================
 import { neon } from "@neondatabase/serverless";
-import type { ConversationState } from "../app/lib/engine/types";
+import type { ConversationState } from "../app/lib/onsinch/types";
 import { loadEnv, requireEnv } from "./_env.mjs";
 
 loadEnv();

@@ -93,7 +93,7 @@ ok(m1.to.length === 2, "multi-recipient To split", JSON.stringify(m1.to));
 ok(/confirming availability/.test(m1.body), "payload.body (no parts) decoded");
 ok(Date.parse(p.messages[0].date_iso) <= Date.parse(p.messages[1].date_iso), "chronological");
 
-console.log("2. contract shape matches app/lib/engine/types.ts ThreadMessage");
+console.log("2. contract shape matches app/lib/onsinch/types.ts ThreadMessage");
 const REQUIRED = ["message_id", "from", "to", "date_iso", "subject", "body", "is_from_spartan"];
 ok(p.messages.every((m) => REQUIRED.every((k) => k in m)), "every message has all 7 fields");
 

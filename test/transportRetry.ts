@@ -23,7 +23,7 @@
 //
 // Run: npx tsx test/transportRetry.ts
 // ============================================================================
-import { httpTransport } from "../app/lib/engine/onsinch";
+import { httpTransport } from "../app/lib/onsinch/onsinch";
 
 let fails = 0;
 const ok = (cond: boolean, label: string, extra = "") => {

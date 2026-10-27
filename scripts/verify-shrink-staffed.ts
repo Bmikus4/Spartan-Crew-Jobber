@@ -44,9 +44,9 @@
 //
 //   npx tsx scripts/verify-shrink-staffed.ts --order 13821 --write
 // ============================================================================
-import { OnsinchClient, httpTransport, type Transport } from "../app/lib/engine/onsinch";
-import { buildOrderBody } from "../app/lib/engine/format";
-import type { DesiredOrder } from "../app/lib/engine/types";
+import { OnsinchClient, httpTransport, type Transport } from "../app/lib/onsinch/onsinch";
+import { buildOrderBody } from "../app/lib/onsinch/format";
+import type { DesiredOrder } from "../app/lib/onsinch/types";
 import { loadEnv } from "./_env.mjs";
 
 loadEnv();

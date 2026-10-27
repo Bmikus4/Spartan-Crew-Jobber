@@ -1,7 +1,7 @@
 // The /api/settings handlers after their auth gate, IO injected for tests (SP-50).
 
 import { getSettings, saveSettings, coerceSettings, settingsHistory } from "../settingsDb";
-import type { Settings } from "../engine/types";
+import type { Settings } from "../onsinch/types";
 import { reportError } from "../errorReport";
 import type { Caller } from "../apiAuth";
 

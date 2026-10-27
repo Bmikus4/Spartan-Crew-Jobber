@@ -17,7 +17,7 @@ import type { Interpretation } from "../v2/interpret/interpret";
 import type { RunResult } from "../v2/bot/run";
 import type { Op } from "../v2/bot/ops";
 import { londonToUtc, shiftWindow } from "../v2/bot/ops";
-import { rNumbersIn } from "../engine/resolve";
+import { rNumbersIn } from "../onsinch/resolve";
 import { cardNote } from "./cardNote";
 
 /** One v2_decisions row of kind write or handoff, with its message's subject. */

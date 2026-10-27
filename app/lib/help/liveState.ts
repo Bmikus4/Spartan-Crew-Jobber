@@ -1,4 +1,4 @@
-import type { Settings } from "../engine/types";
+import type { Settings } from "../onsinch/types";
 
 /**
  * The switches as they stand, in words, for the help assistant's second system block. Read on every

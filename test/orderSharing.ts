@@ -26,7 +26,7 @@ import "./fixtures/pg"; // first: a run of this file alone must reach PGlite, ne
 import { neon } from "@neondatabase/serverless";
 import { loadEnv, requireEnv } from "../scripts/_env.mjs";
 import { upsertTicketFromState } from "../app/lib/ticketsDb";
-import type { ConversationState } from "../app/lib/engine/types";
+import type { ConversationState } from "../app/lib/onsinch/types";
 
 loadEnv();
 const sql = neon(requireEnv("DATABASE_URL"));

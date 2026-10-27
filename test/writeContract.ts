@@ -27,7 +27,7 @@
 //
 // Run: npx tsx test/writeContract.ts
 // ============================================================================
-import { OnsinchClient } from "../app/lib/engine/onsinch";
+import { OnsinchClient } from "../app/lib/onsinch/onsinch";
 
 let fails = 0;
 const ok = (cond: boolean, label: string, extra = "") => {

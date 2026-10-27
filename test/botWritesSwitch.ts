@@ -5,7 +5,7 @@
 // Offline.  npx tsx test/botWritesSwitch.ts
 // ============================================================================
 import { readFileSync } from "node:fs";
-import { DEFAULT_SETTINGS } from "../app/lib/engine/types";
+import { DEFAULT_SETTINGS } from "../app/lib/onsinch/types";
 import { coerceSettings } from "../app/lib/settingsDb";
 let fails = 0;
 const ok = (c: boolean, m: string, d = "") => { console.log(`  ${c ? "PASS" : "FAIL"}  ${m}${c ? "" : "  " + d}`); if (!c) fails++; };

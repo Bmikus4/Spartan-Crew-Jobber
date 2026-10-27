@@ -12,7 +12,7 @@ import {
   waitingPeriod, decide, needsResponse, closureOnly, isOverdue, sendEligible,
   THRESHOLD_HOURS, SEND_GRACE_HOURS, DORMANT_AFTER_DAYS,
 } from "../app/lib/followup/clock";
-import type { ThreadMessage } from "../app/lib/engine/types";
+import type { ThreadMessage } from "../app/lib/onsinch/types";
 
 let fails = 0;
 const ok = (cond: boolean, label: string, extra = "") => {

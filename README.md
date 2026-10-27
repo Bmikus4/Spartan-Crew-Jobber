@@ -20,7 +20,8 @@ and its status are in `ADDENDUM.md`; the map for an agent is `CLAUDE.md`.
   raises a stalled intake, sweep, sync or labels to the owner.
 - **TV and labels.** `/api/feed` (`app/lib/feed/`); Gmail labels from `/api/bot/labels`, applied by n8n.
 - **Alarms.** `app/lib/errorReport.ts`, sent through the n8n workflow "Spartan Alarms".
-- **The old engine** is deleted (ADDENDUM Prompt 12). `app/lib/engine/` keeps only what v2 uses; see its README.
+- **OnSinch.** The client and the helpers v2 kept from the old engine, which is deleted (ADDENDUM Prompt 12):
+  `app/lib/onsinch/`.
 
 ## Routes (`app/api`)
 

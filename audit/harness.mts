@@ -24,13 +24,13 @@
 // once it has one — which is where state, idempotency, sequencing, duplication and
 // recovery live, and none of that needs a model call to exercise.
 // ============================================================================
-import { handleThread, type PipelineDeps, type ThreadTag } from "../app/lib/engine/pipeline";
-import { reconcileThread } from "../app/lib/engine/sweep";
+import { handleThread, type PipelineDeps, type ThreadTag } from "../app/lib/onsinch/pipeline";
+import { reconcileThread } from "../app/lib/onsinch/sweep";
 import { executor as productionExecutor } from "../app/lib/deps";
-import { OnsinchClient, __resetListCache } from "../app/lib/engine/onsinch";
-import { InMemoryStore } from "../app/lib/engine/store";
-import { parseCrew, parseDates, parseTimes } from "../app/lib/engine/parseWork";
-import type { Reasoner, ClassifyResult, ReplyResult, ReplyContext } from "../app/lib/engine/reason";
+import { OnsinchClient, __resetListCache } from "../app/lib/onsinch/onsinch";
+import { InMemoryStore } from "../app/lib/onsinch/store";
+import { parseCrew, parseDates, parseTimes } from "../app/lib/onsinch/parseWork";
+import type { Reasoner, ClassifyResult, ReplyResult, ReplyContext } from "../app/lib/onsinch/reason";
 import type {
   ConversationFacts,
   ConversationState,
@@ -38,8 +38,8 @@ import type {
   HydratedThread,
   Settings,
   ThreadMessage,
-} from "../app/lib/engine/types";
-import { DEFAULT_SETTINGS } from "../app/lib/engine/types";
+} from "../app/lib/onsinch/types";
+import { DEFAULT_SETTINGS } from "../app/lib/onsinch/types";
 import { createHash } from "node:crypto";
 import type { FakeTenant } from "./tenant.mts";
 

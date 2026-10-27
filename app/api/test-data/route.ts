@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { neon } from "@neondatabase/serverless";
 import { authorizeAction } from "../../lib/apiAuth";
-import { httpTransport } from "../../lib/engine/onsinch";
+import { httpTransport } from "../../lib/onsinch/onsinch";
 import { planTestData, clearTestData, lastClear, type OnsinchCall } from "../../lib/testData";
 
 export const runtime = "nodejs";

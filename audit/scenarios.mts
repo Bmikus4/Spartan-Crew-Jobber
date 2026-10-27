@@ -19,8 +19,8 @@
 // ============================================================================
 import { FakeTenant } from "./tenant.mts";
 import { buildRig, deliver, email, sweep, type AuditRig, type EmailSpec } from "./harness.mts";
-import { confirmOrder } from "../app/lib/engine/pipeline";
-import type { ThreadMessage } from "../app/lib/engine/types";
+import { confirmOrder } from "../app/lib/onsinch/pipeline";
+import type { ThreadMessage } from "../app/lib/onsinch/types";
 
 export const START = Date.parse("2026-10-05T09:00:00Z");
 

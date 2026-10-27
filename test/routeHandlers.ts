@@ -12,7 +12,7 @@
 import { handleIntakeHealth } from "../app/lib/routes/healthIntake";
 import { handleSettingsGet, handleSettingsPost } from "../app/lib/routes/settings";
 import { handleDedupe } from "../app/lib/routes/dedupe";
-import { DEFAULT_SETTINGS } from "../app/lib/engine/types";
+import { DEFAULT_SETTINGS } from "../app/lib/onsinch/types";
 
 let fails = 0;
 const ok = (cond: boolean, label: string, extra = "") => {

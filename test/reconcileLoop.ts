@@ -24,9 +24,9 @@
 //
 // Run: npx tsx test/reconcileLoop.ts
 // ============================================================================
-import { readLiveShape, driftAgainst, driftKey } from "../app/lib/engine/reconcile";
-import { OnsinchClient } from "../app/lib/engine/onsinch";
-import type { DesiredOrder } from "../app/lib/engine/types";
+import { readLiveShape, driftAgainst, driftKey } from "../app/lib/onsinch/reconcile";
+import { OnsinchClient } from "../app/lib/onsinch/onsinch";
+import type { DesiredOrder } from "../app/lib/onsinch/types";
 
 let fails = 0;
 const ok = (cond: boolean, label: string, extra = "") => {

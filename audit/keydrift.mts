@@ -26,8 +26,8 @@
 import { readFileSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { selectLatest, normalizeThread, cleanEmailBody, isMachineMessage } from "../app/lib/engine/normalize";
-import type { HydratedThread, ThreadMessage } from "../app/lib/engine/types";
+import { selectLatest, normalizeThread, cleanEmailBody, isMachineMessage } from "../app/lib/onsinch/normalize";
+import type { HydratedThread, ThreadMessage } from "../app/lib/onsinch/types";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const rows = readFileSync(join(ROOT, "data", "testset", "threads.jsonl"), "utf8")

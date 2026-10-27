@@ -15,8 +15,8 @@
 // ============================================================================
 import { verify, changeOf, readOnly, __resetVerifyCache, type VerifyDeps } from "../app/lib/feed/verify";
 import { project, type FeedMark } from "../app/lib/feed/project";
-import type { Transport } from "../app/lib/engine/onsinch";
-import type { ConversationState } from "../app/lib/engine/types";
+import type { Transport } from "../app/lib/onsinch/onsinch";
+import type { ConversationState } from "../app/lib/onsinch/types";
 import { fromStates } from "./fixtures/stateSource";
 
 let fails = 0;

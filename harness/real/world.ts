@@ -23,7 +23,7 @@
 // snapshot where no later change exists).
 // ============================================================================
 import type { World } from "../../app/lib/v2/interpret/plan";
-import { normName } from "../../app/lib/engine/resolve";
+import { normName } from "../../app/lib/onsinch/resolve";
 import { shiftWindow } from "../../app/lib/v2/bot/ops";
 import { gold, type GoldDecision } from "./data";
 

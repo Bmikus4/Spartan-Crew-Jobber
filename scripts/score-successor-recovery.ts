@@ -30,8 +30,8 @@
 // ============================================================================
 import { readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
-import { matchExistingOrder, rNumbersIn, type OrderRec } from "../app/lib/engine/resolve";
-import type { PlaceCandidate } from "../app/lib/engine/types";
+import { matchExistingOrder, rNumbersIn, type OrderRec } from "../app/lib/onsinch/resolve";
+import type { PlaceCandidate } from "../app/lib/onsinch/types";
 import { loadEnv, requireEnv, ROOT_DIR } from "./_env.mjs";
 
 loadEnv();

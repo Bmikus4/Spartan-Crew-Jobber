@@ -16,7 +16,7 @@
 // ============================================================================
 import { sql } from "./_q.mjs";
 import { waitingPeriod, needsResponse, closureOnly, substantive } from "../app/lib/followup/clock";
-import type { ThreadMessage } from "../app/lib/engine/types";
+import type { ThreadMessage } from "../app/lib/onsinch/types";
 
 const BUCKET = process.argv.includes("--bucket")
   ? String(process.argv[process.argv.indexOf("--bucket") + 1] || "none")

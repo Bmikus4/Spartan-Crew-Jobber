@@ -11,8 +11,8 @@ import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { serveFeed } from "../app/lib/feed/serve";
 import { verify, __resetVerifyCache } from "../app/lib/feed/verify";
-import type { Transport } from "../app/lib/engine/onsinch";
-import type { ConversationState } from "../app/lib/engine/types";
+import type { Transport } from "../app/lib/onsinch/onsinch";
+import type { ConversationState } from "../app/lib/onsinch/types";
 import { fromStates } from "./fixtures/stateSource";
 
 let fails = 0;

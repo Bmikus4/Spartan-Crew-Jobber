@@ -6,7 +6,7 @@
 //   npx tsx --env-file=.env.local scripts/ops-truth.mts [--from 2026-10-09T10:20:00Z] [--out .tmp-data/ops-truth.json]
 import { readOnlySql, proveReadOnly } from "./_readonly.mts";
 import { writeFileSync, mkdirSync } from "node:fs";
-import { httpTransport } from "../app/lib/engine/onsinch";
+import { httpTransport } from "../app/lib/onsinch/onsinch";
 import { onsinchWorld } from "../app/lib/v2/process";
 const arg = (k: string, d: string) => { const i = process.argv.indexOf(k); return i > 0 ? process.argv[i + 1] : d; };
 const FROM = arg("--from", "2026-10-09T10:20:00Z");

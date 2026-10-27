@@ -3,7 +3,7 @@
 // the automation always have a safe launch posture.
 
 import { neon, type NeonQueryFunction } from "@neondatabase/serverless";
-import { DEFAULT_SETTINGS, type Settings } from "./engine/types";
+import { DEFAULT_SETTINGS, type Settings } from "./onsinch/types";
 import { reportError } from "./errorReport";
 import { ensureSchema } from "./migrations";
 

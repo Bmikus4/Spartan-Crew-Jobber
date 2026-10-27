@@ -14,7 +14,7 @@
 // does for staff's edits. Only a change that would leave fewer seats than workers waits
 // (staffedRefusal) until the bot can drop a worker and log who.
 // ============================================================================
-import { httpTransport, OnsinchClient } from "../../engine/onsinch";
+import { httpTransport, OnsinchClient } from "../../onsinch/onsinch";
 import contracts from "./contracts.json";
 import type { Contract } from "./contract";
 import { acquireLease, releaseLease, ledgerGet, ledgerIntent, ledgerSet, type LedgerStatus } from "./db";

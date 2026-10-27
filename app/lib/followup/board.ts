@@ -22,7 +22,7 @@
 import { neon, type NeonQueryFunction } from "@neondatabase/serverless";
 import { waitingPeriod, isOverdue, isDormant, DORMANT_AFTER_DAYS, type Owed } from "./clock";
 import { allSuppressions, isSuppressed } from "./suppressionDb";
-import type { ThreadMessage } from "../engine/types";
+import type { ThreadMessage } from "../onsinch/types";
 
 // Each *Db module here keeps its own lazy accessor rather than sharing one. Following
 // that rather than inventing a shared module for one new reader.

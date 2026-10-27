@@ -12,7 +12,7 @@
 //                                       priced every new order on the client's oldest card
 // So a list is read here or not at all; test/createParity.ts holds the rebuild to that.
 // ============================================================================
-import type { Transport } from "../engine/onsinch";
+import type { Transport } from "../onsinch/onsinch";
 
 export const rowsOf = (r: any): any[] => (Array.isArray(r?.data?.data) ? r.data.data : Array.isArray(r?.data) ? r.data : []);
 

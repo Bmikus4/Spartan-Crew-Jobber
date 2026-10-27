@@ -8,7 +8,7 @@
 // Run: npx tsx test/feedProjection.ts
 // ============================================================================
 import { project, STATUS_TEXT, DONE_DWELL_MS, STALE_UNDATED_MS, QUIET_MS, dismissKey, londonInstant, type FeedMark } from "../app/lib/feed/project";
-import type { ConversationState } from "../app/lib/engine/types";
+import type { ConversationState } from "../app/lib/onsinch/types";
 import { v2Sources, type V2Row } from "../app/lib/feed/v2";
 import { fromStates } from "./fixtures/stateSource";
 

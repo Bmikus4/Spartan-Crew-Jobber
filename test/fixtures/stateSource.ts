@@ -5,8 +5,8 @@
 // conversion lives here, with copies of the three old-engine predicates it read.
 // ============================================================================
 import { STATUS_TEXT, londonInstant, type FeedItem, type FeedKind, type FeedSource, type FeedWant } from "../../app/lib/feed/project";
-import type { ConversationState, DesiredSlotTeam } from "../../app/lib/engine/types";
-import { rNumbersIn } from "../../app/lib/engine/resolve";
+import type { ConversationState, DesiredSlotTeam } from "../../app/lib/onsinch/types";
+import { rNumbersIn } from "../../app/lib/onsinch/resolve";
 
 const PLACEHOLDER_PLACE_IDS = new Set([2069, 6922, 87, 6581]);
 const CHANGED_A_STANDING_ORDER: ReadonlySet<string> = new Set(["amend", "patch", "replace"]);

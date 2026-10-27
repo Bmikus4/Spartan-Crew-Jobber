@@ -15,7 +15,7 @@
 // ============================================================================
 import { neon } from "@neondatabase/serverless";
 import { writeFileSync, mkdirSync, existsSync, readFileSync } from "node:fs";
-import { httpTransport } from "../app/lib/engine/onsinch";
+import { httpTransport } from "../app/lib/onsinch/onsinch";
 import { readRows } from "../app/lib/v2/read";
 import { isTestSender, isTestId } from "../app/lib/testData";
 

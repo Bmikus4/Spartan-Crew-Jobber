@@ -18,8 +18,8 @@
 //
 // Run: npx tsx test/venueShortName.ts
 // ============================================================================
-import { matchPlace } from "../app/lib/engine/resolve";
-import type { PlaceCandidate } from "../app/lib/engine/types";
+import { matchPlace } from "../app/lib/onsinch/resolve";
+import type { PlaceCandidate } from "../app/lib/onsinch/types";
 
 let fails = 0;
 const ok = (cond: boolean, label: string, extra = "") => {

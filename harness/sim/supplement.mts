@@ -9,7 +9,7 @@
 //   npx tsx --env-file=.env.local harness/sim/supplement.mts      (after snapshot.mts)
 // ============================================================================
 import { readFileSync, writeFileSync } from "node:fs";
-import { httpTransport } from "../../app/lib/engine/onsinch";
+import { httpTransport } from "../../app/lib/onsinch/onsinch";
 import { readPage } from "../../app/lib/v2/read";
 
 const L = (n: string) => JSON.parse(readFileSync(`.tmp-data/sim/${n}.json`, "utf8"));

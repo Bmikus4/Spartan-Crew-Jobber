@@ -5217,5 +5217,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0243",
+  "ts": "2026-10-27T22:00:09+00:00",
+  "kind": "measurement",
+  "headline": "R7 done: app/lib/engine renamed app/lib/onsinch (imports only)",
+  "subject": "What v2 kept from the old engine is app/lib/onsinch; app/lib/engine is gone",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 105,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]

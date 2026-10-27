@@ -24,7 +24,7 @@ import { fileURLToPath } from "node:url";
 import { baseTenant, invariants, SCENARIOS, CLASS_LABEL, type Check, type ClassName, type Ctx } from "./scenarios.mts";
 import { buildRig, deliver, type AuditRig } from "./harness.mts";
 import type { FakeTenant } from "./tenant.mts";
-import type { ThreadMessage } from "../app/lib/engine/types";
+import type { ThreadMessage } from "../app/lib/onsinch/types";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const arg = (k: string) => process.argv.find((a) => a.startsWith(`--${k}=`))?.split("=")[1];
@@ -49,7 +49,7 @@ function auditedVersion(): { head: string; dirty: boolean; engine: string; files
       else if (e.endsWith(".ts")) seen.push(p);
     }
   };
-  for (const d of ["app/lib/engine", "app/lib/mail", "app/lib/followup"]) walk(join(root, d));
+  for (const d of ["app/lib/onsinch", "app/lib/mail", "app/lib/followup"]) walk(join(root, d));
   seen.push(join(root, "app/lib/deps.ts"), join(root, "app/lib/stateDb.ts"));
   seen.sort();
   const h = createHash("sha256");

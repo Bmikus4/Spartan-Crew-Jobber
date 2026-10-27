@@ -12,7 +12,7 @@
 //
 //   npx tsx scripts/time-onsinch.mjs
 import { loadEnv, requireEnv } from "./_env.mjs";
-import { OnsinchClient, httpTransport, __resetListCache } from "../app/lib/engine/onsinch.ts";
+import { OnsinchClient, httpTransport, __resetListCache } from "../app/lib/onsinch/onsinch.ts";
 
 loadEnv();
 const client = new OnsinchClient(

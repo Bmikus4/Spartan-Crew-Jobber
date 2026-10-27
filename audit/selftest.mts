@@ -17,7 +17,7 @@ import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { baseTenant, invariants, SCENARIOS, type Check, type Ctx } from "./scenarios.mts";
 import { buildRig, deliver, email, scriptedReasoner } from "./harness.mts";
-import type { ThreadMessage } from "../app/lib/engine/types";
+import type { ThreadMessage } from "../app/lib/onsinch/types";
 import type { FakeTenant } from "./tenant.mts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));

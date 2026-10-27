@@ -4,7 +4,7 @@
 // thread already exists; we just shape the job-relevant fields for the UI,
 // including the green-check flag for AI-generated replies.
 import { neon, type NeonQueryFunction } from "@neondatabase/serverless";
-import type { ConversationState } from "./engine/types";
+import type { ConversationState } from "./onsinch/types";
 
 let _sql: NeonQueryFunction<false, false> | null = null;
 

@@ -1,11 +1,11 @@
-# app/lib/engine: what v2 still uses from the old engine
+# app/lib/onsinch: the OnSinch client, and what v2 kept from the old engine
 
 The old engine is deleted (ADDENDUM Prompt 12, 27 Oct): its pipeline, compiler, deps, reasoner, sweeps, venue
 matching and their routes (/api/mail-inbound, /api/sweep-ingest, /api/reconcile, /api/confirm-order) are gone with
 their tests, in git history. Nothing here decides an email; a booking is matched in `app/lib/v2/interpret/plan.ts`.
-What is left is imported by v2 and the live app, and moves to `app/lib/onsinch/` in Prompt 12's last stage.
+What is left is imported by v2 and the live app. Until Prompt 12's last stage it was `app/lib/engine/`.
 
-| engine file | imported by |
+| file | imported by |
 |---|---|
 | onsinch.ts (the OnSinch client) | v2/process, v2/read, v2/links, v2/bot/run, v2/bot/apiCreate, v2/bot/canary, feed/live, feed/verify, api/bot/sync, api/test-data |
 | resolve.ts | v2/process, v2/interpret/plan, v2/interpret/interpret, v2/threadState, feed/v2, feed/verify |

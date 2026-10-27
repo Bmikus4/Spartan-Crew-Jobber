@@ -7,7 +7,7 @@
 // ============================================================================
 import { readFileSync } from "node:fs";
 import { serveFeed, type FeedDeps, type HeldLink } from "../app/lib/feed/serve";
-import type { ConversationState } from "../app/lib/engine/types";
+import type { ConversationState } from "../app/lib/onsinch/types";
 import type { FeedCard, FeedMark } from "../app/lib/feed/project";
 import { fromStates } from "./fixtures/stateSource";
 

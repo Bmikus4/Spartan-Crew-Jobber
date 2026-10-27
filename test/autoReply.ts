@@ -22,8 +22,8 @@
 //
 // Run: npx tsx test/autoReply.ts
 // ============================================================================
-import { isMachineMessage, isAutoReply, isMachineSender } from "../app/lib/engine/normalize";
-import type { ThreadMessage } from "../app/lib/engine/types";
+import { isMachineMessage, isAutoReply, isMachineSender } from "../app/lib/onsinch/normalize";
+import type { ThreadMessage } from "../app/lib/onsinch/types";
 
 let fails = 0;
 const ok = (cond: boolean, label: string, extra = "") => {

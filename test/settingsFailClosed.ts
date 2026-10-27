@@ -10,7 +10,7 @@
 // Offline.  npx tsx test/settingsFailClosed.ts
 // ============================================================================
 import { getSettings, saveSettings } from "../app/lib/settingsDb";
-import { DEFAULT_SETTINGS } from "../app/lib/engine/types";
+import { DEFAULT_SETTINGS } from "../app/lib/onsinch/types";
 
 let fails = 0;
 const ok = (cond: boolean, label: string, extra = "") => {

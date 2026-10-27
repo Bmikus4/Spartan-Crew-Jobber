@@ -33,7 +33,7 @@
 // ============================================================================
 import { neon } from "@neondatabase/serverless";
 import { loadEnv, requireEnv, onsinchGet } from "./_env.mjs";
-import type { ConversationState } from "../app/lib/engine/types";
+import type { ConversationState } from "../app/lib/onsinch/types";
 
 loadEnv();
 const APPLY = process.argv.slice(2).includes("--apply");

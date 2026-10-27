@@ -17,7 +17,7 @@ import { confirms, type Interpretation, type Request } from "./interpret";
 import { addMinutes } from "./ground";
 import { fillTimes, pastShifts } from "./assume";
 import { tradeOf, pickProfession, PROFESSION_NAME, type LiveProfession } from "./professions";
-import { matchCompanyBySender, rNumbersIn, normName } from "../../engine/resolve";
+import { matchCompanyBySender, rNumbersIn, normName } from "../../onsinch/resolve";
 import { evidenceMatch, wantOf, BOT_USER, type Found } from "../evidence";
 import { coded } from "../reasons";
 import { findOrder as findByEvidence, companiesOf, coveredBy, stampedSince, type ThreadIn, type ThreadMsg, type StateWorld, type Grounded } from "../threadState";

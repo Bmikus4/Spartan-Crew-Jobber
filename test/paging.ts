@@ -14,7 +14,7 @@
 //
 //   npx tsx test/paging.ts
 // ============================================================================
-import { OnsinchClient, __resetListCache, type Transport } from "../app/lib/engine/onsinch";
+import { OnsinchClient, __resetListCache, type Transport } from "../app/lib/onsinch/onsinch";
 
 let fails = 0;
 const ok = (cond: boolean, label: string, extra = "") => {

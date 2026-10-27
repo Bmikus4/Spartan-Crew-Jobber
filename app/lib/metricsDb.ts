@@ -5,8 +5,8 @@
 // dashboard aggregates. Event vocabulary is the engine's MetricType.
 
 import { neon, type NeonQueryFunction } from "@neondatabase/serverless";
-import type { MetricEvent, MetricSink, MetricType } from "./engine/metrics";
-import { aggregate, type DashboardStats } from "./engine/metrics";
+import type { MetricEvent, MetricSink, MetricType } from "./onsinch/metrics";
+import { aggregate, type DashboardStats } from "./onsinch/metrics";
 import { ticketStateCounts, type TicketStateCounts } from "./ticketsDb";
 import { ensureSchema } from "./migrations";
 

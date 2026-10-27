@@ -10,7 +10,7 @@
 //
 // Run: npx tsx test/settings.ts
 // ============================================================================
-import { DEFAULT_SETTINGS, type Settings } from "../app/lib/engine/types";
+import { DEFAULT_SETTINGS, type Settings } from "../app/lib/onsinch/types";
 // The REAL whitelist and the REAL wire rule - not reimplementations, so this
 // test cannot drift away from what the route actually does.
 import { coerceSettings, replyDeliveryForWire } from "../app/lib/settingsDb";

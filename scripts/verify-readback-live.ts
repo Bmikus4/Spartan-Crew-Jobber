@@ -19,9 +19,9 @@
 //
 //   npx tsx scripts/verify-readback-live.ts
 // ============================================================================
-import { OnsinchClient, httpTransport } from "../app/lib/engine/onsinch";
-import { buildOrderBody, buildSlotTeamBody } from "../app/lib/engine/format";
-import type { DesiredOrder, DesiredSlotTeam } from "../app/lib/engine/types";
+import { OnsinchClient, httpTransport } from "../app/lib/onsinch/onsinch";
+import { buildOrderBody, buildSlotTeamBody } from "../app/lib/onsinch/format";
+import type { DesiredOrder, DesiredSlotTeam } from "../app/lib/onsinch/types";
 import { loadEnv } from "./_env.mjs";
 
 loadEnv();

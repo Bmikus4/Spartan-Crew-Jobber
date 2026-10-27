@@ -19,7 +19,7 @@
 // sweepLinks keeps true; a ticket whose order is gone has no live link, and no tile.
 // ============================================================================
 import type { Job } from "../jobsDb";
-import type { ConversationState } from "../engine/types";
+import type { ConversationState } from "../onsinch/types";
 import type { FeedCard, FeedKind } from "./project";
 import type { LiveLink } from "./serve";
 import { STATUS_TEXT } from "./project";

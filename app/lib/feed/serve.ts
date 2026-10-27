@@ -14,7 +14,7 @@ import { portedCards } from "./ported";
 import { project, type FeedCard, type FeedMark, type FeedSource, type FeedWant, type ReplyNeed } from "./project";
 import { v2Sources, type V2Row } from "./v2";
 import { intakeHealth } from "../intakeHealth";
-import type { ConversationState } from "../engine/types";
+import type { ConversationState } from "../onsinch/types";
 
 /** An order the minute sweep cannot find (links.ts), on the TV once held long enough. `days`: the London days its shifts were on. */
 export type HeldLink = { thread_id: string; r_number: string | null; company: string | null; subject: string | null; since: string; note: string | null; days?: string[] };

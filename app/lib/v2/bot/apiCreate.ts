@@ -25,7 +25,7 @@
 //                   automation-built order from theirs at a glance. The rebuild dropped it
 //                   until the create parity harness (scripts/create-ab.mts) caught it on 10-15.
 // ============================================================================
-import { httpTransport, OnsinchClient } from "../../engine/onsinch";
+import { httpTransport, OnsinchClient } from "../../onsinch/onsinch";
 import { shiftWindow, type Op } from "./ops";
 import { readRows } from "../read";
 

@@ -4,7 +4,7 @@ import { backfillBoardLinks, backfillLinks, sweepLinks } from "../../../lib/v2/l
 import { botWrites, retryStopped, retryUnread, sweepUndecided } from "../../../lib/v2/process";
 import { replanOpen } from "../../../lib/v2/replan";
 import { neon } from "@neondatabase/serverless";
-import { httpTransport } from "../../../lib/engine/onsinch";
+import { httpTransport } from "../../../lib/onsinch/onsinch";
 import { getSettings } from "../../../lib/settingsDb";
 import { maybeSweep, type OnsinchCall } from "../../../lib/testData";
 import { automationPausedFlag } from "../../../lib/paused";

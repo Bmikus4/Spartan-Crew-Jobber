@@ -4,7 +4,7 @@
 // audit log, and a projection to the Job read-model the UI already renders.
 // Written from the engine's ConversationState after each processed thread.
 import { neon, type NeonQueryFunction } from "@neondatabase/serverless";
-import type { ConversationState } from "./engine/types";
+import type { ConversationState } from "./onsinch/types";
 import type { Job } from "./jobsDb";
 import { ensureSchema } from "./migrations";
 

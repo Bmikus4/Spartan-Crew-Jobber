@@ -4,7 +4,7 @@
 // cannot leak into each other and every expected answer is exact.
 // ============================================================================
 import type { World } from "../../../app/lib/v2/interpret/plan";
-import { normName } from "../../../app/lib/engine/resolve";
+import { normName } from "../../../app/lib/onsinch/resolve";
 import { shiftWindow } from "../../../app/lib/v2/bot/ops";
 
 export type Company = { id: number; name: string; domain: string; people: string[] };

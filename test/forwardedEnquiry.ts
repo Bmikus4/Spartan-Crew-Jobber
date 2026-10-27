@@ -25,8 +25,8 @@
 //
 // Run: npx tsx test/forwardedEnquiry.ts
 // ============================================================================
-import { normalizeThread } from "../app/lib/engine/normalize";
-import type { HydratedThread, ThreadMessage } from "../app/lib/engine/types";
+import { normalizeThread } from "../app/lib/onsinch/normalize";
+import type { HydratedThread, ThreadMessage } from "../app/lib/onsinch/types";
 
 let fails = 0;
 const ok = (cond: boolean, label: string, extra = "") => {

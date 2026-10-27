@@ -13,7 +13,7 @@ every step update its status line, its §0 table and any measurement.**
 3. **Ground.** Every value must be in the email's words: `interpret/interpret.ts`, `interpret/ground.ts`.
 4. **Plan: which booking, which change.** `interpret/plan.ts` (findOrder, bookedAt, targetShift),
    `app/lib/v2/evidence.ts`, `threadState.ts`, `threadOrder.ts`, `links.ts`. **A booking is matched here, in
-   v2, never in app/lib/engine.**
+   v2, never in app/lib/onsinch.**
 5. **Record.** One `v2_decisions` row per email (`process.ts`), with stable reason codes (`app/lib/v2/reasons.ts`).
 6. **Write.** The bot (`app/lib/v2/bot/`: `run.ts`, `builder.ts`, `ops.ts`, `db.ts`, `apiCreate.ts`).
    **Off:** the Settings switch bot_writes_enabled is false (owner, 25 Oct).
@@ -25,8 +25,8 @@ every step update its status line, its §0 table and any measurement.**
    **Labels:** `/api/bot/labels` from `app/lib/mail/threadLabels.ts`, applied by n8n with the mailbox's Gmail
    credential after each sync. **Alarms:** `app/lib/errorReport.ts`.
 
-The old engine is deleted (ADDENDUM Prompt 12). `app/lib/engine/` holds only what v2 imports: the OnSinch client and
-its types and helpers (`app/lib/engine/README.md`).
+**OnSinch:** `app/lib/onsinch/` (`onsinch.ts` the client, `resolve.ts`, `types.ts`, `reconcile.ts`), what v2 kept when the old
+engine was deleted (ADDENDUM Prompt 12; `app/lib/onsinch/README.md`).
 
 ## Safety rules (ADDENDUM §2): build around them, never loosen them
 - Capture before deciding. A throw before Save is blocked; after Save it is unknown and never retried.
@@ -65,6 +65,6 @@ ticket and deletes it. Old tickets may be thinned to headlines, never rewritten 
   the TV's cards every minute; nothing sets one by hand.
 - **A draft is not a message.** An unsent draft of ours never counts as Spartan having replied.
 - **Never write Job.min_beginning / max_end**, and treat the job window as unreliable input
-  (`app/lib/engine/README.md` has the measurement).
+  (`app/lib/onsinch/README.md` has the measurement).
 - **`6922 "No Location"` is exempt from every venue phase.** Exactly one may exist; code finds it by name.
 - **Zero references is permission to delete, never a reason to.**

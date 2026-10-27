@@ -2,7 +2,7 @@
 import { neon, type NeonQueryFunction } from "@neondatabase/serverless";
 import { allMarks, verifyStatus, addMark, claimVerify, saveVerify } from "./marksDb";
 import { verify } from "./verify";
-import { httpTransport } from "../engine/onsinch";
+import { httpTransport } from "../onsinch/onsinch";
 import { followupsEnabled } from "../followup/enabled";
 import type { FeedDeps, LiveLink } from "./serve";
 import { HOLD_TV_MINUTES } from "../v2/links";
@@ -10,7 +10,7 @@ import { FEED_FROM, type ReplyNeed } from "./project";
 import type { V2Row } from "./v2";
 import { listTickets } from "../ticketsDb";
 import { getSettings } from "../settingsDb";
-import type { ConversationState } from "../engine/types";
+import type { ConversationState } from "../onsinch/types";
 
 let _sql: NeonQueryFunction<false, false> | null = null;
 function db(): NeonQueryFunction<false, false> {

@@ -4,7 +4,7 @@
 //   ... --apply --force   past the caps (CAPS in testData.ts), after reading the plan
 // The Settings screen's "Clear test data" and the quarter-hourly sweep run the same code.
 import { neon } from "@neondatabase/serverless";
-import { httpTransport } from "../app/lib/engine/onsinch";
+import { httpTransport } from "../app/lib/onsinch/onsinch";
 import { planTestData, clearTestData, type OnsinchCall } from "../app/lib/testData";
 const sql = neon((process.env.DATABASE_URL || "").trim());
 const t = httpTransport({ baseUrl: process.env.ONSINCH_BASE_URL || "https://spartancrew.onsinch.com/api/v1", apiKey: process.env.ONSINCH_API_KEY || "" }) as unknown as OnsinchCall;

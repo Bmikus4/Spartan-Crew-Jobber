@@ -15,12 +15,12 @@ const ok = (cond: boolean, label: string) => { if (!cond) fails++; console.log(`
 
 const GONE: Array<[file: string, phrase: string, why: string]> = [
   ["README.md", "claude-opus-4.8", "the default model is opus-4.6 (deps.ts)"],
-  ["README.md", "src/compiler.ts", "the engine lives in app/lib/engine"],
+  ["README.md", "src/compiler.ts", "the engine lives in app/lib/v2"],
   ["README.md", "order_mode", "order_mode retired with the staging queue (Q1)"],
   ["README.md", "Not built yet", "everything on that list was built"],
   ["CLAUDE.md", "117-file", "the runner finds its own files; any count goes stale"],
   ["docs/JOB-IDENTITY-DESIGN-2026-09-29.md", "Nothing here is built", "steps 1-5 and 6.1 are built"],
-  ["app/lib/engine/reconcile.ts", "the ONLY working", "the nested order read expands blocks too"],
+  ["app/lib/onsinch/reconcile.ts", "the ONLY working", "the nested order read expands blocks too"],
   ["app/api/mail-poll/route.ts", "\"/api/reconcile\",      \"schedule\"", "a cron GET of /api/reconcile is a dry run"],
 ];
 

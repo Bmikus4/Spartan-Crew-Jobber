@@ -11,8 +11,8 @@
 // conversation_state for the thread's order (the thread itself naming its booking).
 // ============================================================================
 import { neon, type NeonQueryFunction } from "@neondatabase/serverless";
-import { httpTransport, OnsinchClient } from "../engine/onsinch";
-import { matchCompanyBySender, normName } from "../engine/resolve";
+import { httpTransport, OnsinchClient } from "../onsinch/onsinch";
+import { matchCompanyBySender, normName } from "../onsinch/resolve";
 import { extractWithMeta, malformedReading, type Extraction, type ExtractMeta } from "./interpret/extract";
 import { ground, type Interpretation, type Request } from "./interpret/interpret";
 import { latestText } from "./interpret/ground";
