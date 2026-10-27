@@ -6,7 +6,7 @@
   below as findings and status.
 - Every step updates this file: its status line, its measurement, and what moved.
 
-**Last updated:** 27 October 2026, R10 DONE (S-0248): the email-to-board harness and its 20-email case study. R9 DONE (S-0247). R8 DONE but e (S-0244 to S-0246); e waits on the owner's yes to a paid measurement. R3's switch-over waits on CRON_SECRET. The baseline was 0f2dcef. App code changed since then in these
+**Last updated:** 27 October 2026, R11 DONE (S-0249): the live trace is on; 5.7 counted, its outbound change waits on the owner. R10 DONE (S-0248): the email-to-board harness and its 20-email case study. R9 DONE (S-0247). R8 DONE but e (S-0244 to S-0246); e waits on the owner's yes to a paid measurement. R3's switch-over waits on CRON_SECRET. The baseline was 0f2dcef. App code changed since then in these
 commits only:
 
 | commit | ticket | what |
@@ -30,6 +30,7 @@ commits only:
 | (R8.d) | S-0246 | Prompt 4 step d: the TV verifier finds an unbound need's order by the planner's rule; the old engine's matcher is called by nothing |
 | (R9) | S-0247 | Prompt 6: v2/resume.ts resumes a write that stopped between or before operations after planning it again, or closes it with one result; any build (F38) |
 | (R10) | S-0248 | Prompt 13: harness/board (cases, gold, a subagent reader, stage attribution), eval/board/2026-10-27.md, test/boardCases.ts in the gate |
+| (R11) | S-0249 | 5.2: v2/traceLive.ts, v2_trace (migrations 085-087), intake and changed re-plans traced, 90-day prune in the minute sync; 5.7 counted |
 
 bd10dae (S-0213) moved the test suite onto PGlite. Line references below are at HEAD unless a line says "at 0f2dcef".
 
@@ -88,12 +89,12 @@ and §3 ends with the findings added after 23 Oct (F29 onward). §11 is the rebu
 | F27 "yes, book that" is a card | policy: the owner ruled on 20 Oct that it hands off. An acceptance card is built and held (held item 6) | plan.ts |
 | F28 create read-back skips the venue | **DONE** S-0215 | run.ts createMismatches :124 |
 | 5.1 scoring | **DONE** S-0216, S-0217 (strict scorer, context forwarded, reason codes, four numbers). Extended 25-26 Oct by the real-mail harness (§4) | app/lib/v2/score.ts; harness/real/ |
-| 5.2 live trace | **OPEN** | process.ts:519, replan.ts:114 pass noTrace |
+| 5.2 live trace | **DONE** S-0249: one v2_trace row per step, addresses hashed, no email text, 90 days | app/lib/v2/traceLive.ts; test/liveTrace.ts |
 | 5.3 one shared finder | **DONE but e** S-0244 to S-0246 (the planner, shifts, venues, the near miss, the TV verifier); e (the reader's list) held for a paid measurement | Prompt 4; map claude.ai/artifact/6VWRB2Ymd3pst5QTbdL4zG |
 | 5.4 faithful requests | **DONE** S-0239 (F24, F25, F8, "20-Nov" and held item 5's parser, schema check) | Prompt 5 |
 | 5.5 recover interrupted work | **DONE:** F1; re-read S-0235; resume S-0247 | Prompt 6 |
 | 5.6 every request visible | **PART:** every need kept (S-0214); the Needs Reply lane is open | F41 |
-| 5.7 R number in our subjects | **OPEN**, test first | |
+| 5.7 R number in our subjects | **COUNTED** (5 of 6 replied to us); the outbound change waits on the owner's yes | .tmp-v2/r57.mts |
 | 5.8 assisted mode | **OPEN**, design after the numbers | Prompt 7 |
 | 5.9 acceptance | policy, see F27 | |
 | 5.10 small fixes | **DONE**: F15 S-0214; README and harness STATE S-0236; F13, F14, F18, the op key and run.ts:5 S-0239 | |
@@ -148,6 +149,9 @@ items-1-3-runtime, item-4-scoring, n1-write-judging and c-current-mail's C2 and 
    - This lets intake, labels and alarms leave n8n entirely.
 3. **A Neon branch for Preview** (F44). The steps are under Prompt 11 in §11.
 4. **Paz's answers** (F41, F42, held items 6 and 8).
+5. **SPARTAN_TRACE_SALT in Vercel's production environment** (5.2), any long random string. Without it the live trace
+   blanks every address, so one sender's rows cannot be joined. Not urgent.
+6. **The owner's yes to 5.7** (an R number in Spartan's subjects): outbound mail.
 
 ### Dates
 - **28 Oct 16:06Z:** the pause-window store.
@@ -877,7 +881,14 @@ What was built:
 **Proves it:** planted wrong-count, wrong-venue, extra-op and half-executed cases fail the scorer (test/scoreStrict.ts).
 
 ### 5.2 Switch on the live trace
-**Status 26 Oct: OPEN.** process.ts:519 and replan.ts:114 pass noTrace.
+**Status 27 Oct: DONE** (S-0249).
+- app/lib/v2/traceLive.ts writes each step (filter, extract, ground, plan, run, final) to v2_trace, after the
+  decision is made, so a function cannot end before its rows land. Intake traces every email it decides; the minute
+  re-plan traces only an answer that changed.
+- Any address in an event is a salted SHA-256 (SPARTAN_TRACE_SALT); until the owner sets a salt it is "[address]".
+  No email text is handed to a trace. pruneTrace, in the minute sync, deletes rows past 90 days.
+- A row that cannot be written is dropped and counted; the decision is unchanged (test/liveTrace.ts).
+  SPARTAN_TRACE=off stops it. harness/DATA_POLICY.md's live mode says the same.
 
 harness/DATA_POLICY.md already defines a safe live mode: hashed senders, no email text, quotes kept, 90-day retention.
 With it on, each weekly miss shows which step chose wrong: extract, ground, plan or run.
@@ -957,7 +968,11 @@ ops after re-reading the target, staff edits and policy. An unknown is reconcile
 - Per-obligation storage with supersession is not built. The card-level rowsOnCard does the job for now.
 
 ### 5.7 Let Spartan's own emails carry the order number (test first)
-**Status 26 Oct: OPEN.**
+**Status 27 Oct: COUNTED;** the change waits on the owner's yes.
+- **Measured** (.tmp-v2/r57.mts on the gold copy, read only): 6 of 958 decisions end "order not identified" or
+  "not found". 5 of the 6 replied in a thread where Spartan had written, 1 began a thread, and none answered only
+  the client's own mail. In none of the 5 did a Spartan subject carry an R number. So an R number in our subjects
+  would reach 5 of the 6, which is 0.5% of decisions: small, and it touches mail clients read.
 - Headers are stored since 23 Oct (F46).
 - A change to outbound mail needs the owner's yes.
 - **Test first:** from the "order not identified" cases, count how many were replies to a Spartan email versus fresh
@@ -1367,7 +1382,7 @@ Still to come from §10: the identity owner (R8), and the move of what the old e
 | R8 | 4 | **One shared booking finder** (5.3), built once the old engine is gone, so there is one place for it. Brings in held C1 and item 7. **a to d DONE** S-0244 to S-0246; e held for the owner's yes to a paid measurement | yes |
 | R9 | 6 | Resume interrupted plans (F26, F38, F39). **DONE** S-0247 | yes |
 | R10 | **13** (new) | **The email-to-board harness** (the owner's design, below), then its case study. **DONE** S-0248 | report + test |
-| R11 | 5.2, 5.7 | Live trace; R number in our subjects (test first) | yes; 5.7 needs the owner's yes for outbound mail |
+| R11 | 5.2, 5.7 | Live trace; R number in our subjects (test first). **DONE** S-0249; 5.7's change held for the owner | yes; 5.7 needs the owner's yes for outbound mail |
 | R12 | TV | F41 Needs Reply lane, F42 aging, held items 6 and 8 | **owner and Paz** |
 | R13 | 7 | Assisted mode design, from R10's numbers | design |
 | R14 | | Mail intake through v2 (F43), live with the Gmail grant; then intake, labels and alarms leave n8n entirely | dormant until the grant |

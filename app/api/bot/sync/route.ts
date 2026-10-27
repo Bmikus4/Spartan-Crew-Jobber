@@ -4,6 +4,7 @@ import { backfillBoardLinks, backfillLinks, sweepLinks } from "../../../lib/v2/l
 import { botWrites, retryUnread, sweepUndecided } from "../../../lib/v2/process";
 import { resumeStopped } from "../../../lib/v2/resume";
 import { replanOpen } from "../../../lib/v2/replan";
+import { pruneTrace } from "../../../lib/v2/traceLive";
 import { neon } from "@neondatabase/serverless";
 import { httpTransport } from "../../../lib/onsinch/onsinch";
 import { getSettings } from "../../../lib/settingsDb";
@@ -43,6 +44,9 @@ async function sync(request: Request, labels: boolean): Promise<Response> {
     ["unread", () => retryUnread()],
     // The planner again on every open card, against OnSinch now (Ben approved 10-20): reads only, never a write. [DECISIONS V24]
     ["replan", () => replanOpen(sql)],
+    // The live trace's 90 days (harness/DATA_POLICY.md); a prune that fails turns the sync red, since rows past
+    // the policy would otherwise stay unseen.
+    ["trace", () => pruneTrace(sql)],
     ["testData", () => getSettings()
       .then(async (s) => maybeSweep(sql, t, !!s.test_data_autoclear, { writes: await botWrites() }))
       .then((r) => (typeof r === "string" ? r : { orders: r.orders.length, companies: r.companies.length, rows: Object.values(r.rows).reduce((a, b) => a + b, 0), refused: r.refused ?? null, failed: r.failed.length }))],

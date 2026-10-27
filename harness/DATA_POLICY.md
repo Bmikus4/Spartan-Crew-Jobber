@@ -20,12 +20,16 @@ Every event carries `trace_id`, `run_mode` (`test` or `live`) and, in test, `cas
 - **Retention:** recordings are kept, because they are what makes re-scoring free. Runs can be
   deleted at will.
 
-## Live mode (OFF until the operator says `enable live`)
-- **Wiring:** production passes `noTrace`, so nothing is written.
-- **Personal data, when enabled:**
-  - the sender's address is stored as a SHA-256 hash with a per-deployment salt;
+## Live mode (ON since 27 Oct, ADDENDUM R11 / 5.2; `SPARTAN_TRACE=off` stops it)
+- **Wiring:** `app/lib/v2/traceLive.ts` writes one `v2_trace` row per step. Intake (`process.ts`
+  processMessage) writes every email it decides; the minute re-plan (`replan.ts`) writes only an answer that
+  changed. `resume.ts`'s check plan and the harness replay still pass `noTrace`.
+- **Personal data:**
+  - any email address in an event is replaced by its SHA-256 with a per-deployment salt
+    (`SPARTAN_TRACE_SALT`), so one sender's rows join; with no salt set it is `[address]`;
   - email text is never put in a trace;
   - the model's quotes are kept, because they are what a reviewer checks.
-- **Retention, when enabled:** 90 days, then thinned to the decision and its scores.
-- **Failure:** a sink that throws is swallowed and counted (`tracer().failures()`). It never blocks or
-  changes how an email is handled.
+- **Retention:** 90 days. `pruneTrace` runs in the minute sync and deletes older rows; the decision itself
+  stays in `v2_decisions`.
+- **Failure:** a sink that throws, or a row that cannot be written, is dropped and counted (`failures()`).
+  It never blocks or changes how an email is handled (test/liveTrace.ts).

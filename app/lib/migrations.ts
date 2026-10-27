@@ -505,6 +505,12 @@ export const MIGRATIONS: ReadonlyArray<readonly [id: string, statement: string]>
   ["084_create_table_settings_history", `CREATE TABLE IF NOT EXISTS settings_history (
     id BIGSERIAL PRIMARY KEY, field TEXT NOT NULL, from_value JSONB, to_value JSONB, actor TEXT NOT NULL,
     at TIMESTAMPTZ NOT NULL DEFAULT now())`],
+  // lib/v2/traceLive.ts
+  ["085_create_table_v2_trace", `CREATE TABLE IF NOT EXISTS v2_trace (
+    id BIGSERIAL PRIMARY KEY, trace_id TEXT NOT NULL, source TEXT NOT NULL, component TEXT NOT NULL,
+    at TIMESTAMPTZ NOT NULL, ms INTEGER, data JSONB NOT NULL)`],
+  ["086_create_index_v2_trace_at", `CREATE INDEX IF NOT EXISTS v2_trace_at ON v2_trace (at)`],
+  ["087_create_index_v2_trace_trace_id", `CREATE INDEX IF NOT EXISTS v2_trace_trace_id ON v2_trace (trace_id)`],
 ];
 
 /**

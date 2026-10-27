@@ -14,7 +14,8 @@ every step update its status line, its §0 table and any measurement.**
 4. **Plan: which booking, which change.** `interpret/plan.ts` (findOrder, bookedAt, targetShift),
    `app/lib/v2/evidence.ts`, `threadState.ts`, `threadOrder.ts`, `links.ts`. **A booking is matched here, in
    v2, never in app/lib/onsinch.**
-5. **Record.** One `v2_decisions` row per email (`process.ts`), with stable reason codes (`app/lib/v2/reasons.ts`).
+5. **Record.** One `v2_decisions` row per email (`process.ts`), with stable reason codes (`app/lib/v2/reasons.ts`),
+   and its steps in `v2_trace` (`app/lib/v2/traceLive.ts`, 90 days, no email text: `harness/DATA_POLICY.md`).
 6. **Write.** The bot (`app/lib/v2/bot/`: `run.ts`, `builder.ts`, `ops.ts`, `db.ts`, `apiCreate.ts`).
    **Off:** the Settings switch bot_writes_enabled is false (owner, 25 Oct).
 7. **Every minute.** `/api/bot/sync`: stopped writes, the undecided sweep, failed reads, the re-plan

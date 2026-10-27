@@ -20,7 +20,8 @@ import { plan, type Decision, type World } from "./interpret/plan";
 import { runOp, type RunResult } from "./bot/run";
 import type { Op } from "./bot/ops";
 import { utcToLondon } from "./bot/ops";
-import { noTrace, type Tracer } from "./trace";
+import { type Tracer } from "./trace";
+import { liveTracer } from "./traceLive";
 import { automationPausedFlag, v2Writes } from "../paused";
 import { isTestId, isTestSender } from "../testData";
 import { coded, systemFailureOf } from "./reasons";
@@ -521,6 +522,7 @@ export async function processMessage(message_id: string, opts: { execute: boolea
   const m: MessageIn = before.length ? { ...m0, body: [...before, latestText(String(m0.body ?? ""))].join("\n\n") } : m0;
   const from = addr(m.from_address);
   const world = opts.world ?? onsinchWorld();
+  const trace = liveTracer(sql, message_id, "intake");
   const r = await decideMessage(m, {
     extract: extractWithMeta,
     world,
@@ -549,8 +551,8 @@ export async function processMessage(message_id: string, opts: { execute: boolea
       const failed = systemFailureOf(d.decision, d.executed);
       if (failed) void reportError({ route: "system-failed", where: "v2/process", what: failed, detail: `message ${message_id}, thread ${m.thread_id}` });
     },
-    trace: noTrace,
-  });
+    trace,
+  }).finally(trace.flush);
   if (!r.interpretation) return { message_id, skipped: "not a client's email", decision: r.decision };
   return { message_id, interpretation: r.interpretation.grounded, decision: r.decision, ...(r.executed ? { executed: r.executed } : {}) };
 }

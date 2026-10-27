@@ -4,8 +4,8 @@
 // read, ground, plan, each write, final state) be rebuilt after the fact.
 // ----------------------------------------------------------------------------
 // A TRACE NEVER CHANGES OR BLOCKS AN EMAIL'S HANDLING. A sink that throws is swallowed and
-// counted; the decision goes on. Live collection is wired but OFF (no live sink is passed
-// in production) until the operator says "enable live" (harness/DATA_POLICY.md).
+// counted; the decision goes on. Live traffic is written by traceLive.ts, as
+// harness/DATA_POLICY.md's live mode sets out.
 // ============================================================================
 
 export type TraceComponent = "filter" | "extract" | "ground" | "plan" | "run" | "final";
@@ -36,5 +36,5 @@ export function tracer(sink: (e: TraceEvent) => void, base: { trace_id: string; 
   return t;
 }
 
-/** Production until live collection is enabled: nothing is written anywhere. */
+/** Nothing is written anywhere: the harness replay, and resume's check plan, which decides nothing. */
 export const noTrace: Tracer = () => {};

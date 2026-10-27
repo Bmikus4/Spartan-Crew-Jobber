@@ -19,7 +19,7 @@ import { decideMessage, onsinchWorld, rawRequests, threadReads, type Recorded, t
 import type { World } from "./interpret/plan";
 import { linkedOrderId } from "./threadOrder";
 import { linkFound } from "./links";
-import { noTrace } from "./trace";
+import { liveTracer } from "./traceLive";
 import { getSettings } from "../settingsDb";
 import { rowsOnCard, type V2Row } from "../feed/v2";
 import { V2_FROM } from "../feed/live";
@@ -95,6 +95,7 @@ export async function replanOpen(sql: Sql, opts: { limit?: number; budgetMs?: nu
       if (!m0) continue;
       let got: Recorded | null = null;
       const links: Array<{ order_id: number; source: string }> = [];
+      const trace = liveTracer(sql, row.message_id, "replan");
       await decideMessage(m0, {
         ...threadReads(sql, m0),
         extract: (async () => ({ x: row.interpretation.extraction, meta: row.interpretation.meta ?? { model: "stored", prompt_id: "stored", input_tokens: 0, output_tokens: 0, cost_usd: 0, ms: 0 } })) as any,
@@ -112,7 +113,7 @@ export async function replanOpen(sql: Sql, opts: { limit?: number; budgetMs?: nu
         ]),
         link: async (order_id, source = "planner") => { links.push({ order_id, source }); },
         record: async (r) => { got = r; },
-        trace: noTrace,
+        trace,
       });
       rep.planned++;
       const d = (got as Recorded | null)?.decision;
@@ -127,7 +128,8 @@ export async function replanOpen(sql: Sql, opts: { limit?: number; budgetMs?: nu
       if (opts.dry) continue;
       if (before !== after || !row.replanned_at) {
         await sql`UPDATE v2_decisions SET replan = ${after}::jsonb, replanned_at = now() WHERE message_id = ${row.message_id}`;
-        if (before !== after) rep.changed++;
+        // Only an answer that changed is traced: the re-plan runs every open card every minute.
+        if (before !== after) { rep.changed++; await trace.flush(); }
       } else {
         await sql`UPDATE v2_decisions SET replanned_at = now() WHERE message_id = ${row.message_id}`;
       }

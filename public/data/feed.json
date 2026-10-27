@@ -5301,5 +5301,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0249",
+  "ts": "2026-10-27T23:08:57+00:00",
+  "kind": "measurement",
+  "headline": "R11: live trace on (v2_trace, 90 days); 5.7 counted, 5 of 6 unidentified replied to Spartan, change held",
+  "subject": "Each decided email's steps are kept 90 days, addresses hashed, no email text",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 109,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]
