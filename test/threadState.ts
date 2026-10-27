@@ -54,11 +54,14 @@ ok(s.state === "needs-created", "a booking nobody has answered and no order hold
 s = threadState(thread([client("R11507 please add one")], { link: null }), world([{ ...R11507, status: -1 }]));
 ok(s.order === null, "a cancelled order is never the thread's order", s);
 
-// Harbour Scenic: the thread names its September job and its October one; the days decide.
+// Harbour Scenic: the thread names its September job and its October one; the days decide. As the
+// thread stood (1a1308b99b2eaf9b), the numbers were in its earlier emails and in a quote of ours.
 const R10950 = order(15900, "10950", 48, [slot("2026-09-18", "17:30", 2)], { status: -2 });
 const R11508 = order(16560, "11508", 48, [slot("2026-10-13", "17:30", 2), slot("2026-10-15", "19:00", 4)]);
+s = threadState(thread([client("Further to R10950 last month", T0 - 86400_000), client("change the 15th to 19:00-01:00\n\nOn Mon, ops wrote:\n> R11508 is confirmed")], { requests: [{ date: "2026-10-15", start: "19:00" }] }), world([R10950, R11508]));
+ok(s.order?.r === "R11508", "of two numbers in the thread, the order holding the day asked is the one", s);
 s = threadState(thread([client("Further to R10950 last month, and R11508: change the 15th to 19:00-01:00")], { requests: [{ date: "2026-10-15", start: "19:00" }] }), world([R10950, R11508]));
-ok(s.order?.r === "R11508", "of two numbers named, the order holding the day asked is the one", s);
+ok(s.order?.r === "R11508", "two numbers in the newest email: the card still names the one holding the day (the planner writes to neither)", s);
 
 // Creative Technology, 10-14: the link pointed at R11500 (another job); staff had R11555 at Cytiva.
 const R11500 = order(16553, "11500", 48, [slot("2026-10-16", "08:00", 6, 111)], { name: "Creative Technology - Technicians @ Barclays" });

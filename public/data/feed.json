@@ -5231,5 +5231,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0244",
+  "ts": "2026-10-27T22:24:41+00:00",
+  "kind": "measurement",
+  "headline": "R8 a+b: one booking finder for the planner; F11, F12, F9 covered, item 7",
+  "subject": "Which order an email is about is decided in one place, app/lib/v2/identity",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 105,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]

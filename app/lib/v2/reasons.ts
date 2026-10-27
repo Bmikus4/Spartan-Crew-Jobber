@@ -29,7 +29,7 @@ export const REASON_CODES: ReadonlyArray<readonly [string, RegExp]> = [
   ["booking_link_unreadable", /linked to order \d+, which the system could not read/],
   ["system_failed", /could not (read|plan|decide)|replay threw|not decided when it arrived/],
   ["client_unknown", /no single client company/],
-  ["booking_not_identified", /no order is named|could be the one meant|does not single out|of the client's orders have a shift on|the email names \d+ orders|existing bookings in one email/],
+  ["booking_not_identified", /no order is named|could be the one meant|does not single out|of the client's orders have a shift on|the email names \d+ orders|existing bookings in one email|of the client's orders fit equally|orders are named, each holding the days asked/],
   ["booking_not_found", /\bR\d+ not found|belongs to another client|could not read|no shift on \d{4}-\d\d-\d\d/],
   ["venue_not_identified", /locations; which one|one call at \d+ venues|venues are named|is not an OnSinch venue|no OnSinch venue/],
   ["request_inconsistent", /the email says \d+ crew, the shift has|makes \d+, not the \d+ written|already has PO|changes in one email|position to re-time$/],

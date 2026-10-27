@@ -9,21 +9,20 @@
 // edited the client's order since, or the thread itself named the order.
 //
 // So a thread's state is a function of the whole thread and of OnSinch now:
-//   order      the order the thread is about, by the strongest evidence that exists:
-//              link > an R/J number written in the thread (ours or quoted) > the thread's PO
-//              on an order > day + one more fact (evidence.ts) > an order staff made for the
-//              client after the email, on a day it asks for. Never a day alone (Ben, 10-15). [DECISIONS V1]
+//   order      the order the thread is about, by the ladder in identity/index.ts (one rule for
+//              the planner and the TV). Never a day alone (Ben, 10-15). [DECISIONS V1]
 //   state      done | needs-updated (an order, with its R and J) | needs-created (no order and
 //              nobody has answered) | answered (no order, a person replied after the client)
 //              | not-a-job (our own request to a supplier)
 // The TV and the labels read this, so they cannot disagree with each other or with OnSinch.
 // ============================================================================
-import { evidenceMatch, wantOf, BOT_USER } from "./evidence";
+import { wantOf, BOT_USER } from "./evidence";
+import { identify, covered, refsIn, type OrderRef } from "./identity";
 import { CONSUMER_DOMAINS, domainOfEmail, type CompanyRec } from "../onsinch/resolve";
 
 export type ThreadMsg = { message_id: string; from: string; to: string[]; at: number; subject: string; body: string; ours: boolean };
 export type Grounded = { date?: string; start?: string; crew?: number; place_id?: number; venue?: string; target?: { date?: string; start?: string } };
-export type OrderRef = { id: number; r: string; j: string | null; by: string };
+export type { OrderRef };
 export type ThreadState = {
   thread_id: string;
   order: OrderRef | null;
@@ -52,87 +51,13 @@ export type ThreadIn = {
   need: { kind: "needs-created" | "needs-updated"; at: number } | null;
 };
 
-const R_RE = /\b(?:R|order\s*(?:no\.?|number|#)?\s*)[\s#:-]?(1\d{4})\b/gi;
-const J_RE = /\bJ[\s#:-]?(1\d{4,5})\b/g;
-const PO_RE = /\b(?=[A-Z0-9-]*\d)[A-Z0-9][A-Z0-9-]{4,}\b/gi;
-const live = (o: any) => o && Number(o.status) !== -1;
-const jOf = (o: any): string | null => { const j = ([] as any[]).concat(o?.Job ?? [])[0]; return j?.id ? `J${j.id}` : null; };
-const ref = (o: any, by: string): OrderRef => ({ id: Number(o.id), r: `R${o.number}`, j: jOf(o), by });
-
-/** The order this thread is about, or null; `ambiguous` finds are no answer. */
+/** The order this thread is about, or null: identity/index.ts decides; of several, only the lead. */
 export function findOrder(t: ThreadIn, w: StateWorld, companyIds: number[]): OrderRef | null {
-  const byId = new Map(w.orders.map((o) => [Number(o.id), o]));
-  const byNumber = new Map(w.orders.map((o) => [String(o.number), o]));
-  const byJob = new Map<string, any>();
-  for (const o of w.orders) for (const j of [].concat(o?.Job ?? []) as any[]) byJob.set(String(j.id), o);
-
-  const want = wantOf(t.requests);
-  const asked = new Set(want.days);
-  const holds = (o: any) => !asked.size || daysOn(o).some((d) => asked.has(d));
-  // The link is the thread's order while it holds a day the thread asks for. A link that holds
-  // none is weighed with the rest: R11500 was linked to the Cytiva thread (10-14) from a screen
-  // find, and the bot wrote Cytiva's shift into it while staff's R11555 held the job.
-  const linked = t.link ? byId.get(Number(t.link.order_id)) : null;
-  if (live(linked) && holds(linked)) return ref(linked, "link");
-
   const text = t.messages.map((m) => `${m.subject}\n${m.body}`).join("\n");
-  const named = new Map<number, any>();
-  for (const x of text.matchAll(R_RE)) { const o = byNumber.get(x[1]); if (live(o)) named.set(Number(o.id), o); }
-  for (const x of text.matchAll(J_RE)) { const o = byJob.get(x[1]); if (live(o)) named.set(Number(o.id), o); }
-  const mine = (o: any) => !companyIds.length || companyIds.includes(Number(o.company_id));
-  const namedMine = [...named.values()].filter(mine);
-  // One number named, holding the days asked: that order. Several: the days decide among them
-  // (Harbour Scenic names its September R10950 and its October R11508).
-  const namedHolding = namedMine.filter(holds);
-  if (namedHolding.length === 1) return ref(namedHolding[0], "its number in the thread");
-
-  const clientOrders = w.orders.filter((o) => live(o) && companyIds.includes(Number(o.company_id)));
-  // A PO or project reference the thread carries, on exactly one of the client's orders.
-  const tokens = new Set([...text.matchAll(PO_RE)].map((x) => x[0].toUpperCase()));
-  const poHits = clientOrders.filter((o) => {
-    const po = String(o.intern_name ?? "").trim().toUpperCase();
-    if (po.length >= 5 && tokens.has(po)) return true;
-    return String(o.name ?? "").toUpperCase().split(/[^A-Z0-9-]+/).some((p) => p.length >= 5 && /\d/.test(p) && tokens.has(p));
-  }).filter(holds);
-  if (poHits.length === 1) return ref(poHits[0], "its PO or project reference in the thread");
-
-  // The day and one more fact; the venue the client names counts when the order's own name
-  // carries it ("Creative Technology @ Cytiva, Amersham Place").
-  const venues = new Set(t.requests.flatMap((r) => words(r.venue)));
-  // Among several named orders holding the days, those; else every order of the client's (SN
-  // ExCeL names R10304 and quotes, and R10522 holds the Saturday call).
-  const pool = namedHolding.length > 1 ? namedHolding : clientOrders;
-  const scored = pool.map((o) => {
-    const ev = asked.size ? evidenceMatch(want, [o], { staffOnly: false }) : null;
-    if (!ev || ev === "ambiguous") return null;
-    const at = String(o.name ?? "").split("@").slice(1).join("@");
-    const by = [...ev.evidence, ...(venues.size && words(at).some((x) => venues.has(x)) && !ev.evidence.includes("venue") ? ["venue name"] : [])];
-    return { o, by };
-  }).filter((x): x is { o: any; by: string[] } => !!x);
-  if (scored.length) {
-    const best = Math.max(...scored.map((x) => x.by.length));
-    let top = scored.filter((x) => x.by.length === best);
-    // Equal evidence: the order holding more of the days asked. SN ExCeL asks for the 17th,
-    // 18th, 20th and 21st; COG's R10522 holds all four, its R10304 three.
-    if (top.length > 1) {
-      const held = (o: any) => new Set(daysOn(o).filter((d) => asked.has(d))).size;
-      const most = Math.max(...top.map((x) => held(x.o)));
-      top = top.filter((x) => held(x.o) === most);
-      if (top.length === 1) return ref(top[0].o, `the day and ${top[0].by.join(" + ")}, and the most days asked`);
-    }
-    if (top.length === 1) return ref(top[0].o, `the day and ${top[0].by.join(" + ")}`);
-  }
-
-  // No "an order staff made for this client after the email, on a day it asks for": the
-  // client and the day are not two facts for a client running several jobs a week. It found
-  // R11588 (Microsoft, Excel, 10-22) for Creative Technology's NVIDIA Berlin stand-down.
-  return live(linked) ? ref(linked, "link (it holds none of the days asked)") : null;
+  const id = identify({ refs: refsIn(t.messages), requests: t.requests, link: t.link ? Number(t.link.order_id) : null, text }, w.orders, { companyIds });
+  return id.kind === "one" ? id.order : id.kind === "several" ? id.lead ?? null : null;
 }
 
-const STOP = new Set(["the", "and", "hotel", "london", "house", "centre", "center", "hall", "venue", "place", "street", "road", "park"]);
-const words = (s: unknown): string[] => String(s ?? "").toLowerCase().split(/[^a-z0-9]+/).filter((x) => x.length >= 4 && !STOP.has(x));
-const daysOn = (o: any): string[] => ([] as any[]).concat(o?.Job ?? []).flatMap((j: any) => ([] as any[]).concat(j.SlotTeam ?? []))
-  .flatMap((s: any) => ([] as any[]).concat(s.Slot ?? [])).filter((s: any) => s?.cancelled !== true && s?.beginning).map((s: any) => londonDate(s.beginning));
 const londonDate = (iso: string) => new Date(iso).toLocaleDateString("en-CA", { timeZone: "Europe/London" });
 
 /**
@@ -158,23 +83,9 @@ export function companiesOf(addresses: string[], companies: CompanyRec[]): numbe
   return [...out];
 }
 
-/**
- * Every dated request in an order of the client's, by its day and one more fact: the orders
- * that hold them, or null when one is in none. A quote can be booked as several orders
- * (Subfrantic 10-16: R11698 for Job 1, R11701 and R11705 for Job 2's two options).
- */
-export function coveredBy(t: ThreadIn, w: StateWorld, companyIds: number[]): OrderRef[] | null {
-  // Earliest day first, so the first order named holds the booking's first day.
-  const dated = t.requests.filter((r) => r.date).sort((a, b) => String(a.date).localeCompare(String(b.date)));
-  if (!dated.length) return null;
-  const pool = w.orders.filter((o) => live(o) && companyIds.includes(Number(o.company_id)));
-  const out = new Map<number, OrderRef>();
-  for (const r of dated) {
-    const hit = pool.map((o) => ({ o, ev: evidenceMatch(wantOf([r]), [o]) })).filter((x) => x.ev && x.ev !== "ambiguous");
-    if (!hit.length) return null;
-    for (const x of hit) out.set(Number(x.o.id), ref(x.o, `the day and ${(x.ev as { evidence: string[] }).evidence.join(" + ")}`));
-  }
-  return [...out.values()];
+/** Every dated request held by the client's orders (identity/index.ts covered), or null. `after`: the need's email. */
+export function coveredBy(t: ThreadIn, w: StateWorld, companyIds: number[], after?: number): OrderRef[] | null {
+  return covered(t.requests, w.orders, { companyIds, after });
 }
 
 /** A staff hand on the order since `at`, by its own stamps: some edits never reach the timeline. */
@@ -191,7 +102,7 @@ export function threadState(t: ThreadIn, w: StateWorld): ThreadState {
   const base = { thread_id: t.thread_id, order, company_ids: companyIds };
   if (!t.need) return { ...base, state: "done", why: "nothing asked for is outstanding" };
   if (t.need.kind === "needs-created") {
-    const all = coveredBy(t, w, companyIds);
+    const all = coveredBy(t, w, companyIds, t.need.at);
     if (all?.length) return { ...base, order: order ?? all[0], orders: all, state: "done", why: `already booked: ${all.map((o) => o.r).join(", ")}` };
   }
 

@@ -17,10 +17,11 @@ import { confirms, type Interpretation, type Request } from "./interpret";
 import { addMinutes } from "./ground";
 import { fillTimes, pastShifts } from "./assume";
 import { tradeOf, pickProfession, PROFESSION_NAME, type LiveProfession } from "./professions";
-import { matchCompanyBySender, rNumbersIn, normName } from "../../onsinch/resolve";
-import { evidenceMatch, wantOf, BOT_USER, type Found } from "../evidence";
+import { matchCompanyBySender, rNumbersIn, normName, domainOfEmail, CONSUMER_DOMAINS } from "../../onsinch/resolve";
+import { BOT_USER } from "../evidence";
 import { coded } from "../reasons";
-import { findOrder as findByEvidence, companiesOf, coveredBy, stampedSince, type ThreadIn, type ThreadMsg, type StateWorld, type Grounded } from "../threadState";
+import { companiesOf, stampedSince, type ThreadIn, type ThreadMsg, type StateWorld, type Grounded } from "../threadState";
+import { identify, covered, refsIn, GENERIC_PLACE, type Facts, type OrderRef } from "../identity";
 
 export type World = {
   companies(): Promise<any[]>;
@@ -180,45 +181,47 @@ async function placesFor(world: World, venue: string, clientOrders: any[] = []):
  * the thread's link: measured 10-21, of 107 threads with a need since 10-09, 42 asked about an
  * order that already existed and was never found, by its PO or project reference in the order's
  * name (12), an R or J number elsewhere in the thread (8), or its day and one more fact (39).
- * Now the evidence finder (threadState.ts) names it, strongest first: the link while it holds a
- * day asked for, an R/J number anywhere in the thread, the PO or project reference, the day and
- * one more fact (start, crew count, venue). NEVER the day alone (Ben, 10-03 and 10-15): a second [DECISIONS V1]
- * job that day would have its crew and times rewritten.
+ * Since R8 the shared resolver (identity/index.ts) names it, by the same ladder the TV uses.
+ * NEVER the day alone (Ben, 10-03 and 10-15): a second job that day would have its crew and [DECISIONS V1]
+ * times rewritten.
  * `explicit` refuses the day-and-fact finds: new shifts go onto an order only by reference,
  * and a day's booking is weighed by bookedAt instead.
  */
 async function findOrder(msg: Message, companyId: number, world: World, threadOrderId: number | null, ev?: Evidence | null, explicit = false): Promise<any | string> {
-  const rs = rNumbersIn(`${msg.subject}
-${msg.text}`);
-  if (rs.length > 1) return `the email names ${rs.length} orders`;
-  if (rs.length === 1) {
-    const o = await world.orderByNumber(rs[0]);
-    if (!o) return `R${rs[0]} not found`;
-    return Number(o.company_id) === companyId ? o : `R${rs[0]} belongs to another client`;
+  // A number the email itself writes is checked against OnSinch first: one OnSinch does not hold,
+  // or holds for another client, is said rather than passed over for a weaker find.
+  const pool = ev ? [...ev.pool] : await world.companyOrders(companyId);
+  for (const n of rNumbersIn(`${msg.subject}\n${msg.text}`)) {
+    const o = pool.find((x) => String(x.number) === n) ?? (await world.orderByNumber(n));
+    if (!o) return `R${n} not found`;
+    if (Number(o.company_id) !== companyId) return `R${n} belongs to another client`;
+    if (!pool.some((x) => Number(x.id) === Number(o.id))) pool.push(o);
   }
-  if (ev) {
-    const ref = findByEvidence(ev.tin, ev.sw, ev.ids);
-    const o = ref && !(explicit && /^the day and/.test(ref.by)) ? ev.pool.find((x) => Number(x.id) === ref.id) : null;
-    if (o && Number(o.company_id) === companyId) return o;
-  }
-  if (threadOrderId) {
-    const o = (await world.companyOrders(companyId)).find((x) => Number(x.id) === threadOrderId);
-    if (o) return o;
-  }
+  const facts: Facts = ev?.facts ?? { refs: refsIn([], { subject: msg.subject, text: msg.text }), requests: [], link: threadOrderId, text: `${msg.subject}\n${msg.text}` };
+  const id = identify(facts, pool, { companyIds: [companyId], add: explicit });
+  if (id.kind === "one") return pool.find((o) => Number(o.id) === id.order.id);
+  if (id.kind === "several") return `${id.why}: ${id.orders.map((o) => o.r).join(", ")}`;
   return "no order is named";
 }
 
-/** What the evidence finder reads: the thread, every company it could be, their orders. */
-type Evidence = { ids: number[]; pool: any[]; tin: ThreadIn; sw: StateWorld; sentAt: number };
+/** What the evidence finder reads: the thread, every company it could be, their orders, the facts. */
+type Evidence = { ids: number[]; pool: any[]; tin: ThreadIn; sw: StateWorld; sentAt: number; facts: Facts };
+/** The order a card names: the resolver's one, or the lead of several (never written to: findOrder refuses several). */
+const found = (ev: Evidence): OrderRef | null => { const id = identify(ev.facts, ev.pool, { companyIds: ev.ids }); return id.kind === "one" ? id.order : id.kind === "several" ? id.lead ?? null : null; };
 const isDay = (d: unknown): d is string => typeof d === "string" && /^\d{4}-\d{2}-\d{2}$/.test(d);
 
 async function evidenceOf(msg: Message, i: Interpretation, world: World, threadOrderId: number | null, opts: PlanOpts): Promise<Evidence | null> {
   const companies = await world.companies();
   const thread: ThreadMsg[] = opts.thread?.length ? opts.thread : [{ message_id: msg.message_id, from: msg.from, to: [], at: Date.parse(msg.sentIso), subject: msg.subject, body: msg.text, ours: false }];
   const linked = threadOrderId && world.orderById ? await world.orderById(threadOrderId).catch(() => null) : null;
-  // Finding may search every company the addresses could be; booking still needs exactly one.
+  // Finding may search every company the senders could be; booking still needs exactly one. A Cc'd
+  // venue contact or second client never widens the search (F12): the To and Cc addresses count
+  // only when no sender names a company, and only when they name exactly one.
+  const clientMail = thread.filter((m) => !m.ours);
+  const fromIds = companiesOf(clientMail.map((m) => m.from), companies);
+  const toIds = fromIds.length ? [] : companiesOf(clientMail.flatMap((m) => m.to), companies);
   const ids = [...new Set([matchCompanyBySender(msg.from, companies) || 0, Number(linked?.company_id) || 0,
-    ...companiesOf(thread.filter((m) => !m.ours).flatMap((m) => [m.from, ...m.to]), companies)].filter((x) => x > 0))].slice(0, 4);
+    ...fromIds, ...(toIds.length === 1 ? toIds : [])].filter((x) => x > 0))].slice(0, 4);
   if (!ids.length && !linked) return null;
   const pool: any[] = [];
   for (const c of ids) pool.push(...(await world.companyOrders(c)));
@@ -229,10 +232,12 @@ async function evidenceOf(msg: Message, i: Interpretation, world: World, threadO
     ...i.requests.map((r) => ({ date: r.date ?? r.target?.date, start: r.start, crew: r.crew, place_id: r.place_id, venue: r.venue, target: r.target })),
     ...(opts.raw ?? []),
   ].filter((r) => isDay(r.date) || isDay(r.target?.date)).map((r) => ({ ...r, date: isDay(r.date) ? r.date : r.target!.date }));
+  const generic = new Set((world.allPlaces ? await world.allPlaces() : []).filter((p) => GENERIC_PLACE.test(normName(p.name))).map((p) => Number(p.id)));
   return {
     ids, pool, sentAt: Date.parse(msg.sentIso),
     tin: { thread_id: "", messages: thread, requests, link: threadOrderId ? { order_id: threadOrderId } : null, need: null },
     sw: { orders: pool.filter((o) => Number(o.status) !== -1), companies, staffEdits: [] },
+    facts: { refs: refsIn(thread, { subject: msg.subject, text: msg.text }), requests, link: threadOrderId, text: thread.map((m) => `${m.subject}\n${m.body}`).join("\n"), generic },
   };
 }
 
@@ -261,7 +266,7 @@ function settle(d: Decision, i: Interpretation, ev: Evidence | null, again: bool
     const touched = targets.filter(since);
     if (touched.length) return { kind: "none", reason: `staff changed ${touched.map(rOf).join(", ")} after the email`, found: touched };
     if (d.ops.some((o) => o.op.kind === "create_order")) {
-      const all = coveredBy(ev.tin, ev.sw, ev.ids);
+      const all = covered(ev.tin.requests, ev.sw.orders, { companyIds: ev.ids, after: ev.sentAt, generic: ev.facts.generic });
       if (all?.length && all.every((o) => since(o.id))) return { kind: "none", reason: `already booked: ${all.map((o) => o.r).join(", ")}`, found: all.map((o) => o.id) };
     }
     return d;
@@ -269,10 +274,10 @@ function settle(d: Decision, i: Interpretation, ev: Evidence | null, again: bool
   if (d.kind !== "handoff") return d;
   const asksNew = i.requests.length ? i.requests.every((r) => r.action === "new_shift") : i.intent === "booking" || i.intent === "quote_request";
   if (asksNew) {
-    const all = coveredBy(ev.tin, ev.sw, ev.ids);
+    const all = covered(ev.tin.requests, ev.sw.orders, { companyIds: ev.ids, after: ev.sentAt, generic: ev.facts.generic });
     if (all?.length && all.every((o) => since(o.id))) return { kind: "none", reason: `already booked: ${all.map((o) => o.r).join(", ")}`, found: all.map((o) => o.id) };
   }
-  const ref = findByEvidence(ev.tin, ev.sw, ev.ids);
+  const ref = found(ev);
   if (!ref || ref.by === "link (it holds none of the days asked)") return d;
   // Nor are its numbers a new booking's: a client running two jobs that day would see the other's.
   if (asksNew && /^the day and/.test(ref.by) && !since(ref.id)) return d;
@@ -482,7 +487,7 @@ async function decide(msg: Message, i: Interpretation, world: World, threadOrder
   if (!companyId && threadOrderId && world.orderById) { const o = await world.orderById(threadOrderId).catch(() => null); if (o && Number(o.company_id) > 0) companyId = Number(o.company_id); }
   // Else the company of the order the finder names: tom@fulltilt.london is on companies 501 and
   // 635, and the card read "new client, not in OnSinch" over staff's R11750 (MK Crew, 10-19).
-  if (!companyId && ev) { const ref = findByEvidence(ev.tin, ev.sw, ev.ids); const o = ref ? ev.pool.find((x) => Number(x.id) === ref.id) : null; if (o && Number(o.company_id) > 0) companyId = Number(o.company_id); }
+  if (!companyId && ev) { const ref = found(ev); const o = ref ? ev.pool.find((x) => Number(x.id) === ref.id) : null; if (o && Number(o.company_id) > 0) companyId = Number(o.company_id); }
   // A sender OnSinch has no company for has nothing booked: a cancellation or a PO from them
   // changes nothing (AT Comms, 10-11: "the PM has this covered now" after their first email).
   if (!companyId && (i.intent === "cancellation" || i.intent === "info_only")) return { kind: "none", reason: `${msg.from} is not a client in OnSinch, so nothing of theirs is booked` };
@@ -495,8 +500,21 @@ async function decide(msg: Message, i: Interpretation, world: World, threadOrder
   // person to place. OnSinch's API cannot delete a company, so the bar is high on purpose.
   const STOP = new Set(["ltd", "limited", "uk", "the", "and", "group", "events", "event", "solutions", "services", "productions", "production", "media", "live", "co", "company", "plc", "llp", "&"]);
   const words = (t: string) => normName(t).split(" ").filter((w) => w.length > 2 && !STOP.has(w));
+  // A DOMAIN SEVERAL COMPANIES SHARE is settled by the company the email names, when exactly one of
+  // them matches it (held item 7, OPERATING §9.3: one sender for several clients is resolved by
+  // content, never by the most frequent). 3 of the live week's 7 emails with no client were on such a
+  // domain. Two to three companies only: a wider domain is a mail host. A domain OnSinch already
+  // holds is never a new client either: a name matching none of its companies is for a person. A
+  // personal mail host is neither: icloud.com sits on 2 of 811 companies and gmail.com on 34, and a
+  // person's address says nothing about which company they book for (red-team-B H2).
+  const senderDomain = CONSUMER_DOMAINS.has(domainOfEmail(msg.from)) ? "" : domainOfEmail(msg.from);
+  const onDomain = !companyId && senderDomain ? (await world.companies()).filter((c) => (c.Client ?? []).some((cl: { email?: string }) => domainOfEmail(cl.email) === senderDomain)) : [];
+  if (!companyId && i.company_name && onDomain.length >= 2 && onDomain.length <= 3) {
+    const named = onDomain.filter((c) => words(String(c.name ?? "")).some((w) => words(i.company_name!).includes(w)));
+    if (named.length === 1) companyId = Number(named[0].id);
+  }
   const nameClash = i.company_name ? (await world.companies()).some((c) => words(String(c.name ?? "")).some((w) => words(i.company_name!).includes(w))) : false;
-  const newClient = !companyId && i.company_name && !nameClash && (i.intent === "booking" || i.intent === "quote_request") && i.requests.length && i.requests.every((r) => r.action === "new_shift") ? i.company_name : null;
+  const newClient = !companyId && i.company_name && !nameClash && !onDomain.length && (i.intent === "booking" || i.intent === "quote_request") && i.requests.length && i.requests.every((r) => r.action === "new_shift") ? i.company_name : null;
   if (!companyId && !newClient) return handoff(`no single client company for ${msg.from}`);
   const clientOrders = await world.companyOrders(companyId);
   const live = reqs.some((r) => tradeOf(r.trade)?.named) && world.professions ? await world.professions() : [];
@@ -533,7 +551,8 @@ async function decide(msg: Message, i: Interpretation, world: World, threadOrder
   // read from the quoted thread or the subject is checked against the client's orders by its day
   // and one more fact: held, nothing to do; held by no order, the card stays for a person.
   const histNew = hist.filter((r) => r.action === "new_shift" && r.date && r.date >= (today ?? sentDay));
-  const holders = histNew.map((r) => evidenceMatch(wantOf([r]), clientOrders));
+  // Two orders holding it equally still hold it: the card would say no order does.
+  const holders = histNew.map((r) => { const id = identify({ refs: [], requests: [r], link: null, text: "", generic: ev?.facts.generic }, clientOrders, { companyIds: [companyId] }); return id.kind === "one" ? id.order : id.kind === "several" ? "several" as const : null; });
   const unheld = histNew.filter((_, k) => !holders[k]);
   if (unheld.length) return handoff(`the client confirmed ${[...new Set(unheld.map((r) => r.date))].join(", ")}, and no order holds it yet`);
   // A change from the thread that the client now confirms is a person's to make: "Can we confirm
@@ -542,9 +561,9 @@ async function decide(msg: Message, i: Interpretation, world: World, threadOrder
   const histChange = hist.filter((r) => r.action === "change_times" || r.action === "change_crew");
   if (histChange.length && confirms(msg.text)) return handoff(`the client confirmed a change from the thread (${[...new Set(histChange.map((r) => r.target?.date ?? r.date ?? "a shift"))].join(", ")}): a person makes it`);
   if (!reqs.length && hist.length) {
-    const held = [...new Map(holders.filter((h): h is Found => !!h && h !== "ambiguous").map((h) => [Number(h.order.id), h.order])).values()];
-    const reason = held.length ? `already booked: ${held.map((o) => `R${o.number}`).join(", ")}` : "nothing new asked for: the requests are the thread's earlier ones";
-    return { kind: "none", reason: [reason, ...(i.notes ?? [])].join("; "), ...(held.length ? { found: held.map((o) => Number(o.id)) } : {}) };
+    const held = [...new Map(holders.filter((h): h is OrderRef => !!h && h !== "several").map((h) => [h.id, h])).values()];
+    const reason = held.length ? `already booked: ${held.map((o) => o.r).join(", ")}` : "nothing new asked for: the requests are the thread's earlier ones";
+    return { kind: "none", reason: [reason, ...(i.notes ?? [])].join("; "), ...(held.length ? { found: held.map((o) => o.id) } : {}) };
   }
   const assumed: string[] = [];
   const history = pastShifts(clientOrders);
