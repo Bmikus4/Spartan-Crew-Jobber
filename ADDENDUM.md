@@ -6,7 +6,7 @@
   below as findings and status.
 - Every step updates this file: its status line, its measurement, and what moved.
 
-**Last updated:** 27 October 2026, R9 DONE (S-0247): a stopped write is finished or closed, never left. R8 DONE but e (S-0244 to S-0246); e waits on the owner's yes to a paid measurement. R3's switch-over waits on CRON_SECRET. The baseline was 0f2dcef. App code changed since then in these
+**Last updated:** 27 October 2026, R10 DONE (S-0248): the email-to-board harness and its 20-email case study. R9 DONE (S-0247). R8 DONE but e (S-0244 to S-0246); e waits on the owner's yes to a paid measurement. R3's switch-over waits on CRON_SECRET. The baseline was 0f2dcef. App code changed since then in these
 commits only:
 
 | commit | ticket | what |
@@ -29,6 +29,7 @@ commits only:
 | (R8.c) | S-0245 | Prompt 4 step c: shifts by venue on multi-venue orders (F10), the near-miss hand-off (F9's strict half), held C1 |
 | (R8.d) | S-0246 | Prompt 4 step d: the TV verifier finds an unbound need's order by the planner's rule; the old engine's matcher is called by nothing |
 | (R9) | S-0247 | Prompt 6: v2/resume.ts resumes a write that stopped between or before operations after planning it again, or closes it with one result; any build (F38) |
+| (R10) | S-0248 | Prompt 13: harness/board (cases, gold, a subagent reader, stage attribution), eval/board/2026-10-27.md, test/boardCases.ts in the gate |
 
 bd10dae (S-0213) moved the test suite onto PGlite. Line references below are at HEAD unless a line says "at 0f2dcef".
 
@@ -734,6 +735,9 @@ hand-out (10 minutes); a signal that cannot be read counts as stale. Each raises
 - On the current reader's labelled mail, 7 of 17 silent misses are such readings (eval/reader-diagnostic/).
 - **Fix:** a prompt change. It needs the owner's yes and a capped paid run (about $1-3).
 - **Measure first** with the email-to-board harness (R10) to see whether a better reading fixes the board.
+- **Measured, R10 (S-0248):** of its 20 cases, 2 are read as nothing asked by production's reader and by a Haiku
+  subagent alike (1a1540528d5a2d27, 1a168d83b151f870, the second a known prospective-1 miss). Another model on the same
+  prompt did not fix them, which points at the prompt, not the model. Twenty cases cannot size it.
 
 **F41. Needs Reply cards that carry booking work are not listed (Recall, high; F2's open half).**
 - They are 7 of the current reader's 17 misses.
@@ -1362,7 +1366,7 @@ Still to come from §10: the identity owner (R8), and the move of what the old e
 | R7 | **12** (new) | Retire the old engine in stages (F45, §10): move the shared OnSinch client and helpers to app/lib/onsinch/, delete what nothing live reaches, then pipeline/compiler/deps and the shut routes, then the 145 old tests | **DONE** S-0241 to S-0243 |
 | R8 | 4 | **One shared booking finder** (5.3), built once the old engine is gone, so there is one place for it. Brings in held C1 and item 7. **a to d DONE** S-0244 to S-0246; e held for the owner's yes to a paid measurement | yes |
 | R9 | 6 | Resume interrupted plans (F26, F38, F39). **DONE** S-0247 | yes |
-| R10 | **13** (new) | **The email-to-board harness** (the owner's design, below), then its case study | report + test |
+| R10 | **13** (new) | **The email-to-board harness** (the owner's design, below), then its case study. **DONE** S-0248 | report + test |
 | R11 | 5.2, 5.7 | Live trace; R number in our subjects (test first) | yes; 5.7 needs the owner's yes for outbound mail |
 | R12 | TV | F41 Needs Reply lane, F42 aging, held items 6 and 8 | **owner and Paz** |
 | R13 | 7 | Assisted mode design, from R10's numbers | design |
@@ -1520,7 +1524,31 @@ Zero references is permission to delete, never a reason to.
 **Done when:** app/lib/engine is gone or holds only what v2 uses, and nothing live changed (the harness and the suite
 agree).
 
-### Prompt 13: the email-to-board harness (the owner's design, 26 Oct)
+### Prompt 13: the email-to-board harness (the owner's design, 26 Oct): **DONE**, S-0248
+**As run (S-0248):**
+- **Cases:** harness/board/cases.ts picks 20 of D-cur by kind, in hash order of their ids (eval/board/cases.json): new
+  booking 4, acceptance 3, change 4, cancel 2, reply for crew 3, non-work 4. Never E3, never the pause window.
+- **The prompt:** harness/real/replay.ts takes `onExtract`, which hands over exactly what decideMessage would send the
+  reader, and `readings`, a reading per email in place of production's (the `--reader subagent` of step 4).
+  `harness/board/run.ts --requests` writes the 20 prompts (extract@f3e1a862322b) to .tmp-data/board/ (gitignored).
+- **Subagents** (claude-haiku-5-5, Read and Write in that folder only, about 610k tokens in all): the reader in two
+  batches of 10, and two blind labellers. A third labelled the 4 emails where they split. The card kind comes from
+  the two-reader labels; the target and the change come from the labellers. The change settles on its kinds; dates
+  are checked at grounding.
+- **`run.ts --compare`**: both readers through ground, plan, card (feed/v2.ts via system.ts) and label
+  (mail/threadLabels.ts), stopped at the first stage that parts from gold. Report eval/board/2026-10-27.md, ids and
+  codes only.
+- **Result:** 20 of 20 have gold; production's board matches on 16. The 4 misses:
+  - **reader (both), 2:** both readings find nothing asked (see F40).
+  - **reader, 1:** a cancellation production's reading turned into a reply card (reply_detail_missing); the
+    subagent's reading gets it to the gold board.
+  - **display, 1:** an acceptance shown as Needs Updated on R11798. The labels read a new booking, while the
+    labellers name R11798 as the target. That makes the gold the weaker side; it is for a person to settle.
+  The subagent's own reading misses once where production's does not: an ops miss, a shift where gold asks a PO.
+- **In the gate:** test/boardCases.ts, 12 synthetic emails (no client data) with checked-in readings, through
+  decideMessage, the card and the label.
+- **Rules held:** gold copy only (HARNESS_GOLD), no network, no model call in the harness itself, no email text
+  committed or printed.
 **Goal:** for each email, show:
 - what came in;
 - what it asks for;

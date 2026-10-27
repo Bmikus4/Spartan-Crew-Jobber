@@ -5287,5 +5287,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0248",
+  "ts": "2026-10-27T22:58:45+00:00",
+  "kind": "measurement",
+  "headline": "R10: email-to-board harness; 20 cases, production matches 16 of 20 (2 reader-both, 1 reader, 1 display)",
+  "subject": "Each email's board is compared with what it should show, stage by stage",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 108,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]

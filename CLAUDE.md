@@ -40,7 +40,8 @@ engine was deleted (ADDENDUM Prompt 12; `app/lib/onsinch/README.md`).
 - Every test runs on PGlite (`test/fixtures/pg.ts`). **Never run anything against the production DATABASE_URL;**
   read production only through `scripts/_readonly.mts`. Never call OnSinch write paths, /api/bot/* or the canary.
 - Never print email bodies, addresses or client names. Counts, ids and code locations only.
-- The harness: `harness/` (`harness/real/` replays real mail on the time-correct world at $0).
+- The harness: `harness/` (`harness/real/` replays real mail on the time-correct world at $0; `harness/board/` is the
+  email-to-board case study, ADDENDUM Prompt 13).
 
 ## Where things live
 - The plan and its status: `ADDENDUM.md`. Rulings: `DECISIONS.md` (dated ones in `decisions/`).

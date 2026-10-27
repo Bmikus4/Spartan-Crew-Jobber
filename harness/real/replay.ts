@@ -52,7 +52,12 @@ const ours = (m: GoldMessage) => !!m.is_from_spartan || /@spartancrew\.co\.uk$/i
  * time-correct world the way booked.mts checked production's (an order the reason names with a
  * live shift on an asked day). The check is reported beside the score; it never changes it.
  */
-export async function replay(evalIds: string[], askedDays: (id: string) => string[] = () => []): Promise<{ rows: Map<string, SystemRow>; limits: Map<string, EmailLimits>; booked: Map<string, boolean>; runs: number; warmups: number; modelCalls: number; netAttempts: number; preflight: string[] }> {
+/**
+ * opts.readings: a reading per evaluated email in place of production's (the email-to-board harness's subagent,
+ * harness/board/run.ts); the thread's earlier emails keep production's. opts.onExtract: what production would have
+ * sent the reader for each email (sent, from, subject, newest words, context), as decideMessage passes it.
+ */
+export async function replay(evalIds: string[], askedDays: (id: string) => string[] = () => [], opts: { readings?: Map<string, any>; onExtract?: (id: string, args: [string, string, string, string, string]) => void } = {}): Promise<{ rows: Map<string, SystemRow>; grounded: Map<string, any>; limits: Map<string, EmailLimits>; booked: Map<string, boolean>; runs: number; warmups: number; modelCalls: number; netAttempts: number; preflight: string[] }> {
   // Isolation first: no production credential, no network, the world a fake (OPERATING §8.1).
   const ix = new Index();
   const pf = preflight({ env: process.env, allowHosts: [], adapterChecks: [{ name: "the world is the time-correct fake", ok: new TimeWorld(ix, 0).fake === true, detail: "TimeWorld" }] });
@@ -85,6 +90,7 @@ export async function replay(evalIds: string[], askedDays: (id: string) => strin
   const order = [...evalIds, ...warm.map((d) => d.message_id)].map((id) => byId.get(id)!).sort((a, b) => T(a.date_iso) - T(b.date_iso) || a.message_id.localeCompare(b.message_id));
 
   const done = new Map<string, Recorded>();
+  const grounded = new Map<string, any>();
   const rows = new Map<string, SystemRow>();
   const limits = new Map<string, EmailLimits>();
   const booked = new Map<string, boolean>();
@@ -113,11 +119,12 @@ export async function replay(evalIds: string[], askedDays: (id: string) => strin
       .filter((x) => T(x.date_iso) < at && done.get(x.message_id)?.interpretation && T(dec.get(x.message_id)?.created_at) <= at)
       .flatMap((x) => done.get(x.message_id)!.interpretation!.grounded.requests ?? []);
     const link = world.threadOrderAt(m0.thread_id);
-    const x = reading.get(m0.message_id);
+    const x = opts.readings && evalSet.has(m0.message_id) ? opts.readings.get(m0.message_id) : reading.get(m0.message_id);
     let recorded: Recorded | null = null;
     const t0 = Date.now();
     await decideMessage(m, {
-      extract: async () => {
+      extract: async (sentIso: string, from: string, subject: string, newest: string, context = "") => {
+        opts.onExtract?.(m0.message_id, [sentIso, from, subject, newest, context]);
         if (!x) throw new Error("no stored reading for this email");
         return { x: structuredClone(x), meta: { model: "stored reading", prompt_id: PROMPT_ID, input_tokens: 0, output_tokens: 0, cost_usd: 0, ms: 0 } };
       },
@@ -139,6 +146,7 @@ export async function replay(evalIds: string[], askedDays: (id: string) => strin
     const r = recorded as Recorded | null;
     if (!r) throw new Error(`replay: ${m0.message_id} ended with no recorded decision`);
     done.set(m0.message_id, r);
+    if (evalSet.has(m0.message_id)) grounded.set(m0.message_id, r.interpretation?.grounded ?? null);
     if (!evalSet.has(m0.message_id)) continue;
 
     const card = cardOf({ thread_id: m0.thread_id, message_id: m0.message_id, sent_at: m0.date_iso, subject: m0.subject, from_address: addr(m0.from_address) }, r.kind, r.decision, r.executed, r.interpretation?.grounded ?? null, r.client.id);
@@ -181,5 +189,5 @@ export async function replay(evalIds: string[], askedDays: (id: string) => strin
     }
   }
   globalThis.fetch = closed;
-  return { rows, limits, booked, runs: order.length, warmups: order.length - evalIds.length, modelCalls, netAttempts, preflight: pf.checks.map((c) => `${c.ok ? "ok" : "FAIL"} ${c.name}: ${c.detail}`) };
+  return { rows, grounded, limits, booked, runs: order.length, warmups: order.length - evalIds.length, modelCalls, netAttempts, preflight: pf.checks.map((c) => `${c.ok ? "ok" : "FAIL"} ${c.name}: ${c.detail}`) };
 }
