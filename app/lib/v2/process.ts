@@ -13,7 +13,7 @@
 import { neon, type NeonQueryFunction } from "@neondatabase/serverless";
 import { httpTransport, OnsinchClient } from "../engine/onsinch";
 import { matchCompanyBySender, normName } from "../engine/resolve";
-import { extractWithMeta, type Extraction, type ExtractMeta } from "./interpret/extract";
+import { extractWithMeta, malformedReading, type Extraction, type ExtractMeta } from "./interpret/extract";
 import { ground, type Interpretation, type Request } from "./interpret/interpret";
 import { latestText } from "./interpret/ground";
 import { plan, type Decision, type World } from "./interpret/plan";
@@ -191,7 +191,16 @@ export async function retryUnread(opts: { decide?: (message_id: string) => Promi
 
 export type Processed = { message_id: string; skipped?: string; interpretation?: Interpretation; decision?: Decision; executed?: RunResult[] };
 
-const NOT_CLIENT = /spartancrew\.co\.uk|no-?reply|mailer-daemon|postmaster|onsinch|sinch\.cz/i;
+/**
+ * Mail that is never a client's: ours, OnSinch's, and machine senders. By the whole domain (or a
+ * subdomain of it) and the whole mailbox name, never a substring (addendum F18): "onsinch" or
+ * "noreply" anywhere in an address set a client's email aside (1 of 64 in the 30 days to 27 Oct).
+ */
+export function notClient(address: string): boolean {
+  const m = /([^<\s@]+)@([^>\s]+)/.exec(String(address ?? "").toLowerCase());
+  if (!m) return false;
+  return /^(?:no-?reply|do-?not-?reply|mailer-daemon|postmaster)$/.test(m[1]) || /(?:^|\.)(?:spartancrew\.co\.uk|onsinch\.(?:com|cz|co\.uk)|sinch\.cz)$/.test(m[2]);
+}
 
 const addr = (from: unknown) => String(from ?? "").replace(/.*</, "").replace(/>.*/, "").trim().toLowerCase();
 
@@ -222,10 +231,10 @@ export async function decideDelivery(newIds: string[], decide: Decide = decideNe
   const sql = await db();
   const rows = (await sql`SELECT message_id, thread_id, from_address, date_iso, is_from_spartan FROM thread_messages WHERE message_id = ANY(${newIds}) ORDER BY date_iso, first_seen_at`) as any[];
   const out: Processed[] = [];
-  const client = rows.filter((r) => !r.is_from_spartan && !NOT_CLIENT.test(addr(r.from_address)));
+  const client = rows.filter((r) => !r.is_from_spartan && !notClient(addr(r.from_address)));
   // Every inbound message ends in a recorded state, filtered mail too: bounces and system
   // mail had no row (10 on 10-09/10), so "was this email handled?" had no answer for them.
-  for (const r of rows.filter((r) => !r.is_from_spartan && NOT_CLIENT.test(addr(r.from_address)))) {
+  for (const r of rows.filter((r) => !r.is_from_spartan && notClient(addr(r.from_address)))) {
     const decision: Decision = coded({ kind: "none", reason: "not a client's email" });
     await sql`
       INSERT INTO v2_decisions (message_id, thread_id, from_address, sent_at, kind, decision, code_version)
@@ -299,7 +308,7 @@ export async function oldestUndecidedAt(): Promise<number | null> {
       AND NOT EXISTS (SELECT 1 FROM v2_decisions d WHERE d.message_id = m.message_id)
       AND NOT EXISTS (SELECT 1 FROM v2_store_only s WHERE s.message_id = m.message_id)
     ORDER BY m.first_seen_at LIMIT 200`) as any[])
-    .filter((r) => !NOT_CLIENT.test(addr(r.from_address)) && !isTestSender(addr(r.from_address)) && !isTestId(r.message_id) && !isTestId(r.thread_id))
+    .filter((r) => !notClient(addr(r.from_address)) && !isTestSender(addr(r.from_address)) && !isTestId(r.message_id) && !isTestId(r.thread_id))
     // History stored late (a backfill) is not the sweep's, so it is not a lag either.
     .filter((r) => !(Date.parse(r.date_iso) < Date.now() - UNDECIDED_SENT_WITHIN_DAYS * 86_400_000));
   return rows.length ? Date.parse(String(rows[0].first_seen_at instanceof Date ? rows[0].first_seen_at.toISOString() : rows[0].first_seen_at)) : null;
@@ -333,11 +342,11 @@ export async function sweepUndecided(opts: { decide?: Decide; limit?: number } =
     INSERT INTO v2_decisions (message_id, thread_id, from_address, sent_at, kind, decision, code_version)
     VALUES (${r.message_id}, ${r.thread_id}, ${addr(r.from_address)}, ${r.date_iso}, ${kind}, ${JSON.stringify(decision)}::jsonb, ${codeVersion()})
     ON CONFLICT (message_id) DO NOTHING RETURNING message_id` as Promise<any[]>;
-  for (const r of rows.filter((r) => NOT_CLIENT.test(addr(r.from_address)))) {
+  for (const r of rows.filter((r) => notClient(addr(r.from_address)))) {
     if ((await record(r, "none", coded({ kind: "none", reason: "not a client's email" }))).length) rep.filtered.push(r.message_id);
   }
   const byThread = new Map<string, any[]>();
-  for (const r of rows.filter((r) => !NOT_CLIENT.test(addr(r.from_address)))) byThread.set(r.thread_id, [...(byThread.get(r.thread_id) ?? []), r]);
+  for (const r of rows.filter((r) => !notClient(addr(r.from_address)))) byThread.set(r.thread_id, [...(byThread.get(r.thread_id) ?? []), r]);
   // Two threads a minute: one decision can wait two minutes for the bot (runWhenFree), and the
   // minute sync has 300 seconds for this, the retries and the re-plan together.
   for (const list of [...byThread.values()].slice(0, opts.limit ?? 2)) {
@@ -419,7 +428,7 @@ export type DecideDeps = {
 
 export async function decideMessage(m: MessageIn, deps: DecideDeps): Promise<Recorded> {
   const from = addr(m.from_address);
-  if (m.is_from_spartan || NOT_CLIENT.test(from)) {
+  if (m.is_from_spartan || notClient(from)) {
     const r: Recorded = { kind: "none", interpretation: null, decision: coded({ kind: "none", reason: "not a client's email" }), executed: null, client: { id: null, name: null } };
     deps.trace("filter", { client: false });
     await deps.record(r);
@@ -502,6 +511,12 @@ async function understand(m: MessageIn, from: string, deps: DecideDeps, seen: { 
   // The model, prompt, tokens and cost of the reading are kept with the decision: until 10-11
   // they were traced and dropped, so no decision could say which model made it or what it cost.
   const { x, meta } = got;
+  const malformed = malformedReading(x);
+  if (malformed) {
+    const reason = `the system could not read this email (malformed reading: ${malformed})`;
+    deps.trace("extract", { ...meta, error: reason }, meta.ms);
+    return { kind: "handoff", interpretation: null, decision: { kind: "handoff", reasons: [reason] }, executed: null, client };
+  }
   deps.trace("extract", { ...meta, intent: x.intent, requests: x.requests?.length ?? 0 }, meta.ms);
   const t1 = Date.now();
   const prior = deps.prior ? await deps.prior().catch(() => [] as Request[]) : [];
@@ -562,11 +577,12 @@ export async function processMessage(message_id: string, opts: { execute: boolea
   const before = opts.with?.length ? ((await sql`SELECT body FROM thread_messages WHERE message_id = ANY(${opts.with}) ORDER BY date_iso`) as any[]).map((r) => latestText(String(r.body ?? ""))) : [];
   const m: MessageIn = before.length ? { ...m0, body: [...before, latestText(String(m0.body ?? ""))].join("\n\n") } : m0;
   const from = addr(m.from_address);
+  const world = opts.world ?? onsinchWorld();
   const r = await decideMessage(m, {
     extract: extractWithMeta,
-    world: opts.world ?? onsinchWorld(),
-    // Every recorded link (threadOrder.ts says which count).
-    threadOrderId: () => linkedOrderId(sql, m.thread_id),
+    world,
+    // Every recorded link (threadOrder.ts says which count); one OnSinch has deleted is passed over (addendum F14).
+    threadOrderId: () => linkedOrderId(sql, m.thread_id, async (id) => (world.orderById ? !!(await world.orderById(id)) : true)),
     ...threadReads(sql, m0, opts.with ?? []),
     run: opts.execute ? runWhenFree : null,
     // A settings read that fails keeps the rule on: undefined is the planner's default, never null.

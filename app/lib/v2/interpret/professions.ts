@@ -35,7 +35,8 @@ const TABLE = [
   T(/(telehand?ler|\bteli\b).*(over|above|>)\s*9|\bj3\b/, ["24", "7"], "Telehandler over 9m"),
   T(/telehand?ler|\bteli\b/, ["23", "4"], "Telehandler"),
   T(/rough ?terrain|all ?terrain/, ["25", "17"], "Rough Terrain"),
-  T(/fork ?lift|counter ?balance|\bflt\b/, ["22", "11"], "Counterbalance"),
+  // "Forkies": unmatched, "make it 3 forkies" fell through to plain crew and would have set the crew to 3.
+  T(/fork ?lift|forkie|counter ?balance|\bflt\b/, ["22", "11"], "Counterbalance"),
   T(/\bipaf\b.*\b1b\b/, ["53"], "IPAF 1b"),
   T(/\bipaf\b|cherry ?picker|scissor ?lift|boom ?lift|\bmewp\b/, ["5"], "IPAF 3a/3b"),
   T(/\bpasma\b/, ["6"], "PASMA"),

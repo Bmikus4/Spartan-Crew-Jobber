@@ -6,7 +6,7 @@
   below as findings and status.
 - Every step updates this file: its status line, its measurement, and what moved.
 
-**Last updated:** 27 October 2026, R4 shipped (S-0238). R3's switch-over waits on CRON_SECRET. The baseline was 0f2dcef. App code changed since then in these
+**Last updated:** 27 October 2026, R5 shipped (S-0239). R3's switch-over waits on CRON_SECRET. The baseline was 0f2dcef. App code changed since then in these
 commits only:
 
 | commit | ticket | what |
@@ -20,6 +20,7 @@ commits only:
 | 4757c27 | S-0236 | Prompt 8: docs and ruling ids in comments only |
 | 057dbb6 | S-0237 | Prompt 10: vercel.json crons, the heartbeat, an honest sync, sync and labels on CRON_SECRET |
 | (R4) | S-0238 | Prompt 0: scripts/size-findings.mts (read-only); the scoreboard reads an email with no body |
+| (R5) | S-0239 | Prompt 5 and 5.10: combined changes, trade totals, direction words, schema check, F13, F14, F18, the op key |
 
 bd10dae (S-0213) moved the test suite onto PGlite. Line references below are at HEAD unless a line says "at 0f2dcef".
 
@@ -52,41 +53,41 @@ and §3 ends with the findings added after 23 Oct (F29 onward). §11 is the rebu
 | F1 lost emails | **DONE** S-0214 | test/everyEmailDecided.ts; sweepUndecided (process.ts) |
 | F2 open work drops off the TV | **DONE for the leak** S-0214 (every open need kept; outbound clears only Needs Reply). **OPEN: the Needs Reply lane** (F41) | test/feedKeepsEveryNeed.ts; feed/v2.ts rowsOnCard |
 | F3 pause doesn't stop everything | **DONE for retries, the sweep, test-data and labels** S-0214. **Auth half built** S-0237: sync and labels take authorizeCronCall, which refuses the intake secret once CRON_SECRET is set; **live when the owner sets it** | test/pauseStopsSync.ts; test/cronEntryPoints.ts |
-| F4 creates go through the API | **OPEN** (docs): run.ts:5 still says "The API is used only to read" | run.ts:5, :258-268 |
+| F4 creates go through the API | **DONE for the docs** S-0239: run.ts says creates go through the API. The phase is still logged as "browser" | run.ts:5 |
 | F5 two-week rule | **OPEN, owner decision** | plan.ts:54, :774-775 |
 | F6 unknown sender creates a client | **OPEN, owner decision** | plan.ts:499-500, :834 |
 | F7 suite writes to production | **DONE** S-0213 (PGlite). **OPEN: preview shares production's database** (F44) | test/fixtures/pg.ts |
-| F8 grounding checks presence, not selection | **OPEN** | interpret.ts:129 accepts on membership before the instead-of logic at :130-138 |
+| F8 grounding checks presence, not selection | **DONE** S-0239: direction ("instead of", "rather than", "was X, make it Y", "make it") is read before membership; a reply's subject supplies no new value | test/v2EverydayRequests.ts [F8]; interpret.ts directed |
 | F9 "already booked" too loose / too strict | **OPEN** | evidence.ts:34-56; plan.ts:379-396 (exact beginning) |
 | F10 venue ignored on multi-venue orders | **OPEN** | plan.ts:379 bookedAt is location-blind; called :674, :730 |
 | F11 lone R/J links the thread | **OPEN** | threadState.ts:60-90 |
 | F12 CC'd addresses widen the pool | **OPEN** | plan.ts:215 evidenceOf |
-| F13 failed company list → duplicate company | **OPEN** | apiCreate.ts:109 |
-| F14 deleted linked order blocks forever | **OPEN** | threadOrder.ts:16-30 |
+| F13 failed company list → duplicate company | **DONE** S-0239: a list that cannot be read blocks the create | test/v2SmallFixes.ts [F13] |
+| F14 deleted linked order blocks forever | **DONE** S-0239: an id from an old decision OnSinch has deleted is passed over | test/v2SmallFixes.ts [F14]; threadOrder.ts |
 | F15 test-data clear on one setting | **DONE** S-0214 (pause, both write keys, logged) | testData.ts:285-288; sync/route.ts:39 |
 | F16 J is the first Job only | **Measured** S-0238: 3 of 338 staff-built orders in 30 days have more than one Job. Left as is | links.ts |
 | F17 lease can lapse | **Measured** S-0238: 0 of 159 ledger runs over 180 s (longest 51 s). Not a problem | run.ts, bot/db.ts |
-| F18 NOT_CLIENT by substring | **OPEN** | process.ts:161 |
+| F18 NOT_CLIENT by substring | **DONE** S-0239: notClient by whole domain and mailbox name (1 of 64 in 30 days had been set aside wrongly) | test/v2SmallFixes.ts [F18]; process.ts notClient |
 | F19 dates dd/mm | OPEN (right for UK clients; a decision, not a bug) | ground.ts:255 |
 | F20 re-plan cache and limits | known behaviour | replan.ts:32 |
 | F21 docs behind the code | **DONE** S-0236 (README and harness/STATE.md name the live reader) | README.md; harness/STATE.md |
 | F22 duration beside an end dropped | **DONE** S-0215 | test/v2WrongBookingPaths.ts |
 | F23 model pick on the day alone | **DONE** S-0215 | same test |
-| F24 time change + crew total refused | **OPEN** | plan.ts:558 splits only crew_add/crew_remove |
-| F25 trade totals/reductions refused | **OPEN** | plan.ts:599-602 |
+| F24 time change + crew total refused | **DONE** S-0239: a total written as one ("make it 8 crew") beside a time change is a second change; an added chief works the new times | test/v2EverydayRequests.ts [F24] |
+| F25 trade totals/reductions refused | **DONE** S-0239: a total or reduction sets or cancels the trade's one position; two such positions hand off. "Forkies" is a forklift | test/v2EverydayRequests.ts [F25] |
 | F26 failed reads / interrupted plans never recovered | **DONE for reads** S-0235 (retryUnread from the minute sync, after F29's in-call retry). **OPEN: resuming interrupted plans** (R9) | test/retryUnread.ts; process.ts retryUnread |
 | F27 "yes, book that" is a card | policy: the owner ruled on 20 Oct that it hands off. An acceptance card is built and held (held item 6) | plan.ts |
 | F28 create read-back skips the venue | **DONE** S-0215 | run.ts createMismatches :124 |
 | 5.1 scoring | **DONE** S-0216, S-0217 (strict scorer, context forwarded, reason codes, four numbers). Extended 25-26 Oct by the real-mail harness (§4) | app/lib/v2/score.ts; harness/real/ |
 | 5.2 live trace | **OPEN** | process.ts:519, replan.ts:114 pass noTrace |
 | 5.3 one shared finder | **OPEN** (the main coverage lever) | Prompt 4 |
-| 5.4 faithful requests | **OPEN** (part held: a parser fix, held item 5) | Prompt 5 |
+| 5.4 faithful requests | **DONE** S-0239 (F24, F25, F8, "20-Nov" and held item 5's parser, schema check) | Prompt 5 |
 | 5.5 recover interrupted work | **PART:** F1 done; re-read DONE S-0235; resume open | Prompt 6 |
 | 5.6 every request visible | **PART:** every need kept (S-0214); the Needs Reply lane is open | F41 |
 | 5.7 R number in our subjects | **OPEN**, test first | |
 | 5.8 assisted mode | **OPEN**, design after the numbers | Prompt 7 |
 | 5.9 acceptance | policy, see F27 | |
-| 5.10 small fixes | F15 DONE; README and harness STATE DONE S-0236. F13, F14, F18, op key, run.ts:5 **OPEN** (R5) | |
+| 5.10 small fixes | **DONE**: F15 S-0214; README and harness STATE S-0236; F13, F14, F18, the op key and run.ts:5 S-0239 | |
 | §6 rules | **OPEN, owner** | |
 | §10 / Prompt 8 docs | **DONE** S-0236: CLAUDE.md is the v2 map; engine invariants in app/lib/engine/README.md; docs/README.md; 35 code rulings and 5 standing ones in DECISIONS.md (V1-V35, O1-O5), each comment tagged | CLAUDE.md; DECISIONS.md |
 | F29 one read attempt | **DONE** S-0235 | test/extractRetry.ts; extract.ts extractWithMeta |
@@ -107,9 +108,9 @@ items-1-3-runtime, item-4-scoring, n1-write-judging and c-current-mail's C2 and 
 |---|---|---|
 | items-1-3-runtime | F30 owner alert, F35 replay guard, F36 UTC audit times | R1 |
 | item-4-scoring, n1-write-judging | 5.1: the scorer judges a staff-built order once; write judging agrees with a hand reading on 21/23 | R1 (harness only) |
-| n2-planner-ops | F47: re-timing one named role moves only that role; a crew change with its own hours, or two changes to one shift, hand off | re-cut in R5 |
+| n2-planner-ops | F47: re-timing one named role moves only that role; a crew change with its own hours, or two changes to one shift, hand off | **shipped S-0239** |
 | c-current-mail | C1: a create books the client's or the one fitting OnSinch venue (F9 / 5.3 territory). C2: the harness counts the bot's own runs. C3: retryUnread (F26) | C3 → R1; C1 → R5; C2 → R1 |
-| p1-fixes items 5-8 (stale for 1-4) | 5: parser (5.4); 6: quote acceptance (5.9); 7: shared-domain client (F12 / 5.3); 8: reply cards listed (F41) | re-cut in R4, R5 and R9; 6 and 8 need the owner and Paz |
+| p1-fixes items 5-8 (stale for 1-4) | 5: parser (5.4), **shipped S-0239**; 6: quote acceptance (5.9); 7: shared-domain client (F12 / 5.3); 8: reply cards listed (F41) | re-cut in R4, R5 and R9; 6 and 8 need the owner and Paz |
 
 ### Owner rulings since 23 Oct (each binds the rebuild)
 - **No heartbeat for this automation runs in n8n, ever** (26 Oct). It is in the repo's CLAUDE.md.
@@ -377,8 +378,8 @@ Bounds:
   anyway).
 
 ### F4. Creates go through the OnSinch API, not the staff screens (Description gap)
-**Status 26 Oct: OPEN.**
-- run.ts:5 still says "The API is used only to read"; the phase is still logged as "browser" (run.ts:258-268).
+**Status 27 Oct: DONE for the docs** (S-0239): run.ts:5 says a new order is created through the API.
+- The phase is still logged as "browser" (run.ts:258-268).
 - F28's venue check is DONE.
 
 Mechanism (at 0f2dcef):
@@ -434,8 +435,10 @@ Mechanism (at 0f2dcef):
 - middleware.ts:50-57 notes that preview and production share one database.
 
 ### F8. Grounding checks that a value is present, not that it's the right one (Matching)
-**Status 26 Oct: OPEN.** interpret.ts:129 still accepts a value on membership (`among(g.quote).has(g.value)`) before
-the "instead of / rather than" direction at :130-138. "Make it" and "was X" have no direction rule.
+**Status 27 Oct: DONE** (S-0239). interpret.ts `directed` reads "instead of / rather than", "was X, make it Y" and "make
+it" before membership: when the side the value must come from holds a value of its kind, only that side counts. A change's
+new values ground against the client's own words, so a reply's subject supplies none. Fixtures in
+test/v2EverydayRequests.ts [F8].
 
 Mechanism:
 - A value is accepted when it is among the quote's values.
@@ -518,15 +521,16 @@ second client can then supply the company.
 recipient-only company override a contradicting sender domain.
 
 ### F13. A failed company-list read creates a duplicate company (Matching)
-**Status 26 Oct: OPEN** (apiCreate.ts:109 `allCompanies().catch(() => [])`).
+**Status 27 Oct: DONE** (S-0239): the failed list read throws before anything is sent, so the create is blocked.
+Measured (§7): 3 same-name groups among 814 companies.
 
 **Candidate fix:** treat a list failure as blocked, not as an empty list.
 
 **Count first:** same-name companies created by bot user 2257.
 
 ### F14. A deleted linked order blocks new shifts on that thread forever (Fail-safe, burden)
-**Status 26 Oct: OPEN** (threadOrder.ts:16-30 linkedOrderId takes pri-2 ids from old decisions without checking they
-exist).
+**Status 27 Oct: DONE** (S-0239): linkedOrderId passes over an id from an old decision that OnSinch no longer holds; a
+read that fails keeps the id. Link rows are left to the links sweep.
 
 **Candidate fix:** when a decision-derived id is unreadable, skip it and fall through to evidence.
 
@@ -550,13 +554,15 @@ a length sets start = end - length. "six hours ending 18:00" books 12:00-18:00, 
 - The day alone never settles which booking a change is for.
 
 ### F24. A time change plus a new crew total in one email is refused (Blocked)
-**Status 26 Oct: OPEN.** plan.ts:558 splits only crew_add/crew_remove beside a time change. "Move it to 10:00 and make
-it 8 crew" becomes a card.
+**Status 27 Oct: DONE** (S-0239). A count beside a time change written as a new total ("make it 8 crew") is grounded as
+crew_set and planned as a second change; a bare count still names the shift. A position the crew change adds takes the
+time change's new times (a chief added beside "start an hour earlier" was put at the old times).
 
 ### F25. Trade totals and reductions are refused (Blocked)
-**Status 26 Oct: OPEN.**
-- plan.ts:599-602 refuses anything but adding to a trade, although set_position_size and cancel_position exist.
-- Trade-only shift additions on existing orders are also blocked.
+**Status 27 Oct: DONE for totals and reductions** (S-0239): set_position_size or cancel_position on the trade's one
+position; none and a total adds it; two positions, or more removed than booked, hand off. "Forkies" now reads as a
+forklift (it fell through to plain crew).
+- Still open: trade-only shift additions on existing orders.
 
 ### F26. Extraction failures and interrupted plans are never recovered (Missed)
 **Status 26 Oct: DONE for failed reads** (S-0235); resuming interrupted plans OPEN (R9).
@@ -585,7 +591,8 @@ back with none does not match. Creates still skip the audit diff: by design, sin
   orders are affected. **Status:** count them (Prompt 0).
 - **F17.** Lease can lapse mid-operation. The 240 s lease is set against builder timeouts and up to three logins.
   **Status:** measure from the ledger (Prompt 0).
-- **F18.** NOT_CLIENT filters by substring (process.ts:161). **Status: OPEN.**
+- **F18.** NOT_CLIENT filtered by substring (process.ts:161). **Status: DONE** S-0239: notClient by whole domain and mailbox
+  name.
 - **F19.** Dates are parsed dd/mm (ground.ts:255). That is right for UK clients. **Status:** keep, unless a US-format
   sender appears.
 - **F20.** Re-plan has a 5-minute cache (replan.ts:32), a 20-card limit and a time budget. The TV can lag a staff edit.
@@ -747,7 +754,7 @@ medium).**
 - They have been stored since 23 Oct.
 - They are the cheapest thread-to-order signal there is (5.7).
 
-**F47. Planner faults on current mail (Wrong write, measured in replay).**
+**F47. Planner faults on current mail (Wrong write, measured in replay). Held n2-planner-ops shipped S-0239.**
 
 Of 20 writes replayed on the current reader's mail (dev-2):
 - at HEAD: 7 completed, 2 partial, 11 wrong;
@@ -874,11 +881,17 @@ The fix:
 Then fewer identity handoffs on the held-out week, with no new wrong targets.
 
 ### 5.4 Represent requests faithfully (F22, F24, F25)
-**Status 26 Oct:**
-- F22 is DONE.
-- F24, F25, the schema validation and F8 are OPEN.
-- Held item 5 (the parser: crew in words, "Duration: N", ordinal months, ranges; 1,336 stored quotes, +13 grounded, 0
-  lost) is re-cut here.
+**Status 27 Oct: DONE** (S-0239).
+- F22 S-0215; F24, F25, F8 and the schema check S-0239: a malformed reading is one recorded "could not read" card, so
+  retryUnread reads it again.
+- Held item 5 (the parser: "Duration: N", "28-Nov", ranges and lists of days; 1,336 stored quotes, +13 grounded, 0
+  lost) shipped S-0239.
+- Found while building it: a reading's pick of an order the client wrote as "R11100" was refused, because the check
+  wanted a word boundary between R and the digits. It now reads R numbers as findOrder does.
+- **Measured** (harness/real/writes-run.ts on dev-2, $0, offline): HEAD 20 writes, 10 completed, 2 partial, 8 wrong; with
+  R5 22 writes, 11 completed, 2 partial, 9 wrong. The new completed is a PO. The new wrong is a create that "28-Nov"
+  made possible: its shifts are staff's exactly (days, times, venue, 5 crew and a chief), but on one order where staff
+  made two. Creates go to To Confirm. The held-out week (E3, from 29 Oct) is not read until a fix is frozen.
 
 The fix:
 - Keep duration as its own fact.
@@ -939,16 +952,16 @@ If Spartan wants it automated:
 
 | item | status |
 |---|---|
-| comments and docs: run.ts:5, README, harness STATE | OPEN |
+| comments and docs: run.ts:5, README, harness STATE | DONE (S-0236, S-0239) |
 | paused.ts header | updated S-0214, S-0232 |
-| allCompanies().catch(() => []) should block (F13) | OPEN |
-| skip dead decision-derived order ids (F14) | OPEN |
+| allCompanies().catch(() => []) should block (F13) | DONE S-0239 |
+| skip dead decision-derived order ids (F14) | DONE S-0239 |
 | gate test-data cleanup (F15) | DONE |
 | tests on their own database (F7) | DONE |
 | preview on its own database (F44) | OPEN |
-| NOT_CLIENT by whole domain (F18) | OPEN |
-| measure lease duration (F17) | OPEN, measure |
-| canonicalise the op key recursively | OPEN. ops.ts:6 is still `JSON.stringify(op, Object.keys(op).sort())`; migrate so old ledger rows stay recognised |
+| NOT_CLIENT by whole domain (F18) | DONE S-0239 |
+| measure lease duration (F17) | DONE S-0238: 0 of 159 over 180 s |
+| canonicalise the op key recursively | DONE S-0239: keys sorted at every depth; a flat op's key is unchanged, and runOp also asks for legacyOpKey, so no ledger row is orphaned |
 | business rules as data | after §6 |
 
 ---
@@ -1050,7 +1063,7 @@ list is true and the owner has reviewed the result. Don't run several at once: t
 | 2 | DONE (S-0215) |
 | 3 | DONE (S-0216, S-0217) |
 | 4 | OPEN |
-| 5 | OPEN |
+| 5 | DONE (S-0239) |
 | 6 | half held (re-read), half OPEN (resume) |
 | 7 | OPEN (design) |
 | 8 | DONE (S-0236) |
@@ -1121,7 +1134,7 @@ none are matched loosely.
 - on held-out mail, identity handoffs fall and wrong targets stay at zero (the strict scorer and the email-to-board
   harness).
 
-### Prompt 5: understand everyday requests (5.4, F8, F24, F25)
+### Prompt 5: understand everyday requests (5.4, F8, F24, F25): **DONE**, S-0239
 **Goal:** the system can represent the common requests it refuses today, without guessing.
 1. Handle a time change plus a new absolute crew total against one target state.
 2. Allow trade totals and reductions on a uniquely matched trade position, using set_position_size and cancel_position.
@@ -1246,7 +1259,7 @@ Still to come from §10: the identity owner (R8) and the old engine's retirement
 | R2 | 8 | Re-map the repo: CLAUDE.md, engine README, docs index, rulings into DECISIONS.md | **DONE S-0236** |
 | R3 | **10** (new) | **No heartbeat in n8n** (F32): cron entry points, the heartbeat, honest sync status (F37), sync and labels on their own secret (F3), labels by webhook, the switch-over | **Code DONE S-0237.** Switch-over waits on CRON_SECRET |
 | R4 | 0 | Size the findings, read-only | **DONE S-0238** (§7) |
-| R5 | 5 + 5.10 | Everyday requests (F8, F24, F25, dates, schema validation) and the small fixes (F13, F14, F18, op key, run.ts:5, README). Re-cut held item 5 and n2-planner-ops | yes |
+| R5 | 5 + 5.10 | Everyday requests (F8, F24, F25, dates, schema validation) and the small fixes (F13, F14, F18, op key, run.ts:5, README). Re-cut held item 5 and n2-planner-ops | **DONE S-0239** |
 | R6 | **11** (new) | Govern the switches (F34). One migrations module (F44). A Preview branch when access exists | yes |
 | R7 | **12** (new) | Retire the old engine in stages (F45, §10): move the shared OnSinch client and helpers to app/lib/onsinch/, delete what nothing live reaches, then pipeline/compiler/deps and the shut routes, then the 145 old tests | yes, staged |
 | R8 | 4 | **One shared booking finder** (5.3), built once the old engine is gone, so there is one place for it. Brings in held C1 and item 7 | yes |

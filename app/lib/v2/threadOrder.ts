@@ -13,10 +13,16 @@
 import type { NeonQueryFunction } from "@neondatabase/serverless";
 import { ensureLinks } from "./links";
 
-export async function linkedOrderId(sql: NeonQueryFunction<false, false>, threadId: string): Promise<number | null> {
+/**
+ * `readable` says whether OnSinch still holds an order. An id taken from an old decision is passed
+ * over once OnSinch has deleted it (addendum F14): it otherwise refused every later email on the
+ * thread as "linked order unreadable". A read that fails is not a deletion, so the id stands. Link
+ * rows are left to the links sweep, which marks a deleted order's row itself.
+ */
+export async function linkedOrderId(sql: NeonQueryFunction<false, false>, threadId: string, readable?: (orderId: number) => Promise<boolean>): Promise<number | null> {
   await ensureLinks(sql);
   const rows = (await sql`
-    SELECT o FROM (
+    SELECT o, pri FROM (
       SELECT (e->'detail'->>'order_id')::bigint AS o, 2 AS pri, d.created_at AS at
         FROM v2_decisions d, jsonb_array_elements(CASE WHEN jsonb_typeof(d.executed) = 'array' THEN d.executed ELSE '[]'::jsonb END) e
        WHERE d.thread_id = ${threadId} AND (e->'detail'->>'order_id') ~ '^[0-9]+$'
@@ -27,6 +33,10 @@ export async function linkedOrderId(sql: NeonQueryFunction<false, false>, thread
       UNION ALL
       SELECT order_id::bigint, 0, coalesce(last_checked, first_seen)
         FROM job_links WHERE thread_id = ${threadId} AND state IN ('linked', 'relinked') AND order_id > 0
-    ) links WHERE o > 0 ORDER BY pri, at DESC LIMIT 1`) as Array<{ o: string | number }>;
-  return rows.length ? Number(rows[0].o) : null;
+    ) links WHERE o > 0 ORDER BY pri, at DESC LIMIT 20`) as Array<{ o: string | number; pri: number }>;
+  for (const r of rows) {
+    if (Number(r.pri) === 2 && readable && !(await readable(Number(r.o)).catch(() => true))) continue;
+    return Number(r.o);
+  }
+  return null;
 }

@@ -98,7 +98,7 @@ export async function replanOpen(sql: Sql, opts: { limit?: number; budgetMs?: nu
         ...threadReads(sql, m0),
         extract: (async () => ({ x: row.interpretation.extraction, meta: row.interpretation.meta ?? { model: "stored", prompt_id: "stored", input_tokens: 0, output_tokens: 0, cost_usd: 0, ms: 0 } })) as any,
         world,
-        threadOrderId: () => linkedOrderId(sql, m0.thread_id),
+        threadOrderId: () => linkedOrderId(sql, m0.thread_id, async (id) => (world.orderById ? !!(await world.orderById(id)) : true)),
         run: null,
         leadDays: async () => leadDays,
         now: () => now,

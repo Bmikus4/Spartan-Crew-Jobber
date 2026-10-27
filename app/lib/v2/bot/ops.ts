@@ -36,8 +36,23 @@ export type Op =
   | { kind: "add_shift"; order_id: number; location_id: number; name: string; date: string; start: string; end: string; positions: PositionSpec[] }
   | { kind: "add_position"; order_id: number; shift_id: number; date: string; start: string; end: string; position: PositionSpec };
 
-/** Idempotency: the source message plus the operation's content. A retried email can never write twice. */
+/** Keys sorted at every depth; a field left undefined is left out, as JSON leaves it. */
+const canonical = (v: unknown): string => Array.isArray(v) ? `[${v.map(canonical).join(",")}]`
+  : v && typeof v === "object" ? `{${Object.keys(v).sort().filter((k) => (v as Record<string, unknown>)[k] !== undefined).map((k) => `${JSON.stringify(k)}:${canonical((v as Record<string, unknown>)[k])}`).join(",")}}`
+  : JSON.stringify(v);
+
+/**
+ * Idempotency: the source message plus the operation's content, every field at every depth. A
+ * retried email can never write twice. Until 27 Oct the key was legacyOpKey's: a replacer array
+ * filters nested keys too, so a position's size and profession were not in it, and two additions
+ * differing only there shared a key. A flat operation's key is unchanged.
+ */
 export function opKey(source: string, op: Op): string {
+  return createHash("sha256").update(`${source}\n${op.kind}\n${canonical(op)}`).digest("hex").slice(0, 32);
+}
+
+/** The key before 27 Oct, still asked for so an operation run under it is never run again. */
+export function legacyOpKey(source: string, op: Op): string {
   const canon = JSON.stringify(op, Object.keys(op).sort());
   return createHash("sha256").update(`${source}\n${op.kind}\n${canon}`).digest("hex").slice(0, 32);
 }

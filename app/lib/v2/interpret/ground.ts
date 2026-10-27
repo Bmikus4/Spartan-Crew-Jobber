@@ -76,7 +76,7 @@ const HOURS = /(\d+(?:\.\d+)?|\b(?:one|two|three|four|five|six|seven|eight|nine|
 const hoursIn = (n: string) => (/^\d/.test(n) ? Number(n) : WORDS[n]);
 export function parseDuration(raw: string): number | null {
   // Booking forms put the label first: "Call hours: 4" (EMS, measured 10-09).
-  const m = HOURS.exec(norm(raw)) ?? /\b(?:call\s+)?(?:hours|hrs)\s*[:\-]\s*(\d+(?:\.\d+)?)\b/.exec(norm(raw));
+  const m = HOURS.exec(norm(raw)) ?? /\b(?:call\s+)?(?:hours|hrs|duration)\s*[:\-]\s*(\d+(?:\.\d+)?)\b/.exec(norm(raw));
   if (!m) return null;
   const mins = Math.round(hoursIn(m[1]) * 60);
   return mins > 0 && mins <= 24 * 60 ? mins : null;
@@ -256,7 +256,8 @@ export function parseDate(raw: string, sentIso: string): string | null {
   if (m) {
     d = Number(m[1]); mo = Number(m[2]) - 1; if (m[3]) y = Number(m[3].length === 2 ? `20${m[3]}` : m[3]);
   } else {
-    m = /\b(\d{1,2})(?:st|nd|rd|th)?\s+(?:of\s+)?([a-z]{3,9})\b(?:\s+'?(\d{2}(?![:.]\d)|20[2-9]\d)\b)?/.exec(q);
+    // "28-Nov" (a booking table, 10-12) as well as "28 Nov": the month may follow a hyphen.
+    m = /\b(\d{1,2})(?:st|nd|rd|th)?(?:\s+|-)(?:of\s+)?([a-z]{3,9})\b(?:[\s-]+'?(\d{2}(?![:.]\d)|20[2-9]\d)\b)?/.exec(q);
     let mi = m ? MONTHS.indexOf(m[2].slice(0, 3)) : -1;
     // "November 4th", "October 8 2026": month first. Read before the bare "4th" fallback,
     // which would otherwise take the day and put it in the sent month (measured 10-08).
@@ -337,8 +338,15 @@ export function countsIn(raw: string): Set<number> {
   for (const m of q.matchAll(/\b(\d{1,3})\s*x\b|\bx\s*(\d{1,3})\b|\b(\d{1,3})\s*x(?=\s*\d)/g)) out.add(Number(m[1] ?? m[2] ?? m[3]));
   // "Could we up this call to 4 too please" (RG Jones, 10-15): a total after its verb, a few
   // words between, anywhere in the quote.
-  for (const m of q.matchAll(/\b(?:up|increase|bump|raise|take|make|go)\s+(?:[a-z]+\s+){0,3}to\s+(\d{1,3})\b/g)) out.add(Number(m[1]));
   const who = "(?:crew|staff|people|persons?|bodies|hands|guys|men|lads|helpers|labourers|stagehands|riggers|carpenters?|drivers?|techs?|technicians?|stewards?|workers?)";
+  for (const m of q.matchAll(/\b(?:up|increase|bump|raise|take|make|go)\s+(?:[a-z]+\s+){0,3}to\s+(\d{1,3})\b(?![:.]\d|\s*(?:am|pm)\b)/g)) out.add(Number(m[1]));
+  // "Reduce this crew to 5": these verbs change times and places as often as headcounts, so the words
+  // between must name the crew and never a time or a place. "Change the start time to 8:00" read as
+  // 8 crew let a misread count pass the grounding check (red-team-B2 B2-7).
+  const crewWords = new RegExp(String.raw`\b(?:${who}|team|numbers?|headcount|it|this|that|them)\b`);
+  for (const m of q.matchAll(/\b(?:change|reduce|drop|cut|bring|lower|decrease|amend)\s+((?:[a-z]+\s+){0,3})to\s+(\d{1,3})\b(?![:.]\d|\s*(?:am|pm)\b)/g)) {
+    if (crewWords.test(m[1]) && !/\b(?:time|start|finish|end|venue|address|location|site|call)\b/.test(m[1])) out.add(Number(m[2]));
+  }
   for (const m of q.matchAll(new RegExp(String.raw`\b(\d{1,3}|${WORD_N})\s+(?:x\s+)?(?:more\s+|extra\s+|additional\s+)?(?:local\s+|general\s+)?${who}\b`, "g"))) out.add(/\d/.test(m[1]) ? Number(m[1]) : WORDS[m[1]]);
   for (const m of q.matchAll(new RegExp(String.raw`\bat least\s+(\d{1,3}|${WORD_N})\b`, "g"))) out.add(/\d/.test(m[1]) ? Number(m[1]) : WORDS[m[1]]);
   if (/\b(?:man|driver) and (?:a )?van\b|\bvan and (?:a )?(?:driver|man)\b/.test(q)) out.add(1);
@@ -371,5 +379,12 @@ export function datesIn(raw: string, sentIso: string): Set<string> {
   const q = norm(raw);
   for (const m of q.matchAll(/\b(mon|tues?|wed(?:nes)?|thur?s?|fri|sat(?:ur)?|sun)(?:day)?\b(?:\s+(?:the\s+)?\d{1,2}(?:st|nd|rd|th)?(?:\s+[a-z]{3,9})?)?/g)) { const d = parseDate(m[0], sentIso); if (d) out.add(d); }
   for (const m of q.matchAll(/\b\d{1,2}(?:st|nd|rd|th)?(?:[/.]\d{1,2}(?:[/.]\d{2,4})?|\s+(?:of\s+)?[a-z]{3,9}(?:\s+\d{2,4})?)\b/g)) { const d = parseDate(m[0].replace(/\bof\s+/, ""), sentIso); if (d) out.add(d); }
+  // "24th & 25th October", "29-31 October 2026": every day of a list or a range under one month.
+  // A range longer than two weeks is not read as days.
+  for (const m of q.matchAll(/\b(\d{1,2})(?:st|nd|rd|th)?\s*(&|and|,|-|to)\s*(\d{1,2})(?:st|nd|rd|th)?\s+(?:of\s+)?([a-z]{3,9})\b(?:\s+(20[2-9]\d))?/g)) {
+    const a = Number(m[1]), b = Number(m[3]), tail = `${m[4]}${m[5] ? ` ${m[5]}` : ""}`;
+    const days = /&|and|,/.test(m[2]) ? [a, b] : b >= a && b - a <= 14 ? Array.from({ length: b - a + 1 }, (_, i) => a + i) : [];
+    for (const d of days) { const iso = parseDate(`${d} ${tail}`, sentIso); if (iso) out.add(iso); }
+  }
   return out;
 }

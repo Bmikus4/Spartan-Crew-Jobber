@@ -6,6 +6,7 @@
 import type { Extraction, Grounded, RawRequest } from "./extract";
 import { addMinutes, amountIn, countsIn, datesIn, durationsIn, londonDay, norm, oneIn, parseCount, parseDate, parseDuration, parseNewDate, parseTime, poAfterLabel, quoteIn, subjectDate, timesIn } from "./ground";
 import { quotable, type Booking, type BookingShift, type ReadContext } from "./context";
+import { rNumbersIn } from "../../engine/resolve";
 
 /** What the client's own words say about which booked shift is meant. */
 type PickWords = { days: Set<string>; starts: Set<string>; crew?: number; venueIn: (venue: string) => boolean };
@@ -58,8 +59,30 @@ export type Request = {
    * bot added from 9 to 20 Oct, 4 were such requests written beside staff's own identical shift.
    */
   history?: boolean;
+  /** A count beside a time change written as a new total ("make it 8 crew"): a second change, not the words naming the shift. */
+  crew_set?: boolean;
   problems: string[];
 };
+
+/** Words that set a new headcount rather than name the shift by its present one. */
+const SETS_TOTAL = /\b(?:make it|making it|increase|up (?:it|this|them) to|bump|raise|take (?:it|this) to|go (?:up |down )?to|reduce|drop|cut|bring|lower|decrease|change (?:it |this |the numbers? )?to|instead of|now need|need \d+ now)\b/i;
+
+/**
+ * The new and the old side of a quote that changes one value into another, or null. A side that
+ * itself holds another change ("12:00 instead of 13:00, 18:00 instead of 17:00") is two changes
+ * in one quote, and is left to the whole-quote reading.
+ */
+function directed(q: string): { fresh: string; old: string } | null {
+  const marker = /\b(?:instead of|rather than|make it|was)\b/i;
+  const pick = (fresh: string, old: string) => (marker.test(fresh) || marker.test(old) ? null : { fresh, old });
+  let m = /^(.*?)\b(?:instead of|rather than)\b(.*)$/i.exec(q);
+  if (m) return pick(m[1], m[2]);
+  m = /^(.*?)\bwas\b(.*?)\b(?:make it|change it to|move it to|should be|now)\b(.*)$/i.exec(q);
+  if (m) return pick(m[3], `${m[1]} ${m[2]}`);
+  m = /^(.*?)\bmake it\b(.*)$/i.exec(q);
+  if (m) return pick(m[2], m[1]);
+  return null;
+}
 
 /** problems block the email (no write); notes are kept with the decision and block nothing. */
 export type Interpretation = { intent: Extraction["intent"]; po?: string; requests: Request[]; problems: string[]; notes?: string[]; order_id?: number; company_name?: string };
@@ -124,19 +147,27 @@ export function ground(x: Extraction, newest: string, sentIso: string, ctx: Grou
     if (!g) return undefined;
     if (typeof g !== "object" || typeof g.quote !== "string") { problems.push(`${name}: a value with no words quoted for it`); return undefined; }
     if (!quoteIn(text, g.quote)) { problems.push(`${name}: "${g.quote}" is not in the email`); return undefined; }
+    // A QUOTE THAT CHANGES ONE VALUE INTO ANOTHER holds both, so membership alone let the old one
+    // pass for the new (addendum F8): "was 08:00, make it 09:00" read as 08:00 planned nothing.
+    // "Arrival: 12:00 instead of 13:00", "today instead of yesterday": the new value comes before
+    // "instead of", the old one after it; after "make it" when "was" names the old. A target is the
+    // old one. Measured 10-15 on Sol's readings: 3 of 10 refusals were a quote holding both values.
+    // When the side the value must come from holds a value of its kind, only that side counts;
+    // when it holds none ("12:00 instead of 13:00 with 4 crew", the crew), the whole quote does.
+    const sides = directed(g.quote);
+    if (sides) {
+      // Each side without a label or emphasis: "Arrival: 12:00*" is 12:00.
+      const side = (/target/.test(name) ? sides.old : sides.fresh).replace(/^[^:\d]*:\s*(?=\d)/, "").replace(/[*_~]+/g, "").trim();
+      const w = side ? parse(side) : null;
+      if ((w !== null && w === g.value) || (among && side && among(side).has(g.value))) return g.value;
+      if (w !== null || (among && side && among(side).size)) {
+        problems.push(`${name}: "${g.quote}" changes one value into another, and ${JSON.stringify(g.value)} is not the ${/target/.test(name) ? "old" : "new"} one`);
+        return undefined;
+      }
+    }
     const v = parse(g.quote);
     if (v !== null && v === g.value) return v;
     if (among && among(g.quote).has(g.value)) return g.value;
-    // "Arrival: 12:00 instead of 13:00", "today instead of yesterday": the new value comes
-    // before "instead of", the old one after it. A target is the old one. Measured 10-15 on
-    // Sol's readings: 3 of 10 refusals were a quote holding both values.
-    const sides = /^(.*?)\b(?:instead of|rather than)\b(.*)$/i.exec(g.quote);
-    if (sides) {
-      // Each side without a label or emphasis: "Arrival: 12:00*" is 12:00.
-      const side = (/target/.test(name) ? sides[2] : sides[1]).replace(/^[^:\d]*:\s*(?=\d)/, "").replace(/[*_~]+/g, "").trim();
-      const w = side ? parse(side) : null;
-      if ((w !== null && w === g.value) || (among && side && among(side).has(g.value))) return g.value;
-    }
     problems.push(`${name}: "${g.quote}" reads as ${JSON.stringify(v)}, not ${JSON.stringify(g.value)}`);
     return undefined;
   };
@@ -152,7 +183,9 @@ export function ground(x: Extraction, newest: string, sentIso: string, ctx: Grou
       const ahead = (Date.parse(`${next}T12:00:00Z`) - Date.parse(`${londonDay(sentIso)}T12:00:00Z`)) / 864e5;
       if (ahead >= 0 && ahead <= 120) { notes.push(`${tag}: the email gives ${date.slice(0, 4)} for ${next.slice(5)}; read as ${next}, the coming one`); date = next; }
     }
-    const where = r.action === "new_shift" ? all : mine;
+    // A change's new values are the client's own words: a reply's subject is the thread's first
+    // email and holds the old figures ("Re: 4 crew 08:00-16:00", then "start at 09:00 instead").
+    const where = r.action === "new_shift" ? all : ownWords;
     let start = check(`${tag} start`, r.start, parseTime, timesIn, where);
     const dur = check(`${tag} duration`, r.duration_minutes, parseDuration, durationsIn, where);
     // A finish the reader worked out from a length ("2hr at 07:00" -> 09:00) is grounded when the
@@ -167,6 +200,9 @@ export function ground(x: Extraction, newest: string, sentIso: string, ctx: Grou
     // an end was written, so a new shift took the assumed 08:00 start and a change kept the old one.
     if (!start && end && dur) start = addMinutes(end, -dur);
     let crew = check(`${tag} crew`, r.crew, parseCount, countsIn, where);
+    // "Move them to 10:00 and make it 8 crew": a count written as a new total beside a time change
+    // is a second change on the shift (addendum F24). A bare "the 6 crew" still names the shift.
+    const crewSet = r.action === "change_times" && crew !== undefined && !!r.crew && typeof r.crew === "object" && SETS_TOTAL.test(String(r.crew.quote ?? ""));
     // An increase must SAY it is one ("add 2", "2 more"): a bare "2 crew" is a total.
     const add = check(`${tag} crew increase`, r.crew_add, (q) => (/\b(add|extra|more|another|additional|plus)\b/i.test(q) ? amountIn(q) : null), undefined, where);
     // A decrease must SAY it is one ("stand down 2", "2 fewer"), as an increase must.
@@ -203,7 +239,9 @@ export function ground(x: Extraction, newest: string, sentIso: string, ctx: Grou
       const sh = sid ? b.shifts.find((s) => s.shift_id === sid) : undefined;
       const day = target?.date ?? (r.action !== "new_shift" ? date : undefined);
       const venueIn = (v: string) => !!v && bare(mine).includes(bare(v).slice(0, 12));
-      const byRef = (k: Booking) => ctx.linkedOrderId === k.order_id || new RegExp(String.raw`\b${k.order.slice(1)}\b`).test(mine);
+      // "R11100" as clients write it: a word boundary between the R and the digits never matched it,
+      // so a pick of the very order the email names was refused as borne out by nothing.
+      const byRef = (k: Booking) => ctx.linkedOrderId === k.order_id || rNumbersIn(mine).includes(k.order.slice(1)) || new RegExp(String.raw`\b${k.order.slice(1)}\b`).test(mine);
       const pickWords: PickWords = { days: new Set([...datesIn(mine, sentIso), ...(day ? [day] : [])]), starts: timesIn(mine), crew, venueIn };
       if (sid && !sh) notes.push(`${tag}: shift ${sid} is not on ${b.order}; the pick is dropped`);
       else if (sh && day && day !== sh.date && !(date && target?.date)) notes.push(`${tag}: ${b.order} shift ${sh.shift_id} is on ${sh.date}, the email says ${day}; the pick is dropped`);
@@ -328,7 +366,7 @@ export function ground(x: Extraction, newest: string, sentIso: string, ctx: Grou
       .map((g) => (g && typeof g === "object" && typeof (g as { quote?: unknown }).quote === "string" ? (g as { quote: string }).quote : null))
       .filter((x): x is string => !!x && !!x.trim());
     const history = quotes.length > 0 && !quotes.some((x) => quoteIn(ownWords, x)) && !(call && quoteIn(ownWords, call[0]));
-    return { action, date, start, end, duration: dur, crew, crew_add: add, crew_remove: less, venue, crew_chief: chief, trade, target, order_id, order, shift_id, place_id, ...(history ? { history: true } : {}), problems: own };
+    return { action, date, start, end, duration: dur, crew, crew_add: add, crew_remove: less, venue, crew_chief: chief, trade, target, order_id, order, shift_id, place_id, ...(crewSet ? { crew_set: true } : {}), ...(history ? { history: true } : {}), problems: own };
   });
 
   // "Can I also add 3 people for the load out on Sunday 25th, this would be the same timings"

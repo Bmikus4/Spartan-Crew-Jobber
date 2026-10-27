@@ -2,7 +2,8 @@
 // One operation, end to end: lease -> ledger intent -> read before write -> browser write
 // -> read back through the API -> ledger verdict.
 // ----------------------------------------------------------------------------
-// The API is used only to read. Every write is made in the staff screens by the bot.
+// Edits are made in the staff screens by the bot. A new order is created through the API
+// (apiCreate.ts, addendum F4), and every write is read back through the API.
 //
 // A key the ledger has seen is never executed again, whatever its status. "unknown" in
 // particular is final for the bot: the save may or may not have landed, and re-sending it
@@ -17,7 +18,7 @@ import { httpTransport, OnsinchClient } from "../../engine/onsinch";
 import contracts from "./contracts.json";
 import type { Contract } from "./contract";
 import { acquireLease, releaseLease, ledgerGet, ledgerIntent, ledgerSet, type LedgerStatus } from "./db";
-import { apiRole, builderDate, builderEdit, opKey, positionCreateFields, rowsFor, shiftCreateFields, shiftWindow, utcToLondon, type Op, type PositionSpec } from "./ops";
+import { apiRole, builderDate, builderEdit, legacyOpKey, opKey, positionCreateFields, rowsFor, shiftCreateFields, shiftWindow, utcToLondon, type Op, type PositionSpec } from "./ops";
 import { openBot, BROWSER_DIED, type Bot } from "./session";
 import { cancelNode, createChild, editNode, type EditOutcome } from "./builder";
 import { apiCreateOrder, firstRow, ORDER_MANAGER_ID } from "./apiCreate";
@@ -250,7 +251,8 @@ async function step(h: { bot: Bot }, fn: (bot: Bot) => Promise<EditOutcome>): Pr
 
 export async function runOp(source: string, op: Op, opts: { testOnly: boolean } = { testOnly: true }): Promise<RunResult> {
   const key = opKey(source, op);
-  const seen = await ledgerGet(key);
+  const old = legacyOpKey(source, op);
+  const seen = (await ledgerGet(key)) ?? (old !== key ? await ledgerGet(old) : null);
   if (seen) return { op_key: key, status: "seen", reasons: [`already ${seen.status}`], detail: seen.detail ?? undefined };
   if (!(await acquireLease(key, 240))) return { op_key: key, status: "busy", reasons: ["another operation holds the bot"] };
   // Before the browser opens nothing can have been sent, so a throw there is "blocked";

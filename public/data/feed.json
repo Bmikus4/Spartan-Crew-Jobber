@@ -5161,5 +5161,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0239",
+  "ts": "2026-10-27T12:25:12+00:00",
+  "kind": "measurement",
+  "headline": "R5 (Prompt 5 + 5.10): F24, F25, F8, 28-Nov, schema check, F13, F14, F18, op key; n2 and the parser fix",
+  "subject": "A time change with a new crew total, and a trade total or cut, are planned",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 232,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]

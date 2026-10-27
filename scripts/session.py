@@ -107,12 +107,14 @@ def confirm(skip_suite=False):
         # WHICH FILE FAILED IS THE ONLY LINE THAT MATTERS, and the first time this
         # gate went red it was buried: the tail showed a stack trace from a test that
         # throws ON PURPOSE (venueAdjudicate proves a judge that throws falls back),
-        # and the runner's own verdict line had scrolled past. Surface it first.
+        # and the runner's own verdict line had scrolled past. It goes LAST: die()
+        # keeps only the final 4,000 characters, which cut a banner put first (the
+        # first run of ticket S-0239 failed with no file named).
         out = (r.stdout or "") + (r.stderr or "")
         which = re.search(r"^\d+ of \d+ FAILED: .*$", out, re.M)
         banner = f"\n>>> {which.group(0)}\n" if which else (
-            "\n>>> the runner did not print which file failed; the tail follows\n")
-        die("suite", banner + out)
+            "\n>>> the runner did not print which file failed; the tail is above\n")
+        die("suite", out + banner)
 
     ran = ran_count(r.stdout)
     if ran is None:

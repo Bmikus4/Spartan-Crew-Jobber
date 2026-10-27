@@ -4,7 +4,7 @@
 //
 // Offline.  npx tsx test/v2Ground.ts
 // ============================================================================
-import { latestText, quoteIn, parseTime, parseDuration, parseCount, parseDate, addMinutes, poAfterLabel, oneIn, timesIn, countsIn } from "../app/lib/v2/interpret/ground";
+import { latestText, quoteIn, parseTime, parseDuration, parseCount, parseDate, addMinutes, poAfterLabel, oneIn, timesIn, countsIn, datesIn } from "../app/lib/v2/interpret/ground";
 import { ground } from "../app/lib/v2/interpret/interpret";
 
 let fails = 0;
@@ -164,6 +164,25 @@ console.log("a decrease must say it is one (crew_remove, 10-11)");
   const req = (crew_remove: { value: number; quote: string }) => ({ intent: "change" as const, po: null, note: "", requests: [{ action: "change_crew" as const, date: { value: "2026-10-16", quote: "Friday" }, start: null, end: null, duration_minutes: null, crew: null, crew_add: null, crew_remove, venue: null, crew_chief: null, trade: null, target: null }] });
   eq(ground(req({ value: 2, quote: "stand down 2 crew" }), email, sent).requests[0]?.crew_remove, 2, "stand down 2 crew is a decrease of 2");
   eq(ground(req({ value: 3, quote: "3 crew" }), email, sent).requests[0]?.crew_remove, undefined, "a bare 3 crew is a total, never a decrease");
+}
+
+console.log("shapes HEAD still refused on 10-25 (eval/iterations.md, iteration 1)");
+{
+  const sent = "2026-11-10T09:00:00Z";
+  eq(parseDate("28-Nov", sent), "2026-11-28", "28-Nov: a hyphen before the month name (booking tables, 7 grounding refusals)");
+  eq(parseDate("2-day", sent), null, "2-day is not a date: the word after the hyphen must be a month");
+  eq(parseDuration("Duration: 4"), 240, "Duration: 4 is four hours, as Call hours: 4 already was");
+  ok(countsIn("can you reduce this crew to 5").has(5), "reduce this crew to 5 holds a total of 5");
+  // red-team-B2 B2-7: the same verbs move times and places; neither is a headcount.
+  ok(!countsIn("Can you change the start time to 8:00 please").has(8), "change the start time to 8:00 is not 8 crew");
+  ok(!countsIn("change venue to 12 High Street").has(12), "change venue to 12 High Street is not 12 crew");
+  ok(!countsIn("could we change the call to 9am").has(9), "change the call to 9am is not 9 crew");
+  const oct = "2026-10-20T09:00:00Z";
+  const both = datesIn("24th & 25th October", oct);
+  ok(both.has("2026-10-24") && both.has("2026-10-25"), "24th & 25th October holds both days", [...both].join(","));
+  const range = datesIn("29-31 October 2026", oct);
+  ok(["2026-10-29", "2026-10-30", "2026-10-31"].every((d) => range.has(d)), "29-31 October 2026 holds every day of the range", [...range].join(","));
+  ok(datesIn("1-30 November", oct).size <= 2, "a range over two weeks is not read as days");
 }
 
 if (fails) { console.log(`\n${fails} FAILED`); process.exit(1); }

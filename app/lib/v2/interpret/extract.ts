@@ -100,6 +100,25 @@ export function userPrompt(sentIso: string, from: string, subject: string, newes
  * production, so the reader no longer falls back to it.
  */
 export const interpretModel = () => process.env.SPARTAN_INTERPRET_MODEL || "openai/gpt-6.1-sol";
+const ACTIONS: ReadonlyArray<RawRequest["action"]> = ["new_shift", "change_times", "change_crew", "cancel_shift", "other"];
+/**
+ * Why a reading cannot be grounded as it stands, or null: checked before grounding, so a malformed
+ * answer is one recorded card and never a throw (addendum Prompt 5). A bare value where words are
+ * expected is not malformed: grounding refuses it as a value with no words.
+ */
+export function malformedReading(x: unknown): string | null {
+  if (!x || typeof x !== "object" || Array.isArray(x)) return "the answer is not an object";
+  const reqs = (x as { requests?: unknown }).requests;
+  if (reqs != null && !Array.isArray(reqs)) return "requests is not a list";
+  for (const [i, q] of ((reqs as unknown[] | null) ?? []).entries()) {
+    if (!q || typeof q !== "object" || Array.isArray(q)) return `request ${i + 1} is not an object`;
+    const r = q as { action?: unknown; target?: unknown };
+    if (!ACTIONS.includes(r.action as RawRequest["action"])) return `request ${i + 1} has no known action`;
+    if (r.target != null && (typeof r.target !== "object" || Array.isArray(r.target))) return `request ${i + 1}'s target is not an object`;
+  }
+  return null;
+}
+
 /** Which prompt produced an extraction: a reading is only comparable to one made by the same prompt. */
 export const PROMPT_ID = `extract@${createHash("sha256").update(SYSTEM).digest("hex").slice(0, 12)}`;
 

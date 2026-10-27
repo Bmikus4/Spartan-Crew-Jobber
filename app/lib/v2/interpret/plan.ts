@@ -505,7 +505,14 @@ async function decide(msg: Message, i: Interpretation, world: World, threadOrder
     const prof = trade && !trade.asCrew ? pickProfession(trade, clientOrders, live) : null;
     return trade && prof ? { trade, prof } : null;
   };
+  /** The hours a crew change asks for, when they are not its shift's; null when it names none or the same. */
+  const hoursOf = (r: Request, first: { beginning: string; end: string }) => {
+    const s = utcToLondon(first.beginning).time, e = utcToLondon(first.end).time;
+    const start = r.start ?? s, end = r.end ?? (r.duration ? addMinutes(start, r.duration) : e);
+    return start !== s || end !== e ? `${start}-${end}` : null;
+  };
   const ops: { source: string; op: Op }[] = [];
+  const asked = new Set<string>();
   const why: string[] = [];
   const src = (n: number) => `${msg.message_id}#${n}`;
 
@@ -551,11 +558,18 @@ async function decide(msg: Message, i: Interpretation, world: World, threadOrder
     news.push({ ...r, start: f.start, end: f.end, duration: undefined });
     assumed.push(...f.assumed.map((a) => `assumed: ${r.date}, ${a}`));
   }
-  // A time change that also asks for more or fewer people is two changes on that shift: "start
-  // an hour earlier, so 07:00 - 15:00? And add 2 more crew" (end to end on TEST, 10-13) made
-  // only the time change. Both are planned against the shift as it stands.
+  // A time change that also asks for more or fewer people, or for a new total, is two changes on
+  // that shift: "start an hour earlier, so 07:00 - 15:00? And add 2 more crew" (end to end on TEST,
+  // 10-13) made only the time change, and "move them to 10:00 and make it 8 crew" was refused
+  // (addendum F24). Both are planned against the shift as it stands; a position the crew change
+  // adds takes the new times (retimed below).
   const changes = reqs.filter((r) => r.action !== "new_shift").flatMap((r) =>
-    r.action === "change_times" && (r.crew_add || r.crew_remove) ? [{ ...r, crew_add: undefined, crew_remove: undefined }, { ...r, action: "change_crew" as const, start: undefined, end: undefined, duration: undefined, crew: undefined }] : [r]);
+    r.action === "change_times" && (r.crew_add || r.crew_remove || r.crew_set)
+      ? [{ ...r, crew: r.crew_set ? undefined : r.crew, crew_add: undefined, crew_remove: undefined, crew_set: undefined },
+        { ...r, action: "change_crew" as const, start: undefined, end: undefined, duration: undefined, crew: r.crew_set ? r.crew : undefined, crew_set: undefined }]
+      : [r]);
+  /** The times a time change in this email gives each shift, for a position the email also adds to it. */
+  const retimed = new Map<number, { date: string; start: string; end: string }>();
 
   /** One change on one order's shift: its operations, or why a person must make it. */
   const change = async (n: number, r: Request): Promise<string | null> => {
@@ -565,15 +579,32 @@ async function decide(msg: Message, i: Interpretation, world: World, threadOrder
     const pickedShift = r.shift_id ? teams(order).find((t) => t.id === r.shift_id) : undefined;
     const shift = pickedShift ?? targetShift(order, r);
     if (typeof shift === "string") return (`R${order.number}: ${shift}`);
+    // Two crew counts, or two times, for one shift in one email: each request reads the shift as it stood, so
+    // applied one after the other they make a shift the client asked for in neither (1a121640a61d9b46).
+    const once = `${shift.id}|${r.action}`;
+    if (asked.has(once)) return (`R${order.number} shift ${shift.id}: two ${r.action === "change_crew" ? "crew" : r.action === "change_times" ? "time" : "such"} changes in one email`);
+    asked.add(once);
     const first = shift.slots[0];
     // A change names its shift by the day it is on (target) and may give a NEW day (date).
     // Until 10-11 the new day was ignored, so "move Tuesday's shift to Wednesday, 9-5" wrote
     // 9-5 on Tuesday: measured by the harness, 40 of 40 such emails were wrong writes.
     const date = r.target?.date && r.date && r.date !== r.target.date ? r.date : dayOf(first.beginning);
     if (r.action === "change_times") {
+      // A TIME FOR A NAMED ROLE OR TRADE MOVES ONLY THOSE POSITIONS. "The forklift driver and the chief
+      // from 07:00" on a shift of crew, a chief and a forklift moved all three, so 6 crew would have
+      // arrived an hour early; staff moved the chief and the forklift alone (1a13585d743572a8,
+      // eval/next-block.md N2). A trade OnSinch books as plain crew cannot say which crew are meant.
+      const trade = tradeOf(r.trade);
+      let slots = shift.slots;
+      if (r.crew_chief || trade) {
+        if (trade && (trade.asCrew || trade.named || !trade.candidates.length)) return (`R${order.number} shift ${shift.id}: a time for the ${trade.label} only, and the shift does not say which positions are theirs`);
+        slots = shift.slots.filter((s) => (r.crew_chief && Number(s.role) === 1) || (!!trade && Number(s.role) !== 1 && trade.candidates.includes(String(s.profession_id))));
+        if (!slots.length) return (`R${order.number} shift ${shift.id}: no ${[r.crew_chief ? "crew chief" : "", trade?.label ?? ""].filter(Boolean).join(" or ")} position to re-time`);
+      }
+      const first = slots[0];
       // "Tuesday 13th 2 x Crew 8 hours": a count written beside a time change says which shift
       // the client means, so it must be that shift's size or this is another shift.
-      const size = shift.slots.reduce((a, s) => a + Number(s.size), 0);
+      const size = slots.reduce((a, s) => a + Number(s.size), 0);
       if (r.crew && r.crew !== size) return (`R${order.number} shift ${shift.id}: the email says ${r.crew} crew, the shift has ${size}`);
       // A length beside an end sets the start: "six hours ending 18:00" is 12:00 (addendum F22).
       const start = r.start ?? (r.end && r.duration ? addMinutes(r.end, -r.duration) : utcToLondon(first.beginning).time);
@@ -585,24 +616,52 @@ async function decide(msg: Message, i: Interpretation, world: World, threadOrder
       const end = r.end ?? (r.duration ? addMinutes(start, r.duration) : r.start ? addMinutes(start, length) : utcToLondon(first.end).time);
       if (start === end) return (`R${order.number} shift ${shift.id}: ${start}-${end} has no length`);
       // A position already at the asked times is left alone: a restated booking is not a change.
-      for (const s of shift.slots) {
+      for (const s of slots) {
         const w = shiftWindow(date, start, end);
         if (Date.parse(s.beginning) === Date.parse(w.beginning) && Date.parse(s.end) === Date.parse(w.end)) continue;
         ops.push({ source: `${src(n)}:${s.id}`, op: { kind: "set_position_times", order_id: Number(order.id), slot_id: Number(s.id), date, start, end } });
       }
+      retimed.set(shift.id, { date, start, end });
       why.push(`R${order.number} shift ${shift.id}: times to ${start}-${end}`);
     } else if (r.action === "cancel_shift") {
       for (const s of shift.slots) ops.push({ source: `${src(n)}:${s.id}`, op: { kind: "cancel_position", order_id: Number(order.id), slot_id: Number(s.id) } });
       why.push(`R${order.number} shift ${shift.id}: cancelled`);
+    } else if (r.action === "change_crew" && hoursOf(r, first)) {
+      // A CREW CHANGE WITH ITS OWN HOURS is not a size change of the shift. "4 crew from 17:00 for 4 hours"
+      // on a 17:00-23:00 shift booked all 4 to 23:00 (1a13fea576aeda13); "2 more, 22:00-01:00" on a
+      // 22:00-03:00 shift kept the 2 to 03:00 (1a154d69fc48ba38). Staff split such a shift by hours.
+      return (`R${order.number} shift ${shift.id}: a crew change for ${hoursOf(r, first)}, the shift is ${utcToLondon(first.beginning).time}-${utcToLondon(first.end).time}`);
     } else if (r.action === "change_crew" && professionOf(r)) {
       // "add a carpenter to the team tomorrow" (Wall to Wall, 10-11): a position of that
-      // profession on the shift, beside the crew. Only an addition: a total or a reduction of
-      // a profession is for a person to square with what is booked.
+      // profession on the shift, beside the crew. A total or a reduction ("make it 3 forkies",
+      // "drop one forklift") changes the trade's one position on the shift (addendum F25); with
+      // two such positions, which one is meant is a person's call. The bot's attendance guard
+      // still refuses to shrink a position below the workers on it (run.ts staffedRefusal).
       const { trade, prof } = professionOf(r)!;
-      if (!r.crew_add || r.crew || r.crew_remove) return (`R${order.number}: a change to the ${trade.label} count other than adding`);
-      const londonStart = utcToLondon(first.beginning).time, londonEnd = utcToLondon(first.end).time;
-      ops.push({ source: `${src(n)}:prof`, op: { kind: "add_position", order_id: Number(order.id), shift_id: shift.id, date, start: londonStart, end: londonEnd, position: { size: r.crew_add, profession_id: prof.id } } });
-      why.push(`R${order.number}: add ${r.crew_add} ${trade.label} on ${date}`);
+      const at = retimed.get(shift.id);
+      const londonStart = at?.start ?? utcToLondon(first.beginning).time, londonEnd = at?.end ?? utcToLondon(first.end).time;
+      const add = (size: number) => ops.push({ source: `${src(n)}:prof`, op: { kind: "add_position", order_id: Number(order.id), shift_id: shift.id, date: at?.date ?? date, start: londonStart, end: londonEnd, position: { size, profession_id: prof.id } } });
+      if (r.crew_add && !r.crew && !r.crew_remove) {
+        add(r.crew_add);
+        why.push(`R${order.number}: add ${r.crew_add} ${trade.label} on ${date}`);
+        return null;
+      }
+      const held = shift.slots.filter((s) => Number(s.role) !== 1 && (trade.candidates.includes(String(s.profession_id)) || String(s.profession_id) === prof.id));
+      if (held.length > 1) return (`R${order.number} shift ${shift.id}: ${held.length} ${trade.label} positions, so which to change is for a person`);
+      const now = held.length ? Number(held[0].size) : 0;
+      const total = r.crew ?? now + (r.crew_add ?? 0) - (r.crew_remove ?? 0);
+      if (r.crew && (r.crew_add || r.crew_remove) && r.crew !== now + (r.crew_add ?? 0) - (r.crew_remove ?? 0))
+        return (`R${order.number} shift ${shift.id}: the email's ${trade.label} change on ${now} does not make the ${r.crew} written`);
+      if (total < 0) return (`R${order.number} shift ${shift.id}: ${r.crew_remove} fewer ${trade.label} than the ${now} booked`);
+      if (!held.length) {
+        if (!total) return (`R${order.number} shift ${shift.id}: no ${trade.label} position to remove`);
+        add(total);
+      } else if (!total) {
+        ops.push({ source: `${src(n)}:prof`, op: { kind: "cancel_position", order_id: Number(order.id), slot_id: Number(held[0].id) } });
+      } else if (total !== now) {
+        ops.push({ source: `${src(n)}:prof`, op: { kind: "set_position_size", order_id: Number(order.id), slot_id: Number(held[0].id), size: total } });
+      }
+      why.push(`R${order.number} shift ${shift.id}: ${total} ${trade.label} in all`);
     } else if (r.action === "change_crew") {
       const unverified = tradeOf(r.trade);
       if (unverified) why.push(`asked for ${unverified.label}: no live OnSinch profession, booked as Crew`);
@@ -636,9 +695,11 @@ async function decide(msg: Message, i: Interpretation, world: World, threadOrder
       const others = shift.slots.filter((s) => Number(s.role) !== 1 && Number(s.id) !== Number(crew[0].id)).reduce((a, s) => a + Number(s.size), 0);
       const want = chiefsFor(total + others, !!r.crew_chief || (chiefSize > 0 && current + others < 4));
       if (total - want < 1) return (`R${order.number} shift ${shift.id}: ${total} crew leaves no crew position`);
-      const londonStart = utcToLondon(first.beginning).time, londonEnd = utcToLondon(first.end).time;
+      // A chief added beside a time change in the same email works the new times, not the old.
+      const at = retimed.get(shift.id);
+      const londonStart = at?.start ?? utcToLondon(first.beginning).time, londonEnd = at?.end ?? utcToLondon(first.end).time;
       if (want && !chiefSize) {
-        ops.push({ source: `${src(n)}:chief`, op: { kind: "add_position", order_id: Number(order.id), shift_id: shift.id, date, start: londonStart, end: londonEnd, position: { size: want, profession_id: "36", role: "crew_chief" } } });
+        ops.push({ source: `${src(n)}:chief`, op: { kind: "add_position", order_id: Number(order.id), shift_id: shift.id, date: at?.date ?? date, start: londonStart, end: londonEnd, position: { size: want, profession_id: "36", role: "crew_chief" } } });
       } else if (!want && chiefSize) {
         ops.push({ source: `${src(n)}:chief`, op: { kind: "cancel_position", order_id: Number(order.id), slot_id: Number(chief[0].id) } });
       } else if (want !== chiefSize) {
@@ -651,6 +712,14 @@ async function decide(msg: Message, i: Interpretation, world: World, threadOrder
     return null;
   };
   for (const [n, r] of changes.entries()) { const no = await change(n, r); if (no) return handoff(no); }
+  // TWO CHANGES TO ONE POSITION IN ONE EMAIL are not a plan: each request read the shift as it stood, so
+  // "4 crew for 2 hours" and "2 crew for 4 hours" on one 07:00 call sized one position 3, then 2, and
+  // cancelled another (1a121640a61d9b46). A time and a size on the same position are two fields, not two
+  // changes; the same kind twice, or a cancel beside anything, is for a person.
+  const onSlot = new Map<number, string[]>();
+  for (const { op } of ops) if ("slot_id" in op) onSlot.set(Number(op.slot_id), [...(onSlot.get(Number(op.slot_id)) ?? []), op.kind]);
+  for (const [slot, kinds] of onSlot) if (new Set(kinds).size !== kinds.length || (kinds.includes("cancel_position") && kinds.length > 1))
+    return handoff(`position ${slot}: ${kinds.length} changes in one email (${kinds.join(", ")})`);
 
   // New shifts on a booking the email names (R number, or the thread the bot booked it in)
   // are added to it: Legal Geek's "add a derig on the 13th" is a shift on #13709, not a new

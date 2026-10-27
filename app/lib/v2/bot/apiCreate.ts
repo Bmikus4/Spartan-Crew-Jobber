@@ -106,7 +106,9 @@ export async function apiCreateOrder(op: CreateOp): Promise<ApiCreated> {
   if (op.company_id.startsWith("new:")) {
     const name = op.company_id.slice(4).trim();
     const domain = op.client_email.split("@")[1]?.toLowerCase() ?? "";
-    const existing = (await client.allCompanies().catch(() => [] as any[])).find((c: any) =>
+    // A list that cannot be read is not an empty list: taken as one, the company was made again
+    // (addendum F13). The throw comes before anything is sent, so the operation is blocked.
+    const existing = (await client.allCompanies()).find((c: any) =>
       String(c.name ?? "").trim().toLowerCase() === name.toLowerCase() || ([] as any[]).concat(c.Client ?? []).some((u: any) => String(u.email ?? "").toLowerCase().endsWith("@" + domain) && domain && !/gmail|hotmail|outlook|yahoo|icloud|live\./.test(domain)));
     op.company_id = String(existing ? existing.id : (await client.createCompany({ name, email_invoice: op.client_email })).id);
   }
