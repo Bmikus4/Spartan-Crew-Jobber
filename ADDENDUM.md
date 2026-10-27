@@ -6,7 +6,7 @@
   below as findings and status.
 - Every step updates this file: its status line, its measurement, and what moved.
 
-**Last updated:** 26 October 2026, R2 shipped (S-0236). The baseline was 0f2dcef. App code changed since then in these
+**Last updated:** 27 October 2026, R3 code shipped (S-0237); its switch-over waits on CRON_SECRET. The baseline was 0f2dcef. App code changed since then in these
 commits only:
 
 | commit | ticket | what |
@@ -17,7 +17,8 @@ commits only:
 | 6a98170 | S-0217 | Prompt 3b |
 | 6988aa0 | S-0232 | /api/confirm-order shut under v2 |
 | 40f7ca5 | S-0235 | Prompt 9: in-call retry, retryUnread, owner alerts, replay guard, UTC audit times, pause stores only |
-| (R2) | S-0236 | Prompt 8: docs and ruling ids in comments only |
+| 4757c27 | S-0236 | Prompt 8: docs and ruling ids in comments only |
+| (R3) | S-0237 | Prompt 10: vercel.json crons, the heartbeat, an honest sync, sync and labels on CRON_SECRET |
 
 bd10dae (S-0213) moved the test suite onto PGlite. Line references below are at HEAD unless a line says "at 0f2dcef".
 
@@ -49,7 +50,7 @@ and §3 ends with the findings added after 23 Oct (F29 onward). §11 is the rebu
 |---|---|---|
 | F1 lost emails | **DONE** S-0214 | test/everyEmailDecided.ts; sweepUndecided (process.ts) |
 | F2 open work drops off the TV | **DONE for the leak** S-0214 (every open need kept; outbound clears only Needs Reply). **OPEN: the Needs Reply lane** (F41) | test/feedKeepsEveryNeed.ts; feed/v2.ts rowsOnCard |
-| F3 pause doesn't stop everything | **DONE for retries, the sweep, test-data and labels** S-0214. **OPEN: sync and labels still accept the intake secret** | test/pauseStopsSync.ts; sync/route.ts:26, labels/route.ts:25 |
+| F3 pause doesn't stop everything | **DONE for retries, the sweep, test-data and labels** S-0214. **Auth half built** S-0237: sync and labels take authorizeCronCall, which refuses the intake secret once CRON_SECRET is set; **live when the owner sets it** | test/pauseStopsSync.ts; test/cronEntryPoints.ts |
 | F4 creates go through the API | **OPEN** (docs): run.ts:5 still says "The API is used only to read" | run.ts:5, :258-268 |
 | F5 two-week rule | **OPEN, owner decision** | plan.ts:54, :774-775 |
 | F6 unknown sender creates a client | **OPEN, owner decision** | plan.ts:499-500, :834 |
@@ -92,7 +93,9 @@ and §3 ends with the findings added after 23 Oct (F29 onward). §11 is the rebu
 | F31 a pause throws mail away | **DONE** S-0235 (a v2 pause stores, marks v2_store_only, decides nothing) | test/pauseStoresOnly.ts; paused.ts automationPaused |
 | F35 replay erased the write record | **DONE** S-0235 | test/replayKeepsWriteRecord.ts |
 | F36 zone-less audit times | **DONE** S-0235 | test/zonelessIsUtc.ts |
-| F32-F34, F37-F47 (added 26 Oct) | see §3, "Added 26 October" | |
+| F32 n8n runs this automation's heartbeats | **Code DONE** S-0237: vercel.json crons (sync every minute, heartbeat every 5), /api/health/heartbeat, the label workflow made webhook-triggered (scripts/install-sync-workflow.mjs), the watchdog installer refuses to run. **Switch-over OPEN: waits on CRON_SECRET** | test/cronEntryPoints.ts; test/heartbeat.ts |
+| F37 the sync reports success whatever happened | **DONE for the sync** S-0237 (ok only when every step succeeded, 500 otherwise). Labels still count as applied when handed out | test/cronEntryPoints.ts |
+| F33-F34, F38-F47 (added 26 Oct) | see §3, "Added 26 October" | |
 
 ### Built and held (not deployed)
 Each held diff is mapped to the item it serves. They sit in `eval/patches/` and stack in this order on 305bf84. Applied
@@ -629,7 +632,10 @@ reversed).
   - after unpausing, the sweep skips marked mail and decides unmarked mail;
   - test/automationPaused.ts [5] reverses its intake check.
 
-**F32. n8n is the single point of failure, and it runs this automation's heartbeats (Ops, high; owner ruling).**
+**F32. n8n is the single point of failure, and it runs this automation's heartbeats (Ops, high; owner ruling).
+Code DONE S-0237; the switch-over waits on CRON_SECRET (§0 blocked item 1).** The heartbeat checks last capture (working
+hours), the oldest undecided client email past 15 minutes, the last sync finish (5 minutes) and the last label
+hand-out (10 minutes); a signal that cannot be read counts as stale. Each raises reportError route "heartbeat".
 - n8n carries intake, the minute sync, labels, the watchdog and the alarm channel itself. If it stops, the owner hears
   nothing; staff see the TV's sync dot turn red after 90 quiet minutes.
 - **The owner ruled on 26 Oct: no heartbeat for this automation runs in n8n, ever.**
@@ -689,7 +695,7 @@ reversed).
 - **Fixture:** test/zonelessIsUtc.ts.
 
 **F37. The minute sync reports success whatever happened, and labels count as applied before Gmail applies them
-(Observability, medium).**
+(Observability, medium). DONE for the sync S-0237; the label half stays.**
 - The sync's errors are folded under ok:true (sync/route.ts).
 - A label is marked applied when handed out (labels/route.ts:55-60).
 - The hourly full resend is capped at 150 threads.
@@ -1044,7 +1050,8 @@ list is true and the owner has reviewed the result. Don't run several at once: t
 | 7 | OPEN (design) |
 | 8 | DONE (S-0236) |
 | 9 | DONE (S-0235) |
-| 10-13 | new, §11 |
+| 10 | code DONE (S-0237); switch-over waits on CRON_SECRET |
+| 11-13 | new, §11 |
 
 **Rules for every task:**
 - Read ADDENDUM.md first. Re-find each line reference at HEAD before editing, and say what moved.
@@ -1232,7 +1239,7 @@ Still to come from §10: the identity owner (R8) and the old engine's retirement
 |---|---|---|---|
 | R1 | **9** (new) | **Stop losing work, part 2:** F29 (in-call retry), F26 re-read (retryUnread), F30 owner alerts, F35 replay guard, F36 UTC times, F31 pause stores mail. Held items-1-3-runtime, plus C3 and C2 / item-4 / n1 scoring | **DONE S-0235** |
 | R2 | 8 | Re-map the repo: CLAUDE.md, engine README, docs index, rulings into DECISIONS.md | **DONE S-0236** |
-| R3 | **10** (new) | **No heartbeat in n8n** (F32): cron entry points, the heartbeat, honest sync status (F37), sync and labels on their own secret (F3), labels by webhook, the switch-over | yes. Live when CRON_SECRET is set |
+| R3 | **10** (new) | **No heartbeat in n8n** (F32): cron entry points, the heartbeat, honest sync status (F37), sync and labels on their own secret (F3), labels by webhook, the switch-over | **Code DONE S-0237.** Switch-over waits on CRON_SECRET |
 | R4 | 0 | Size the findings, read-only | report |
 | R5 | 5 + 5.10 | Everyday requests (F8, F24, F25, dates, schema validation) and the small fixes (F13, F14, F18, op key, run.ts:5, README). Re-cut held item 5 and n2-planner-ops | yes |
 | R6 | **11** (new) | Govern the switches (F34). One migrations module (F44). A Preview branch when access exists | yes |
@@ -1271,7 +1278,14 @@ Still to come from §10: the identity owner (R8) and the old engine's retirement
 - retryUnread;
 - test/pauseStoresOnly.ts.
 
-### Prompt 10: no heartbeat in n8n (F32, F37, F3's auth half)
+### Prompt 10: no heartbeat in n8n (F32, F37, F3's auth half): **code DONE**, S-0237; switch-over OPEN
+**As built:** the secret is CRON_SECRET for the sync, the labels and the heartbeat alike. Until it is set the intake
+secret still opens them, so the n8n minute schedule keeps running; once it is set the intake secret is refused. The
+cron's GET of /api/bot/sync calls the n8n webhook `spartan-labels` after the sync (SPARTAN_LABELS_WEBHOOK overrides
+the URL). **The switch-over, in one sitting:** the owner sets CRON_SECRET in Vercel (Production) and in .env.local;
+redeploy; three cron firings seen; deactivate n8n baVlgOkVMCpvj1N7; run `node scripts/install-sync-workflow.mjs`
+(it replaces rfYGsZULF4PehLPm with the webhook form and retires it); labels seen to apply; /api/health/heartbeat
+answers ok.
 **Goal:** every timer for this automation lives in the app. n8n keeps no schedule.
 1. Add GET handlers on /api/bot/sync and a new /api/health/heartbeat, authorised by authorizeCronCall.
    - Both paths are on the middleware SKIP list, so each checks its own secret; test/machineRouteAuth.ts must pass.

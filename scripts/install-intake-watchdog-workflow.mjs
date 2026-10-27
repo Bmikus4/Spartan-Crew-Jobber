@@ -38,6 +38,12 @@
 // ============================================================================
 import { loadEnv, requireEnv } from "./_env.mjs";
 
+// OVERRULED 26 Oct (the owner; DECISIONS O1, addendum F32): no heartbeat for this automation runs in
+// n8n, ever. The heartbeat is /api/health/heartbeat on a Vercel cron (vercel.json). This script must
+// not run again, so it refuses to; the argument above is kept as the record of what was decided against.
+console.error("Overruled 26 Oct (DECISIONS O1): no heartbeat runs in n8n. The heartbeat is /api/health/heartbeat (vercel.json).");
+process.exit(2);
+
 loadEnv();
 
 const argv = process.argv.slice(2);

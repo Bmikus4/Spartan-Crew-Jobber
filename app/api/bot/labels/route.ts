@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { neon } from "@neondatabase/serverless";
-import { authorizeMachineCall } from "../../../lib/apiAuth";
+import { authorizeCronCall } from "../../../lib/apiAuth";
+import { markRun } from "../../../lib/runMarks";
 import { automationPausedFlag } from "../../../lib/paused";
 import { serveFeed } from "../../../lib/feed/serve";
 import { liveFeedDeps } from "../../../lib/feed/live";
@@ -19,10 +20,12 @@ const PER_RUN = 150;
  * "Spartan Sync (every minute)" (scripts/_labelNodes.mjs), from the same cards the TV draws. Only threads whose
  * labels changed since they were last handed out are returned, and every hour all of them, so
  * a run n8n dropped is put right within the hour. mode "dry" hands out the same answer and
- * remembers nothing. Under /api/bot, so the machine secret is its only gate.
+ * remembers nothing. Under /api/bot, so authorizeCronCall is its only gate: once CRON_SECRET is set,
+ * n8n presents that and the intake secret is refused (addendum F3). Each live answer is recorded
+ * for the heartbeat (heartbeat.ts), so labels that stop being asked for are noticed.
  */
 export async function POST(request: Request): Promise<Response> {
-  if (!authorizeMachineCall(request).ok) return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
+  if (!authorizeCronCall(request).ok) return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
   // Paused, n8n is told what it is told when the feed cannot be read: change nothing this minute.
   if (automationPausedFlag()) return NextResponse.json({ ok: false, paused: true, error: "automation paused (SPARTAN_PAUSED=1); no labels change this minute" }, { status: 503 });
   const body = (await request.json().catch(() => ({}))) as { mode?: string; full?: boolean; failed?: unknown };
@@ -57,6 +60,7 @@ export async function POST(request: Request): Promise<Response> {
       await sql`INSERT INTO thread_labels (thread_id, order_label, follow_up, applied_at) VALUES (${t.thread_id}, ${t.order}, ${t.follow_up}, now())
         ON CONFLICT (thread_id) DO UPDATE SET order_label = EXCLUDED.order_label, follow_up = EXCLUDED.follow_up, applied_at = now()`;
     }
+    await markRun("labels", true, { threads: todo.length }).catch(() => {});
   }
   return NextResponse.json({
     ok: true, mode: live ? "live" : "dry", full,

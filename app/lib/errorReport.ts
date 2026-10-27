@@ -37,7 +37,7 @@ export type Severity = "alert" | "log";
  * not running cannot report that it is not running. It is asked from outside on a schedule —
  * see app/api/health/intake. The other three are the engine reporting on itself.
  */
-export type Route = "booking-lost" | "write-unconfirmed" | "engine-threw" | "intake-quiet" | "mail-undeliverable" | "mail-pull-failed" | "label-failed" | "help-report" | "system-failed";
+export type Route = "booking-lost" | "write-unconfirmed" | "engine-threw" | "intake-quiet" | "mail-undeliverable" | "mail-pull-failed" | "label-failed" | "help-report" | "system-failed" | "heartbeat";
 
 const ROUTE_TITLE: Record<Route, string> = {
   "booking-lost": "A BOOKING WAS LOST",
@@ -62,6 +62,8 @@ const ROUTE_TITLE: Record<Route, string> = {
   // The decision was recorded, so nothing is lost, but the reason a person must act is the
   // system's own failure (OnSinch unreadable, a write stopped part-way), not the client's
   // request. Staff see it as a need; until this route, the owner never heard of it.
+  // The automation stopped somewhere: intake, the sweep, the minute sync or the labels (heartbeat.ts).
+  heartbeat: "THE AUTOMATION'S HEARTBEAT IS STALE",
   "system-failed": "THE SYSTEM FAILED ON ITS OWN PART OF AN EMAIL",
 };
 

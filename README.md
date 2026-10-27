@@ -16,7 +16,9 @@ and its status are in `ADDENDUM.md`; the map for an agent is `CLAUDE.md`.
 - **Grounding and planning.** `app/lib/v2/interpret/` proves every value against the email's words and finds the
   booking (`plan.ts`). Each email ends in one `v2_decisions` row.
 - **Writes.** The bot in `app/lib/v2/bot/`, behind two keys: `SPARTAN_WRITES=live` and the Settings switch.
-- **Every minute.** `/api/bot/sync`: stopped writes, undecided mail, failed reads and the re-plan of open cards.
+- **Every minute.** `/api/bot/sync`: stopped writes, undecided mail, failed reads and the re-plan of open cards. A
+  Vercel cron (`vercel.json`), n8n's schedule until the switch-over. `/api/health/heartbeat`, every 5 minutes,
+  raises a stalled intake, sweep, sync or labels to the owner.
 - **TV and labels.** `/api/feed` (`app/lib/feed/`); Gmail labels from `/api/bot/labels`, applied by n8n.
 - **Alarms.** `app/lib/errorReport.ts`, sent through the n8n workflow "Spartan Alarms".
 - **The old engine** (`app/lib/engine/`) is paused; see `app/lib/engine/README.md`.
@@ -27,8 +29,9 @@ and its status are in `ADDENDUM.md`; the map for an agent is `CLAUDE.md`.
 |---|---|---|
 | `n8n-inbound` | n8n intake | stores a thread and decides its new emails (v2) |
 | `dedupe` | n8n intake | claims a message id once (`message_ledger`) |
-| `bot/sync` | n8n, every minute | the minute sync (above) |
-| `bot/labels` | n8n, every minute | the Gmail labels the TV implies |
+| `bot/sync` | Vercel cron every minute (n8n until the switch-over) | the minute sync (above) |
+| `bot/labels` | n8n, after each sync | the Gmail labels the TV implies |
+| `health/heartbeat` | Vercel cron every 5 minutes | intake, sweep, sync and labels still running |
 | `bot/process`, `bot/run`, `bot/canary` | by hand | replay one email; run the bot; check the OnSinch forms |
 | `health/intake` | n8n watchdog | is mail arriving |
 | `settings` | Settings screen | the write switch, replies, delivery |

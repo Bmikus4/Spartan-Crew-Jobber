@@ -1,13 +1,16 @@
-// The bridge's minute (Ben, 10-13: "Everything should always be synced every minute"): an n8n
-// Schedule workflow that POSTs /api/bot/sync once a minute. The route follows every order the
-// bot made or changed by its J number, looks for the unlinked, and retries writes that stopped
-// before anything was sent (app/lib/v2/links.ts, process.ts retryStopped).
+// The Gmail labels after each minute sync (ADDENDUM R3, F32). No heartbeat for this automation
+// runs in n8n, ever (the owner, 26 Oct; DECISIONS O1): the minute sync is a Vercel cron on
+// /api/bot/sync (vercel.json), and after each run it calls this workflow's webhook. The workflow
+// keeps only what the app cannot do yet, applying the labels with the mailbox's Gmail credential,
+// until the Gmail grant moves that into the app too (R14).
 //
-// The schedule lives in n8n, not Vercel: this project has no vercel.json crons, and n8n already
-// runs the minute Gmail poll the intake depends on, so one scheduler carries both.
+// It replaces "Spartan Sync (every minute)", whose schedule ran the sync and then these steps.
+// RUN IT ONLY AT THE SWITCH-OVER, after CRON_SECRET is set in Vercel and three cron firings are seen:
+// the label steps ask the app with CRON_SECRET, which the app accepts only once it is set there,
+// and the old schedule is retired by this run.
 //
-// After the sync the same execution applies the Gmail labels (scripts/_labelNodes.mjs says why
-// they ride here and not in a workflow of their own).
+// The label steps ride in this one workflow (scripts/_labelNodes.mjs says why: n8n Cloud counts
+// executions, and running out stops the Gmail intake too).
 //
 //   node scripts/install-sync-workflow.mjs [--activate] [--status] [--print]
 import { loadEnv, requireEnv } from "./_env.mjs";
@@ -20,32 +23,28 @@ const ACTIVATE = argv.includes("--activate");
 const STATUS = argv.includes("--status");
 const PRINT = argv.includes("--print");
 
-const WF_NAME = "Spartan Sync (every minute)";
-const SECRET = (process.env.N8N_WEBHOOK_SECRET || "").trim();
+const WF_NAME = "Spartan Labels (after each sync)";
+/** The schedule form this replaces: retired by the first run. */
+const OLD_NAMES = ["Spartan Sync (every minute)"];
+const SECRET = (process.env.CRON_SECRET || "").trim();
 const APP = (process.env.SPARTAN_APP_URL || "https://spartan-crew-jobber.vercel.app").replace(/\/$/, "");
+/** app/lib/routes/sync.ts labelsWebhook() posts here; the two must agree. */
+const HOOK_PATH = "spartan-labels";
 
 const nodes = [
-  { id: "sched", name: "Every minute", type: "n8n-nodes-base.scheduleTrigger", typeVersion: 1.2, position: [0, 0],
-    parameters: { rule: { interval: [{ field: "minutes", minutesInterval: 1 }] } } },
-  { id: "sync", name: "Sync the bridge", type: "n8n-nodes-base.httpRequest", typeVersion: 4.2, position: [240, 0],
-    onError: "continueRegularOutput",
-    parameters: {
-      method: "POST", url: `${APP}/api/bot/sync`,
-      options: { response: { response: { fullResponse: true, neverError: true } }, timeout: 290000 },
-      sendHeaders: true, headerParameters: { parameters: [{ name: "x-webhook-secret", value: SECRET }] },
-    } },
+  { id: "hook", name: "After the sync", type: "n8n-nodes-base.webhook", typeVersion: 2, position: [0, 0], webhookId: HOOK_PATH,
+    parameters: { httpMethod: "POST", path: HOOK_PATH, responseMode: "onReceived", options: {} } },
 ];
-const labels = labelChain({ app: APP, secret: SECRET, x: 480, y: 0 });
+const labels = labelChain({ app: APP, secret: SECRET, x: 240, y: 0 });
 nodes.push(...labels.nodes);
 const connections = {
-  "Every minute": { main: [[{ node: "Sync the bridge", type: "main", index: 0 }]] },
-  "Sync the bridge": { main: [[{ node: labels.entry, type: "main", index: 0 }]] },
+  "After the sync": { main: [[{ node: labels.entry, type: "main", index: 0 }]] },
   ...labels.connections,
 };
 const body = { name: WF_NAME, nodes, connections, settings: { executionOrder: "v1", saveDataSuccessExecution: argv.includes("--save-runs") ? "all" : "none" } };
 
 if (PRINT) { console.log((SECRET ? JSON.stringify(body, null, 2).split(SECRET).join("<secret>") : JSON.stringify(body, null, 2))); process.exit(0); }
-if (!SECRET) { console.error("MISSING ENV: N8N_WEBHOOK_SECRET -- every sync would 401."); process.exit(2); }
+if (!SECRET) { console.error("MISSING ENV: CRON_SECRET -- the label steps would be refused. Set it in Vercel and .env.local first."); process.exit(2); }
 
 const BASE = requireEnv("N8N_BASE").replace(/\/$/, "").replace(/\/api\/v1$/, "");
 const KEY = requireEnv("N8N_API_KEY");
@@ -57,22 +56,22 @@ async function api(path, init = {}) {
   return text ? JSON.parse(text) : {};
 }
 const all = await api("/workflows?limit=250");
-const existing = (all.data || []).find((w) => w.name === WF_NAME) || null;
-if (STATUS) { console.log(existing ? `${WF_NAME}: ${existing.id}, active=${existing.active}` : `${WF_NAME}: not installed`); process.exit(0); }
-// ALWAYS A NEW WORKFLOW, the old one retired after it. n8n refuses an UPDATE that adds nodes
+const existing = (all.data || []).filter((w) => w.name === WF_NAME || OLD_NAMES.includes(w.name));
+if (STATUS) { console.log(existing.length ? existing.map((w) => `${w.name}: ${w.id}, active=${w.active}`).join("\n") : `${WF_NAME}: not installed`); process.exit(0); }
+// ALWAYS A NEW WORKFLOW, the old ones retired after it. n8n refuses an UPDATE that adds nodes
 // using a credential the API key's user does not own ("You don't have access to the credentials
-// in the 'List labels' node", 10-16), and accepts the same nodes in a CREATE. The old one is
-// backed up first, and switched off before the new one starts so two never sync at once.
+// in the 'List labels' node", 10-16), and accepts the same nodes in a CREATE. Each old one is
+// backed up first and switched off before the new one starts, so labels are never applied twice.
 let wasActive = false;
-if (existing) {
-  const old = await api(`/workflows/${existing.id}`);
+for (const w of existing) {
+  const old = await api(`/workflows/${w.id}`);
   mkdirSync("n8n/backups", { recursive: true });
-  writeFileSync(`n8n/backups/sync-${existing.id}-${Date.now()}.json`, JSON.stringify(old, null, 2));
-  wasActive = !!old.active;
-  if (old.active) await api(`/workflows/${existing.id}/deactivate`, { method: "POST" });
+  writeFileSync(`n8n/backups/sync-${w.id}-${Date.now()}.json`, JSON.stringify(old, null, 2));
+  wasActive = wasActive || !!old.active;
+  if (old.active) await api(`/workflows/${w.id}/deactivate`, { method: "POST" });
 }
 const wf = await api("/workflows", { method: "POST", body: JSON.stringify(body) });
 console.log(`created ${wf.id}`);
 if (ACTIVATE || wasActive) { await api(`/workflows/${wf.id}/activate`, { method: "POST" }); console.log(`activated: ${(await api(`/workflows/${wf.id}`)).active}`); }
-if (existing) { await api(`/workflows/${existing.id}`, { method: "DELETE" }); console.log(`retired ${existing.id}`); }
-console.log(`POSTs ${APP}/api/bot/sync every minute`);
+for (const w of existing) { await api(`/workflows/${w.id}`, { method: "DELETE" }); console.log(`retired ${w.id}`); }
+console.log(`labels run when ${BASE}/webhook/${HOOK_PATH} is called (by /api/bot/sync's cron run)`);

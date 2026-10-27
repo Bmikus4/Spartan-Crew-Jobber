@@ -18,9 +18,12 @@ every step update its status line, its §0 table and any measurement.**
 6. **Write.** The bot (`app/lib/v2/bot/`: `run.ts`, `builder.ts`, `ops.ts`, `db.ts`, `apiCreate.ts`).
    **Off:** the Settings switch bot_writes_enabled is false (owner, 25 Oct).
 7. **Every minute.** `/api/bot/sync`: stopped writes, the undecided sweep, failed reads, the re-plan
-   (`app/lib/v2/replan.ts`), test data.
+   (`app/lib/v2/replan.ts`), test data; ok only when every step succeeded. A Vercel cron (`vercel.json`); n8n's
+   schedule until the switch-over (ADDENDUM R3). Every 5 minutes `/api/health/heartbeat` (`app/lib/heartbeat.ts`)
+   raises a stalled intake, sweep, sync or labels to the owner.
 8. **TV.** `app/lib/feed/` (`v2.ts` rowsOnCard, `serve.ts`, `live.ts`) behind `/api/feed`.
-   **Labels:** `/api/bot/labels` from `app/lib/mail/threadLabels.ts`. **Alarms:** `app/lib/errorReport.ts`.
+   **Labels:** `/api/bot/labels` from `app/lib/mail/threadLabels.ts`, applied by n8n with the mailbox's Gmail
+   credential after each sync. **Alarms:** `app/lib/errorReport.ts`.
 
 `app/lib/engine/` is the paused old engine; v2 imports a few of its files (`app/lib/engine/README.md`).
 

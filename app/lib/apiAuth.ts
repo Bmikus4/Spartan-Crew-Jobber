@@ -158,9 +158,11 @@ export function authorizeMailWebhook(request: Request): Caller {
  * manual trigger carrying `x-webhook-secret` is still accepted, because being able to
  * run the poll by hand is how it gets tested.
  *
- * CRON_SECRET is Vercel's own variable name and it sets it automatically on Pro; the
- * shared machine secret is accepted as well so a deployment that has one but not the
- * other is not silently unreachable.
+ * ONCE CRON_SECRET IS SET, THE INTAKE SECRET NO LONGER OPENS THESE ROUTES (addendum F3).
+ * The minute sync retries writes to OnSinch, and N8N_WEBHOOK_SECRET sits in every n8n intake
+ * node, so a leak of it must not be enough to drive the sync or the labels. Until CRON_SECRET
+ * is set the intake secret is still accepted: the n8n minute schedule is what runs the sync
+ * until the switch-over in ADDENDUM R3, and refusing it first would leave nothing running.
  */
 export function authorizeCronCall(request: Request): Caller {
   const cronSecret = (process.env.CRON_SECRET || "").trim();
@@ -170,7 +172,7 @@ export function authorizeCronCall(request: Request): Caller {
   const auth = request.headers.get("authorization") || "";
   if (/^bearer /i.test(auth)) presented.push(auth.slice(7).trim());
 
-  const secrets = [cronSecret, machineSecret].filter(Boolean);
+  const secrets = (cronSecret ? [cronSecret] : [machineSecret]).filter(Boolean);
   return decideMachineCall({
     secretMatches: secrets.some((s) => presented.some((p) => p !== "" && safeEqual(p, s))),
     secretConfigured: secrets.length > 0,

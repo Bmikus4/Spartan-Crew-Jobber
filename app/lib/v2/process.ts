@@ -285,6 +285,26 @@ export type SweepReport = { paused?: true; threads: number; decided: string[]; c
  * decision on its thread already overtook is never read now: acting on "4 crew" after "make it
  * 5" was done would undo the newer request, so a person reads it.
  */
+/**
+ * When the oldest client email that nothing has decided was stored: the heartbeat's lag signal
+ * (heartbeat.ts). The same mail the sweep would take, test and non-client mail and store-only
+ * mail and history stored late left out, so a lag means the sweep itself has stalled.
+ */
+export async function oldestUndecidedAt(): Promise<number | null> {
+  const sql = await db();
+  const rows = ((await sql`
+    SELECT m.message_id, m.thread_id, m.from_address, m.date_iso, m.first_seen_at FROM thread_messages m
+    WHERE NOT m.is_from_spartan
+      AND m.first_seen_at > now() - (${UNDECIDED_WITHIN_HOURS} || ' hours')::interval
+      AND NOT EXISTS (SELECT 1 FROM v2_decisions d WHERE d.message_id = m.message_id)
+      AND NOT EXISTS (SELECT 1 FROM v2_store_only s WHERE s.message_id = m.message_id)
+    ORDER BY m.first_seen_at LIMIT 200`) as any[])
+    .filter((r) => !NOT_CLIENT.test(addr(r.from_address)) && !isTestSender(addr(r.from_address)) && !isTestId(r.message_id) && !isTestId(r.thread_id))
+    // History stored late (a backfill) is not the sweep's, so it is not a lag either.
+    .filter((r) => !(Date.parse(r.date_iso) < Date.now() - UNDECIDED_SENT_WITHIN_DAYS * 86_400_000));
+  return rows.length ? Date.parse(String(rows[0].first_seen_at instanceof Date ? rows[0].first_seen_at.toISOString() : rows[0].first_seen_at)) : null;
+}
+
 /** Marks stored mail as never to be decided: what intake receives while the automation is paused (addendum F31). */
 export async function storeOnly(message_ids: string[], reason: string): Promise<void> {
   if (!message_ids.length) return;
