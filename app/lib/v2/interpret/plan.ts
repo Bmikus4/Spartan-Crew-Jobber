@@ -21,7 +21,7 @@ import { matchCompanyBySender, rNumbersIn, normName, domainOfEmail, CONSUMER_DOM
 import { BOT_USER } from "../evidence";
 import { coded } from "../reasons";
 import { companiesOf, stampedSince, type ThreadIn, type ThreadMsg, type StateWorld, type Grounded } from "../threadState";
-import { identify, covered, refsIn, GENERIC_PLACE, type Facts, type OrderRef } from "../identity";
+import { identify, covered, refsIn, atVenue, nearStart, placesOn, GENERIC_PLACE, type Facts, type OrderRef } from "../identity";
 
 export type World = {
   companies(): Promise<any[]>;
@@ -88,10 +88,12 @@ const dayOf = (iso: string) => utcToLondon(iso).date;
 const SHIFT_WORDS = ["derig", "de-rig", "install", "build", "setup", "set up", "rig", "get in", "get out", "load in", "load out", "breakdown", "strike", "collection", "delivery"];
 
 /** The one shift a change is about, or why there is not exactly one. */
-export function targetShift(order: any, r: Request): { id: number; slots: any[] } | string {
+export function targetShift(order: any, r: Request, at?: Set<number> | null): { id: number; slots: any[] } | string {
   const day = r.target?.date ?? r.date;
-  let cands = teams(order).filter((t) => t.slots.some((s) => dayOf(s.beginning) === day));
-  if (!cands.length) return `no shift on ${day}`;
+  // On an order at several venues, the one the email names (identity atVenue, F10).
+  const fits = atVenue(order, at);
+  let cands = teams(order).filter((t) => t.slots.some((s) => dayOf(s.beginning) === day && fits(s)));
+  if (!cands.length) return `no shift on ${day}${at?.size && placesOn(order).size > 1 ? " at the venue written" : ""}`;
   if (cands.length > 1 && r.target?.start) cands = cands.filter((t) => t.slots.some((s) => utcToLondon(s.beginning).time === r.target!.start));
   if (cands.length > 1 && r.target?.quote) {
     const words = SHIFT_WORDS.filter((w) => r.target!.quote.toLowerCase().includes(w));
@@ -136,7 +138,7 @@ export function venueKey(name: string): string {
  * dropped (venueKey). Never a resemblance: a key must equal a key. Several places with one
  * name (146 addresses hold 2 or more) are narrowed to the ones this client has booked before.
  */
-async function placesFor(world: World, venue: string, clientOrders: any[] = []): Promise<{ id: number; name: string }[]> {
+async function placesFor(world: World, venue: string, clientOrders: any[] = []): Promise<{ id: number; name: string; byHistory?: true }[]> {
   let hits: { id: number; name: string; address?: string }[] = (await world.placesNamed(venue)).filter((p) => normName(p.name) === normName(venue));
   if (!hits.length) {
     const head = venue.split(",")[0].trim();
@@ -154,6 +156,30 @@ async function placesFor(world: World, venue: string, clientOrders: any[] = []):
       const initials = (n: string) => venueKey(n).split(" ").filter(Boolean).map((w) => w[0]).join("");
       const acr = (await world.allPlaces()).filter((p) => p.address && initials(p.name) === caps.toLowerCase());
       if (acr.length === 1) hits = acr;
+    }
+  }
+  // A PLACE THIS CLIENT BOOKS, NAMED IN MORE OR FEWER WORDS. When nothing matches by name, or only places
+  // the client never booked, the one place the client has booked whose name words and the email's share
+  // at least two, one set holding the other, is the venue. On current mail creates booked a new place, or
+  // an unused duplicate (place 7083, no booking ever), where staff used the client's own place, booked 2
+  // to 32 times (1a15984719fbd60e, 1a15984f57ab3251, 1a13438a3dd67400; eval/phase-c.md). Exactly one:
+  // two such places stay as they were.
+  // With no place of that name at all, the one OnSinch place (of 2,319 with an address) that fits the same
+  // way is the venue: right and unique on 2 of the 4 current-mail cases, and never a guess between two.
+  if (world.allPlaces) {
+    const used = new Set(clientOrders.flatMap((o) => teams(o).flatMap((t) => t.slots.map((x) => Number(x.SlotLocation?.place_id)))).filter(Boolean));
+    if (!hits.some((h) => used.has(Number(h.id)))) {
+      const words = (s: string | null | undefined) => new Set(venueKey(s ?? "").split(" ").filter((w) => w.length > 2));
+      const asked = words(venue);
+      const fit = (p: { name: string; address?: string }) => {
+        const name = words(p.name), shared = [...asked].filter((w) => name.has(w)).length;
+        return !!p.address && shared >= 2 && (shared === name.size || shared === asked.size);
+      };
+      const all = await world.allPlaces();
+      const mine = all.filter((p) => used.has(Number(p.id)) && fit(p));
+      if (mine.length === 1) return [{ id: Number(mine[0].id), name: mine[0].name, byHistory: true }];
+      const any = hits.length ? [] : all.filter(fit);
+      if (any.length === 1) return [{ id: Number(any[0].id), name: any[0].name, byHistory: true }];
     }
   }
   // ONE BUILDING, SEVERAL PLACES: 146 addresses hold 2 or more. "Mandarin Oriental" (230) and
@@ -381,12 +407,18 @@ function staffSince(t: { raw: any; slots: any[] }, slots: any[], sent: number): 
  * A trade beside the crew ("2 carpenters at 08:00") is not a new count for the crew's shift, so
  * only the same window holds it.
  */
-function bookedAt(o: any, w: Call, sent: number): "fresh" | { synth: Request[] } | string {
+function bookedAt(o: any, w: Call, sent: number, venue: Set<number> | null = null): "fresh" | { synth: Request[] } | string {
   const win = shiftWindow(w.date, w.start, w.end);
   const b = Date.parse(win.beginning), e = Date.parse(win.end);
-  if (!w.plain) return teams(o).some((t) => t.slots.some((s) => Date.parse(s.beginning) === b && Date.parse(s.end) === e)) ? { synth: [] } : "fresh";
-  const at = teams(o).map((t) => ({ t, slots: t.slots.filter((s) => Date.parse(s.beginning) === b) })).filter((x) => x.slots.length);
-  if (!at.length) return "fresh";
+  // On an order at several venues, only the venue's shifts hold the call (F10).
+  const fits = atVenue(o, venue);
+  const ts = teams(o).map((t) => ({ ...t, slots: t.slots.filter(fits) })).filter((t) => t.slots.length);
+  if (!w.plain) return ts.some((t) => t.slots.some((s) => Date.parse(s.beginning) === b && Date.parse(s.end) === e)) ? { synth: [] } : "fresh";
+  const at = ts.map((t) => ({ t, slots: t.slots.filter((s) => Date.parse(s.beginning) === b) })).filter((x) => x.slots.length);
+  if (!at.length) {
+    const near = nearStart(o, w.date, w.start, venue);
+    return near ? `R${o.number}: a shift on ${w.date} starts at ${near}, the email asks ${w.start}: possibly the same booking` : "fresh";
+  }
   if (at.some((x) => staffSince(x.t, x.slots, sent))) return { synth: [] };
   const total = at.reduce((a, x) => a + x.slots.reduce((k, s) => k + Number(s.size), 0), 0);
   const sameEnd = at.every((x) => x.slots.every((s) => Date.parse(s.end) === e));
@@ -518,6 +550,9 @@ async function decide(msg: Message, i: Interpretation, world: World, threadOrder
   if (!companyId && !newClient) return handoff(`no single client company for ${msg.from}`);
   const clientOrders = await world.companyOrders(companyId);
   const live = reqs.some((r) => tradeOf(r.trade)?.named) && world.professions ? await world.professions() : [];
+  /** The OnSinch places a request's venue names: its picked place, else its words (placesFor); null when it names none. */
+  const venueOf = async (r: Request | undefined): Promise<Set<number> | null> =>
+    !r ? null : r.place_id ? new Set([Number(r.place_id)]) : r.venue ? new Set((await placesFor(world, r.venue, clientOrders)).map((p) => Number(p.id))) : null;
   const professionOf = (r: Request) => {
     const trade = tradeOf(r.trade);
     const prof = trade && !trade.asCrew ? pickProfession(trade, clientOrders, live) : null;
@@ -596,7 +631,7 @@ async function decide(msg: Message, i: Interpretation, world: World, threadOrder
     const order = picked ?? (await findOrder(msg, companyId, world, threadOrderId, ev));
     if (typeof order === "string") return (order);
     const pickedShift = r.shift_id ? teams(order).find((t) => t.id === r.shift_id) : undefined;
-    const shift = pickedShift ?? targetShift(order, r);
+    const shift = pickedShift ?? targetShift(order, r, await venueOf(r));
     if (typeof shift === "string") return (`R${order.number}: ${shift}`);
     // Two crew counts, or two times, for one shift in one email: each request reads the shift as it stood, so
     // applied one after the other they make a shift the client asked for in neither (1a121640a61d9b46).
@@ -759,7 +794,7 @@ async function decide(msg: Message, i: Interpretation, world: World, threadOrder
     const fresh: Request[] = [];
     const synth: Request[] = [];
     for (const w of windowsOf(news)) {
-      const b = bookedAt(named, w, sent);
+      const b = bookedAt(named, w, sent, await venueOf(w.rs.find((x) => x.place_id || x.venue) ?? news.find((x) => x.place_id || x.venue)));
       if (b === "fresh") fresh.push(...w.rs);
       else if (typeof b === "string") return handoff(b);
       else synth.push(...b.synth);
@@ -814,8 +849,14 @@ async function decide(msg: Message, i: Interpretation, world: World, threadOrder
       const at = placeIds.get(w.rs[0]);
       const begins = Date.parse(shiftWindow(w.date, w.start, w.end).beginning);
       const hits = orders.filter((o) => Number(o.status) !== -1 && teams(o).some((t) => t.slots.some((s) => Date.parse(s.beginning) === begins && (!at || at.has(Number(s.SlotLocation?.place_id))))));
-      if (!hits.length) { verdicts.push({ w, order: null, synth: [] }); continue; }
-      const each = hits.map((o) => bookedAt(o, w, sent));
+      if (!hits.length) {
+        // The near miss (F9): a shift of the client's that day at the venue the email names, starting within
+        // the hour of the asked start. A second order beside it would book the job twice.
+        const near = w.plain ? orders.filter((o) => Number(o.status) !== -1).map((o) => ({ o, t: nearStart(o, w.date, w.start, at, true) })).filter((x) => x.t) : [];
+        if (near.length) return handoff(`${near.map((x) => `R${x.o.number}`).join(", ")}: a shift on ${w.date} starts at ${near[0].t}, the email asks ${w.start}: possibly the same booking`);
+        verdicts.push({ w, order: null, synth: [] }); continue;
+      }
+      const each = hits.map((o) => bookedAt(o, w, sent, at));
       if (hits.length > 1) {
         // Booked as asked in every one of them is still booked; anything else needs a person to pick.
         if (each.every((v) => typeof v === "object" && !v.synth.length)) { verdicts.push({ w, order: hits[0], synth: [] }); continue; }
@@ -884,6 +925,7 @@ async function decide(msg: Message, i: Interpretation, world: World, threadOrder
         }
         place = places.length ? { id: String(places[0].id), name: places[0].name } : { id: `new:${venue.trim().slice(0, 120)}`, name: venue.trim().split(",")[0].slice(0, 80) };
         if (!places.length) extra.push(`venue "${venue.trim()}" is new to OnSinch and was added`);
+        else if (places[0].byHistory) extra.push(`assumed: "${venue.trim()}" is ${places[0].name} (place ${places[0].id}), the one OnSinch venue whose name fits these words`);
       }
       // No venue written: the client's own premises when it has exactly one among the places it
       // books (a warehouse, HQ, yard or depot): Event Concept's "Crew" for this week went to

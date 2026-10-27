@@ -226,3 +226,41 @@ export function covered(requests: Grounded[], orders: any[], opts: { companyIds:
   }
   return [...out.values()];
 }
+
+/** The OnSinch places an order's live shifts stand at. */
+export const placesOn = (o: any): Set<number> => new Set(slotsOf(o).map((s) => Number(s?.SlotLocation?.place_id)).filter((p) => p > 0));
+
+/**
+ * Whether a shift counts for a call at `at` (the places the email's venue names): on an order standing at
+ * several places, only those there do (F10: "the ExCeL call" changed Olympia's shift with the same window,
+ * and a new ExCeL shift read as already booked by Olympia's). With no venue named, or an order at one
+ * place, every shift counts.
+ */
+export const atVenue = (o: any, at: Set<number> | null | undefined) => {
+  const here = at?.size && placesOn(o).size > 1 ? at : null;
+  return (s: any) => !here || here.has(Number(s?.SlotLocation?.place_id));
+};
+
+/** How far, in minutes, a shift's start may sit from the asked one and still be the same booking (F9). */
+export const NEAR_MINUTES = 60;
+
+/**
+ * THE NEAR MISS (F9's strict half): a shift that day at the venue whose start is within NEAR_MINUTES of the
+ * asked start but not at it, as London's clock reads it ("07:30"), or null. Staff's 07:30 against an asked
+ * 08:00 read as a fresh call, so the bot could book the job a second time. `sameVenue`: the shift must stand
+ * at a place in `at` whatever the order holds; without it the order the email named is its own venue.
+ * Without the venue a client running several jobs a day had one taken for the new booking (Creative
+ * Technology, 1a13b915f3a326a3: staff made R11588 for it).
+ */
+export function nearStart(o: any, date: string, start: string, at?: Set<number> | null, sameVenue = false): string | null {
+  const mins = (t: string) => Number(t.slice(0, 2)) * 60 + Number(t.slice(3, 5));
+  if (sameVenue && !at?.size) return null;
+  const fits = sameVenue ? (s: any) => at!.has(Number(s?.SlotLocation?.place_id)) : atVenue(o, at);
+  for (const s of slotsOf(o)) {
+    if (!fits(s)) continue;
+    const l = utcToLondon(s.beginning);
+    if (l.date !== date || l.time === start) continue;
+    if (Math.abs(mins(l.time) - mins(start)) <= NEAR_MINUTES) return l.time;
+  }
+  return null;
+}

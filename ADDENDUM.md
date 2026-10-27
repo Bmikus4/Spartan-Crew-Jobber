@@ -6,7 +6,7 @@
   below as findings and status.
 - Every step updates this file: its status line, its measurement, and what moved.
 
-**Last updated:** 27 October 2026, R8 steps a and b shipped (S-0244): one booking finder, app/lib/v2/identity/, used by the planner. R3's switch-over waits on CRON_SECRET. The baseline was 0f2dcef. App code changed since then in these
+**Last updated:** 27 October 2026, R8 step c shipped (S-0245): shifts by venue and the near miss. Steps a and b S-0244. R3's switch-over waits on CRON_SECRET. The baseline was 0f2dcef. App code changed since then in these
 commits only:
 
 | commit | ticket | what |
@@ -26,6 +26,7 @@ commits only:
 | (R7.3) | S-0242 | Prompt 12 stages 3 and 4: the old engine, its routes and SPARTAN_ENGINE deleted with their tests; a failed test file can no longer exit 0 (F48) |
 | (R7.1) | S-0243 | Prompt 12 stage 1: app/lib/engine renamed app/lib/onsinch; imports only |
 | (R8.ab) | S-0244 | Prompt 4 steps a and b: app/lib/v2/identity, one ladder for the planner and the thread state; F11, F12, the F9 "covered" half, held item 7 |
+| (R8.c) | S-0245 | Prompt 4 step c: shifts by venue on multi-venue orders (F10), the near-miss hand-off (F9's strict half), held C1 |
 
 bd10dae (S-0213) moved the test suite onto PGlite. Line references below are at HEAD unless a line says "at 0f2dcef".
 
@@ -63,8 +64,8 @@ and §3 ends with the findings added after 23 Oct (F29 onward). §11 is the rebu
 | F6 unknown sender creates a client | **OPEN, owner decision** | plan.ts:499-500, :834 |
 | F7 suite writes to production | **DONE** S-0213 (PGlite). **OPEN: preview shares production's database** (F44; steps in §11 Prompt 11) | test/fixtures/pg.ts |
 | F8 grounding checks presence, not selection | **DONE** S-0239: direction ("instead of", "rather than", "was X, make it Y", "make it") is read before membership; a reply's subject supplies no new value | test/v2EverydayRequests.ts [F8]; interpret.ts directed |
-| F9 "already booked" too loose / too strict | **Loose half DONE** S-0244 (identity covered: each request among everything the client has that day; a generic place is never the venue). **Strict half OPEN** (R8c: bookedAt's exact start, the near miss) | test/identity.ts [1] [2] |
-| F10 venue ignored on multi-venue orders | **OPEN** | plan.ts:379 bookedAt is location-blind; called :674, :730 |
+| F9 "already booked" too loose / too strict | **DONE** S-0244 (loose: identity covered, each request among everything the client has that day; a generic place is never the venue) and S-0245 (strict: a shift that day at the venue starting within an hour is a person's, never a second booking) | test/identity.ts [1] [2]; test/v2Shifts.ts |
+| F10 venue ignored on multi-venue orders | **DONE** S-0245: bookedAt and targetShift count only the venue's shifts on an order at several | test/v2Shifts.ts |
 | F11 lone R/J links the thread | **DONE** S-0244: a number in quoted text decides only when a day is asked and its order holds it | test/identity.ts [4] |
 | F12 CC'd addresses widen the pool | **DONE** S-0244: To and Cc count only when no sender names a company, and only when they name exactly one | plan.ts evidenceOf |
 | F13 failed company list → duplicate company | **DONE** S-0239: a list that cannot be read blocks the create | test/v2SmallFixes.ts [F13] |
@@ -85,7 +86,7 @@ and §3 ends with the findings added after 23 Oct (F29 onward). §11 is the rebu
 | F28 create read-back skips the venue | **DONE** S-0215 | run.ts createMismatches :124 |
 | 5.1 scoring | **DONE** S-0216, S-0217 (strict scorer, context forwarded, reason codes, four numbers). Extended 25-26 Oct by the real-mail harness (§4) | app/lib/v2/score.ts; harness/real/ |
 | 5.2 live trace | **OPEN** | process.ts:519, replan.ts:114 pass noTrace |
-| 5.3 one shared finder | **Steps a and b DONE** S-0244 (the planner); c (shifts, venues, the near miss), d (the TV verifier) OPEN; e (the reader's list) held for a paid measurement | Prompt 4; map claude.ai/artifact/6VWRB2Ymd3pst5QTbdL4zG |
+| 5.3 one shared finder | **Steps a, b, c DONE** S-0244, S-0245 (the planner, shifts, venues, the near miss); d (the TV verifier) OPEN; e (the reader's list) held for a paid measurement | Prompt 4; map claude.ai/artifact/6VWRB2Ymd3pst5QTbdL4zG |
 | 5.4 faithful requests | **DONE** S-0239 (F24, F25, F8, "20-Nov" and held item 5's parser, schema check) | Prompt 5 |
 | 5.5 recover interrupted work | **PART:** F1 done; re-read DONE S-0235; resume open | Prompt 6 |
 | 5.6 every request visible | **PART:** every need kept (S-0214); the Needs Reply lane is open | F41 |
@@ -1124,7 +1125,7 @@ appear anywhere.
 
 ### Prompt 3: make the scoreboard strict (5.1): **DONE**, S-0216, S-0217
 
-### Prompt 4: one shared booking finder (5.3, F9, F10, F11, F12): **steps a and b DONE**, S-0244
+### Prompt 4: one shared booking finder (5.3, F9, F10, F11, F12): **steps a, b, c DONE**, S-0244, S-0245
 **The map (step 1)** went to the owner before any change: claude.ai/artifact/6VWRB2Ymd3pst5QTbdL4zG. 18 places
 answered "which order"; the build order there is a to e.
 **As run, a and b (S-0244):**
@@ -1148,8 +1149,23 @@ answered "which order"; the build order there is a to e.
 - **Measured** (harness/real/run.ts --mode replay, dev, 561 emails, $0, against HEAD's planner on the same data):
   one email changed, client_unknown 6 to 5 (its client found; still a staff create inside 14 days). Writes 24 and 24,
   every write the same. The dev-2 write replay is unchanged: 22 writes, 11 completed, 2 partial, 9 wrong.
-- **Still open:** c (bookedAt, targetShift and the unnamed path by venue, the near miss, held C1), d (the TV verifier),
-  e held (the reader's list changes what the model reads: built only with the owner's yes to a paid measurement).
+**As run, c (S-0245):**
+- F10: identity atVenue. On an order standing at several places, bookedAt and targetShift count only the shifts at
+  the venue the email names (its picked place, else its words through placesFor). "Make the ExCeL call 6 crew" on
+  an order with the same window at Olympia and ExCeL changed whichever came first; a new ExCeL shift read as already
+  booked by Olympia's.
+- F9's strict half: identity nearStart. No shift at the asked start, but one that day starting within 60 minutes
+  (NEAR_MINUTES): "possibly the same booking", a person's (code booking_near_miss). On a named order its own venue
+  counts; on the unnamed path the shift must stand at the venue the email names. The first cut took any venue, and
+  the dev replay showed it naming another job of a client who runs several a day (1a13b915f3a326a3, a new booking
+  staff made R11588 for).
+- Held C1: placesFor finds the client's own place written in more or fewer words, else the one OnSinch place that
+  fits them; a create so placed says so.
+- **Measured:** test/v2Shifts.ts fails 4 of 6 on S-0244's planner and passes now. The dev replay (561 emails) is the
+  same as S-0244's, email for email; the dev-2 write replay is unchanged (22: 11 completed, 2 partial, 9 wrong); the
+  harness gate's sets hold their floors. None of the replayed mail meets these cases, so the gain is in the tests.
+- **Still open:** d (the TV verifier), e held (the reader's list changes what the model reads: built only with the
+  owner's yes to a paid measurement).
 
 **Goal:** every step answers "which order and shift is this?" with the same rule, so fewer emails are handed off and
 none are matched loosely.
@@ -1313,7 +1329,7 @@ Still to come from §10: the identity owner (R8), and the move of what the old e
 | R5 | 5 + 5.10 | Everyday requests (F8, F24, F25, dates, schema validation) and the small fixes (F13, F14, F18, op key, run.ts:5, README). Re-cut held item 5 and n2-planner-ops | **DONE S-0239** |
 | R6 | **11** (new) | Govern the switches (F34). One migrations module (F44). A Preview branch when access exists | **DONE S-0240**; the branch waits on access |
 | R7 | **12** (new) | Retire the old engine in stages (F45, §10): move the shared OnSinch client and helpers to app/lib/onsinch/, delete what nothing live reaches, then pipeline/compiler/deps and the shut routes, then the 145 old tests | **DONE** S-0241 to S-0243 |
-| R8 | 4 | **One shared booking finder** (5.3), built once the old engine is gone, so there is one place for it. Brings in held C1 and item 7. **a+b DONE** S-0244; c, d open; e held | yes |
+| R8 | 4 | **One shared booking finder** (5.3), built once the old engine is gone, so there is one place for it. Brings in held C1 and item 7. **a, b, c DONE** S-0244, S-0245; d open; e held | yes |
 | R9 | 6 | Resume interrupted plans (F26, F38, F39) | yes |
 | R10 | **13** (new) | **The email-to-board harness** (the owner's design, below), then its case study | report + test |
 | R11 | 5.2, 5.7 | Live trace; R number in our subjects (test first) | yes; 5.7 needs the owner's yes for outbound mail |
