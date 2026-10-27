@@ -14,6 +14,7 @@
 // the words), system_ (a failure), none_ (nothing to do).
 // ============================================================================
 import type { Decision } from "./interpret/plan";
+import type { RunResult } from "./bot/run";
 
 /** First match wins. */
 export const REASON_CODES: ReadonlyArray<readonly [string, RegExp]> = [
@@ -52,6 +53,23 @@ export const DEFAULT_CODES: ReadonlyArray<readonly [string, RegExp]> = [
   ["default_venue_same_name", /OnSinch venues are named .*; booked at/],
   ["default_venue_none", /no venue written, booked at No Location/],
 ];
+
+/**
+ * ONE test of "the system failed on its own part", for the owner's alert (process.ts): an earlier
+ * copy tested `[verified, not verified]`, a shape no write ever had. The live week's 3 crew-chief
+ * stops are one op each with status `mismatch` (red-team-B H6). A refusal by rule (signed-on crew,
+ * workers on a position) is the client's need reaching ops, not a fault; the bot's own error on
+ * OnSinch's page is a fault. Not booking_link_unreadable: a linked order the system cannot read is a
+ * booking gone (above).
+ */
+export function systemFailureOf(decision: Decision, executed: ReadonlyArray<Pick<RunResult, "status" | "reasons">> | null | undefined): string | null {
+  const ran = executed ?? [];
+  if (ran.some((x) => x.status === "mismatch") || (ran.some((x) => x.status === "verified") && ran.some((x) => x.status !== "verified"))) return "a write stopped part-way";
+  if (ran.some((x) => x.status === "blocked" && (x.reasons ?? []).some((r) => /^bot error|^form changed|did not open a new|is not in .*'s fill list|is not on order \d+'s builder|: \d+ inputs$|^company: \d+ options match/.test(r)))) return "the bot failed on OnSinch's page";
+  // The plan named a contact OnSinch does not hold for the company: the system's own plan, not a rule (red-team-B2 B2-8).
+  if (ran.some((x) => x.status === "blocked" && (x.reasons ?? []).some((r) => /is not a contact of /.test(r)))) return "a write used a contact OnSinch does not hold for its client";
+  return coded(decision).code === "system_failed" ? "the system could not read, plan or decide an email" : null;
+}
 
 export const codeOfReason = (reason: string): string => REASON_CODES.find(([, re]) => re.test(reason))?.[0] ?? "other";
 

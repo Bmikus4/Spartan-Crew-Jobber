@@ -62,17 +62,62 @@ export function bookingKeys(op: Op): string[] {
     case "set_position_size": return [`size ${op.order_id}/${op.slot_id}=${op.size}`];
     case "set_position_times": return [`times ${op.order_id}/${op.slot_id}=${op.date} ${op.start}-${op.end}`];
     case "cancel_position": return [`cancel ${op.order_id}/${op.slot_id}`];
-    case "set_po": return [`po ${op.order_id}=${op.po}`];
+    case "set_po": return [`po ${op.order_id}=${String(op.po).trim()}`];
     case "add_shift": return [`shift ${op.order_id}: ${op.date} ${op.start}-${op.end} ${crewOf(op.positions)}`];
     case "add_position": return [`position ${op.order_id}/${op.shift_id}: ${op.date} ${op.start}-${op.end} ${crewOf([op.position])}`];
   }
 }
 
+const same = (x: unknown, y: unknown) => String(x ?? "").trim() === String(y ?? "").trim();
+
+/**
+ * Edits as their net effect: one Slot's (or one Order's) edits in the window become one act holding each
+ * field's first old and last new value, and a field that ends where it began is no change at all. Counted
+ * edit by edit, a PO typed then corrected, or a time moved and moved back, was two changes the plan could
+ * not hold, and an equal plan was judged partial (eval/write-breakdown.md §7, fault 1).
+ */
+function netEdits(acts: Act[]): Act[] {
+  const out: Act[] = [], net = new Map<string, Act>();
+  for (const a of [...acts].sort((x, y) => Date.parse(x.at) - Date.parse(y.at))) {
+    const id = a.model === "Slot" ? a.model_id : a.model === "Order" ? a.order_id : undefined;
+    if (!a.changes || !id || !/^edit /.test(a.what)) { out.push(a); continue; }
+    const k = `${a.model}:${id}`, was = net.get(k);
+    if (!was) { const first = { ...a, changes: { ...a.changes } }; net.set(k, first); out.push(first); continue; }
+    for (const [f, v] of Object.entries(a.changes)) was.changes![f] = { old: was.changes![f] ? was.changes![f].old : v.old, new: v.new };
+    was.at = a.at;
+  }
+  for (const a of net.values()) for (const f of Object.keys(a.changes!)) if (same(a.changes![f].old, a.changes![f].new)) delete a.changes![f];
+  return out.filter((a) => !a.changes || Object.keys(a.changes).length);
+}
+
 /** What staff did after an email, as booking keys; `other` is what no system operation can express. */
 export function truthKeys(acts: Act[], orderById: (id: number) => any | undefined): { keys: string[]; other: string[] } {
   const keys = new Set<string>(), other: string[] = [];
-  for (const a of acts) {
+  // An order staff created is judged once, by its create key. That key reads the order as it stands at the
+  // judging time, so it already holds every job, shift, position and edit staff made while building it;
+  // counting those again judged equal creates "partial" (1a121423eac99289: add job, a shift re-timed in the
+  // same minute; 1a13af10fc5250eb: add job, a trade changed 5 minutes on; eval/write-breakdown.md §1). A
+  // cancel of the order is not part of building it and still counts.
+  const made = new Set(acts.filter((a) => a.what === "create order").map((a) => a.order_id));
+  // A part added and deleted inside the window left no work behind (fault 2): both acts are dropped. A
+  // delete row names the deleted part, as the act's model and model_id (harness/real/writes.ts).
+  const deleted = new Set(acts.filter((a) => /^delete /.test(a.what)).map((a) => `${a.model}:${a.model_id}`));
+  const added = new Set(acts.filter((a) => /^add (shift|position)$/.test(a.what)).map((a) => `${a.model}:${a.model_id}`));
+  // An added shift or position is keyed by its state at the judging time, so later edits to it are in that key.
+  const addedTeams = new Set(acts.filter((a) => a.what === "add shift").map((a) => Number(a.model_id)));
+  const teamOfSlot = (o: any, slotId: number) => teams(o).find((t) => ([] as any[]).concat(t?.Slot ?? []).some((s: any) => Number(s.id) === slotId));
+  for (const a of netEdits(acts)) {
     const o = orderById(a.order_id);
+    if (made.has(a.order_id) && a.what !== "create order" && a.what !== "cancel order") continue;
+    const part = `${a.model}:${a.model_id}`;
+    if (/^add (shift|position)$/.test(a.what) && deleted.has(part)) continue;
+    if (/^delete /.test(a.what)) {
+      if (added.has(part)) continue;
+      // A position that existed before the email and is deleted is the cancel the system would send.
+      if (a.model === "Slot") keys.add(`cancel ${a.order_id}/${a.model_id}`); else other.push(`deleted a ${String(a.model)} on R${a.number}`);
+      continue;
+    }
+    if (a.model === "Slot" && a.model_id && /^edit /.test(a.what) && (added.has(part) || addedTeams.has(Number(teamOfSlot(o, a.model_id)?.id)))) continue;
     if (a.what === "create order") {
       const shifts = teams(o).map(shiftKey).filter((k): k is string => !!k).sort();
       if (shifts.length) keys.add(`create ${a.company_id}: ` + shifts.join(" | "));
@@ -102,7 +147,7 @@ export function truthKeys(acts: Act[], orderById: (id: number) => any | undefine
       for (const f of Object.keys(ch).filter((f) => !["size", "cancelled", "beginning", "end"].includes(f))) other.push(`changed ${f} on R${a.number}`);
       continue;
     }
-    if (a.model === "Order" && ch.intern_name) { keys.add(`po ${a.order_id}=${String(ch.intern_name.new ?? "")}`); continue; }
+    if (a.model === "Order" && ch.intern_name) { keys.add(`po ${a.order_id}=${String(ch.intern_name.new ?? "").trim()}`); continue; }
     other.push(`${a.what} on R${a.number}`);
   }
   return { keys: [...keys].sort(), other };

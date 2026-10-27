@@ -105,23 +105,47 @@ export const PROMPT_ID = `extract@${createHash("sha256").update(SYSTEM).digest("
 
 export type ExtractMeta = { model: string; prompt_id: string; input_tokens: number | null; output_tokens: number | null; cost_usd: number | null; ms: number };
 
+/**
+ * A read that got no answer is asked again inside the call (addendum F29): 3 attempts, 400 ms then
+ * 1,200 ms apart plus up to half again, and none started after 120 s. Only a 429, a 5xx other than
+ * 501, a timeout or a dropped connection: a 400, 401 or 402 is the same refusal every time, and a
+ * reply that came back is never asked for twice, since each attempt is paid.
+ */
+const ATTEMPTS = 3, BACKOFF_MS = [400, 1200], LAST_START_MS = 120_000;
+const retryable = (status: number) => status === 429 || (status >= 500 && status !== 501);
+
 /** One OpenRouter call (the key the engine already uses). Costs money: callers budget it. */
 export async function extractWithMeta(sentIso: string, from: string, subject: string, newest: string, context = ""): Promise<{ x: Extraction; meta: ExtractMeta }> {
   const apiKey = process.env.OPENROUTER_API_KEY;
   if (!apiKey) throw new Error("OPENROUTER_API_KEY not set");
   const model = interpretModel();
   const t0 = Date.now();
-  const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-    method: "POST",
-    headers: { authorization: `Bearer ${apiKey}`, "content-type": "application/json" },
-    body: JSON.stringify({
-      model, temperature: 0, response_format: { type: "json_object" }, usage: { include: true },
-      messages: [{ role: "system", content: SYSTEM }, { role: "user", content: userPrompt(sentIso, from, subject, newest, context) }],
-    }),
-    signal: AbortSignal.timeout(60000),
-  });
-  if (!res.ok) throw new Error(`extract: OpenRouter ${res.status}`);
-  const j: any = await res.json();
+  let res: Response | null = null;
+  for (let attempt = 1; ; attempt++) {
+    let failure: Error;
+    try {
+      res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+        method: "POST",
+        headers: { authorization: `Bearer ${apiKey}`, "content-type": "application/json" },
+        body: JSON.stringify({
+          model, temperature: 0, response_format: { type: "json_object" }, usage: { include: true },
+          messages: [{ role: "system", content: SYSTEM }, { role: "user", content: userPrompt(sentIso, from, subject, newest, context) }],
+        }),
+        signal: AbortSignal.timeout(60000),
+      });
+      failure = new Error(`extract: OpenRouter ${res.status}`);
+    } catch (e) {
+      // A thrown fetch is a timeout or a dropped connection.
+      res = null;
+      failure = e as Error;
+    }
+    if (res?.ok) break;
+    if (res && !retryable(res.status)) throw failure;
+    const wait = (BACKOFF_MS[attempt - 1] ?? 0) * (1 + Math.random() / 2);
+    if (attempt >= ATTEMPTS || Date.now() - t0 + wait > LAST_START_MS) throw failure;
+    await new Promise((r) => setTimeout(r, wait));
+  }
+  const j: any = await res!.json();
   // Models sometimes wrap the object in prose or a code fence; the object itself is taken.
   const text = String(j?.choices?.[0]?.message?.content ?? "");
   const first = text.indexOf("{"), last = text.lastIndexOf("}");

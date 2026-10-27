@@ -71,6 +71,7 @@ async function main() {
       capture: (async () => ({ ok: true, captured: true, dedup_key: "k", thread_id: "t-x", message_id: "v1", messages_stored: 1, new_message_ids: ["v1"] })) as InboundIO["capture"],
       report: (async () => false) as InboundIO["report"],
       decide: (async () => { throw new Error("v2 must not run here"); }) as InboundIO["decide"],
+      storeOnly: async () => {},
       buildDeps: (async () => ({ settings: {} })) as unknown as InboundIO["buildDeps"],
       handleThread: (async () => { throw new Error("model returned no JSON"); }) as unknown as InboundIO["handleThread"],
       upsertTicket: async () => {},

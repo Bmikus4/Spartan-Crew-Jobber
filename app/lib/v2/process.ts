@@ -23,7 +23,8 @@ import { utcToLondon } from "./bot/ops";
 import { noTrace, type Tracer } from "./trace";
 import { automationPausedFlag, v2Writes } from "../paused";
 import { isTestId, isTestSender } from "../testData";
-import { coded } from "./reasons";
+import { coded, systemFailureOf } from "./reasons";
+import { reportError } from "../errorReport";
 
 /**
  * Whether the bot may create and update orders for real clients now: the Settings master switch
@@ -65,6 +66,8 @@ async function db(): Promise<NeonQueryFunction<false, false>> {
       )`;
     // The client as the TV names it; resolved here because the TV must not read OnSinch per refresh.
     await _sql`ALTER TABLE v2_decisions ADD COLUMN IF NOT EXISTS company_id INTEGER, ADD COLUMN IF NOT EXISTS company TEXT`;
+    // Mail stored while the automation was paused: kept, never decided (storeOnly).
+    await _sql`CREATE TABLE IF NOT EXISTS v2_store_only (message_id TEXT PRIMARY KEY, reason TEXT NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT now())`;
     _ready = true;
   }
   return _sql;
@@ -154,6 +157,36 @@ export async function retryStopped(): Promise<{ retried: number; results: string
     results.push(`${d.message_id}: ${out.map((r) => r.status).join(",")}`);
   }
   return { retried: results.length, results };
+}
+
+/**
+ * AN EMAIL THE SYSTEM COULD NOT READ IS READ AGAIN, up to three times, 5, 15 and 45 minutes on, within the
+ * week the sweep covers. A rate limit or a timeout is the system's own passing failure (addendum F26, F29),
+ * yet it stayed on the TV as "Needs Created" for good: 1a144c619a140ea6, "OpenRouter 429" on 10-23, still
+ * red on 10-26 (audit/verification-2026-10-26.md). A read that fails again keeps its card and counts the try.
+ */
+export const UNREAD_RETRIES = 3;
+const UNREAD = "the system could not read this email";
+export async function retryUnread(opts: { decide?: (message_id: string) => Promise<unknown>; now?: number; limit?: number } = {}): Promise<{ retried: string[]; paused?: true }> {
+  if (automationPausedFlag()) return { retried: [], paused: true };
+  const sql = await db();
+  const now = opts.now ?? Date.now();
+  const rows = (await sql`SELECT message_id, decision, created_at FROM v2_decisions
+    WHERE kind = 'handoff' AND decision->'reasons'->>0 LIKE ${UNREAD + "%"} AND coalesce(jsonb_typeof(executed), 'null') = 'null'
+      AND created_at > now() - (${UNDECIDED_SENT_WITHIN_DAYS} || ' days')::interval ORDER BY created_at`) as any[];
+  const retried: string[] = [];
+  for (const d of rows) {
+    if (retried.length >= (opts.limit ?? 2)) break;
+    const reads = Number(d.decision?.reads ?? 0);
+    const since = Date.parse(String(d.decision?.read_at ?? d.created_at));
+    if (reads >= UNREAD_RETRIES || now - since < 5 * 60_000 * 3 ** reads) continue;
+    await (opts.decide ?? (async (id: string) => processMessage(id, { execute: await botWrites() })))(d.message_id).catch(() => {});
+    // Still unread: the card stays, and the try is counted on it so the next one waits longer.
+    await sql`UPDATE v2_decisions SET decision = decision || ${JSON.stringify({ reads: reads + 1, read_at: new Date(now).toISOString() })}::jsonb
+      WHERE message_id = ${d.message_id} AND decision->'reasons'->>0 LIKE ${UNREAD + "%"}`;
+    retried.push(d.message_id);
+  }
+  return { retried };
 }
 
 export type Processed = { message_id: string; skipped?: string; interpretation?: Interpretation; decision?: Decision; executed?: RunResult[] };
@@ -252,6 +285,13 @@ export type SweepReport = { paused?: true; threads: number; decided: string[]; c
  * decision on its thread already overtook is never read now: acting on "4 crew" after "make it
  * 5" was done would undo the newer request, so a person reads it.
  */
+/** Marks stored mail as never to be decided: what intake receives while the automation is paused (addendum F31). */
+export async function storeOnly(message_ids: string[], reason: string): Promise<void> {
+  if (!message_ids.length) return;
+  const sql = await db();
+  await sql`INSERT INTO v2_store_only (message_id, reason) SELECT unnest(${message_ids}::text[]), ${reason} ON CONFLICT (message_id) DO NOTHING`;
+}
+
 export async function sweepUndecided(opts: { decide?: Decide; limit?: number } = {}): Promise<SweepReport> {
   if (automationPausedFlag()) return { paused: true, threads: 0, decided: [], carded: [], filtered: [] };
   const sql = await db();
@@ -261,6 +301,7 @@ export async function sweepUndecided(opts: { decide?: Decide; limit?: number } =
       AND m.first_seen_at < now() - (${UNDECIDED_AFTER_MINUTES} || ' minutes')::interval
       AND m.first_seen_at > now() - (${UNDECIDED_WITHIN_HOURS} || ' hours')::interval
       AND NOT EXISTS (SELECT 1 FROM v2_decisions d WHERE d.message_id = m.message_id)
+      AND NOT EXISTS (SELECT 1 FROM v2_store_only s WHERE s.message_id = m.message_id)
     ORDER BY m.date_iso, m.first_seen_at`) as any[])
     // Test mail is the test-data sweep's (testData.ts), never a model call. So is history: an email
     // sent weeks ago and stored only now came from a backfill (scripts/backfill-thread-messages.mjs
@@ -487,6 +528,13 @@ export function threadReads(sql: NeonQueryFunction<false, false>, m0: MessageIn,
 
 export async function processMessage(message_id: string, opts: { execute: boolean; world?: World; with?: string[] } = { execute: false }): Promise<Processed> {
   const sql = await db();
+  // WHAT WAS SENT FOR AN EMAIL IS ITS RECORD, so such an email is never decided again here. The
+  // upsert below writes `executed` as JSON null, which `coalesce` keeps, so a replay through
+  // /api/bot/process (the route intake's alarm names) erased the only account of what reached
+  // OnSinch (audit/pipeline-trace-addendum.md R4, 10-25). The replan refuses these rows too (replan.ts:63).
+  // `<> '[]'`, not jsonb_array_length: Postgres need not short-circuit AND, and the length of a scalar throws.
+  const sent = (await sql`SELECT 1 FROM v2_decisions WHERE message_id = ${message_id} AND jsonb_typeof(executed) = 'array' AND executed <> '[]'::jsonb`) as any[];
+  if (sent.length) return { message_id, skipped: "something was sent for this email: its record stands" };
   const rows = (await sql`SELECT message_id, thread_id, from_address, date_iso, subject, body, is_from_spartan FROM thread_messages WHERE message_id = ${message_id}`) as any[];
   const m0 = rows[0] as MessageIn | undefined;
   if (!m0) return { message_id, skipped: "message not captured" };
@@ -515,6 +563,12 @@ export async function processMessage(message_id: string, opts: { execute: boolea
         ON CONFLICT (message_id) DO UPDATE SET kind = EXCLUDED.kind, interpretation = EXCLUDED.interpretation, decision = EXCLUDED.decision,
           executed = coalesce(EXCLUDED.executed, v2_decisions.executed), code_version = EXCLUDED.code_version,
           company_id = EXCLUDED.company_id, company = EXCLUDED.company`;
+      // THE SYSTEM'S OWN FAILURES GO TO THE OWNER (addendum F30): 5 of the live week's 81
+      // listed cards were the system failing, shown to staff as ordinary needs and reported to
+      // nobody (audit/reconstruction.md §6.7). errorReport collapses repeats inside its window,
+      // so recording after each op cannot flood.
+      const failed = systemFailureOf(d.decision, d.executed);
+      if (failed) void reportError({ route: "system-failed", where: "v2/process", what: failed, detail: `message ${message_id}, thread ${m.thread_id}` });
     },
     trace: noTrace,
   });

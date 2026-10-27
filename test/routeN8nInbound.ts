@@ -24,6 +24,7 @@ function rig() {
     capture: (async () => ({ ok: true, captured: true, dedup_key: "k-1", thread_id: null, message_id: null, messages_stored: 0, new_message_ids: [] })) as InboundIO["capture"],
     report: (async (a: { route: string; where: string }) => { reports.push({ route: a.route, where: a.where }); return false; }) as InboundIO["report"],
     decide: (async () => { throw new Error("v2 must not run without SPARTAN_ENGINE=v2"); }) as InboundIO["decide"],
+    storeOnly: async () => {},
     buildDeps: (async () => ({ settings: {} })) as unknown as InboundIO["buildDeps"],
     handleThread: (async (t: { thread_id: string }) => { ran.push(t.thread_id); return { thread_id: t.thread_id, notes: [] }; }) as unknown as InboundIO["handleThread"],
     upsertTicket: async () => {},

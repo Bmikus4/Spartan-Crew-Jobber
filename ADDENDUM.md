@@ -6,7 +6,7 @@
   below as findings and status.
 - Every step updates this file: its status line, its measurement, and what moved.
 
-**Last updated:** 26 October 2026, against HEAD 41f6ee7. The baseline was 0f2dcef. App code changed since then in five
+**Last updated:** 26 October 2026, R1 shipped (S-0235). The baseline was 0f2dcef. App code changed since then in these
 commits only:
 
 | commit | ticket | what |
@@ -16,6 +16,7 @@ commits only:
 | 83e4972 | S-0216 | Prompt 3a |
 | 6a98170 | S-0217 | Prompt 3b |
 | 6988aa0 | S-0232 | /api/confirm-order shut under v2 |
+| (R1) | S-0235 | Prompt 9: in-call retry, retryUnread, owner alerts, replay guard, UTC audit times, pause stores only |
 
 bd10dae (S-0213) moved the test suite onto PGlite. Line references below are at HEAD unless a line says "at 0f2dcef".
 
@@ -36,8 +37,8 @@ and §3 ends with the findings added after 23 Oct (F29 onward). §11 is the rebu
 - **Writes to OnSinch are off:** bot_writes_enabled=false since 25 Oct 13:21Z, the owner's ruling.
   - Checked 26 Oct: none of the 15,049 OnSinch audit rows since 21 Oct were made by the system's user (2257).
   - 28 planned writes were never run.
-- **The TV is current and accounts for every write and handoff since 23 Oct** (audit/verification-2026-10-26.md). Two
-  faults remain: F29 and F42.
+- **The TV is current and accounts for every write and handoff since 23 Oct** (audit/verification-2026-10-26.md). Of the
+  two faults it found, F29 is fixed (S-0235); F42 waits on the owner and Paz.
 - **A push to main deploys production.** Work in C:/Users/thera/spartan-v2, branch v2 → origin/main. The only commit and
   push is `python -u scripts/session.py` (about 15 minutes).
 
@@ -70,14 +71,14 @@ and §3 ends with the findings added after 23 Oct (F29 onward). §11 is the rebu
 | F23 model pick on the day alone | **DONE** S-0215 | same test |
 | F24 time change + crew total refused | **OPEN** | plan.ts:558 splits only crew_add/crew_remove |
 | F25 trade totals/reductions refused | **OPEN** | plan.ts:599-602 |
-| F26 failed reads / interrupted plans never recovered | **OPEN in production.** A bounded re-read is built and held (retryUnread); resuming interrupted plans is not built | replan.ts:62, :102; process.ts:124 |
+| F26 failed reads / interrupted plans never recovered | **DONE for reads** S-0235 (retryUnread from the minute sync, after F29's in-call retry). **OPEN: resuming interrupted plans** (R9) | test/retryUnread.ts; process.ts retryUnread |
 | F27 "yes, book that" is a card | policy: the owner ruled on 20 Oct that it hands off. An acceptance card is built and held (held item 6) | plan.ts |
 | F28 create read-back skips the venue | **DONE** S-0215 | run.ts createMismatches :124 |
 | 5.1 scoring | **DONE** S-0216, S-0217 (strict scorer, context forwarded, reason codes, four numbers). Extended 25-26 Oct by the real-mail harness (§4) | app/lib/v2/score.ts; harness/real/ |
 | 5.2 live trace | **OPEN** | process.ts:519, replan.ts:114 pass noTrace |
 | 5.3 one shared finder | **OPEN** (the main coverage lever) | Prompt 4 |
 | 5.4 faithful requests | **OPEN** (part held: a parser fix, held item 5) | Prompt 5 |
-| 5.5 recover interrupted work | **PART:** F1 done; re-read held; resume open | Prompt 6 |
+| 5.5 recover interrupted work | **PART:** F1 done; re-read DONE S-0235; resume open | Prompt 6 |
 | 5.6 every request visible | **PART:** every need kept (S-0214); the Needs Reply lane is open | F41 |
 | 5.7 R number in our subjects | **OPEN**, test first | |
 | 5.8 assisted mode | **OPEN**, design after the numbers | Prompt 7 |
@@ -85,11 +86,17 @@ and §3 ends with the findings added after 23 Oct (F29 onward). §11 is the rebu
 | 5.10 small fixes | F15 DONE. F13, F14, F18, op key, run.ts:5, README, harness STATE **OPEN** | |
 | §6 rules | **OPEN, owner** | |
 | §10 / Prompt 8 docs | **OPEN** | |
-| F29-F46 (added 26 Oct) | see §3, "Added 26 October" | |
+| F29 one read attempt | **DONE** S-0235 | test/extractRetry.ts; extract.ts extractWithMeta |
+| F30 owner never told of system failures | **DONE** S-0235 (system-failed alert) | test/systemFailureToOwner.ts |
+| F31 a pause throws mail away | **DONE** S-0235 (a v2 pause stores, marks v2_store_only, decides nothing) | test/pauseStoresOnly.ts; paused.ts automationPaused |
+| F35 replay erased the write record | **DONE** S-0235 | test/replayKeepsWriteRecord.ts |
+| F36 zone-less audit times | **DONE** S-0235 | test/zonelessIsUtc.ts |
+| F32-F34, F37-F47 (added 26 Oct) | see §3, "Added 26 October" | |
 
 ### Built and held (not deployed)
 Each held diff is mapped to the item it serves. They sit in `eval/patches/` and stack in this order on 305bf84. Applied
-together in worktree C:/Users/thera/spartan-v2-n1, they pass tsc and all 227 test files.
+together in worktree C:/Users/thera/spartan-v2-n1, they pass tsc and all 227 test files. **S-0235 shipped
+items-1-3-runtime, item-4-scoring, n1-write-judging and c-current-mail's C2 and C3.** Still held: C1, n2, p1 items 5-8.
 
 | diff | serves | in the rebuild |
 |---|---|---|
@@ -125,7 +132,8 @@ together in worktree C:/Users/thera/spartan-v2-n1, they pass tsc and all 227 tes
 - **28 Oct 16:06Z:** the pause-window store.
 - **29 Oct:** two blind readers label the 26-28 Oct mail (W2). Mail from 29 Oct (E3) stays untouched until a fix is
   frozen, as the held-out week 5.1 asks for.
-- **Before 30 Oct:** ship R1, so retryUnread can still re-read the 23 Oct 429 card. Its window is 7 days.
+- **Before 30 Oct:** ship R1, so retryUnread can still re-read the 23 Oct 429 card. Its window is 7 days. **Shipped
+  26 Oct, S-0235.**
 
 ---
 
@@ -546,10 +554,10 @@ it 8 crew" becomes a card.
 - Trade-only shift additions on existing orders are also blocked.
 
 ### F26. Extraction failures and interrupted plans are never recovered (Missed)
-**Status 26 Oct: OPEN in production.**
+**Status 26 Oct: DONE for failed reads** (S-0235); resuming interrupted plans OPEN (R9).
 - **Re-plan:** it still skips rows with no extraction (replan.ts:62) and passes run: null (:102).
-- **Built and held:** a bounded re-read, retryUnread (eval/patches/c-current-mail.diff, test/retryUnread.ts 8 checks).
-  It reads again at 5, 15 and 45 minutes, at most 3 times, from the minute sync. It goes in with R1.
+- **Shipped S-0235:** a bounded re-read, retryUnread (test/retryUnread.ts). It reads again at 5, 15 and 45 minutes, at
+  most 3 times, from the minute sync, once F29's in-call retry has failed.
 - **Not built:** resuming a plan interrupted after some ops verified.
 - **Measured** (the system audit, on the 26 Oct copy):
   - 7 of 223 handoffs are the system failing: 1 OpenRouter 429, 2 OnSinch 404 while planning, 4 linked order
@@ -583,7 +591,8 @@ back with none does not match. Creates still skip the audit diff: by design, sin
 
 ### Added 26 October (found by the 24-26 Oct audits; each is code-verified at HEAD)
 
-**F29. A failed model read is tried once and then never again (Missed, high).**
+**F29. A failed model read is tried once and then never again (Missed, high). DONE S-0235.** test/extractRetry.ts: 429
+then 200 makes 2 calls; three 5xx throw after 3; a dropped connection retries; 400, 401, 402 and 501 make 1 call.
 - extract.ts:114-123 makes one attempt with a 60 s timeout. The old engine tried three times with backoff on 429/5xx
   (engine/reason.ts:245-285).
 - A failed read becomes a red booking card that nothing reads again. The 23 Oct 429 card sat for 3 days.
@@ -596,7 +605,7 @@ back with none does not match. Creates still skip the audit diff: by design, sin
 - **Do not touch the prompt** (PROMPT_ID is its hash).
 - **Fixture:** a stubbed fetch giving 429 then 200 makes 2 calls; three 5xx throw after 3; 402 makes 1 call.
 
-**F30. The v2 path never tells the owner when the system itself fails (Alert, high).**
+**F30. The v2 path never tells the owner when the system itself fails (Alert, high). DONE S-0235.**
 - app/lib/v2, feed, mail and api/bot contain no reportError, apart from intake's capture-failed and decide-threw.
 - **Built and held:** systemFailureOf plus the system-failed alert (items-1-3-runtime). It covers:
   - a write stopped part-way;
@@ -605,7 +614,8 @@ back with none does not match. Creates still skip the audit diff: by design, sin
   - "could not read, plan or decide".
 - **Fixture:** test/systemFailureToOwner.ts.
 
-**F31. A pause throws mail away (Leak, high).**
+**F31. A pause throws mail away (Leak, high). DONE S-0235** (test/pauseStoresOnly.ts; test/automationPaused.ts [5]
+reversed).
 - SPARTAN_PAUSED=1 answers 503 at /api/n8n-inbound and /api/dedupe, before capture. The 21 Oct pause left 40 client
   emails unstored, beyond intake's 72 h catch-up.
 - **Fix:**
@@ -666,13 +676,13 @@ back with none does not match. Creates still skip the audit diff: by design, sin
   - a history row with actor and time;
   - an owner alert on every change.
 
-**F35. Deciding an email again erased the record of what was sent (Record, medium).**
+**F35. Deciding an email again erased the record of what was sent (Record, medium). DONE S-0235.**
 - The decision upsert writes executed as JSON null, and coalesce keeps it, so a replay through /api/bot/process erased
   the only account of what reached OnSinch.
 - **Built and held** in items-1-3-runtime: processMessage refuses an email with something sent.
 - **Fixture:** test/replayKeepsWriteRecord.ts.
 
-**F36. OnSinch's zone-less audit times were read in the machine's zone (Scoring).**
+**F36. OnSinch's zone-less audit times were read in the machine's zone (Scoring). DONE S-0235.**
 - OnSinch writes "2026-10-23 07:30:00" in UTC: 1,810 of 1,813 in summer time.
 - **Built and held** in items-1-3-runtime. It affects scoring only.
 - **Fixture:** test/zonelessIsUtc.ts.
@@ -688,7 +698,7 @@ back with none does not match. Creates still skip the audit diff: by design, sin
 
 **F39. A write that stops part-way raises no alarm (Alert, medium).**
 - By design an unknown is never re-sent. But 3 of 61 runs stopped part-way, and nobody was told.
-- F30's systemFailureOf covers it once shipped.
+- F30's systemFailureOf covers it, shipped S-0235.
 
 **F40. Most mail is set aside by one model reading (Recall, high).**
 - 419 of 958 decisions (44%) are "no change asked for", and never reach the TV (the system audit, on the 26 Oct copy).
@@ -1032,7 +1042,8 @@ list is true and the owner has reviewed the result. Don't run several at once: t
 | 6 | half held (re-read), half OPEN (resume) |
 | 7 | OPEN (design) |
 | 8 | OPEN |
-| 9-13 | new, §11 |
+| 9 | DONE (S-0235) |
+| 10-13 | new, §11 |
 
 **Rules for every task:**
 - Read ADDENDUM.md first. Re-find each line reference at HEAD before editing, and say what moved.
@@ -1213,7 +1224,7 @@ writes exactly what was shown.
 
 | step | prompt | what | ships |
 |---|---|---|---|
-| R1 | **9** (new) | **Stop losing work, part 2:** F29 (in-call retry), F26 re-read (retryUnread), F30 owner alerts, F35 replay guard, F36 UTC times, F31 pause stores mail. Held items-1-3-runtime, plus C3 and C2 / item-4 / n1 scoring | yes. **Before 30 Oct** |
+| R1 | **9** (new) | **Stop losing work, part 2:** F29 (in-call retry), F26 re-read (retryUnread), F30 owner alerts, F35 replay guard, F36 UTC times, F31 pause stores mail. Held items-1-3-runtime, plus C3 and C2 / item-4 / n1 scoring | **DONE S-0235** |
 | R2 | 8 | Re-map the repo: CLAUDE.md, engine README, docs index, rulings into DECISIONS.md | yes (docs) |
 | R3 | **10** (new) | **No heartbeat in n8n** (F32): cron entry points, the heartbeat, honest sync status (F37), sync and labels on their own secret (F3), labels by webhook, the switch-over | yes. Live when CRON_SECRET is set |
 | R4 | 0 | Size the findings, read-only | report |
@@ -1229,7 +1240,7 @@ writes exactly what was shown.
 | R14 | | Mail intake through v2 (F43), live with the Gmail grant; then intake, labels and alarms leave n8n entirely | dormant until the grant |
 | R15 | | **The V1 review:** a thorough review of the whole system (code cleanliness, what works and what doesn't, what to do next), by me and by an independent agent. Published and opened in the owner's browser | report |
 
-### Prompt 9: stop losing work, part 2 (F26, F29, F30, F31, F35, F36)
+### Prompt 9: stop losing work, part 2 (F26, F29, F30, F31, F35, F36): **DONE**, S-0235
 **Goal:** a failed read heals itself, the owner hears of the system's own failures, and a pause loses no mail.
 1. **F29.** In extract.ts extractWithMeta:
    - 3 attempts; backoff 400 ms then 1,200 ms, plus up to 50% jitter;

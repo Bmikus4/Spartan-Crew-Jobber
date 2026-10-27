@@ -5105,5 +5105,19 @@
   "sources": [
    "ADDENDUM.md"
   ]
+ },
+ {
+  "id": "S-0235",
+  "ts": "2026-10-27T02:28:14+00:00",
+  "kind": "measurement",
+  "headline": "R1 (Prompt 9): F29 in-call retry, F26 retryUnread, F30 owner alerts, F31 pause stores only, F35, F36",
+  "subject": "A failed read is retried and a pause stores mail instead of refusing it",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 226,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]

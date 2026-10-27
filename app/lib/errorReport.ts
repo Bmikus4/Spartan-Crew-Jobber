@@ -37,7 +37,7 @@ export type Severity = "alert" | "log";
  * not running cannot report that it is not running. It is asked from outside on a schedule —
  * see app/api/health/intake. The other three are the engine reporting on itself.
  */
-export type Route = "booking-lost" | "write-unconfirmed" | "engine-threw" | "intake-quiet" | "mail-undeliverable" | "mail-pull-failed" | "label-failed" | "help-report";
+export type Route = "booking-lost" | "write-unconfirmed" | "engine-threw" | "intake-quiet" | "mail-undeliverable" | "mail-pull-failed" | "label-failed" | "help-report" | "system-failed";
 
 const ROUTE_TITLE: Record<Route, string> = {
   "booking-lost": "A BOOKING WAS LOST",
@@ -59,6 +59,10 @@ const ROUTE_TITLE: Record<Route, string> = {
   // A person pressed Report an issue in the help panel. Not a failure the system found: the one
   // route a human raises, sent to the same inbox because that is where SamurAI reads alarms.
   "help-report": "SOMEBODY REPORTED AN ISSUE FROM THE HELP PANEL",
+  // The decision was recorded, so nothing is lost, but the reason a person must act is the
+  // system's own failure (OnSinch unreadable, a write stopped part-way), not the client's
+  // request. Staff see it as a need; until this route, the owner never heard of it.
+  "system-failed": "THE SYSTEM FAILED ON ITS OWN PART OF AN EMAIL",
 };
 
 /** Default gap between emails about the same thing. Long enough to stop a flood, short enough

@@ -1,7 +1,8 @@
 /**
  * SPARTAN_PAUSED=1 stops every route through which the engine acts without a person:
  * intake, the dedupe claim, the sweeps and the mail hooks. They answer 503 before any
- * auth or engine code runs, so nothing is read, written, drafted or labelled.
+ * auth or engine code runs, so nothing is read, written, drafted or labelled. Under v2,
+ * intake and its dedupe claim stay open and store without deciding (automationPaused).
  *
  * Deliberately left open: /api/health (read-only, and the restore check reads it), the
  * login flow, and every human-driven route (the TV feed, settings), so the app stays usable
@@ -48,7 +49,13 @@ export function automationPausedFlag(flag: string | undefined = process.env.SPAR
   return (flag || "").trim() === "1";
 }
 
+/**
+ * UNDER V2 A PAUSE NEVER SHUTS INTAKE OR ITS DEDUPE CLAIM (addendum F31). Shut at the door, the
+ * 10-21 pause left 40 client emails unstored, beyond intake's 72 h catch-up. Intake stores
+ * what arrives while paused and marks it store-only (n8nInbound.ts), so nothing decides it, then
+ * or after (the owner's store-only ruling, decisions/2026-10-25-pause-window-store-only.md).
+ */
 export function automationPaused(pathname: string, flag: string | undefined = process.env.SPARTAN_PAUSED, engine: string | undefined = process.env.SPARTAN_ENGINE): boolean {
-  const shut = [...(automationPausedFlag(flag) ? AUTOMATION_ROUTES : []), ...(v2Engine(engine) ? OLD_ENGINE_ROUTES : [])];
+  const shut = v2Engine(engine) ? OLD_ENGINE_ROUTES : automationPausedFlag(flag) ? AUTOMATION_ROUTES : [];
   return shut.some((p) => pathname === p || pathname.startsWith(p + "/"));
 }

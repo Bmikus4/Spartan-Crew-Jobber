@@ -39,7 +39,7 @@ console.log("\n[5] SPARTAN_ENGINE=v2: intake and its dedupe claim open, the old 
 for (const p of OLD_ENGINE_ROUTES) ok(automationPaused(p, "", "v2"), `${p} stays shut under v2`);
 for (const p of ["/api/n8n-inbound", "/api/dedupe"]) ok(!automationPaused(p, "", "v2"), `${p} is open under v2`);
 ok(OLD_ENGINE_ROUTES.filter((p) => AUTOMATION_ROUTES.includes(p)).length === AUTOMATION_ROUTES.length - 2, "exactly two automation routes open under v2");
-ok(automationPaused("/api/n8n-inbound", "1", "v2"), "SPARTAN_PAUSED=1 still stops intake under v2");
+ok(!automationPaused("/api/n8n-inbound", "1", "v2") && !automationPaused("/api/dedupe", "1", "v2"), "SPARTAN_PAUSED=1 leaves intake open under v2: it stores and decides nothing (addendum F31, test/pauseStoresOnly.ts)");
 ok(!automationPaused("/api/mail-poll", "", ""), "control: no switch, nothing shut");
 
 console.log("\n[6] the old engine's one-click confirm is shut under v2: it writes to OnSinch past the write switch");

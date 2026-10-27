@@ -68,9 +68,14 @@ export function londonToUtc(date: string, hhmm: string): string {
   return new Date(t).toISOString();
 }
 
-/** UTC instant -> London wall clock, as {date: "YYYY-MM-DD", time: "HH:MM"}. */
+/**
+ * UTC instant -> London wall clock, as {date: "YYYY-MM-DD", time: "HH:MM"}. A string with no zone is
+ * UTC: OnSinch's audit rows write "2026-10-23 07:30:00", and `new Date` would read that in the
+ * machine's zone (4 hours late on a New York box; test/zonelessIsUtc.ts).
+ */
 export function utcToLondon(iso: string): { date: string; time: string } {
-  const p = Object.fromEntries(LONDON.formatToParts(new Date(iso)).map((x) => [x.type, x.value]));
+  const zoned = /^\d{4}-\d\d-\d\d[ T]\d\d:\d\d(:\d\d(\.\d+)?)?$/.test(iso) ? iso.replace(" ", "T") + "Z" : iso;
+  const p = Object.fromEntries(LONDON.formatToParts(new Date(zoned)).map((x) => [x.type, x.value]));
   return { date: `${p.year}-${p.month}-${p.day}`, time: `${p.hour}:${p.minute}` };
 }
 

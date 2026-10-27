@@ -38,10 +38,45 @@ ok(judge([], truthOf([sizeTo6])).verdict === "missed", "nothing planned where st
 ok(judge([size(6)], { keys: [], other: [] }).verdict === "wrong", "a write where staff did nothing: wrong");
 
 console.log("\n[controls] the same plans with the right values pass");
+// Staff build an order as create, then add its shift and position: one order, judged once. Its create key is
+// read from the order's final state, so counting the adds again judged an equal create "partial" (1a121423eac99289,
+// 1a13af10fc5250eb; eval/item-correctness.md, 10-26).
+{
+  const built = [created, act({ what: "add shift", order_id: 16300, number: "11300", model: "SlotTeam", model_id: 601 }), act({ what: "add position", order_id: 16300, number: "11300", model: "Slot", model_id: 71 })];
+  ok(judge([create("32", 3)], truthOf(built)).verdict === "completed", "a create equal to the order staff built, shift by shift, is completed", judge([create("32", 3)], truthOf(built)));
+  // The build also logs its Job, and slot edits made while building (R11529's shift re-timed in the same minute,
+  // R11561's trade changed 5 minutes on). The order as it stands holds them; they are not separate work.
+  const buildEdits = [...built, act({ what: "add job", order_id: 16300, number: "11300", model: "Job", model_id: 801 }),
+    act({ what: "edit Slot.beginning+Slot.end", order_id: 16300, number: "11300", model: "Slot", model_id: 71,
+      changes: { beginning: { old: "2026-11-27 05:30:00", new: "2026-11-27 08:00:00" }, end: { old: "2026-11-27 13:30:00", new: "2026-11-27 16:00:00" } } }),
+    act({ what: "edit Slot.profession_id", order_id: 16300, number: "11300", model: "Slot", model_id: 71, changes: { profession_id: { old: 2, new: 1 } } })];
+  ok(judge([create("32", 3)], truthOf(buildEdits)).verdict === "completed", "and its job and in-build edits do not make it partial", judge([create("32", 3)], truthOf(buildEdits)));
+  const thenCancelled = [...built, act({ what: "cancel order", order_id: 16300, number: "11300", model: "Order" })];
+  ok(judge([create("32", 3)], truthOf(thenCancelled)).verdict === "partial", "a cancel of the order staff made still counts", judge([create("32", 3)], truthOf(thenCancelled)));
+}
 ok(judge([size(6)], truthOf([sizeTo6])).verdict === "completed", "the count staff set", judge([size(6)], truthOf([sizeTo6])));
 ok(judge([create("32", 3)], truthOf([created])).verdict === "completed", "the create staff made, however its positions are split", judge([create("32", 3)], truthOf([created])));
 ok(fullyWritten([{ op: size(6) }], [{ status: "verified" }]), "every operation run and verified");
 ok(judge([size(6)], truthOf([sizeTo6, created])).verdict === "partial", "right as far as it went, staff also created an order: partial");
+
+console.log("\n[net effect] staff's edits count by where they end, not edit by edit (eval/write-breakdown.md §7)");
+const po = (n: string): Op => ({ kind: "set_po", order_id: 16200, po: n });
+const poEdit = (old: string, nu: string, at: string) => act({ at, what: "edit Order.intern_name", model: "Order", model_id: 11200, changes: { intern_name: { old, new: nu } } });
+// 1a1206f2acc35678: the PO typed with a trailing space, then retyped.
+ok(judge([po("PO 4471")], truthOf([poEdit("", "PO 447 ", "2026-10-16T10:00:00Z"), poEdit("PO 447 ", "PO 4471 ", "2026-10-16T10:01:00Z")])).verdict === "completed",
+  "a PO typed then corrected is the one PO it ends as, spaces aside", judge([po("PO 4471")], truthOf([poEdit("", "PO 447 ", "2026-10-16T10:00:00Z"), poEdit("PO 447 ", "PO 4471 ", "2026-10-16T10:01:00Z")])));
+const sizeEdit = (old: number, nu: number, at: string) => act({ at, what: "edit Slot.size", model: "Slot", model_id: 62, changes: { size: { old, new: nu } } });
+ok(judge([size(7)], truthOf([sizeEdit(5, 6, "2026-10-16T10:00:00Z"), sizeEdit(6, 7, "2026-10-16T11:00:00Z")])).verdict === "completed", "two size edits are judged at the last value");
+ok(judge([], truthOf([sizeEdit(5, 6, "2026-10-16T10:00:00Z"), sizeEdit(6, 5, "2026-10-16T10:02:00Z")])).verdict === "nothing to do", "a size moved and moved back is no change");
+ok(judge([size(6)], truthOf([sizeEdit(5, 6, "2026-10-16T10:00:00Z"), sizeEdit(6, 5, "2026-10-16T10:02:00Z")])).verdict === "wrong", "so a plan that changes it is wrong");
+
+console.log("\n[deletes] a part added and deleted inside the window left no work behind");
+// 1a1259926be7623f, 1a12fc76a35c018d, 1a1345c6d25b4669: positions added and deleted within seconds on R11224.
+const addPos = act({ at: "2026-10-16T10:00:00Z", what: "add position", model: "Slot", model_id: 64 });
+const delPos = act({ at: "2026-10-16T10:00:20Z", what: "delete position", model: "Slot", model_id: 64 });
+ok(judge([size(6)], truthOf([sizeTo6, addPos, delPos])).verdict === "completed", "an added-then-deleted position is not work the plan lacks", judge([size(6)], truthOf([sizeTo6, addPos, delPos])));
+ok(judge([{ kind: "cancel_position", order_id: 16200, slot_id: 63 }], truthOf([act({ what: "delete position", model: "Slot", model_id: 63 })])).verdict === "completed",
+  "deleting a position that existed before the email is the cancel the system would send");
 
 console.log(fails ? `\n${fails} FAILED` : "\nALL PASS");
 process.exit(fails ? 1 : 0);

@@ -19,14 +19,16 @@ import { captureInboundRaw } from "./inboundRawDb";
 import { replyDeliveryForWire } from "./settingsDb";
 import { upsertTicketFromState } from "./ticketsDb";
 import { reportError } from "./errorReport";
-import { v2Engine } from "./paused";
-import type { decideDelivery } from "./v2/process";
+import { automationPausedFlag, v2Engine } from "./paused";
+import type { decideDelivery, storeOnly } from "./v2/process";
 
 export interface InboundIO {
   capture: typeof captureInboundRaw;
   report: typeof reportError;
   /** The rebuild's decisions on the messages a delivery added (SPARTAN_ENGINE=v2). */
   decide: typeof decideDelivery;
+  /** Marks what a delivery added as never to be decided: mail that arrives while paused (v2). */
+  storeOnly: typeof storeOnly;
   buildDeps: typeof buildDeps;
   handleThread: typeof handleThread;
   upsertTicket: typeof upsertTicketFromState;
@@ -39,6 +41,7 @@ export const productionInboundIO: InboundIO = {
   report: reportError,
   // Loaded on use: the rebuild pulls in the browser bot, which the old path never needs.
   decide: async (ids) => (await import("./v2/process")).decideDelivery(ids),
+  storeOnly: async (ids, reason) => (await import("./v2/process")).storeOnly(ids, reason),
   buildDeps,
   handleThread,
   upsertTicket: upsertTicketFromState,
@@ -70,6 +73,16 @@ export async function handleInbound(request: Request, io: InboundIO = production
     if (!cap.ok) {
       void io.report({ route: "mail-undeliverable", where: "api/n8n-inbound (v2)", what: "capture failed, so the rebuild did not decide on this delivery", detail: `dedup ${cap.dedup_key}, thread ${cap.thread_id ?? "?"}` });
       return Response.json({ ok: false, engine: "v2", error: "capture failed" }, { status: 500 });
+    }
+    // Paused: stored and marked, decided by nothing, now or after the pause lifts (addendum F31).
+    if (automationPausedFlag()) {
+      try {
+        await io.storeOnly(cap.new_message_ids, "arrived while the automation was paused");
+      } catch (err) {
+        void io.report({ route: "mail-undeliverable", where: "api/n8n-inbound (v2, paused)", what: "stored while paused but not marked store-only, so the sweep may decide it after the pause", detail: `new messages ${cap.new_message_ids.join(", ")}: ${String((err as Error)?.message ?? err).slice(0, 160)}` });
+        return Response.json({ ok: false, engine: "v2", paused: true, error: "store-only mark failed" }, { status: 500 });
+      }
+      return Response.json({ ok: true, captured: cap.captured, engine: "v2", paused: true, stored_only: cap.new_message_ids.length });
     }
     try {
       const r = await io.decide(cap.new_message_ids);
