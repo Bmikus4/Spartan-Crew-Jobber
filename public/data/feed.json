@@ -5357,5 +5357,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0253",
+  "ts": "2026-10-27T23:25:58+00:00",
+  "kind": "measurement",
+  "headline": "R15: V1 review published; independent read found 6 gaps (F49-F54), 2 block writes; ADDENDUM R1-R15 worked",
+  "subject": "The V1 review is published; six write-path and process gaps are F49-F54",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 111,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]

@@ -226,19 +226,6 @@ const NOT_DECIDED = "this email was not decided when it arrived";
 export type SweepReport = { paused?: true; threads: number; decided: string[]; carded: string[]; filtered: string[] };
 
 /**
- * EVERY STORED CLIENT EMAIL ENDS IN A DECISION OR A CARD (addendum F1, 10-23). Intake decides on
- * what a delivery stored for the first time, so an email stored by a capture that then failed,
- * or whose decision threw before it was recorded, was never offered again: nothing read
- * thread_messages for rows with no v2_decisions row. Run every minute by /api/bot/sync.
- *
- * A thread's undecided emails are claimed by recording each as a card first, then decided
- * together on the newest exactly as intake would. The claim IS the outcome if deciding fails
- * again, so there is no state in which a crash leaves an email undecided and unseen, and a
- * second sweep a minute later finds the claim and leaves the thread alone. An email a later
- * decision on its thread already overtook is never read now: acting on "4 crew" after "make it
- * 5" was done would undo the newer request, so a person reads it.
- */
-/**
  * When the oldest client email that nothing has decided was stored: the heartbeat's lag signal
  * (heartbeat.ts). The same mail the sweep would take, test and non-client mail and store-only
  * mail and history stored late left out, so a lag means the sweep itself has stalled.
@@ -258,7 +245,6 @@ export async function oldestUndecidedAt(): Promise<number | null> {
   return rows.length ? Date.parse(String(rows[0].first_seen_at instanceof Date ? rows[0].first_seen_at.toISOString() : rows[0].first_seen_at)) : null;
 }
 
-/** Marks stored mail as never to be decided: what intake receives while the automation is paused (addendum F31). */
 /** Of these ids, the ones with no decision and no store-only mark: what the Gmail poll may still decide. */
 export async function undecidedOf(message_ids: string[]): Promise<string[]> {
   if (!message_ids.length) return [];
@@ -268,12 +254,26 @@ export async function undecidedOf(message_ids: string[]): Promise<string[]> {
       AND NOT EXISTS (SELECT 1 FROM v2_store_only s WHERE s.message_id = id)`) as any[]).map((r) => r.id);
 }
 
+/** Marks stored mail as never to be decided: what intake receives while the automation is paused (addendum F31). */
 export async function storeOnly(message_ids: string[], reason: string): Promise<void> {
   if (!message_ids.length) return;
   const sql = await db();
   await sql`INSERT INTO v2_store_only (message_id, reason) SELECT unnest(${message_ids}::text[]), ${reason} ON CONFLICT (message_id) DO NOTHING`;
 }
 
+/**
+ * EVERY STORED CLIENT EMAIL ENDS IN A DECISION OR A CARD (addendum F1, 10-23). Intake decides on
+ * what a delivery stored for the first time, so an email stored by a capture that then failed,
+ * or whose decision threw before it was recorded, was never offered again: nothing read
+ * thread_messages for rows with no v2_decisions row. Run every minute by /api/bot/sync.
+ *
+ * A thread's undecided emails are claimed by recording each as a card first, then decided
+ * together on the newest exactly as intake would. The claim IS the outcome if deciding fails
+ * again, so there is no state in which a crash leaves an email undecided and unseen, and a
+ * second sweep a minute later finds the claim and leaves the thread alone. An email a later
+ * decision on its thread already overtook is never read now: acting on "4 crew" after "make it
+ * 5" was done would undo the newer request, so a person reads it.
+ */
 export async function sweepUndecided(opts: { decide?: Decide; limit?: number } = {}): Promise<SweepReport> {
   if (automationPausedFlag()) return { paused: true, threads: 0, decided: [], carded: [], filtered: [] };
   const sql = await db();
