@@ -1,6 +1,6 @@
 # STATE.md
 
-Updated: 2026-10-26   Session: 5
+Updated: 2026-10-26   Session: 6
 
 ## Phase and section
 Phase: 1   Current section: Checkpoint B response (decisions/2026-10-26-checkpoint-b-response.md)   Status: in progress
@@ -267,9 +267,17 @@ none
       one page and opened for the owner: https://claude.ai/artifact/Npsy28gT3r7uQ6wSBgvwv3
 STOP after the audits (the owner's instruction). Nothing ships without the owner's yes.
 
+## Session 6b (10-26 night)
+- [x] The owner's ruling: no heartbeat for this automation runs in n8n, ever. It is now a repo CLAUDE.md invariant and in
+      memory.
+- [x] The owner approved the system audit's 8 changes (audit/changes-1026.md). Change 2 shipped as S-0232: /api/confirm-order
+      is shut under v2.
+- [x] The owner asked for one handoff for the next session: C:/Users/thera/fleet/resume/Spartan-Handoff-2026-10-26.md,
+      published and opened: https://claude.ai/artifact/BGaQFcFA9fsyBTQJVw1Cn5
+
 ## Next action
-Await the owner on the audits' decisions (audit/self-audit-2026-10-26.md §7). Held work: the 5-diff stack in
-C:/Users/thera/spartan-v2-n1 (= items-1-3-runtime, item-4-scoring, n1-write-judging, n2-planner-ops, c-current-mail). Nothing ships; writes stay off. On or after
-2026-10-28 16:06Z: the pause-window store (scripts/backfill-pause-window.mts store). On 10-29: label W2 (eval/dev-windows.md).
-Worktrees p1, i14, n1, rd, rdh, stack hold junctions to this checkout: unlink each junction and verify before removing any of them
+Start from C:/Users/thera/fleet/resume/Spartan-Handoff-2026-10-26.md. Its §5 is the build order: A2 (change 1) first,
+and it must ship before 10-30 so retryUnread heals the 10-23 card. On or after 2026-10-28 16:06Z: the pause-window store
+(scripts/backfill-pause-window.mts plan, then store). On 10-29: label W2 (eval/dev-windows.md); E3 stays untouched.
+Worktrees p1, i14 and n1 hold junctions to this checkout. Unlink each junction and verify before removing any of them
 (audit/incident-2026-10-26-tmp-data.md).

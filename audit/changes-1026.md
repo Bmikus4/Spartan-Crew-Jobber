@@ -1,7 +1,7 @@
 # The system audit's eight changes: build notes (10-26 night)
 
-Orchestrator. **The owner, 10-26:** he pasted the system audit's ranked changes (audit/system-audit-2026-10-26.md §4)
-with one ruling on top: "no heartbeats should run in n8n ever for this automation". A pasted plan is his approval
+Orchestrator. **The owner, 10-26,** pasted the system audit's ranked changes (audit/system-audit-2026-10-26.md §4)
+with one ruling on top: "no heartbeats should run in n8n ever for this automation". A pasted plan is the owner's approval
 (memory: plan recommendations are decisions). So all eight are built in order, gated one at a time, and released
 where nothing outside the code blocks them.
 
@@ -55,3 +55,9 @@ Spartan Alarms (mQkxdu2rLkTovYwn) is a webhook, not a schedule. The Reconciliati
 - Test: test/automationPaused.ts [6], 4 checks. The first is red on the old list.
 - Not done: the 16 `proposed` tickets are not marked dead. That is a write to the production database, which this
   engagement does not make. With the route shut they are inert.
+
+### Handoff (10-26 night)
+The owner asked for one thorough handoff before more building: the remaining changes, the held stack, the TV, the
+reader, an email-to-board test harness (the AI step by a Claude subagent, everything else $0), then a V1 review.
+- The handoff: C:/Users/thera/fleet/resume/Spartan-Handoff-2026-10-26.md.
+- Change 1 is designed there (§5 A2), not built.
