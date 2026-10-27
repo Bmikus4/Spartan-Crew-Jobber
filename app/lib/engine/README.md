@@ -6,16 +6,16 @@
 `app/lib/v2/interpret/plan.ts`, not here. Retiring this folder is Prompt 12 (ADDENDUM.md §11, R7): what v2 still
 uses moves to `app/lib/onsinch/`, and the rest is deleted.
 
-## What v2 and the live app still import from here (26 Oct)
+## What v2 and the live app still import from here (27 Oct)
 
 | engine file | imported by |
 |---|---|
 | onsinch.ts (the OnSinch client) | v2/process.ts, v2/read.ts, v2/links.ts, v2/bot/run.ts, v2/bot/apiCreate.ts, v2/bot/canary.ts, feed/live.ts, feed/verify.ts, api/bot/sync, api/test-data, deps.ts |
-| resolve.ts | v2/process.ts, v2/interpret/plan.ts, v2/threadState.ts, feed/v2.ts, feed/project.ts, feed/verify.ts, match/match.ts, deps.ts |
+| resolve.ts | v2/process.ts, v2/interpret/plan.ts, v2/interpret/interpret.ts, v2/threadState.ts, feed/v2.ts, feed/project.ts, feed/verify.ts, deps.ts |
 | types.ts | feed/live.ts, feed/ported.ts, feed/project.ts, feed/serve.ts, followup/board.ts, followup/clock.ts, help/liveState.ts, and the *Db.ts stores |
 | resolver.ts | feed/project.ts |
 | reconcile.ts | feed/verify.ts |
-| reason.ts | v2/draft.ts |
+| reason.ts | deps.ts (the old engine's reasoner) |
 | metrics.ts | v2/metrics.ts, metricsDb.ts |
 | pipeline.ts | feed/project.ts, n8nInbound.ts (old branch), routes/confirmOrder.ts, routes/reconcile.ts, api/mail-inbound, api/mail-poll |
 | normalize.ts | followup/clock.ts |

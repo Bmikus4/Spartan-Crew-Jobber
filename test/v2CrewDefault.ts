@@ -1,12 +1,11 @@
 // ============================================================================
 // Ben, 10-11: a request that names no profession is standard crew, whatever the work is
-// for; and every draft is written as though the team has already made the booking.
+// for. (Its draft half went with app/lib/v2/draft.ts, reached by nothing, 27 Oct.)
 //
 // Offline.  npx tsx test/v2CrewDefault.ts
 // ============================================================================
 import { ground } from "../app/lib/v2/interpret/interpret";
 import type { Extraction, RawRequest } from "../app/lib/v2/interpret/extract";
-import { draftContext } from "../app/lib/v2/draft";
 import { tradeOf, pickProfession } from "../app/lib/v2/interpret/professions";
 import { plan, type World } from "../app/lib/v2/interpret/plan";
 
@@ -84,18 +83,6 @@ ok(d6.kind === "write", "security alone is a crew shift, not a hand-off", JSON.s
 const d5 = await plan(msg, { intent: "booking", requests: [R(4), R(2, "security")], problems: [] }, { ...world, professions: async () => [{ id: "1", name: "Crew" }, { id: "70", name: "Security" }] });
 const pos5 = d5.kind === "write" && d5.ops[0].op.kind === "create_order" ? d5.ops[0].op.shifts.map((s) => s.positions.map((p) => `${p.size}x${p.profession_id}${p.role ? "c" : ""}`).join(" ")) : [];
 ok(pos5[0] === "1x36c 3x1 2x70", "with a Security profession in OnSinch, 2 security are booked as it beside the crew", JSON.stringify(d5));
-
-console.log("\n[3] every draft assumes the order is made; only unwritten details are asked");
-const c1 = draftContext({ kind: "handoff", reasons: ["R40101: 2 shifts on 2026-10-21 could be the one meant"] });
-ok(c1.order_state === "assumed-done" && c1.ask_for.length === 0, "an OnSinch question is the team's, not the client's", JSON.stringify(c1));
-const a1 = draftContext({ kind: "handoff", reasons: ["no venue in the email"] });
-ok(a1.order_state === "assumed-done" && a1.ask_for.join() === "the venue", "a missing venue is asked for", JSON.stringify(a1));
-const two = draftContext({ kind: "handoff", reasons: ["request 1: no start time the client wrote; request 1: no end time or duration the client wrote"] });
-ok(two.ask_for.join() === "the start time,the finish time", "each unwritten detail once", JSON.stringify(two));
-const w = draftContext({ kind: "write", ops: [], why: ["R1: PO 1"] });
-ok(w.order_state === "assumed-done" && !w.ask_for.length, "a write drafts as done, asking nothing");
-ok(!w.quote_attached && !a1.quote_attached && !c1.quote_attached, "no quote is attached unless one was asked for");
-ok(draftContext({ kind: "handoff", reasons: ["the client asked for a quote"] }).quote_attached === true, "a quote request drafts with the quote attached");
 
 console.log(fails ? `\n${fails} FAILED` : "\nall passed");
 process.exit(fails ? 1 : 0);

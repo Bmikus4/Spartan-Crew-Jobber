@@ -6,7 +6,7 @@
   below as findings and status.
 - Every step updates this file: its status line, its measurement, and what moved.
 
-**Last updated:** 27 October 2026, R6 shipped (S-0240). R3's switch-over waits on CRON_SECRET. The baseline was 0f2dcef. App code changed since then in these
+**Last updated:** 27 October 2026, R7 stage 2 shipped (S-0241). R3's switch-over waits on CRON_SECRET. The baseline was 0f2dcef. App code changed since then in these
 commits only:
 
 | commit | ticket | what |
@@ -22,6 +22,7 @@ commits only:
 | (R4) | S-0238 | Prompt 0: scripts/size-findings.mts (read-only); the scoreboard reads an email with no body |
 | (R5) | S-0239 | Prompt 5 and 5.10: combined changes, trade totals, direction words, schema check, F13, F14, F18, the op key |
 | (R6) | S-0240 | Prompt 11: the write and reply switches are an admin's, kept and reported; one migrations module |
+| (R7.2) | S-0241 | Prompt 12 stage 2: the 12 files nothing reaches, deleted with the tests and scripts that existed only for them |
 
 bd10dae (S-0213) moved the test suite onto PGlite. Line references below are at HEAD unless a line says "at 0f2dcef".
 
@@ -1266,7 +1267,7 @@ Still to come from §10: the identity owner (R8) and the old engine's retirement
 | R4 | 0 | Size the findings, read-only | **DONE S-0238** (§7) |
 | R5 | 5 + 5.10 | Everyday requests (F8, F24, F25, dates, schema validation) and the small fixes (F13, F14, F18, op key, run.ts:5, README). Re-cut held item 5 and n2-planner-ops | **DONE S-0239** |
 | R6 | **11** (new) | Govern the switches (F34). One migrations module (F44). A Preview branch when access exists | **DONE S-0240**; the branch waits on access |
-| R7 | **12** (new) | Retire the old engine in stages (F45, §10): move the shared OnSinch client and helpers to app/lib/onsinch/, delete what nothing live reaches, then pipeline/compiler/deps and the shut routes, then the 145 old tests | yes, staged |
+| R7 | **12** (new) | Retire the old engine in stages (F45, §10): move the shared OnSinch client and helpers to app/lib/onsinch/, delete what nothing live reaches, then pipeline/compiler/deps and the shut routes, then the 145 old tests | **Stage 2 DONE S-0241**; stages 3, 4 and 1 (in that order) open |
 | R8 | 4 | **One shared booking finder** (5.3), built once the old engine is gone, so there is one place for it. Brings in held C1 and item 7 | yes |
 | R9 | 6 | Resume interrupted plans (F26, F38, F39) | yes |
 | R10 | **13** (new) | **The email-to-board harness** (the owner's design, below), then its case study | report + test |
@@ -1375,7 +1376,17 @@ files that load .env.local now import ./fixtures/pg first. Run a single test as
 - the alert fires;
 - both migration tests pass.
 
-### Prompt 12: retire the old engine (F45)
+### Prompt 12: retire the old engine (F45): **stage 2 DONE**, S-0241
+**As run:** stage 2 first. Deleted (an import-graph walk from every route, page and middleware reaches none of them):
+engine/fold, jobMigration, orderLink, score, verifyWrite; match/facts, match, ngram, score; sweepLabelsDb; v2/bot/parity;
+v2/draft (V6's code; the ruling stands). With them went the 8 tests and 9 scripts that existed only for them
+(scripts/gold's features, rules, truth and weights among them: the 10-22 matcher audit, kept in git history).
+- **Re-sequenced:** the TV's old-state branch (feed/project.ts stateSource) is exercised by the feed tests through
+  ConversationState, so it goes with stage 3, where the old engine's types go. The move to app/lib/onsinch/ (stage 1)
+  goes last: once stage 3 has deleted the rest, what remains in app/lib/engine is what v2 uses, and the move is one
+  rename.
+- **Kept, against the stage 3 list:** /api/mail-poll is R14's Gmail intake (F43). Stage 3 rewires it from the old
+  pipeline to decideDelivery instead of deleting it.
 Stages, each gated, each followed by a check that the real-mail harness reproduces (the dev replay is unchanged):
 1. Move what v2 imports from app/lib/engine into app/lib/onsinch/ (or shared modules): the OnSinch client, the resolver
    helpers, staffChangeSince and matchExistingOrder.

@@ -179,7 +179,7 @@ the owner's where the comment quotes them. Owner decisions still OPEN are in ADD
 | V3 | 10-06 | "The harness needs to know when any UI changes were made so that it can update the protocol": a form is checked against its contract before every fill | v2/bot/contract.ts, v2/bot/canary.ts |
 | V4 | 10-09 | A new end alone keeps the shift's start and moves the end; a new start alone moves the whole call and keeps its length | interpret/plan.ts (change_times) |
 | V5 | 10-11 | 1 failed order in 100 is the bar; a question back is not a failed order | interpret/plan.ts Decision type |
-| V6 | 10-11 | "Drafts should assume the order was already created so that the team can just send them" | v2/draft.ts |
+| V6 | 10-11 | "Drafts should assume the order was already created so that the team can just send them" | v2/draft.ts (deleted 27 Oct, S-0241: reached by nothing; the ruling stands for when drafts are built) |
 | V7 | 10-11 | Orders are created whatever profession is named; a trade the system cannot verify is booked as standard crew; an unlisted word is plain crew | interpret/professions.ts |
 | V8 | 10-11 | A card note is simple, reliable, informative, and never the system's own reasoning | feed/cardNote.ts |
 | V9 | 10-11 | "Port everything from the jobs board into the tv dashboard, mark them all as completed" | feed/ported.ts |
