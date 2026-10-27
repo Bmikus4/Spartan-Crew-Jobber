@@ -6,7 +6,7 @@
   below as findings and status.
 - Every step updates this file: its status line, its measurement, and what moved.
 
-**Last updated:** 27 October 2026, R14 DONE, dormant (S-0250): the Gmail poll decides through v2 once the grant exists and INTAKE_PATH=routing. R12 held for the owner and Paz. R11 DONE (S-0249): the live trace is on; 5.7 counted, its outbound change waits on the owner. R10 DONE (S-0248): the email-to-board harness and its 20-email case study. R9 DONE (S-0247). R8 DONE but e (S-0244 to S-0246); e waits on the owner's yes to a paid measurement. R3's switch-over waits on CRON_SECRET. The baseline was 0f2dcef. App code changed since then in these
+**Last updated:** 27 October 2026, R13 DONE (S-0251): the assisted-card design, docs/ASSISTED-MODE-DESIGN-2026-10-27.md; at most 90 of 155 dev handoffs are near-misses. R14 DONE, dormant (S-0250): the Gmail poll decides through v2 once the grant exists and INTAKE_PATH=routing. R12 held for the owner and Paz. R11 DONE (S-0249): the live trace is on; 5.7 counted, its outbound change waits on the owner. R10 DONE (S-0248): the email-to-board harness and its 20-email case study. R9 DONE (S-0247). R8 DONE but e (S-0244 to S-0246); e waits on the owner's yes to a paid measurement. R3's switch-over waits on CRON_SECRET. The baseline was 0f2dcef. App code changed since then in these
 commits only:
 
 | commit | ticket | what |
@@ -32,6 +32,7 @@ commits only:
 | (R10) | S-0248 | Prompt 13: harness/board (cases, gold, a subagent reader, stage attribution), eval/board/2026-10-27.md, test/boardCases.ts in the gate |
 | (R11) | S-0249 | 5.2: v2/traceLive.ts, v2_trace (migrations 085-087), intake and changed re-plans traced, 90-day prune in the minute sync; 5.7 counted |
 | (R14) | S-0250 | F43: /api/mail-poll decides through mail/pollIntake.ts; n8n-inbound stores only under INTAKE_PATH=routing; the middleware's shut list removed |
+| (R13) | S-0251 | Prompt 7: docs/ASSISTED-MODE-DESIGN-2026-10-27.md (design only) |
 
 bd10dae (S-0213) moved the test suite onto PGlite. Line references below are at HEAD unless a line says "at 0f2dcef".
 
@@ -96,7 +97,7 @@ and §3 ends with the findings added after 23 Oct (F29 onward). §11 is the rebu
 | 5.5 recover interrupted work | **DONE:** F1; re-read S-0235; resume S-0247 | Prompt 6 |
 | 5.6 every request visible | **PART:** every need kept (S-0214); the Needs Reply lane is open | F41 |
 | 5.7 R number in our subjects | **COUNTED** (5 of 6 replied to us); the outbound change waits on the owner's yes | .tmp-v2/r57.mts |
-| 5.8 assisted mode | **OPEN**, design after the numbers | Prompt 7 |
+| 5.8 assisted mode | **DESIGNED** S-0251; the build needs the owner's and Paz's yes | docs/ASSISTED-MODE-DESIGN-2026-10-27.md |
 | 5.9 acceptance | policy, see F27 | |
 | 5.10 small fixes | **DONE**: F15 S-0214; README and harness STATE S-0236; F13, F14, F18, the op key and run.ts:5 S-0239 | |
 | §6 rules | **OPEN, owner** | |
@@ -991,8 +992,12 @@ ops after re-reading the target, staff edits and policy. An unknown is reconcile
   threads.
 
 ### 5.8 Assisted mode and the learning loop, if the corrected tally supports it
-**Status 26 Oct: OPEN** (design after the weekly numbers). audit/workflow-proposal.md has related groundwork: a tick
-today only adds a mark.
+**Status 27 Oct: DESIGNED** (S-0251, docs/ASSISTED-MODE-DESIGN-2026-10-27.md); the build needs the owner's and Paz's yes.
+- **Measured** (dev replay at bc3944b, $0): 155 handoffs. 58 are a complete plan held only by policy (lead days 54,
+  a confirmed proposal 4), and at most 32 more have one fact unproven with a candidate in hand. So at most 90 (58%)
+  are near-misses, which meets Prompt 7's condition at its upper bound. Class A goes first: its card carries exactly
+  the ops the bot would have run.
+- audit/workflow-proposal.md has related groundwork: a tick today only adds a mark.
 
 If most handoffs turn out to be "a likely candidate, not proven", a card with the change pre-filled and a Confirm button
 turns them into completed work through the same runOp path. The ledger, read-back and To Confirm stay unchanged. Each
@@ -1291,7 +1296,13 @@ none are matched loosely.
 **Done when:** fault-injected runs at partial capture, a model timeout, and after each verified op each end in exactly
 one final result with no duplicated effect.
 
-### Prompt 7: design the one-click confirm and learning loop (5.8, design only)
+### Prompt 7: design the one-click confirm and learning loop (5.8, design only): **DONE**, S-0251
+**As written:** docs/ASSISTED-MODE-DESIGN-2026-10-27.md. A handoff carries its `proposal` (the ops). Confirm re-reads the
+decision, refuses a stale card by its opKeys, and runs each op through runOp under both write keys. Each answer is a
+row in `v2_assist` (no email text, actor hashed) and a case in the regression set that test/harnessGate.ts floors.
+test/assistConfirm.ts would prove a Confirm writes exactly what the card showed. Four questions for the owner and Paz
+are in its §8.
+
 **Goal:** a written design, not code, for assisted cards and the learning loop. Build it only after the weekly numbers
 show most remaining handoffs are near-misses.
 
@@ -1396,7 +1407,7 @@ Still to come from §10: the identity owner (R8), and the move of what the old e
 | R10 | **13** (new) | **The email-to-board harness** (the owner's design, below), then its case study. **DONE** S-0248 | report + test |
 | R11 | 5.2, 5.7 | Live trace; R number in our subjects (test first). **DONE** S-0249; 5.7's change held for the owner | yes; 5.7 needs the owner's yes for outbound mail |
 | R12 | TV | F41 Needs Reply lane, F42 aging, held items 6 and 8. **HELD 27 Oct:** nothing built; every piece changes what the TV shows, which needs the owner's and Paz's yes (§0 blocked item 4) | **owner and Paz** |
-| R13 | 7 | Assisted mode design, from R10's numbers | design |
+| R13 | 7 | Assisted mode design, from R10's numbers. **DONE** S-0251 (docs/ASSISTED-MODE-DESIGN-2026-10-27.md) | design |
 | R14 | | Mail intake through v2 (F43), live with the Gmail grant; then intake, labels and alarms leave n8n entirely. **DONE, dormant** S-0250; labels and alarms after the grant | dormant until the grant |
 | R15 | | **The V1 review:** a thorough review of the whole system (code cleanliness, what works and what doesn't, what to do next), by me and by an independent agent. Published and opened in the owner's browser | report |
 

@@ -7,6 +7,7 @@ marked **current** (still true and still used), **reference** (facts that hold, 
 | file | status | what it is |
 |---|---|---|
 | Spartan-Crew-Onsinch-API-Reference.md | current | The OnSinch API, verified live on 07-20 with key user 2257 |
+| ASSISTED-MODE-DESIGN-2026-10-27.md | current | ADDENDUM Prompt 7's design for assisted cards and the learning loop; nothing in it is built |
 | LOCAL-BUILD-NODE25.md | current | Why `npm run build` dies with EISDIR on this machine, and the workaround |
 | TEST-ENQUIRY-PROMPT.md | reference | A prompt for writing test booking emails to send into the live mailbox |
 | VENUE-SWEEP2-PLAN-2026-09-20.md | reference | The September venue sweep; its venue facts and invariants hold |

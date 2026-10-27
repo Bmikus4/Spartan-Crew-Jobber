@@ -5329,5 +5329,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0251",
+  "ts": "2026-10-27T23:18:21+00:00",
+  "kind": "measurement",
+  "headline": "R13: assisted-card design; at most 90 of 155 dev handoffs are near-misses, 58 exact (lead days, confirmed)",
+  "subject": "Assisted cards have a design: a handoff's ops confirmed through runOp",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 110,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]
