@@ -1,7 +1,7 @@
 // ============================================================================
 // The rebuild's decisions as TV cards.
 // ----------------------------------------------------------------------------
-// NOTHING IS SENT TO OPS; OPS ARE TOLD ON THE TV (Ben, 2026-10-10). A decision the system
+// NOTHING IS SENT TO OPS; OPS ARE TOLD ON THE TV (Ben, 2026-10-10). A decision the system [DECISIONS V35]
 // cannot carry out itself, a planned write it has not made (shadow), and a write it made
 // all land here and nowhere else. Until 10-10 a v2 "handoff" was a database row nobody saw:
 // the TV read only the paused engine's state, so 57 hand-offs on shadow day 1 reached no one.
@@ -141,7 +141,7 @@ export function v2Source(row: V2Row, now: number): FeedSource {
     // number: 15 of 19 open cards showed neither. And the order a decision made can be gone:
     // R11615, a duplicate deleted once staff keyed R11617, still headed its card.
     order_id: row.link?.order_id ?? c.order_id ?? null,
-    // R AND J FROM THE LINK ONLY, the two together (Ben, 10-21: "always the correct R and J"). An R
+    // R AND J FROM THE LINK ONLY, the two together (Ben, 10-21: "always the correct R and J"). An R [DECISIONS V29]
     // read from the subject or the reasons was a number, not an order: EMS's R11562 stayed on its
     // card after the order was deleted. The bot's own orders are linked (links.ts backfillLinks).
     r_number: row.link?.r_number ? `R${String(row.link.r_number).replace(/^R/i, "")}` : null,

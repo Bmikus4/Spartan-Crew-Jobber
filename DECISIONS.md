@@ -151,3 +151,61 @@ serve, and no audit action records the deletion at all.
 
 **Blocked until answered:** whether the 24 identified threads get re-pointed in bulk, and
 what an amendment to a re-keyed order does. Phase 5b.
+
+---
+
+# Rulings in force for v2 (copied from code comments, 26 Oct)
+
+D1 to D6 above are September's open questions for the old engine. The rulings below bind the live v2 system.
+Each was found in a code comment and is copied here with an id; the comment now carries the same id. The words are
+the owner's where the comment quotes them. Owner decisions still OPEN are in ADDENDUM.md §6.
+
+## Standing rulings (ADDENDUM §0)
+
+| id | date | ruling | where |
+|---|---|---|---|
+| O1 | 26 Oct | No heartbeat for this automation runs in n8n, ever: "no heartbeats should run in n8n ever for this automation". Timers live in the app | CLAUDE.md; ADDENDUM F32 |
+| O2 | 24-25 Oct | Production stays shadow; writes stay off (bot_writes_enabled=false since 25 Oct 13:21Z). Model confidence alone is not an execution gate. No prompt change and no paid run without the owner's yes | decisions/2026-10-24-production-stays-shadow.md, decisions/2026-10-25-only-bot-writes-paused.md |
+| O3 | 25 Oct | The 40 emails from the 21 Oct pause are stored, not decided ("store them without deciding"). Mail that arrives during a pause is stored only | decisions/2026-10-25-pause-window-store-only.md; app/lib/paused.ts |
+| O4 | 26 Oct | Display and TV changes go only with the owner's and Paz's yes | ADDENDUM §0 |
+| O5 | 20 Oct | A client's acceptance of a quote ("yes, book that") hands off to a person | ADDENDUM F27, 5.9 |
+
+## Rulings in v2 code
+
+| id | date | ruling | where (comment) |
+|---|---|---|---|
+| V1 | 10-03, 10-15 | Never the day alone: a link, a pick or a find needs the day plus one more fact (client, venue, times, crew). Code and model must agree | v2/evidence.ts, v2/threadState.ts, interpret/context.ts, interpret/interpret.ts, interpret/plan.ts findOrder, feed/verify.ts |
+| V2 | 10-06 | "Never infer from history unless explicitly requested and the job can be found"; a vague request "shouldn't do anything" | interpret/ground.ts, interpret/interpret.ts, interpret/plan.ts header |
+| V3 | 10-06 | "The harness needs to know when any UI changes were made so that it can update the protocol": a form is checked against its contract before every fill | v2/bot/contract.ts, v2/bot/canary.ts |
+| V4 | 10-09 | A new end alone keeps the shift's start and moves the end; a new start alone moves the whole call and keeps its length | interpret/plan.ts (change_times) |
+| V5 | 10-11 | 1 failed order in 100 is the bar; a question back is not a failed order | interpret/plan.ts Decision type |
+| V6 | 10-11 | "Drafts should assume the order was already created so that the team can just send them" | v2/draft.ts |
+| V7 | 10-11 | Orders are created whatever profession is named; a trade the system cannot verify is booked as standard crew; an unlisted word is plain crew | interpret/professions.ts |
+| V8 | 10-11 | A card note is simple, reliable, informative, and never the system's own reasoning | feed/cardNote.ts |
+| V9 | 10-11 | "Port everything from the jobs board into the tv dashboard, mark them all as completed" | feed/ported.ts |
+| V10 | 10-13 | The bot tracks every order it makes or changes by the job's J number, linked to the R number; a sweep finds what is not linked | v2/links.ts |
+| V11 | 10-13 | "Everything should always be synced every minute" | api/bot/sync/route.ts |
+| V12 | 10-13 | The TV shows only what the system could not do | feed/serve.ts |
+| V13 | 10-15 | The crew chief rule: 4 or more on a shift carry a Crew Chief, 10+ two, 20+ three, one more per further 10, inside the headcount | interpret/plan.ts chiefsFor |
+| V14 | 10-15 | "We should only be creating orders that are more than two weeks out, all updates still should be enabled" (open questions in ADDENDUM §6.1) | interpret/plan.ts (create) |
+| V15 | 10-15 | Times a client did not write are assumed from that client's history ("better it exists than not"): no start 08:00, no end the usual length or 4 hours; every assumption is said | interpret/assume.ts, interpret/interpret.ts |
+| V16 | 10-15 | A venue that cannot be settled: the client's most used, then the oldest, flagged for staff; no venue at all: "No Location" | interpret/plan.ts (create venue) |
+| V17 | 10-15 | No hand-off for a detail the order itself can answer | interpret/plan.ts (location) |
+| V18 | 10-15 | Flag a card when the bot assumed the price list | v2/bot/apiCreate.ts |
+| V19 | 10-15 | Staffed positions: every change is made, workers included (replacing 10-06's "goes to ops"); a change leaving fewer seats than workers waits; workers come off unconfirmed first, then most recent | v2/bot/run.ts |
+| V20 | 10-15 | GPT-6.1 Sol reads the emails ("go with sol") | interpret/extract.ts |
+| V21 | 10-15 | Gmail labels come from the TV's own state; earlier systems' labels come off every thread | mail/threadLabels.ts |
+| V22 | 10-16 | "Anything that the staff got to first ... you should go quiet" | interpret/plan.ts (staff precedence) |
+| V23 | 10-17 | The re-plan is the planner itself, run again: no second pass or second state | v2/replan.ts |
+| V24 | 10-20 (Q2a) | The planner runs again every minute on every open card, against OnSinch now, reads only | v2/replan.ts, api/bot/sync/route.ts |
+| V25 | 10-20 (Fix 1) | Requests read from history are never new work | interpret/plan.ts |
+| V26 | 10-20 (Fix 2) | Already booked is the day and the start, not the exact window | interpret/plan.ts bookedAt, interpret/interpret.ts |
+| V27 | 10-20 (Fix 3) | A day already over is never written | interpret/plan.ts |
+| V28 | 10-20 (Q4) | The TV no longer draws the paused engine's threads | feed/live.ts |
+| V29 | 10-21 | Every job carries its own order's R and J, always correct, or it is not shown | feed/serve.ts, feed/v2.ts, feed/ported.ts |
+| V30 | 08-25 | The order manager is Samurai AI (2257) on every order the automation builds: "fill it, leave the contact alone" | v2/bot/apiCreate.ts |
+| V31 | 09-29 | The owner's own account (2257) is the stand-in contact on an order whose client has none yet | v2/bot/apiCreate.ts |
+| V32 | 08-27 | Creating a client is never gated on information beyond a name (the owner's standing rule; ADDENDUM §6.2 asks again) | interpret/plan.ts (new client) |
+| V33 | | A PO is cosmetic (1 in 50): one not proven is left off with a note and never blocks the booking | interpret/interpret.ts, interpret/plan.ts |
+| V34 | 10-04..10-10 | The TV's order and clocks: a client waiting 24 h is red and rises (10-04); old untouched work sinks, never hidden (10-05); open above done (10-04, 10-05); Needs Follow Up after a quiet day (10-10); a job has no timer (10-06); quiet resets on any update (10-06); the colour is the need (10-04) | feed/order.ts, feed/project.ts |
+| V35 | 10-05, 10-10 | An order the engine wrote is not done until somebody checks it; nothing is sent to ops, ops are told on the TV; the TV starts from go-live (10-10); synced once a minute (10-10) | feed/project.ts, feed/v2.ts, feed/verify.ts |

@@ -22,7 +22,7 @@ function db(): NeonQueryFunction<false, false> {
 }
 
 /**
- * The paused engine's threads. The TV no longer draws them (Ben approved 10-20, Q4: they had drawn
+ * The paused engine's threads. The TV no longer draws them (Ben approved 10-20, Q4: they had drawn [DECISIONS V28]
  * nothing since FEED_FROM, and 114 of the orders they name are deleted); only the jobs board's
  * carried-over tiles read them, for the company name (ported.ts).
  */

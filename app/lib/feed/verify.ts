@@ -27,7 +27,7 @@ import { matchExistingOrder, type OrderRec } from "../engine/resolve";
 import { staffChangeSince } from "../engine/reconcile";
 import { londonDay, type FeedCard, type FeedItem, type FeedMark, type FeedWant } from "./project";
 
-/** Once a minute since the bot writes for real (Ben, 2026-10-10: "synced there more often"). One round reads 1-2 timeline pages. */
+/** Once a minute since the bot writes for real (Ben, 2026-10-10: "synced there more often"). One round reads 1-2 timeline pages. [DECISIONS V35] */
 export const VERIFY_EVERY_MS = 60_000;
 export const VERIFY_BUDGET_MS = 8_000;
 /** Pages read back per round. ~90 staff rows an hour, 100 to a page. */
@@ -257,7 +257,7 @@ async function findOrder(client: OnsinchClient, t: Transport, card: FeedCard, wa
   }
   if (scored.length === 1) {
     const [s] = scored;
-    // NEVER A DATE ALONE (Ben, 10-03 and 10-15): a client's only order that day is found only with
+    // NEVER A DATE ALONE (Ben, 10-03 and 10-15): a client's only order that day is found only with [DECISIONS V1]
     // its venue or a shift as asked. "The only order on those days" made 10 of the verifier's 68
     // finds to 10-21, Solotech's among them on the wrong order.
     if (!card.company_id) return { o: s.o, by: "the sender's name on that day's order" };

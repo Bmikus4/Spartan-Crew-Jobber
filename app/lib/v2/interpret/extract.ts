@@ -94,7 +94,7 @@ export function userPrompt(sentIso: string, from: string, subject: string, newes
 }
 
 /**
- * GPT-6.1 Sol reads the emails (Ben, 10-15: "go with sol"). On the newest 100 emails scored
+ * GPT-6.1 Sol reads the emails (Ben, 10-15: "go with sol"). On the newest 100 emails scored [DECISIONS V20]
  * against what ops did, it got 5 of 20 bookings right where the stored Opus readings got 2 of
  * 22, for $0.007 an email against $0.024. SPARTAN_MODEL is the paused engine's and is set in
  * production, so the reader no longer falls back to it.

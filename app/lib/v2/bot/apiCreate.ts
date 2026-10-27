@@ -20,7 +20,7 @@
 //                   10-15; 341 before 09-16). Only staff's orders count, so a card the bot ever
 //                   got wrong can never be copied onto the next order.
 //   positions       hidden from workers, as on 634 of the last 785 staff orders
-//   order manager   Samurai AI (2257) on every order, as the old engine stamped it (Ben,
+//   order manager   Samurai AI (2257) on every order, as the old engine stamped it (Ben, [DECISIONS V30]
 //                   2026-08-25: "fill it, leave the contact alone"), so staff can tell an
 //                   automation-built order from theirs at a glance. The rebuild dropped it
 //                   until the create parity harness (scripts/create-ab.mts) caught it on 10-15.
@@ -70,7 +70,7 @@ export function firstRow(s: CreateOp["shifts"][number]) {
 }
 
 /**
- * The line that tells staff the price list was assumed (Ben, 10-15: flag a card the bot assumed).
+ * The line that tells staff the price list was assumed (Ben, 10-15: flag a card the bot assumed). [DECISIONS V18]
  * OnSinch's API does not give a client's default price list (the company record has no such
  * field, read 10-21), so every card the bot picks is an assumption until the default is read
  * from the order builder (Release 4's probe, held while job creation is paused): IET's R11552
@@ -97,7 +97,7 @@ export function createBody(op: CreateOp, d: { user_id: string; card: number; car
   }];
 }
 
-/** Ben's own account: the stand-in contact on an order whose client has none yet (09-29: intentional). */
+/** Ben's own account: the stand-in contact on an order whose client has none yet (09-29: intentional). [DECISIONS V31] */
 const PLACEHOLDER_CONTACT = "2257";
 
 export async function apiCreateOrder(op: CreateOp): Promise<ApiCreated> {

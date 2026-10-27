@@ -8,7 +8,7 @@
 // particular is final for the bot: the save may or may not have landed, and re-sending it
 // is how a crew of 4 becomes 8. Reconciliation reads OnSinch and a person decides.
 //
-// Staffed positions (Ben, 10-15, replacing his 10-06 "goes to ops" ruling, which "was for
+// Staffed positions (Ben, 10-15, replacing his 10-06 "goes to ops" ruling, which "was for [DECISIONS V19]
 // safety"): every change is made, workers on the position included; OnSinch tells them as it
 // does for staff's edits. Only a change that would leave fewer seats than workers waits
 // (staffedRefusal) until the bot can drop a worker and log who.
@@ -72,7 +72,7 @@ export async function attendingOn(orderId: number, slotId: number): Promise<numb
  * The one staffed change the bot does not make yet: fewer seats than workers on the position.
  * Measured 10-15: staff cut such a size first and remove the workers after (22 of 39 within a
  * minute), and OnSinch does not stop the cut. The bot holds it until it can drop a worker
- * itself, as Ben ruled: unconfirmed first, then the most recent, each logged by name.
+ * itself, as Ben ruled: unconfirmed first, then the most recent, each logged by name. [DECISIONS V19]
  */
 export function staffedRefusal(op: Op, held: number): string[] {
   if (held === 0) return [];

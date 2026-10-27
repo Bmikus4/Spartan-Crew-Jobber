@@ -6,7 +6,7 @@
   below as findings and status.
 - Every step updates this file: its status line, its measurement, and what moved.
 
-**Last updated:** 26 October 2026, R1 shipped (S-0235). The baseline was 0f2dcef. App code changed since then in these
+**Last updated:** 26 October 2026, R2 shipped (S-0236). The baseline was 0f2dcef. App code changed since then in these
 commits only:
 
 | commit | ticket | what |
@@ -16,7 +16,8 @@ commits only:
 | 83e4972 | S-0216 | Prompt 3a |
 | 6a98170 | S-0217 | Prompt 3b |
 | 6988aa0 | S-0232 | /api/confirm-order shut under v2 |
-| (R1) | S-0235 | Prompt 9: in-call retry, retryUnread, owner alerts, replay guard, UTC audit times, pause stores only |
+| 40f7ca5 | S-0235 | Prompt 9: in-call retry, retryUnread, owner alerts, replay guard, UTC audit times, pause stores only |
+| (R2) | S-0236 | Prompt 8: docs and ruling ids in comments only |
 
 bd10dae (S-0213) moved the test suite onto PGlite. Line references below are at HEAD unless a line says "at 0f2dcef".
 
@@ -66,7 +67,7 @@ and §3 ends with the findings added after 23 Oct (F29 onward). §11 is the rebu
 | F18 NOT_CLIENT by substring | **OPEN** | process.ts:161 |
 | F19 dates dd/mm | OPEN (right for UK clients; a decision, not a bug) | ground.ts:255 |
 | F20 re-plan cache and limits | known behaviour | replan.ts:32 |
-| F21 docs behind the code | **OPEN** (Prompt 8) | README.md:54; harness/STATE.md:9,32 |
+| F21 docs behind the code | **DONE** S-0236 (README and harness/STATE.md name the live reader) | README.md; harness/STATE.md |
 | F22 duration beside an end dropped | **DONE** S-0215 | test/v2WrongBookingPaths.ts |
 | F23 model pick on the day alone | **DONE** S-0215 | same test |
 | F24 time change + crew total refused | **OPEN** | plan.ts:558 splits only crew_add/crew_remove |
@@ -83,9 +84,9 @@ and §3 ends with the findings added after 23 Oct (F29 onward). §11 is the rebu
 | 5.7 R number in our subjects | **OPEN**, test first | |
 | 5.8 assisted mode | **OPEN**, design after the numbers | Prompt 7 |
 | 5.9 acceptance | policy, see F27 | |
-| 5.10 small fixes | F15 DONE. F13, F14, F18, op key, run.ts:5, README, harness STATE **OPEN** | |
+| 5.10 small fixes | F15 DONE; README and harness STATE DONE S-0236. F13, F14, F18, op key, run.ts:5 **OPEN** (R5) | |
 | §6 rules | **OPEN, owner** | |
-| §10 / Prompt 8 docs | **OPEN** | |
+| §10 / Prompt 8 docs | **DONE** S-0236: CLAUDE.md is the v2 map; engine invariants in app/lib/engine/README.md; docs/README.md; 35 code rulings and 5 standing ones in DECISIONS.md (V1-V35, O1-O5), each comment tagged | CLAUDE.md; DECISIONS.md |
 | F29 one read attempt | **DONE** S-0235 | test/extractRetry.ts; extract.ts extractWithMeta |
 | F30 owner never told of system failures | **DONE** S-0235 (system-failed alert) | test/systemFailureToOwner.ts |
 | F31 a pause throws mail away | **DONE** S-0235 (a v2 pause stores, marks v2_store_only, decides nothing) | test/pauseStoresOnly.ts; paused.ts automationPaused |
@@ -1041,7 +1042,7 @@ list is true and the owner has reviewed the result. Don't run several at once: t
 | 5 | OPEN |
 | 6 | half held (re-read), half OPEN (resume) |
 | 7 | OPEN (design) |
-| 8 | OPEN |
+| 8 | DONE (S-0236) |
 | 9 | DONE (S-0235) |
 | 10-13 | new, §11 |
 
@@ -1149,7 +1150,7 @@ show most remaining handoffs are near-misses.
 **Done when:** the design names the files it would touch, the data it stores, and the test that proves a confirmed card
 writes exactly what was shown.
 
-### Prompt 8: re-map the repo for the agent (docs only)
+### Prompt 8: re-map the repo for the agent (docs only): **DONE**, S-0236
 **Goal:** the files an agent reads first describe the live v2 system accurately. Change no runtime code.
 1. Read CLAUDE.md, README.md, DECISIONS.md, harness/STATE.md, docs/ and section 10.
 2. Draft a new CLAUDE.md of at most about 80 lines. It covers:
@@ -1178,9 +1179,14 @@ writes exactly what was shown.
 
 ## 10. Organising the repo for the AI that builds it
 
-**Status 26 Oct: OPEN** (Prompt 8). One change since:
-- the repo CLAUDE.md now carries the no-n8n-heartbeat rule;
-- it still describes the legacy engine and has no map of v2.
+**Status 26 Oct: DONE** (S-0236, Prompt 8):
+- CLAUDE.md is a 65-line map of the live v2 pipeline, the §2 safety rules, where truth lives, the gate and the
+  invariants that still hold (no heartbeat in n8n among them);
+- the old engine's invariants moved unchanged to app/lib/engine/README.md, with the engine files v2 still imports;
+- docs/README.md marks each file in docs/ current, reference or superseded;
+- DECISIONS.md carries O1-O5 (§0's rulings) and V1-V35 (every ruling found in a v2 code comment), and each of the 68
+  comment lines names its id.
+Still to come from §10: the identity owner (R8) and the old engine's retirement (R7).
 
 **Nico's findings (code-verified at 0f2dcef, all still true):**
 - **CLAUDE.md describes the legacy engine.** It never mentions v2, the harness, the two write keys or the refusal rules.
@@ -1225,7 +1231,7 @@ writes exactly what was shown.
 | step | prompt | what | ships |
 |---|---|---|---|
 | R1 | **9** (new) | **Stop losing work, part 2:** F29 (in-call retry), F26 re-read (retryUnread), F30 owner alerts, F35 replay guard, F36 UTC times, F31 pause stores mail. Held items-1-3-runtime, plus C3 and C2 / item-4 / n1 scoring | **DONE S-0235** |
-| R2 | 8 | Re-map the repo: CLAUDE.md, engine README, docs index, rulings into DECISIONS.md | yes (docs) |
+| R2 | 8 | Re-map the repo: CLAUDE.md, engine README, docs index, rulings into DECISIONS.md | **DONE S-0236** |
 | R3 | **10** (new) | **No heartbeat in n8n** (F32): cron entry points, the heartbeat, honest sync status (F37), sync and labels on their own secret (F3), labels by webhook, the switch-over | yes. Live when CRON_SECRET is set |
 | R4 | 0 | Size the findings, read-only | report |
 | R5 | 5 + 5.10 | Everyday requests (F8, F24, F25, dates, schema validation) and the small fixes (F13, F14, F18, op key, run.ts:5, README). Re-cut held item 5 and n2-planner-ops | yes |

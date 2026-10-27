@@ -1,7 +1,7 @@
 // ============================================================================
 // The one line a TV card says about a rebuild decision.
 // ----------------------------------------------------------------------------
-// SIMPLE, RELIABLE, INFORMATIVE, AND NEVER THE SYSTEM'S OWN REASONING (Ben, 10-11). Until then
+// SIMPLE, RELIABLE, INFORMATIVE, AND NEVER THE SYSTEM'S OWN REASONING (Ben, 10-11). Until then [DECISIONS V8]
 // the card printed the planner's reasons as written: of 40 cards on 10-11, 20 showed text like
 // `request 1 crew: "another 3 crew" reads as null, not 3`, message ids or "(shadow)", and 12
 // ran past what the tile shows.

@@ -1,5 +1,5 @@
 // ============================================================================
-// Gmail labels from the TV's own state (Ben, 10-15). One minute workflow in n8n asks this for
+// Gmail labels from the TV's own state (Ben, 10-15). One minute workflow in n8n asks this for [DECISIONS V21]
 // every thread's labels and applies them; the app decides, n8n only carries it out.
 // ----------------------------------------------------------------------------
 // Four order labels, exclusive (CLAUDE.md: a thread wearing done and outstanding at once says
@@ -31,7 +31,7 @@ export const RENAMES: Array<{ from: string; to: OrderLabel }> = [
   { from: "Order Needs Built", to: "Order Needs Created" },
 ];
 
-/** Labels earlier systems put on bookings threads; they come off every thread (Ben, 10-15). */
+/** Labels earlier systems put on bookings threads; they come off every thread (Ben, 10-15). [DECISIONS V21] */
 export const STRIP = ["HIGH", "MEDIUM", "LOW", "SamurAI", "TEST"];
 
 export type ThreadLabels = { thread_id: string; order: OrderLabel | null; follow_up: boolean; r_number: string | null };

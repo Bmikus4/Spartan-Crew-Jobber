@@ -1,7 +1,7 @@
 // ============================================================================
 // What the drafter is told about a rebuild decision, whichever TV label it carries.
 // ----------------------------------------------------------------------------
-// EVERY DRAFT ASSUMES THE ORDER IS ALREADY MADE (Ben, 10-11: "drafts should assume the
+// EVERY DRAFT ASSUMES THE ORDER IS ALREADY MADE (Ben, 10-11: "drafts should assume the [DECISIONS V6]
 // order was already created so that the team can just send them"). A card the system
 // could not act on is acted on by a person, who then sends the draft unedited; a draft
 // that said "being updated" or "will confirm shortly" promised a second email nobody

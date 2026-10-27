@@ -6,11 +6,11 @@
 // ============================================================================
 import type { FeedCard } from "./project";
 
-/** A client waiting this long for our reply is red, and rises to the top (Ben, 2026-10-04). */
+/** A client waiting this long for our reply is red, and rises to the top (Ben, 2026-10-04). [DECISIONS V34] */
 export const REPLY_RED_MS = 24 * 3_600_000;
 
 /**
- * THE DIAL for sinking old cards (Ben, 2026-10-05): open work nobody has touched for this
+ * THE DIAL for sinking old cards (Ben, 2026-10-05): open work nobody has touched for this [DECISIONS V34]
  * long (no email either way, no engine write, no staff edit or tick; 10-06) goes below every
  * fresh card, under its own label. Sunk, never hidden: hiding one could hide a lost booking.
  * Whole days, because the screen's label says it in days.
@@ -18,7 +18,7 @@ export const REPLY_RED_MS = 24 * 3_600_000;
 export const QUIET_MS = 7 * 86_400_000;
 
 /**
- * NEEDS FOLLOW UP (Ben, 2026-10-10): an open job on which nothing has happened for a day,
+ * NEEDS FOLLOW UP (Ben, 2026-10-10): an open job on which nothing has happened for a day, [DECISIONS V34]
  * whichever side is waiting. Nothing means no email either way on its thread or on another
  * thread about the same order, no write by the system, and no Confirm or staff edit seen in
  * OnSinch. Raised on the TV as its own label; the wait itself is not drawn ("no timers").
@@ -44,7 +44,7 @@ export function deadline(c: FeedCard, now: number): number | null {
 }
 
 /**
- * THE ORDER (Ben, 2026-10-04 and 10-05). Open work above done work. Within open work,
+ * THE ORDER (Ben, 2026-10-04 and 10-05). Open work above done work. Within open work, [DECISIONS V34]
  * every need whose client has gone quiet (`quiet`, project.ts) sits below every fresh one:
  * a booking nobody has mentioned for a week is less likely to be the one to act on now,
  * and on 2026-10-04 four such threads held the top of the screen. Then, within each group,

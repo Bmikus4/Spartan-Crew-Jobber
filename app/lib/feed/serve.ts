@@ -100,14 +100,14 @@ export async function serveFeed(deps: FeedDeps, now: number): Promise<{ status: 
   const links = deps.links ? await deps.links().catch(() => new Map<string, LiveLink>()) : new Map<string, LiveLink>();
   const ported = portedCards(jobs, deps.portedStates ? await deps.portedStates().catch(() => states) : states, new Set(p.cards.map((c) => c.thread_id)), links, now);
 
-  // THE TV SHOWS ONLY WHAT THE SYSTEM COULD NOT DO (Ben, 10-13: "Only those cases should be
+  // THE TV SHOWS ONLY WHAT THE SYSTEM COULD NOT DO (Ben, 10-13: "Only those cases should be [DECISIONS V12]
   // moved to the display TV"). An order the bot made or changed is the system's own work and a
   // question is answered from the inbox; both are counted, not shown. A need a person has since
   // dealt with stays for its dwell, as before.
   // A need, open or just dealt with. Until 10-15 any green card counted, so an order the bot made
   // showed on the list the moment someone ticked it: a success on the failures list.
   const isFailure = (c: (typeof p.cards)[number]) => c.items.some((i) => i.kind === "needs-created" || i.kind === "needs-updated");
-  // EVERY JOB IS LISTED, AND EVERY JOB'S R AND J ARE ITS ORDER'S OWN (Ben, 10-21: "its not that
+  // EVERY JOB IS LISTED, AND EVERY JOB'S R AND J ARE ITS ORDER'S OWN (Ben, 10-21: "its not that [DECISIONS V29]
   // only jobs with an R and J should be listed, its that every job should HAVE its proper R and J
   // number, and they should always be the correct R and J numbers"). The numbers come only from
   // the thread's link (v2.ts), which the planner keeps and sweepLinks checks every minute by

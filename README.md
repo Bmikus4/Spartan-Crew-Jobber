@@ -1,46 +1,46 @@
 # Spartan Crew Enquiry Engine
 
-Spartan Crew's booking mailbox, read and acted on by code: each new email becomes or
-amends an OnSinch order, and Gmail labels tell ops what still needs a person.
+Spartan Crew's booking mailbox, read by code: each client email is matched to an OnSinch order and planned, and the
+office TV shows what still needs a person. The live system is the v2 engine (SPARTAN_ENGINE=v2), in shadow: it
+decides every email and records the decision, and its writes to OnSinch are off (the Settings switch). The plan
+and its status are in `ADDENDUM.md`; the map for an agent is `CLAUDE.md`.
 
 ## How it runs
 
-- **Intake.** n8n polls the bookings mailbox and POSTs each new message once to
-  `/api/n8n-inbound` (`app/lib/n8nInbound.ts`). n8n never sends a message twice, so
-  anything held is re-read by the hourly sweep, never by a redelivery.
-- **Engine** (`app/lib/engine/`). A model classifies the thread and extracts the crew
-  request; code resolves client, venue, profession and rate card, then creates or amends
-  the order (`compiler.ts`, `pipeline.ts`). A model never invents an id: the venue, link
-  and company judges choose from candidates code lists, code checks the answer, and on a
-  model failure the thread holds and is tagged.
-- **Labels.** Four, mutually exclusive: Order Built, Order Updated, Order Needs Built,
-  Order Needs Updated (`app/lib/mail/gmailWrite.ts`).
-- **Sweep.** `/api/reconcile`, hourly from n8n: checks every future-dated bound order
-  still exists, re-asserts changes OnSinch dropped, re-runs held emails, and expires
-  needs-a-person flags on jobs that are over.
-- **Alarms.** `app/lib/errorReport.ts` emails through the n8n workflow "Spartan Alarms";
-  the n8n "Spartan Intake Watchdog" checks `/api/health/intake` every 15 minutes.
-- **TV feed.** `/api/feed` and `app/components/LiveFeedScreen.tsx`, read-only against OnSinch.
+- **Intake.** n8n posts each new or updated thread to `/api/n8n-inbound` (`app/lib/n8nInbound.ts`). The thread is
+  stored first, then decided by `app/lib/v2/process.ts`. While the automation is paused it is stored and marked
+  store-only, and nothing decides it.
+- **Reader.** One model call per email: `app/lib/v2/interpret/extract.ts`, model `openai/gpt-6.1-sol`
+  (`SPARTAN_INTERPRET_MODEL`) via OpenRouter, tried up to 3 times on a rate limit or an outage.
+  `SPARTAN_MODEL` belongs to the paused old engine and v2 does not read it.
+- **Grounding and planning.** `app/lib/v2/interpret/` proves every value against the email's words and finds the
+  booking (`plan.ts`). Each email ends in one `v2_decisions` row.
+- **Writes.** The bot in `app/lib/v2/bot/`, behind two keys: `SPARTAN_WRITES=live` and the Settings switch.
+- **Every minute.** `/api/bot/sync`: stopped writes, undecided mail, failed reads and the re-plan of open cards.
+- **TV and labels.** `/api/feed` (`app/lib/feed/`); Gmail labels from `/api/bot/labels`, applied by n8n.
+- **Alarms.** `app/lib/errorReport.ts`, sent through the n8n workflow "Spartan Alarms".
+- **The old engine** (`app/lib/engine/`) is paused; see `app/lib/engine/README.md`.
 
 ## Routes (`app/api`)
 
 | Route | Called by | Does |
 |---|---|---|
-| `n8n-inbound` | n8n intake | runs the engine on one email |
+| `n8n-inbound` | n8n intake | stores a thread and decides its new emails (v2) |
 | `dedupe` | n8n intake | claims a message id once (`message_ledger`) |
-| `reconcile` | n8n, hourly | the sweep; `?dry=1` writes nothing |
-| `health/intake` | n8n watchdog | is mail arriving; delete-and-repost state |
-| `confirm-order` | dashboard | approves a staged order |
-| `settings` | Settings screen | replies switch, delivery, scope, default rate card |
-| `jobs`, `metrics`, `feed`, `followups` | dashboard, TV | read models |
-| `mail-inbound`, `mail-poll`, `sweep-ingest` | routing-rule intake | inert while `INTAKE_PATH` is not `routing` |
+| `bot/sync` | n8n, every minute | the minute sync (above) |
+| `bot/labels` | n8n, every minute | the Gmail labels the TV implies |
+| `bot/process`, `bot/run`, `bot/canary` | by hand | replay one email; run the bot; check the OnSinch forms |
+| `health/intake` | n8n watchdog | is mail arriving |
+| `settings` | Settings screen | the write switch, replies, delivery |
+| `feed`, `jobs`, `metrics`, `followups` | dashboard, TV | read models |
+| `reconcile`, `confirm-order`, `mail-inbound`, `mail-poll`, `sweep-ingest` | the old engine | shut under v2 (503) |
 | `auth`, `onboarding` | browser | sign-in and terms |
 
 ## Working in this repo
 
 ```
 npm install
-npm run test:all      # the suite: every test/*.ts, then the payload check
+npm run test:all      # the suite: every test/*.ts, on PGlite, then the payload check
 npx tsc --noEmit
 ```
 
@@ -50,7 +50,6 @@ Commits and pushes go only through `python scripts/session.py` (see `CLAUDE.md`)
 to `main` is a production release on Vercel.
 
 Environment variables: `.env.example` lists every name the app reads (names only),
-regenerated by `node scripts/env-names.mjs` and checked by `test/envExample.ts`. The default
-model is `anthropic/claude-opus-4.6` via OpenRouter (`SPARTAN_MODEL`, `app/lib/deps.ts`).
+regenerated by `node scripts/env-names.mjs` and checked by `test/envExample.ts`.
 
-Design and plans are in `docs/`; `docs/JOB-IDENTITY-DESIGN-2026-09-29.md` is the target design.
+Documents in `docs/` are indexed in `docs/README.md`; none of them is the plan.

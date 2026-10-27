@@ -1,7 +1,7 @@
 // ============================================================================
 // The bridge's memory: which OnSinch order and job each thread is about, kept true every minute.
 // ----------------------------------------------------------------------------
-// Ben, 10-13: the bot tracks every order it makes or changes by the job's J number, linked to the
+// Ben, 10-13: the bot tracks every order it makes or changes by the job's J number, linked to the [DECISIONS V10]
 // order's R number, and a separate sweep finds what is not linked to a J number; what it cannot
 // find is held. The J number is the anchor because it survives a job being moved to another
 // order, while R numbers are reused after a delete (measured 08-19) and staff re-type orders.

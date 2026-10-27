@@ -5,7 +5,7 @@
 // All-or-nothing per email: if any request in it cannot be planned, the whole email goes
 // to a person. Half an email automated and half by hand is how a change gets done twice.
 //
-// "Never infer from history unless explicitly requested and the job can be found" (Ben,
+// "Never infer from history unless explicitly requested and the job can be found" (Ben, [DECISIONS V2]
 // 10-06). An existing booking is touched only when the email names it: an R number, the
 // thread the bot itself booked it in, or the day of a change that exactly one of the
 // client's orders has a shift on. A new booking is never attached to an existing order by
@@ -43,7 +43,7 @@ export type Decision = (
   /**
    * reply: what a person must do is WRITE BACK, not touch an order: a quote, a question, or a
    * booking missing a detail only the client can give. The TV shows it as Needs Reply, never
-   * as an order that failed (Ben, 10-11: 1 failed order in 100 is the bar; a question is not one).
+   * as an order that failed (Ben, 10-11: 1 failed order in 100 is the bar; a question is not one). [DECISIONS V5]
    */
   | { kind: "handoff"; reasons: string[]; reply?: boolean; order_id?: number }
   /** found: the orders that already hold what the email asks for; the thread is linked to one. */
@@ -58,12 +58,12 @@ const ask = (...reasons: string[]): Decision => ({ kind: "handoff", reasons, rep
 const MISSING = /: no (day|start time|end time or duration|crew count|new time or length) the client wrote$|^no venue in the email$/;
 
 /**
- * THE CREW CHIEF RULE (Ben, 10-15): 4 or more on a shift carry a Crew Chief, 10+ two, 20+
+ * THE CREW CHIEF RULE (Ben, 10-15): 4 or more on a shift carry a Crew Chief, 10+ two, 20+ [DECISIONS V13]
  * three, and every further 10 one more, inside the headcount. Measured 10-15 on 3,145 staff-built
  * shifts counting every seat, drivers and trades included: it matches 96.0% (1-3: 99.2%, 4-9:
  * 93.3%, 10-19: 88.6%). Ops book more than it on 30+ (13 shifts). A chief the client asks for on
  * a smaller shift is booked: no request is refused for its size. The old engine's
- * chiefsForTeam (engine/compose.ts) stops at 3; this one does not, by Ben's rule.
+ * chiefsForTeam (engine/compose.ts) stops at 3; this one does not, by Ben's rule. [DECISIONS V13]
  */
 export function chiefsFor(total: number, asked = false): number {
   if (!Number.isInteger(total) || total < 1) return 0;
@@ -182,7 +182,7 @@ async function placesFor(world: World, venue: string, clientOrders: any[] = []):
  * name (12), an R or J number elsewhere in the thread (8), or its day and one more fact (39).
  * Now the evidence finder (threadState.ts) names it, strongest first: the link while it holds a
  * day asked for, an R/J number anywhere in the thread, the PO or project reference, the day and
- * one more fact (start, crew count, venue). NEVER the day alone (Ben, 10-03 and 10-15): a second
+ * one more fact (start, crew count, venue). NEVER the day alone (Ben, 10-03 and 10-15): a second [DECISIONS V1]
  * job that day would have its crew and times rewritten.
  * `explicit` refuses the day-and-fact finds: new shifts go onto an order only by reference,
  * and a day's booking is weighed by bookedAt instead.
@@ -240,7 +240,7 @@ async function evidenceOf(msg: Message, i: Interpretation, world: World, threadO
  * A PERSON'S CARD SAYS WHICH ORDER IT IS ABOUT, AND GOES WHEN STAFF HAVE BOOKED IT. A hand-off
  * names the order the finder finds (the TV's R and J come from it, through the thread's link).
  * A new booking every day of which is in an order made or touched by staff since the email is
- * done (Ben 10-16: "anything that the staff got to first ... you should go quiet"): 13 bookings
+ * done (Ben 10-16: "anything that the staff got to first ... you should go quiet"): 13 bookings [DECISIONS V22]
  * since 10-09 were built by staff after the email and stayed on the TV with no numbers. An
  * order that was there before the email is never the new booking's: it would hide a second job
  * the client has that day.
@@ -362,7 +362,7 @@ function staffSince(t: { raw: any; slots: any[] }, slots: any[], sent: number): 
 }
 
 /**
- * FIX 2 (Ben approved 10-20): ALREADY BOOKED IS THE DAY AND THE START, NOT THE EXACT WINDOW.
+ * FIX 2 (Ben approved 10-20): ALREADY BOOKED IS THE DAY AND THE START, NOT THE EXACT WINDOW. [DECISIONS V26]
  * Measured 10-20 on every bot write since 9 Oct: 4 of the 6 shifts the bot added sat beside
  * staff's own shift on that day at that start, let through because the end differed (Roof
  * Gardens 14:00-15:00 beside 14:00-16:00, COG 08:00-18:00 beside 08:00-17:00). Every position at
@@ -486,7 +486,7 @@ async function decide(msg: Message, i: Interpretation, world: World, threadOrder
   // A sender OnSinch has no company for has nothing booked: a cancellation or a PO from them
   // changes nothing (AT Comms, 10-11: "the PM has this covered now" after their first email).
   if (!companyId && (i.intent === "cancellation" || i.intent === "info_only")) return { kind: "none", reason: `${msg.from} is not a client in OnSinch, so nothing of theirs is booked` };
-  // A CLIENT ONSINCH DOES NOT HOLD IS CREATED from its name, as ops do and as Ben ruled for the
+  // A CLIENT ONSINCH DOES NOT HOLD IS CREATED from its name, as ops do and as Ben ruled for the [DECISIONS V32]
   // engine ("creating a client is never gated on information beyond a name", onsinch.ts): a
   // first booking from AT Comms (10-11) went to a person for want of a company record. Only a
   // booking or quote with its shifts does this; anything else from a stranger is for the inbox.
@@ -514,14 +514,14 @@ async function decide(msg: Message, i: Interpretation, world: World, threadOrder
   const sentDay = utcToLondon(msg.sentIso).date;
   const past = reqs.find((r) => (r.date && r.date < sentDay) || (r.target?.date && r.target.date < sentDay && r.action !== "new_shift"));
   if (past) return handoff(`a request is for ${past.date ?? past.target?.date}, before the email was sent`);
-  // FIX 3 (Ben approved 10-20): A DAY ALREADY OVER IS NEVER WRITTEN. A change to a shift that has
+  // FIX 3 (Ben approved 10-20): A DAY ALREADY OVER IS NEVER WRITTEN. A change to a shift that has [DECISIONS V27]
   // happened is a timesheet or billing question. COG's 27 July email was decided on 19 Oct and
   // wrote a shift for 18 Oct, and 42 of 712 decisions since 9 Oct were on emails over 7 days old.
   const today = opts.now != null ? utcToLondon(new Date(opts.now).toISOString()).date : null;
   const overDay = (r: Request) => [r.date, r.target?.date].find((d) => !!d && !!today && d < today);
   const over = reqs.find((r) => overDay(r));
   if (over) return handoff(`${overDay(over)} is already over: a person adjusts it`);
-  // FIX 1 (Ben approved 10-20): REQUESTS FROM HISTORY ARE NEVER NEW WORK. The client's newest
+  // FIX 1 (Ben approved 10-20): REQUESTS FROM HISTORY ARE NEVER NEW WORK. The client's newest [DECISIONS V25]
   // words asked for nothing new ("All confirmed on my side", "Quote looks great"), so a request
   // read from the quoted thread or the subject is checked against the client's orders by its day
   // and one more fact: held, nothing to do; held by no order, the card stays for a person.
@@ -578,7 +578,7 @@ async function decide(msg: Message, i: Interpretation, world: World, threadOrder
       // A length beside an end sets the start: "six hours ending 18:00" is 12:00 (addendum F22).
       const start = r.start ?? (r.end && r.duration ? addMinutes(r.end, -r.duration) : utcToLondon(first.beginning).time);
       // "Increase hours to 8 (currently 6)": the client gave a length, not a time. The
-      // shift keeps its start and the end moves (Ben, 10-09). A new start alone moves the
+      // shift keeps its start and the end moves (Ben, 10-09). A new start alone moves the [DECISIONS V4]
       // whole call and keeps its length: "arrive for 17:00 instead of 14:00" on 14:00-17:00
       // was planned 17:00-17:00, and ops moved it to 17:00-20:00 (R11029, 10-15).
       const length = Math.round((Date.parse(first.end) - Date.parse(first.beginning)) / 60e3);
@@ -629,7 +629,7 @@ async function decide(msg: Message, i: Interpretation, world: World, threadOrder
         why.push(`R${order.number} shift ${shift.id}: ${total} crew in all`);
         return null;
       }
-      // The chiefs follow Ben's rule (chiefsFor) on everyone the shift will hold: its trades and
+      // The chiefs follow Ben's rule (chiefsFor) on everyone the shift will hold: its trades and [DECISIONS V13]
       // other teams count too. A chief ops put on a shift of 3 or fewer stays while it stays
       // that small. Up adds the chief position or grows it, down shrinks or cancels it; the crew
       // position takes the rest.
@@ -691,7 +691,7 @@ async function decide(msg: Message, i: Interpretation, world: World, threadOrder
         if (hits.length === 1) location_id = hits[0];
       }
       // Still none: the location most of the order's shifts stand at, flagged for staff to check
-      // (Ben, 10-15: no hand-off for a detail the order itself can answer).
+      // (Ben, 10-15: no hand-off for a detail the order itself can answer). [DECISIONS V17]
       if (!location_id && locations.size > 1) {
         const uses = new Map<number, number>();
         for (const t of teams(named)) for (const s of t.slots) if (Number(s.slotlocation_id)) uses.set(Number(s.slotlocation_id), (uses.get(Number(s.slotlocation_id)) ?? 0) + 1);
@@ -767,7 +767,7 @@ async function decide(msg: Message, i: Interpretation, world: World, threadOrder
     const shifts: ShiftSpec[] = [];
     const groups = shiftGroups(news, clientOrders, live);
     if (typeof groups === "string") return handoff(groups);
-    // Ben, 10-15: "we should only be creating orders that are more than two weeks out, all
+    // Ben, 10-15: "we should only be creating orders that are more than two weeks out, all [DECISIONS V14]
     // updates still should be enabled". A new order nearer than that is staff's to create;
     // shifts added to an order that already exists are updates and go on as before.
     const earliest = groups.map((g) => g.date).sort()[0];
@@ -786,7 +786,7 @@ async function decide(msg: Message, i: Interpretation, world: World, threadOrder
       } else if (venue) {
         let places = await placesFor(world, venue, clientOrders);
         // Several OnSinch places with the name and none this client booked: one with an address,
-        // then the oldest, flagged for staff to check, rather than no order at all (Ben, 10-15).
+        // then the oldest, flagged for staff to check, rather than no order at all (Ben, 10-15). [DECISIONS V16]
         if (places.length > 1) {
           const all = world.allPlaces ? await world.allPlaces() : [];
           const full = places.map((p) => all.find((x) => Number(x.id) === Number(p.id)) ?? p) as { id: number; name: string; address?: string }[];
@@ -810,7 +810,7 @@ async function decide(msg: Message, i: Interpretation, world: World, threadOrder
         const own = named.length ? named : all.filter((p) => used.has(Number(p.id)) && /\b(warehouse|hq|head ?office|yard|depot|workshop)\b/i.test(p.name));
         if (own.length === 1) { place = { id: String(own[0].id), name: own[0].name }; extra.push(`no venue written: the client's own ${own[0].name}`); }
       }
-      // No venue at all: "No Location" (Ben, 10-15), found by its name (CLAUDE.md: exactly one may
+      // No venue at all: "No Location" (Ben, 10-15), found by its name (CLAUDE.md: exactly one may [DECISIONS V16]
       // exist, the id is incidental). A venue is one detail; without the order there is nothing.
       if (!place) {
         const none = (await world.placesNamed("No Location")).filter((p) => normName(p.name) === "no location");
@@ -836,7 +836,7 @@ async function decide(msg: Message, i: Interpretation, world: World, threadOrder
     why.push(`new order: ${shifts.length} shift(s) at ${venueName}`, ...extra);
   } else if (i.po) {
     // The order a PO is for: the email's R number or the thread's order, never a day's only
-    // booking (findOrder). A PO is cosmetic (Ben: 1 in 50), so one with no order named is left
+    // booking (findOrder). A PO is cosmetic (Ben: 1 in 50), so one with no order named is left [DECISIONS V33]
     // off with the reason, not a card.
     const order = (i.order_id ? clientOrders.find((o) => Number(o.id) === i.order_id) : null) ?? (await findOrder(msg, companyId, world, threadOrderId, ev));
     if (typeof order === "string") return { kind: "none", reason: `PO ${i.po} left off: ${order}` };

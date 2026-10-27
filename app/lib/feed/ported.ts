@@ -1,5 +1,5 @@
 // ============================================================================
-// The jobs board, carried onto the TV as completed work (Ben, 2026-10-11: "port everything
+// The jobs board, carried onto the TV as completed work (Ben, 2026-10-11: "port everything [DECISIONS V9]
 // from the jobs board into the tv dashboard, mark them all as completed. that is becoming
 // the new opps list").
 // ----------------------------------------------------------------------------
@@ -11,7 +11,7 @@
 // What the board laned as dismissed (not a job, ignored, not a client) is not carried: it
 // was never work. A thread already on the TV keeps its live card.
 //
-// ITS NUMBERS ARE ITS ORDER'S, CHECKED, OR IT IS NOT SHOWN (Ben, 10-21: every job should have
+// ITS NUMBERS ARE ITS ORDER'S, CHECKED, OR IT IS NOT SHOWN (Ben, 10-21: every job should have [DECISIONS V29]
 // its proper R and J, always correct). The board's own numbers were written by the paused
 // engine and never checked again: of 434 tiles on 10-21, 158 carried a J OnSinch no longer has,
 // 23 a cancelled order and 74 none at all. Each tile now takes its R and J from its thread's

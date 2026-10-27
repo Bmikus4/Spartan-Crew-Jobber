@@ -13,7 +13,7 @@ export const maxDuration = 300;
 export const dynamic = "force-dynamic";
 
 /**
- * The bridge's minute (Ben, 10-13: "Everything should always be synced every minute"), called by
+ * The bridge's minute (Ben, 10-13: "Everything should always be synced every minute"), called by [DECISIONS V11]
  * the n8n workflow "Spartan Sync" (scripts/install-sync-workflow.mjs): every order the bot made or
  * changed is followed by its J number, the unlinked are looked for, and writes that stopped
  * before anything was sent are tried again. Every 15 minutes, with the Settings switch and both
@@ -34,7 +34,7 @@ export async function POST(request: Request): Promise<Response> {
   const undecided = await sweepUndecided().catch((e) => ({ error: String(e?.message ?? e).slice(0, 160) }));
   // An email the reader could not read (a rate limit, a timeout) is read again with backoff (process.ts retryUnread).
   const unread = await retryUnread().catch((e) => ({ error: String(e?.message ?? e).slice(0, 160) }));
-  // The planner again on every open card, against OnSinch now (Ben approved 10-20): reads only, never a write.
+  // The planner again on every open card, against OnSinch now (Ben approved 10-20): reads only, never a write. [DECISIONS V24]
   const replan = await replanOpen(sql).catch((e) => ({ error: String(e?.message ?? e).slice(0, 160) }));
   const t = httpTransport({ baseUrl: process.env.ONSINCH_BASE_URL || "https://spartancrew.onsinch.com/api/v1", apiKey: process.env.ONSINCH_API_KEY || "" }) as unknown as OnsinchCall;
   const testData = await getSettings()

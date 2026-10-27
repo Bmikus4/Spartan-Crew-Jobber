@@ -54,7 +54,7 @@ export type Request = {
   /**
    * None of its values is in the client's own newest words: it comes from the thread's history
    * (a quoted email, a reply's subject, the earlier request a confirmation brings back). Never new
-   * work: the planner only checks that an order holds it (Ben approved 10-20). Of the 6 shifts the
+   * work: the planner only checks that an order holds it (Ben approved 10-20). Of the 6 shifts the [DECISIONS V26]
    * bot added from 9 to 20 Oct, 4 were such requests written beside staff's own identical shift.
    */
   history?: boolean;
@@ -66,7 +66,7 @@ export type Interpretation = { intent: Extraction["intent"]; po?: string; reques
 
 /**
  * What the thread itself already says. A reply that refers back ("Please may this be booked",
- * "also for 2 hours at 21:30") is about the request it answers: Ben 10-06, "Never infer from
+ * "also for 2 hours at 21:30") is about the request it answers: Ben 10-06, "Never infer from [DECISIONS V2]
  * history unless explicitly requested and the job can be found". Here the client's own words
  * ask for it and the job is the client's own earlier request on the same thread, so it is
  * found, never guessed. Measured on the shadow emails 10-09..10-11: 6 of the 44 hand-offs
@@ -214,12 +214,12 @@ export function ground(x: Extraction, newest: string, sentIso: string, ctx: Grou
       // shift's day, its start, its venue or the R number in the email, or the thread already
       // being about that order. "Please can I extend the below booking to 4x4hr at 18:00" (Event
       // Concept 10-12) named a booking pasted as an image; the reader guessed R11195 and the
-      // change would have gone on the wrong job. Code and model must agree (Ben, 10-03).
+      // change would have gone on the wrong job. Code and model must agree (Ben, 10-03). [DECISIONS V1]
       else if (!(byRef(b) || (r.action === "new_shift" && !sh ? b.shifts.some((s) => datesIn(mine, sentIso).has(s.date) || venueIn(s.venue)) : true)))
         notes.push(`${tag}: nothing in the client's words or the thread's link bears out ${b.order}; the pick is dropped`);
       // A CHANGE'S PICK STANDS ON ITS DAY AND ONE MORE FACT, WITH NO RIVAL AS WELL BORNE OUT
       // (addendum F23, 10-24). It stood on the day alone, so with two bookings that day the
-      // reader's wrong pick was written to; the finder never takes the day alone (Ben 10-03,
+      // reader's wrong pick was written to; the finder never takes the day alone (Ben 10-03, [DECISIONS V1]
       // 10-15). A new shift added to a booking edits nothing booked and keeps the rule above.
       else if (!byRef(b) && !(r.action === "new_shift" && !sh) && pickOnDay(b, sh, bookings, pickWords) !== "ok") {
         const v = pickOnDay(b, sh, bookings, pickWords);
@@ -302,7 +302,7 @@ export function ground(x: Extraction, newest: string, sentIso: string, ctx: Grou
     }
     const need = (cond: boolean, what: string) => { if (!cond) own.push(`${tag}: no ${what} the client wrote`); };
     switch (action) {
-      // A new shift with no times is booked at assumed ones (Ben, 10-15; assume.ts), as the old
+      // A new shift with no times is booked at assumed ones (Ben, 10-15; assume.ts), as the old [DECISIONS V15]
       // engine booked 08:00 when no start was given. A day and a headcount cannot be assumed.
       case "new_shift": need(!!date, "day"); need(!!crew, "crew count"); break;
       // A move to another day is a change by itself: "move Tuesday's shift to Wednesday, same times".
@@ -348,7 +348,7 @@ export function ground(x: Extraction, newest: string, sentIso: string, ctx: Grou
     if (sib?.order_id && !q.order_id) { q.order_id = sib.order_id; q.order = sib.order; }
     notes.push(`request ${k + 1}: "the same timings" are ${st}-${en}, from the other shift in this email`);
   }
-  // A PO is cosmetic (Ben: 1 in 50): one that is not proven is left off with a note, and
+  // A PO is cosmetic (Ben: 1 in 50): one that is not proven is left off with a note, and [DECISIONS V33]
   // never blocks the booking it came with. EMS writes its job number unlabelled ("J46250 -
   // 13/10/26 @ ..."); refusing the booking for that would hand ops a booking the bot can do.
   let po: string | undefined;

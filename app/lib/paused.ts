@@ -53,7 +53,7 @@ export function automationPausedFlag(flag: string | undefined = process.env.SPAR
  * UNDER V2 A PAUSE NEVER SHUTS INTAKE OR ITS DEDUPE CLAIM (addendum F31). Shut at the door, the
  * 10-21 pause left 40 client emails unstored, beyond intake's 72 h catch-up. Intake stores
  * what arrives while paused and marks it store-only (n8nInbound.ts), so nothing decides it, then
- * or after (the owner's store-only ruling, decisions/2026-10-25-pause-window-store-only.md).
+ * or after (the owner's store-only ruling, decisions/2026-10-25-pause-window-store-only.md). [DECISIONS O3]
  */
 export function automationPaused(pathname: string, flag: string | undefined = process.env.SPARTAN_PAUSED, engine: string | undefined = process.env.SPARTAN_ENGINE): boolean {
   const shut = v2Engine(engine) ? OLD_ENGINE_ROUTES : automationPausedFlag(flag) ? AUTOMATION_ROUTES : [];

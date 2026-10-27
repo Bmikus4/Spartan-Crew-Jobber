@@ -11,7 +11,7 @@
 // The reader now picks the booking and shift from the list it is given, by id, and code checks
 // the pick: the id must be one offered, its day must agree with any day the email gives, and
 // every value must still be quoted from the thread (interpret.ts). Code and model must agree,
-// as Ben ruled for every link (10-03); the day alone never links (S-0165).
+// as Ben ruled for every link (10-03); the day alone never links (S-0165). [DECISIONS V1]
 // ============================================================================
 import { utcToLondon } from "../bot/ops";
 import { PROFESSION_NAME } from "./professions";

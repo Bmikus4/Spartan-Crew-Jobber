@@ -24,7 +24,7 @@ export type FeedKind = "needs-created" | "needs-updated" | "created-check" | "up
 export type FeedColour = "red" | "blue" | "neutral";
 export type FeedLane = "reply" | "need" | "done";
 /**
- * AN ORDER THE ENGINE WROTE IS NOT DONE UNTIL SOMEBODY CHECKS IT (Ben, 2026-10-05). Its
+ * AN ORDER THE ENGINE WROTE IS NOT DONE UNTIL SOMEBODY CHECKS IT (Ben, 2026-10-05). Its [DECISIONS V35]
  * card reads "Order was created/updated, check to verify" and stays open until a person
  * confirms it or the verifier finds a staff edit made after the write. From 2026-10-04 to
  * 10-05 such writes went green the moment they were made, and on 10-06 one green card named
@@ -58,7 +58,7 @@ export const STATUS_TEXT: Record<FeedKind, string> = {
 
 /**
  * How long a done card stays at the bottom of the list. A day, so a board the crew has
- * worked through reads all green rather than empty (Ben, 2026-10-04).
+ * worked through reads all green rather than empty (Ben, 2026-10-04). [DECISIONS V34]
  */
 export const DONE_DWELL_MS = 24 * 3_600_000;
 /**
@@ -68,7 +68,7 @@ export const DONE_DWELL_MS = 24 * 3_600_000;
  */
 export const STALE_UNDATED_MS = 14 * 24 * 3_600_000;
 /**
- * The TV starts from the day the new system went live (Ben, 2026-10-10: "have it work
+ * The TV starts from the day the new system went live (Ben, 2026-10-10: "have it work [DECISIONS V35]
  * starting from today"). Anything whose email or write is older belongs to the paused
  * engine or to shadow mode, and ops have dealt with it in the mailbox.
  */
@@ -459,13 +459,13 @@ export function project(
     const r_number = s.r_number;
     const j_number = s.j_number;
     /**
-     * A JOB HAS NO TIMER (Ben, 2026-10-06). Once an order exists in OnSinch the reply clock is
+     * A JOB HAS NO TIMER (Ben, 2026-10-06). Once an order exists in OnSinch the reply clock is [DECISIONS V34]
      * gone, and with it the clock's pull to the top of the list; it counts only for an enquiry
      * nobody has booked yet.
      */
     const isJob = !!(order_id || r_number || j_number);
     /**
-     * QUIET RESETS ON ANY UPDATE (Ben, 2026-10-06): the client's email, ours, an engine write,
+     * QUIET RESETS ON ANY UPDATE (Ben, 2026-10-06): the client's email, ours, an engine write, [DECISIONS V34]
      * or a person's tick or edit. Measured from the client alone, a job the engine updated
      * yesterday sank under "quiet" because the client had last written a week ago.
      */
@@ -475,7 +475,7 @@ export function project(
     if (followUp) counts.needs_follow_up++;
     cards.set(s.thread_id, {
       thread_id: s.thread_id,
-      // The legend's colour is the NEED, not whether an order is bound (Ben, 2026-10-04): an
+      // The legend's colour is the NEED, not whether an order is bound (Ben, 2026-10-04): an [DECISIONS V34]
       // update the engine never bound read "Order needs updated" in red, against the key.
       colour: item.kind === "needs-reply" ? "neutral" : item.kind === "needs-created" || item.kind === "created-check" ? "red" : "blue",
       lane: g ? "done" : item.kind === "needs-reply" ? "reply" : "need",

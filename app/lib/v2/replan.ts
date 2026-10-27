@@ -1,5 +1,5 @@
 // ============================================================================
-// THE PLANNER AGAIN, EVERY MINUTE, ON EVERY OPEN CARD (Ben approved 10-20, Q2a).
+// THE PLANNER AGAIN, EVERY MINUTE, ON EVERY OPEN CARD (Ben approved 10-20, Q2a). [DECISIONS V24]
 // ----------------------------------------------------------------------------
 // A card was decided once, on its email, and frozen. Staff booking the job, the order turning up
 // later and a link moving all left it as it was. Measured 10-21: of 107 threads with a need
@@ -12,7 +12,7 @@
 // staff have done about it since, so a write it plans is shown as a need for a person.
 // The order it names becomes the thread's link (job_links, links.ts linkFound): the card's R and
 // J are then that order's, and sweepLinks checks every minute that it still exists.
-// This is the planner itself, run again; there is no second pass or second state (Ben, 10-17).
+// This is the planner itself, run again; there is no second pass or second state (Ben, 10-17). [DECISIONS V23]
 // ============================================================================
 import type { NeonQueryFunction } from "@neondatabase/serverless";
 import { decideMessage, onsinchWorld, rawRequests, threadReads, type Recorded, type MessageIn } from "./process";

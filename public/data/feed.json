@@ -5119,5 +5119,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0236",
+  "ts": "2026-10-27T02:36:51+00:00",
+  "kind": "measurement",
+  "headline": "R2 (Prompt 8): CLAUDE.md is the v2 map; DECISIONS O1-O5, V1-V35; docs index; engine README",
+  "subject": "The repo map describes the live v2 engine and every v2 ruling has an id",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 226,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]

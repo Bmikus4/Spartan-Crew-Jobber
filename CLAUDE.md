@@ -1,75 +1,65 @@
-# SpartanCrew Enquiry Engine — repo rules
+# Spartan Crew booking engine (v2): repo map
 
-**The plan, and the status of every item in it, is ADDENDUM.md at the repo root: the one document the work runs from.**
-Read it first. After every step, update its status line, its section 0 table and any measurement.
+Client emails to Spartan's bookings mailbox are read, matched to OnSinch orders and planned by code; the office
+TV shows what a person must do. **The plan and the status of every item: ADDENDUM.md. Read it first, and after
+every step update its status line, its §0 table and any measurement.**
+
+## The live pipeline (SPARTAN_ENGINE=v2)
+1. **Intake.** n8n posts each thread to `/api/n8n-inbound`: `app/lib/n8nInbound.ts` stores it first
+   (`app/lib/inboundRawDb.ts`, `app/lib/threadMessagesDb.ts`), then `decideDelivery` (`app/lib/v2/process.ts`).
+   While paused, it stores and marks the mail store-only, and nothing decides it.
+2. **Read.** One model call: `app/lib/v2/interpret/extract.ts` (openai/gpt-6.1-sol, `SPARTAN_INTERPRET_MODEL`;
+   PROMPT_ID is the prompt's hash). The context the reader sees: `interpret/context.ts`.
+3. **Ground.** Every value must be in the email's words: `interpret/interpret.ts`, `interpret/ground.ts`.
+4. **Plan: which booking, which change.** `interpret/plan.ts` (findOrder, bookedAt, targetShift),
+   `app/lib/v2/evidence.ts`, `threadState.ts`, `threadOrder.ts`, `links.ts`. **A booking is matched here, in
+   v2, never in app/lib/engine.**
+5. **Record.** One `v2_decisions` row per email (`process.ts`), with stable reason codes (`app/lib/v2/reasons.ts`).
+6. **Write.** The bot (`app/lib/v2/bot/`: `run.ts`, `builder.ts`, `ops.ts`, `db.ts`, `apiCreate.ts`).
+   **Off:** the Settings switch bot_writes_enabled is false (owner, 25 Oct).
+7. **Every minute.** `/api/bot/sync`: stopped writes, the undecided sweep, failed reads, the re-plan
+   (`app/lib/v2/replan.ts`), test data.
+8. **TV.** `app/lib/feed/` (`v2.ts` rowsOnCard, `serve.ts`, `live.ts`) behind `/api/feed`.
+   **Labels:** `/api/bot/labels` from `app/lib/mail/threadLabels.ts`. **Alarms:** `app/lib/errorReport.ts`.
+
+`app/lib/engine/` is the paused old engine; v2 imports a few of its files (`app/lib/engine/README.md`).
+
+## Safety rules (ADDENDUM §2): build around them, never loosen them
+- Capture before deciding. A throw before Save is blocked; after Save it is unknown and never retried.
+- The op ledger runs a seen key once. Edits are read back and diffed against OnSinch's audit rows.
+- Two write keys, failing closed: SPARTAN_WRITES=live and the Settings switch (`process.ts` botWrites).
+- The planner refuses: a partial email, the day alone, a past day, staff's own edits, an ambiguous shift.
+- A failed read or plan becomes a card. A failed TV read is a 500, never an empty list.
+
+## Tests and data
+- **The suite is `npm run test:all`** (`test/all.ts` finds every file). `npm test` runs one file.
+- Every test runs on PGlite (`test/fixtures/pg.ts`). **Never run anything against the production DATABASE_URL;**
+  read production only through `scripts/_readonly.mts`. Never call OnSinch write paths, /api/bot/* or the canary.
+- Never print email bodies, addresses or client names. Counts, ids and code locations only.
+- The harness: `harness/` (`harness/real/` replays real mail on the time-correct world at $0).
+
+## Where things live
+- The plan and its status: `ADDENDUM.md`. Rulings: `DECISIONS.md` (dated ones in `decisions/`).
+- Measured numbers: `public/data/feed.json`, one ticket per ship. The docs index: `docs/README.md`.
+- History, not instructions: `OPERATING.md`, `RUNBOOK.md`, `audit/`, `fleet/resume/`.
 
 ## The session gate
+`python -u scripts/session.py -m "one line, a fact about the software" --headline "what moved" -- <paths>` is the
+only sanctioned commit and push. It runs `npx tsc --noEmit` and `npm run test:all`, appends one ticket to
+`public/data/feed.json`, commits by pathspec and pushes; it writes nothing when it stops. **A push to main
+deploys production.** `--self-test` proves it can still go red. A number that moved without a ticket explaining
+it is a regression. A measurement script writes `.tmp-data/gate-measurements.json`; the gate folds it into the
+ticket and deletes it. Old tickets may be thinned to headlines, never rewritten or deleted.
 
-`scripts/session.py` is the only sanctioned `git commit` and `git push` in this repo.
-
-```
-python scripts/session.py -m "one line, a fact about the software" \
-       --headline "what moved" -- app/lib/engine/venueMatch.ts test/venuePoolExcludes.ts
-```
-
-It confirms (`npx tsc --noEmit`, then `npm run test:all`), appends one ticket to
-`public/data/feed.json`, then commits by pathspec and pushes. It stops at the first
-failure and writes nothing when it stops. Never hand-commit past it.
-
-`python scripts/session.py --self-test` proves the gate can still go red. A gate nobody
-has watched fail is a gate nobody has reason to believe; re-run it whenever the runner
-or the confirm step changes.
-
-**The suite is `npm run test:all`, not `npm test`.** `npm test` is `tsx test/run.ts` and
-runs exactly one file. The discovery runner is `test/all.ts`, which finds every test file itself. Three handoffs
-have claimed "117 test files, `npm test` ALL PASS" — that sentence names a command which
-does not run them.
-
-**A number that moved without a ticket explaining it is a regression.** All measured data
-goes into the one feed, never a directory of dated files. Old entries may be thinned to
-their headlines; they are never rewritten and never deleted. A measurement script writes
-`.tmp-data/gate-measurements.json` and the gate folds it into the ticket and deletes it,
-so one number can never be carried twice and read as two confirmations of itself.
-
-Read `public/data/feed.json` before trusting any figure quoted in a handoff. Ticket
-`S-0001` is there because a figure withdrawn on 2026-09-03 was still being planned
-around on 2026-09-28: the retraction lived in two files and lost to a one-line summary.
-
-## Invariants — do not "tidy" these
-
-- **`unreconciled` and `unactionable` are different claims.** One is a fact about OnSinch,
-  the other a fact about the engine's own record. Collapsing them loses the only signal
-  separating "OnSinch refused" from "we never asked".
-- **A decline is not a failure, and it is also not a success.** `amendOrderInPlace`
-  declining every block is deterministic: never retried on a timer, never logged as an
-  amend.
-- **Never write `Job.min_beginning` / `max_end`.** The rule stands; the REASON given for it
-  no longer does. It was "the window is derived — it is the envelope of the blocks". Measured
-  2026-09-29 on reference order #16317: after positions were added by hand on 2026-10-01, the
-  job window still read 2026-12-07 08:00..20:00. So the envelope is not recomputed on at least
-  some events, and the field can be **stale**. It is a cache, or create-time only, or derived
-  from something other than positions — undetermined.
-  The consequence is not academic: drift detection compares a desired window against the job's,
-  so "window drift" may sometimes be a stale field rather than a real disagreement, and six of
-  eight live amendment refusals were window-drift cases. **Treat the window as unreliable
-  input, not as truth**, until somebody establishes which events recompute it.
-- **`6922 "No Location"` is exempt from every venue phase.** Exactly one may exist, and
-  the compiler finds it by name — the id is incidental.
+## Invariants: do not "tidy" these
+- **No heartbeat runs in n8n, ever** (owner, 26 Oct). Timers live in the app as vercel.json crons
+  (authorizeCronCall). A replacement goes live before the n8n workflow is switched off.
+  scripts/install-intake-watchdog-workflow.mjs is overruled and must not be run again.
+- **Four, and only four, order labels** (`app/lib/mail/threadLabels.ts`): Order Created, Order Updated, Order
+  Needs Created, Order Needs Updated, mutually exclusive. Needs Follow Up is another axis. They are derived from
+  the TV's cards every minute; nothing sets one by hand.
+- **A draft is not a message.** An unsent draft of ours never counts as Spartan having replied.
+- **Never write Job.min_beginning / max_end**, and treat the job window as unreliable input
+  (`app/lib/engine/README.md` has the measurement).
+- **`6922 "No Location"` is exempt from every venue phase.** Exactly one may exist; code finds it by name.
 - **Zero references is permission to delete, never a reason to.**
-- **FOUR, AND ONLY FOUR order labels** (`app/lib/mail/threadLabels.ts` since 2026-10-15:
-  Order Created, Order Updated, Order Needs Created, Order Needs Updated; "Order Built" and
-  "Order Needs Built" are renamed in place). They are mutually exclusive because a thread
-  wearing "Order Created" and "Order Needs Created" together says the work is both done and
-  outstanding. Conversation state — Needs Follow Up — is a different axis and must not join
-  that set. The labels are DERIVED from the TV's cards every minute (`/api/bot/labels`, applied
-  inside the n8n minute sync, `scripts/install-sync-workflow.mjs` + `scripts/_labelNodes.mjs`);
-  nothing sets one by hand.
-- **A draft is not a message.** An unsent Gmail draft of ours must never count as Spartan
-  having replied; counting one inverts who is waiting for whom, and that fact cannot be
-  rebuilt afterwards.
-- **No heartbeat runs in n8n, ever** (the owner, 2026-10-26: "no heartbeats should run in n8n ever for this
-  automation"). No schedule, watchdog or periodic tick for this automation may live on an n8n canvas. Timers
-  belong in the app, as vercel.json crons (Vercel calls with `Authorization: Bearer $CRON_SECRET`, see
-  authorizeCronCall). The header of scripts/install-intake-watchdog-workflow.mjs argues the opposite; it is
-  overruled, and the script must not be run again. When an n8n schedule is moved out, its replacement goes live
-  first and the n8n workflow is switched off second, so nothing goes unwatched in between.

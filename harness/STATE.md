@@ -1,12 +1,17 @@
 # Harness state
 
+> **History from 26 Oct.** This is the 10-11 record of the generated-mail harness. The plan and its status live in
+> ADDENDUM.md. Production's reader since 16 Oct is openai/gpt-6.1-sol (app/lib/v2/interpret/extract.ts,
+> SPARTAN_INTERPRET_MODEL); the opus-4.8 named below was the model under test on 10-11. Real mail is replayed by
+> harness/real/ (ADDENDUM §4).
+
 Read this first at the start of every work block and after any compaction.
 
 - **Project:** Spartan Crew, adapter `harness/adapters/spartan/`.
 - **Prompt:** `C:\Users\thera\Desktop\Fundamental unit of experience\build-verification-harness-prompt.md`
 - **Repo revision:** b950a8d plus uncommitted work (worktree `C:\Users\thera\spartan-v2`, branch v2).
 - **Phase:** 2 Build DONE and validated. 3 Run: 500 simulated orders on the production model (Ben, 10-11: "finish designing the test harness and validate it. Then you should continue by simulating 500 orders").
-- **Model under test:** `anthropic/claude-opus-4.8`, as memory records production's SPARTAN_MODEL. The Vercel value was not decrypted.
+- **Model under test (10-11):** `anthropic/claude-opus-4.8`. Production's reader is now openai/gpt-6.1-sol (see the note above).
 - **Spend:** the record run is capped at $15. Measured about $0.011 per call. Actual total: see `runs/record-report.md`.
 - **Nothing committed or deployed** for the harness.
 

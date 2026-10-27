@@ -1,7 +1,7 @@
 // ============================================================================
 // Form contracts: what a form looked like on the day the bot was benched against it.
 // ----------------------------------------------------------------------------
-// Ben, 10-06: "the harness needs to know when any UI changes were made so that it can
+// Ben, 10-06: "the harness needs to know when any UI changes were made so that it can [DECISIONS V3]
 // update the protocol." A form is checked against its contract before every fill, and the
 // request it sends is checked again before it leaves the browser. Any field-set change
 // BLOCKS the write; a version change alone only WARNS, because OnSinch ships new script

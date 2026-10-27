@@ -4,7 +4,7 @@
 // words must appear in the email, and parsing them here must give the same value. If either
 // fails the value does not exist, and the request is "unclear": no write.
 //
-// Ben, 10-06: "Never infer from history unless explicitly requested and the job can be
+// Ben, 10-06: "Never infer from history unless explicitly requested and the job can be [DECISIONS V2]
 // found." and a vague request "shouldn't do anything". These parsers therefore accept only
 // the shapes clients were measured writing (fixtures in test/v2Ground.ts) and return null on
 // anything else, rather than guessing.

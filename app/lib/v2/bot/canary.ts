@@ -2,7 +2,7 @@
 // The canary: walks every contracted surface on TEST without saving, and says whether
 // OnSinch's screens still match what the bot was benched against.
 // ----------------------------------------------------------------------------
-// Ben, 10-06: "the harness needs to know when any UI changes were made so that it can
+// Ben, 10-06: "the harness needs to know when any UI changes were made so that it can [DECISIONS V3]
 // update the protocol." Run daily and before any batch of live writes. A "block" means the
 // bot must not write until the contract is re-benched; a "warn" (a version moved, the form
 // did not) means a person looks before the next write.

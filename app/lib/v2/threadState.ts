@@ -12,7 +12,7 @@
 //   order      the order the thread is about, by the strongest evidence that exists:
 //              link > an R/J number written in the thread (ours or quoted) > the thread's PO
 //              on an order > day + one more fact (evidence.ts) > an order staff made for the
-//              client after the email, on a day it asks for. Never a day alone (Ben, 10-15).
+//              client after the email, on a day it asks for. Never a day alone (Ben, 10-15). [DECISIONS V1]
 //   state      done | needs-updated (an order, with its R and J) | needs-created (no order and
 //              nobody has answered) | answered (no order, a person replied after the client)
 //              | not-a-job (our own request to a supplier)
