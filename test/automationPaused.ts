@@ -38,9 +38,15 @@ console.log("\n[4] the middleware asks before its auth switch, which is off by d
 console.log("\n[5] SPARTAN_ENGINE=v2: intake and its dedupe claim open, the old engine's own routes stay shut");
 for (const p of OLD_ENGINE_ROUTES) ok(automationPaused(p, "", "v2"), `${p} stays shut under v2`);
 for (const p of ["/api/n8n-inbound", "/api/dedupe"]) ok(!automationPaused(p, "", "v2"), `${p} is open under v2`);
-ok(OLD_ENGINE_ROUTES.length === AUTOMATION_ROUTES.length - 2, `exactly two routes open under v2 (${OLD_ENGINE_ROUTES.length} shut)`);
+ok(OLD_ENGINE_ROUTES.filter((p) => AUTOMATION_ROUTES.includes(p)).length === AUTOMATION_ROUTES.length - 2, "exactly two automation routes open under v2");
 ok(automationPaused("/api/n8n-inbound", "1", "v2"), "SPARTAN_PAUSED=1 still stops intake under v2");
 ok(!automationPaused("/api/mail-poll", "", ""), "control: no switch, nothing shut");
+
+console.log("\n[6] the old engine's one-click confirm is shut under v2: it writes to OnSinch past the write switch");
+ok(automationPaused("/api/confirm-order", "", "v2"), "/api/confirm-order is shut under v2");
+ok(automationPaused("/api/confirm-order", "1", "v2"), "and while paused under v2");
+ok(!automationPaused("/api/confirm-order", "", ""), "control: under the old engine it still answers (it is that engine's)");
+ok(!automationPaused("/api/feed", "", "v2") && !automationPaused("/api/settings", "", "v2"), "the TV feed and settings stay open under v2");
 
 console.log("\n[v2 writes] the bot writes to real clients only when told, and only under v2");
 ok(v2Writes("live", "v2") && v2Writes(" LIVE ", "v2"), "SPARTAN_WRITES=live under v2: live");

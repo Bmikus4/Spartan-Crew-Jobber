@@ -64,3 +64,9 @@ around on 2026-09-28: the retraction lived in two files and lost to a one-line s
 - **A draft is not a message.** An unsent Gmail draft of ours must never count as Spartan
   having replied; counting one inverts who is waiting for whom, and that fact cannot be
   rebuilt afterwards.
+- **No heartbeat runs in n8n, ever** (the owner, 2026-10-26: "no heartbeats should run in n8n ever for this
+  automation"). No schedule, watchdog or periodic tick for this automation may live on an n8n canvas. Timers
+  belong in the app, as vercel.json crons (Vercel calls with `Authorization: Bearer $CRON_SECRET`, see
+  authorizeCronCall). The header of scripts/install-intake-watchdog-workflow.mjs argues the opposite; it is
+  overruled, and the script must not be run again. When an n8n schedule is moved out, its replacement goes live
+  first and the n8n workflow is switched off second, so nothing goes unwatched in between.

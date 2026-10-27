@@ -4,8 +4,8 @@
  * auth or engine code runs, so nothing is read, written, drafted or labelled.
  *
  * Deliberately left open: /api/health (read-only, and the restore check reads it), the
- * login flow, and every human-driven route (the TV feed, confirm-order, settings), so the
- * app stays usable while the automation is off. Deactivating the n8n workflows alone does
+ * login flow, and every human-driven route (the TV feed, settings), so the app stays usable
+ * while the automation is off. confirm-order is human-driven but the old engine's: see below. Deactivating the n8n workflows alone does
  * not pause the engine: anything still holding the webhook secret could drive it.
  */
 export const AUTOMATION_ROUTES = ["/api/n8n-inbound", "/api/mail-inbound", "/api/mail-poll", "/api/dedupe", "/api/sweep-ingest", "/api/reconcile"];
@@ -15,8 +15,14 @@ export const AUTOMATION_ROUTES = ["/api/n8n-inbound", "/api/mail-inbound", "/api
  * engine's own routes stay shut. Intake and its dedupe claim are the only automation the
  * rebuild shares with the old engine, so they are the only ones that open. Without this,
  * lifting SPARTAN_PAUSED would hand the sweeps and the mail hooks back to the old engine.
+ *
+ * /api/confirm-order is shut with them although a person drives it. It runs the old executor
+ * (create, amend in place, delete and re-post) and never reads bot_writes_enabled or
+ * SPARTAN_WRITES, so while it answered, one click on a stale `proposed` ticket (16 of them, the
+ * newest from 10-07, 12 on live orders) could change an order the owner believed nothing could
+ * touch (audit/system-audit-2026-10-26.md §1).
  */
-export const OLD_ENGINE_ROUTES = AUTOMATION_ROUTES.filter((p) => p !== "/api/n8n-inbound" && p !== "/api/dedupe");
+export const OLD_ENGINE_ROUTES = [...AUTOMATION_ROUTES.filter((p) => p !== "/api/n8n-inbound" && p !== "/api/dedupe"), "/api/confirm-order"];
 
 export function v2Engine(flag: string | undefined = process.env.SPARTAN_ENGINE): boolean {
   return (flag || "").trim().toLowerCase() === "v2";
@@ -43,6 +49,6 @@ export function automationPausedFlag(flag: string | undefined = process.env.SPAR
 }
 
 export function automationPaused(pathname: string, flag: string | undefined = process.env.SPARTAN_PAUSED, engine: string | undefined = process.env.SPARTAN_ENGINE): boolean {
-  const shut = automationPausedFlag(flag) ? AUTOMATION_ROUTES : v2Engine(engine) ? OLD_ENGINE_ROUTES : [];
+  const shut = [...(automationPausedFlag(flag) ? AUTOMATION_ROUTES : []), ...(v2Engine(engine) ? OLD_ENGINE_ROUTES : [])];
   return shut.some((p) => pathname === p || pathname.startsWith(p + "/"));
 }

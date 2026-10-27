@@ -5053,5 +5053,23 @@
    "eval/phase-c.md",
    "audit/verification-2026-10-26.md"
   ]
+ },
+ {
+  "id": "S-0232",
+  "ts": "2026-10-27T00:58:51+00:00",
+  "kind": "decision",
+  "headline": "Change 2: /api/confirm-order shut under v2; owner rule: no n8n heartbeats",
+  "subject": "Under the v2 engine the old one-click confirm can no longer write to OnSinch past the switch",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 219,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  },
+  "sources": [
+   "app/lib/paused.ts",
+   "audit/system-audit-2026-10-26.md"
+  ]
  }
 ]
