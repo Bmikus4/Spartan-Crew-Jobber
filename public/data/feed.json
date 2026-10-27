@@ -5259,5 +5259,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0246",
+  "ts": "2026-10-27T22:40:19+00:00",
+  "kind": "measurement",
+  "headline": "R8 d: the TV verifier on the shared resolver; never the day alone",
+  "subject": "The TV verifier finds an unbound need's order by the planner's rule",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 106,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]

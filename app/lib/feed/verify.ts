@@ -23,7 +23,8 @@
 // why (c) counts only blocks whose creator is not the engine.
 // ============================================================================
 import { OnsinchClient, type Transport } from "../onsinch/onsinch";
-import { matchExistingOrder, type OrderRec } from "../onsinch/resolve";
+import { identify } from "../v2/identity";
+import { utcToLondon } from "../v2/bot/ops";
 import { staffChangeSince } from "../onsinch/reconcile";
 import { londonDay, type FeedCard, type FeedItem, type FeedMark, type FeedWant } from "./project";
 
@@ -233,18 +234,29 @@ async function findOrder(client: OnsinchClient, t: Transport, card: FeedCard, wa
     const a = String(j?.min_beginning ?? o.happening ?? "").slice(0, 10);
     return [a, String(j?.max_end ?? "").slice(0, 10) || a];
   };
+  // The job's span only chooses which orders are read in full: the window is unreliable input
+  // (onsinch/README.md), and a stale one can miss an order here but never pick a wrong one.
   let cands = rows.filter((o) => { const [a, b] = span(o); return !!a && card.dates.some((d) => d >= a && d <= b); });
   if (!card.company_id) cands = cands.filter((o) => names.some((n) => String(o.name ?? "").toLowerCase().includes(n)));
-  else {
-    // The engine's own rule first: date, venue text and a named R number.
-    const m = matchExistingOrder(card.dates[0], rows as OrderRec[], { days: card.dates, location_text: card.venue ?? undefined, r_numbers: want?.r_numbers });
-    if (m && "order_id" in m) {
-      const o = rows.find((x) => Number(x.id) === m.order_id);
-      if (o) return { o, by: "date and venue" };
-    }
-  }
   if (!cands.length || cands.length > MAX_CANDIDATES) return null;
 
+  if (card.company_id) {
+    // The planner's rule (identity/index.ts): the day and one more fact, singling out one order of the
+    // client's that day; never the day alone, which turned a real job green on the wrong order
+    // (Solotech, 10 of the verifier's 68 finds to 10-21 were "the only order on those days"). [DECISIONS V1]
+    const full = [];
+    for (const o of cands) { const n = await nested(client, Number(o.id), now).catch(() => null); if (n?.raw) full.push(n.raw); }
+    const requests = [...(want?.shifts ?? []).map((w) => ({ date: londonDay(w.b), start: utcToLondon(new Date(w.b).toISOString()).time, place_id: w.p ?? want?.place_id ?? undefined })),
+      ...card.dates.map((d) => ({ date: d, place_id: want?.place_id ?? undefined }))];
+    // Every candidate was read as this company's order (pool), so no company filter is needed.
+    const id = identify({ refs: [], requests, link: null, text: "" }, full, { companyIds: [] });
+    if (id.kind !== "one") return null;
+    const o = full.find((x) => Number(x.id) === id.order.id);
+    return o ? { o, by: id.order.by.replace(/^the day and /, "") } : null;
+  }
+
+  // No company: the sender's name on the order chose the candidates. One is the answer; several are
+  // told apart by the venue and the shift times asked.
   const scored: Array<{ o: any; place: boolean; shifts: number }> = [];
   for (const o of cands) {
     const n = await nested(client, Number(o.id), now).catch(() => null);
@@ -255,14 +267,7 @@ async function findOrder(client: OnsinchClient, t: Transport, card: FeedCard, wa
       shifts: (want?.shifts ?? []).filter((w) => blocks.some((k) => sameShift(w, k))).length,
     });
   }
-  if (scored.length === 1) {
-    const [s] = scored;
-    // NEVER A DATE ALONE (Ben, 10-03 and 10-15): a client's only order that day is found only with [DECISIONS V1]
-    // its venue or a shift as asked. "The only order on those days" made 10 of the verifier's 68
-    // finds to 10-21, Solotech's among them on the wrong order.
-    if (!card.company_id) return { o: s.o, by: "the sender's name on that day's order" };
-    return s.place || s.shifts > 0 ? { o: s.o, by: s.place ? "venue" : "shift times" } : null;
-  }
+  if (scored.length === 1) return { o: scored[0].o, by: "the sender's name on that day's order" };
   const score = (s: { place: boolean; shifts: number }) => (s.place ? 100 : 0) + s.shifts;
   const best = Math.max(...scored.map(score));
   const top = scored.filter((s) => score(s) === best);

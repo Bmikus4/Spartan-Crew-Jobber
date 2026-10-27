@@ -153,12 +153,19 @@ void (async () => {
   console.log("\n[6] a needed order somebody raised by hand");
   {
     __resetVerifyCache();
-    const need = project(new Map(), [], null, NOW, new Map(), [...fromStates([needCreated("n", 77), needCreated("undated", 78)], new Map(), NOW)]).cards;
-    need[1].dates = [];
-    const on = fakeOnsinch([[]], { orders: { "77": [{ id: 16600, number: "11081", happening: "2026-10-16T08:00:00+01:00", Job: [{ id: 14200 }] }] } });
+    const states = [needCreated("n", 77), needCreated("undated", 78), { ...needCreated("at", 77), place_id: 24 } as unknown as ConversationState];
+    const p = project(new Map(), [], null, NOW, new Map(), [...fromStates(states, new Map(), NOW)]);
+    const need = p.cards;
+    need.find((c) => c.thread_id === "undated")!.dates = [];
+    // Never the day alone (Ben, 10-03 and 10-15) [DECISIONS V1]: the old engine's matcher, run here until R8,
+    // found a client's only order that day with nothing else in common.
+    const R11081 = { id: 16600, number: "11081", happening: "2026-10-16T08:00:00+01:00", Job: [{ id: 14200, SlotTeam: [{ id: 1, Slot: [{ id: 2, beginning: "2026-10-16T08:00:00+01:00", end: "2026-10-16T16:00:00+01:00", size: 3, SlotLocation: { place_id: 24 } }] }] }] };
+    const on = fakeOnsinch([[]], { orders: { "77": [R11081] }, nested: { 16600: R11081 } });
     const { d, marks } = deps(on.t);
-    await verify(need, NOW, d);
-    ok(marks.length === 1 && marks[0].mark === "order-found" && (marks[0].evidence as { text: string }).text === "order R11081 is in OnSinch", "found by company and date", JSON.stringify(marks[0]?.evidence));
+    await verify(need, NOW, d, [], 60_000, p.wants);
+    const found = (t: string) => marks.find((m) => m.thread_id === t && m.mark === "order-found");
+    ok(!found("n"), "a client's only order that day, with nothing else in common, is not the one", JSON.stringify(marks.map((m) => m.thread_id)));
+    ok((found("at")?.evidence as { text: string } | undefined)?.text === "order R11081 is in OnSinch", "with the day and the venue it is found", JSON.stringify(marks.map((m) => m.thread_id)));
     ok(!on.calls.some((c) => c.includes("company_id=78")), "an undated need is not matched");
   }
 
