@@ -67,6 +67,15 @@ function open(row: V2Row & { interpretation: any; replanned_at: string | null },
   return !days.length || days[days.length - 1] >= today; // the job is over: off the TV anyway
 }
 
+/**
+ * Whether two answers are the same, whatever their keys' order. The stored one comes back from JSONB, which
+ * reorders keys, so comparing plain JSON strings counted every open card as changed every minute (and traced it).
+ */
+export function sameAnswer(a: unknown, b: unknown): boolean {
+  const canon = (v: unknown) => JSON.stringify(v, (_k, x) => (x && typeof x === "object" && !Array.isArray(x) ? Object.fromEntries(Object.entries(x).sort(([p], [q]) => (p < q ? -1 : p > q ? 1 : 0))) : x));
+  return canon(a) === canon(b);
+}
+
 export type ReplanReport = { cards: number; planned: number; changed: number; linked: number; notes: string[] };
 
 export async function replanOpen(sql: Sql, opts: { limit?: number; budgetMs?: number; world?: World; dry?: boolean; now?: number; out?: Array<{ thread_id: string; message_id: string; was: string; now: string; link: string | null }> } = {}): Promise<ReplanReport> {
@@ -118,7 +127,7 @@ export async function replanOpen(sql: Sql, opts: { limit?: number; budgetMs?: nu
       rep.planned++;
       const d = (got as Recorded | null)?.decision;
       if (!d) continue;
-      const before = JSON.stringify(row.replan ?? row.decision), after = JSON.stringify(d);
+      const changed = !sameAnswer(row.replan ?? row.decision, d);
       const was = row.decision.kind === "handoff" ? `handoff: ${(row.decision.reasons ?? [])[0] ?? ""}` : row.decision.kind;
       const said = d.kind === "handoff" ? `handoff${d.order_id ? ` (order ${d.order_id})` : ""}: ${d.reasons[0] ?? ""}` : d.kind === "none" ? `none: ${d.reason}` : `write: ${d.why[0] ?? ""}`;
       // A write from the past is a person's: only the order it is about is kept, as a link.
@@ -126,10 +135,10 @@ export async function replanOpen(sql: Sql, opts: { limit?: number; budgetMs?: nu
       const link = links[0] ?? (target.length === 1 ? { order_id: target[0], source: "planner" } : null);
       opts.out?.push({ thread_id: row.thread_id, message_id: row.message_id, was, now: said, link: link ? String(link.order_id) : null });
       if (opts.dry) continue;
-      if (before !== after || !row.replanned_at) {
-        await sql`UPDATE v2_decisions SET replan = ${after}::jsonb, replanned_at = now() WHERE message_id = ${row.message_id}`;
+      if (changed || !row.replanned_at) {
+        await sql`UPDATE v2_decisions SET replan = ${JSON.stringify(d)}::jsonb, replanned_at = now() WHERE message_id = ${row.message_id}`;
         // Only an answer that changed is traced: the re-plan runs every open card every minute.
-        if (before !== after) { rep.changed++; await trace.flush(); }
+        if (changed) { rep.changed++; await trace.flush(); }
       } else {
         await sql`UPDATE v2_decisions SET replanned_at = now() WHERE message_id = ${row.message_id}`;
       }

@@ -6,7 +6,7 @@
   below as findings and status.
 - Every step updates this file: its status line, its measurement, and what moved.
 
-**Last updated:** 27 October 2026, R13 DONE (S-0251): the assisted-card design, docs/ASSISTED-MODE-DESIGN-2026-10-27.md; at most 90 of 155 dev handoffs are near-misses. R14 DONE, dormant (S-0250): the Gmail poll decides through v2 once the grant exists and INTAKE_PATH=routing. R12 held for the owner and Paz. R11 DONE (S-0249): the live trace is on; 5.7 counted, its outbound change waits on the owner. R10 DONE (S-0248): the email-to-board harness and its 20-email case study. R9 DONE (S-0247). R8 DONE but e (S-0244 to S-0246); e waits on the owner's yes to a paid measurement. R3's switch-over waits on CRON_SECRET. The baseline was 0f2dcef. App code changed since then in these
+**Last updated:** 27 October 2026, S-0252: the re-plan no longer counts every card as changed every minute (found by the live trace). R13 DONE (S-0251): the assisted-card design, docs/ASSISTED-MODE-DESIGN-2026-10-27.md; at most 90 of 155 dev handoffs are near-misses. R14 DONE, dormant (S-0250): the Gmail poll decides through v2 once the grant exists and INTAKE_PATH=routing. R12 held for the owner and Paz. R11 DONE (S-0249): the live trace is on; 5.7 counted, its outbound change waits on the owner. R10 DONE (S-0248): the email-to-board harness and its 20-email case study. R9 DONE (S-0247). R8 DONE but e (S-0244 to S-0246); e waits on the owner's yes to a paid measurement. R3's switch-over waits on CRON_SECRET. The baseline was 0f2dcef. App code changed since then in these
 commits only:
 
 | commit | ticket | what |
@@ -33,6 +33,7 @@ commits only:
 | (R11) | S-0249 | 5.2: v2/traceLive.ts, v2_trace (migrations 085-087), intake and changed re-plans traced, 90-day prune in the minute sync; 5.7 counted |
 | (R14) | S-0250 | F43: /api/mail-poll decides through mail/pollIntake.ts; n8n-inbound stores only under INTAKE_PATH=routing; the middleware's shut list removed |
 | (R13) | S-0251 | Prompt 7: docs/ASSISTED-MODE-DESIGN-2026-10-27.md (design only) |
+| (R11) | S-0252 | replan.ts sameAnswer: an answer read back from JSONB is compared by content, not key order |
 
 bd10dae (S-0213) moved the test suite onto PGlite. Line references below are at HEAD unless a line says "at 0f2dcef".
 
@@ -901,6 +902,11 @@ What was built:
 - Any address in an event is a salted SHA-256 (SPARTAN_TRACE_SALT); until the owner sets a salt it is "[address]".
   No email text is handed to a trace. pruneTrace, in the minute sync, deletes rows past 90 days.
 - A row that cannot be written is dropped and counted; the decision is unchanged (test/liveTrace.ts).
+- **Found by it, first hour live (S-0252):** the re-plan traced 86 different emails in 5 minutes. It compared the
+  stored answer with the new one as JSON strings, and Postgres returns JSONB with its keys reordered. So every open
+  card counted as changed and was rewritten every minute, from the day the re-plan was built (20 Oct). The answers
+  themselves were right; the count and the writes were not. replan.ts sameAnswer compares by content
+  (test/replanSameAnswer.ts goes red with the old comparison).
   SPARTAN_TRACE=off stops it. harness/DATA_POLICY.md's live mode says the same.
 
 harness/DATA_POLICY.md already defines a safe live mode: hashed senders, no email text, quotes kept, 90-day retention.
