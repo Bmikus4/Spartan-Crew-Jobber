@@ -5441,5 +5441,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0259",
+  "ts": "2026-10-28T02:50:23+00:00",
+  "kind": "measurement",
+  "headline": "F46 measured: 380 of 395 reply parents share the Gmail thread, 2 do not; builder steps done, owner list remains",
+  "subject": "Reply headers would add a thread signal for 2 of 395 replies; not built",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 114,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]
