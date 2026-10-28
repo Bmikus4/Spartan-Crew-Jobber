@@ -212,6 +212,18 @@ export function ground(x: Extraction, newest: string, sentIso: string, ctx: Grou
     const bare = (t: string) => t.toLowerCase().replace(/[^a-z0-9]/g, "");
     let venue = r.venue && quoteIn(all, r.venue.quote) && bare(r.venue.quote).includes(bare(String(r.venue.value))) ? String(r.venue.value) : undefined;
     const chief = check(`${tag} crew chief`, r.crew_chief, (q) => (/chief|crew ?boss|supervisor/i.test(q) ? true : null));
+    // A CHIEF WRITTEN AS ITS OWN COUNT IS ONE MORE ON THE CALL: "2x Crew" and "1x Crew Chief" are three
+    // people, "4 crew including a chief" four. Counted inside, it booked 1 crew and a chief where staff booked
+    // 2 and a chief (1a14063b8d8dd75c, ADDENDUM R17); added here, Ben's rule (plan.ts chiefsFor) takes the
+    // chief out of the 3. A chief in brackets after the crew ("4 crew (1 chief)") is one of them.
+    if (chief && crew !== undefined && r.crew && typeof r.crew === "object" && r.crew_chief && typeof r.crew_chief === "object") {
+      const cq = String(r.crew.quote ?? ""), hq = String(r.crew_chief.quote ?? "");
+      const own = hq.match(/^\s*(\d+|an?|one|two)\s*x?\s+(?:crew\s+)?(?:chiefs?|crew ?boss|supervisors?)\b/i);
+      const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      const bracketed = !!cq && new RegExp(`${esc(cq)}\\s*[(\\[]\\s*${esc(hq)}`, "i").test(all);
+      if (own && !bracketed && !/chief|boss|supervisor|\binc|includ/i.test(cq) && !norm(hq).includes(norm(cq)))
+        crew += /^\d+$/.test(own[1]) ? Number(own[1]) : /^two$/i.test(own[1]) ? 2 : 1;
+    }
     const trade = r.trade && quoteIn(all, r.trade.quote) ? r.trade.value : undefined;
     // "5 crew and a carpenter" read as two requests: the carpenter's is one person, in its words.
     if (r.action === "new_shift" && crew === undefined && trade && r.trade && (oneIn(r.trade.quote) || new RegExp(String.raw`\b(?:a|an|one)\s+${String(trade).toLowerCase().replace(/[^a-z ]/g, "").trim()}\b`).test(norm(where)))) {

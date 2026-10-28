@@ -22,6 +22,7 @@ export const REASON_CODES: ReadonlyArray<readonly [string, RegExp]> = [
   ["reply_unclear", /the request is unclear/],
   ["reply_detail_missing", /: no (day|start time|end time or duration|crew count|new time or length|venue) the client wrote$|^no venue in the email$/],
   ["policy_lead_days", /within \d+ days of the email/],
+  ["policy_short_call", /Spartan books 2 hours at least/],
   ["policy_past_day", /before the email was sent/],
   ["policy_day_over", /is already over/],
   ["policy_confirmed_proposal", /the client confirmed/],

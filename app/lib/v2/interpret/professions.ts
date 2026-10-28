@@ -31,7 +31,8 @@ const T = (re: RegExp, candidates: string[], label: string, asCrew = false) => (
 const TABLE = [
   T(/\bmcr\b.*\b(chief|boss)\b/, ["64"], "MCR Crew Chief"),
   T(/\bmcr\b/, ["63"], "MCR Crew"),
-  T(/carpent|chipp(ie|y)|joiner/, ["3"], "Carpenter"),
+  // "2x Set Builders": staff booked them as Carpenter (1a14063b8d8dd75c, ADDENDUM R17).
+  T(/carpent|chipp(ie|y)|joiner|set ?build/, ["3"], "Carpenter"),
   T(/(telehand?ler|\bteli\b).*(over|above|>)\s*9|\bj3\b/, ["24", "7"], "Telehandler over 9m"),
   T(/telehand?ler|\bteli\b/, ["23", "4"], "Telehandler"),
   T(/rough ?terrain|all ?terrain/, ["25", "17"], "Rough Terrain"),

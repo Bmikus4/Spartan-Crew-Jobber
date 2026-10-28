@@ -152,9 +152,16 @@ async function placesFor(world: World, venue: string, clientOrders: any[] = []):
     // "BDC in Angel" (Konnect, 10-09): a short name in capitals is the initials of exactly one
     // place's name. Ops booked it at the Business Design Centre (29).
     const caps = venue.split(",")[0].trim().split(/\s+/)[0];
+    // The whole name's initials count too: venueKey drops "London" and "the", which a client spelling
+    // the initials writes (1a14063b8d8dd75c: a new place was made where staff used the client's own,
+    // booked 30 times; ADDENDUM R17). Several such places: the one this client has booked.
     if (!hits.length && /^[A-Z]{3,5}$/.test(caps)) {
-      const initials = (n: string) => venueKey(n).split(" ").filter(Boolean).map((w) => w[0]).join("");
-      const acr = (await world.allPlaces()).filter((p) => p.address && initials(p.name) === caps.toLowerCase());
+      const initials = (k: string) => k.split(" ").filter(Boolean).map((w) => w[0]).join("");
+      let acr = (await world.allPlaces()).filter((p) => p.address && [venueKey(p.name), normName(p.name)].some((k) => initials(k) === caps.toLowerCase()));
+      if (acr.length > 1) {
+        const booked = new Set(clientOrders.flatMap((o) => teams(o).flatMap((t) => t.slots.map((x) => Number(x.SlotLocation?.place_id)))));
+        acr = acr.filter((p) => booked.has(Number(p.id)));
+      }
       if (acr.length === 1) hits = acr;
     }
   }
@@ -313,6 +320,13 @@ function settle(d: Decision, i: Interpretation, ev: Evidence | null, again: bool
 type ShiftGroup = { date: string; start: string; end: string; venue?: string; place_id?: number; positions: PositionSpec[]; label: string; notes: string[] };
 
 /**
+ * Spartan's shortest call. Staff booked 11,914 of 11,915 positions in the gold copy at 2 hours or more; asked
+ * for three 1-hour calls, they booked 2-hour ones and joined two that touched (1a153e512dae2620, ADDENDUM R17).
+ * How to lengthen a shorter call is staff's choice, so it is a person's.
+ */
+export const MIN_CALL_MINUTES = 120;
+
+/**
  * New shifts, one per day and window, each with its positions. "10 crew and 1 carpenter" on
  * one call is ONE shift with two positions (RG Jones, 10-09: read as two requests). The crew
  * chief rule counts everyone on the shift: across 402 staff-built shifts with a named trade, a
@@ -330,6 +344,9 @@ function shiftGroups(news: Request[], clientOrders: any[], live: LiveProfession[
   for (const rs of byWindow.values()) {
     const venues = [...new Set(rs.map((r) => r.venue).filter(Boolean))];
     if (venues.length > 1) return `one call at ${venues.length} venues`;
+    const win = shiftWindow(rs[0].date!, rs[0].start!, rs[0].end!);
+    const minutes = Math.round((Date.parse(win.end) - Date.parse(win.beginning)) / 60_000);
+    if (minutes < MIN_CALL_MINUTES) return `a call of ${minutes} minutes on ${rs[0].date} (${rs[0].start}-${rs[0].end}): Spartan books 2 hours at least, so a person sets it`;
     let crew = 0;
     const profs = new Map<string, number>();
     const notes: string[] = [];

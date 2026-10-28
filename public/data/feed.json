@@ -5385,5 +5385,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0255",
+  "ts": "2026-10-28T02:30:11+00:00",
+  "kind": "measurement",
+  "headline": "R17: dev-2 writes 7 wrong of 21 (was 9 of 22); chief count, set builders, venue initials, 2-hour minimum",
+  "subject": "A chief counted on its own is one more on the call; short calls go to a person",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 112,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]

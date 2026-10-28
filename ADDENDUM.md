@@ -6,7 +6,7 @@
   below as findings and status.
 - Every step updates this file: its status line, its measurement, and what moved.
 
-**Last updated:** 28 October 2026, R16 DONE (S-0254): F49 and F50, the review's two write-path gaps, closed; the review's other steps are R17-R22. R15 DONE (S-0253): the V1 review, https://claude.ai/artifact/A3WyEdpcXRcehHoJVb6BQe; its write-path gaps are F49-F54, to close before writes go back on. S-0252: the re-plan no longer counts every card as changed every minute (found by the live trace). R13 DONE (S-0251): the assisted-card design, docs/ASSISTED-MODE-DESIGN-2026-10-27.md; at most 90 of 155 dev handoffs are near-misses. R14 DONE, dormant (S-0250): the Gmail poll decides through v2 once the grant exists and INTAKE_PATH=routing. R12 held for the owner and Paz. R11 DONE (S-0249): the live trace is on; 5.7 counted, its outbound change waits on the owner. R10 DONE (S-0248): the email-to-board harness and its 20-email case study. R9 DONE (S-0247). R8 DONE but e (S-0244 to S-0246); e waits on the owner's yes to a paid measurement. R3's switch-over waits on CRON_SECRET. The baseline was 0f2dcef. App code changed since then in these
+**Last updated:** 28 October 2026, R17 planner part DONE (S-0255): dev-2 writes 21, 12 completed, 2 partial, 7 wrong (was 22, 11, 2, 9); the 7 left are owner rules or judging limits, listed under R17. R16 DONE (S-0254): F49 and F50, the review's two write-path gaps, closed; the review's other steps are R17-R22. R15 DONE (S-0253): the V1 review, https://claude.ai/artifact/A3WyEdpcXRcehHoJVb6BQe; its write-path gaps are F49-F54, to close before writes go back on. S-0252: the re-plan no longer counts every card as changed every minute (found by the live trace). R13 DONE (S-0251): the assisted-card design, docs/ASSISTED-MODE-DESIGN-2026-10-27.md; at most 90 of 155 dev handoffs are near-misses. R14 DONE, dormant (S-0250): the Gmail poll decides through v2 once the grant exists and INTAKE_PATH=routing. R12 held for the owner and Paz. R11 DONE (S-0249): the live trace is on; 5.7 counted, its outbound change waits on the owner. R10 DONE (S-0248): the email-to-board harness and its 20-email case study. R9 DONE (S-0247). R8 DONE but e (S-0244 to S-0246); e waits on the owner's yes to a paid measurement. R3's switch-over waits on CRON_SECRET. The baseline was 0f2dcef. App code changed since then in these
 commits only:
 
 | commit | ticket | what |
@@ -36,6 +36,7 @@ commits only:
 | (R11) | S-0252 | replan.ts sameAnswer: an answer read back from JSONB is compared by content, not key order |
 | (R15) | S-0253 | The V1 review (builder and an independent reviewer, every claim checked); F49-F54 added; two misplaced process.ts comments moved |
 | (R16) | S-0254 | F49: resume closes a write that died in its first operation as unknown, by its ledger row; F50: recordDecision keeps a write's record |
+| (R17) | S-0255 | A chief counted on its own is one more on the call; set builders are Carpenters; venue initials read on the whole name; a call under 2 hours is a person's |
 
 bd10dae (S-0213) moved the test suite onto PGlite. Line references below are at HEAD unless a line says "at 0f2dcef".
 
@@ -1446,7 +1447,7 @@ Still to come from §10: the identity owner (R8), and the move of what the old e
 | R14 | | Mail intake through v2 (F43), live with the Gmail grant; then intake, labels and alarms leave n8n entirely. **DONE, dormant** S-0250; labels and alarms after the grant | dormant until the grant |
 | R15 | | **The V1 review:** a thorough review of the whole system (code cleanliness, what works and what doesn't, what to do next), by me and by an independent agent. Published and opened in the owner's browser. **DONE** S-0253: https://claude.ai/artifact/A3WyEdpcXRcehHoJVb6BQe | report |
 | R16 | | F49, F50: the review's two write-path gaps. **DONE** S-0254 | test |
-| R17 | | The 9 wrong dev-2 writes, one by one: each a planner fix or a refusal (harness/real/writes-run.ts) | before writes go back on; writes on is the owner's |
+| R17 | | The 9 wrong dev-2 writes, one by one: each a planner fix or a refusal (harness/real/writes-run.ts). **Planner part DONE** S-0255: 7 wrong of 21; the rest are the owner's rules or judging limits | before writes go back on; writes on is the owner's |
 | R18 | | F51: a link takes new shifts only when its order holds an asked day or the venue | **owner decision** |
 | R19 | | F52: the reason code stored as a column; retries, the sweep, resume and the TV read the code | yes |
 | R20 | | F53: the minute reads limited to open cards and recent days | yes |
@@ -1603,6 +1604,29 @@ Zero references is permission to delete, never a reason to.
 
 **Done when:** app/lib/engine is gone or holds only what v2 uses, and nothing live changed (the harness and the suite
 agree).
+
+### R17: the wrong dev-2 writes: planner part **DONE**, S-0255
+Each of the 9 was diagnosed from values only (dates, times, counts, trades, place ids; no email text). Before:
+22 writes, 11 completed, 2 partial, 9 wrong. **After: 21 writes, 12 completed, 2 partial, 7 wrong** (harness/real/
+writes-run.ts --set dev-2, $0). The dev replay of 561 emails changed in one email, from one hand-off reason to another.
+
+| write | cause | now |
+|---|---|---|
+| 1a14063b8d8dd75c | Three planner faults: "2x Crew, 1x Crew Chief" folded the chief into the 2; "Set Builders" booked as Crew; the venue, written as the initials of the client's own place (booked 30 times), made a new place because venueKey drops "London" before taking initials | **completed** |
+| 1a153e512dae2620 | Three 1-hour calls. Staff never book under 2 hours (1 of 11,915 positions) and booked 2-hour calls, joining two that touched | a person's (policy_short_call) |
+| 1a144942ca8851d1 | Shifts right; staff split the booking into one order per weekend | **owner:** when does one email make several orders? |
+| 1a1541de84b036b8 | A quote with shifts, booked To Confirm by the 13 Oct rule; staff made no order | **owner:** does a quote become an order? |
+| 1a144f983605bc19 | No end written; the client's usual length (V15) gave 2 hours, staff booked 4 | **owner:** V15 fits 90%; this is its miss |
+| 1a15984719fbd60e | Totals right; staff made some seats Carpool and Minivan Drivers, which the email's counts do not say | **owner:** driver seats are staff's knowledge |
+| 1a163dd1e345c607 | "Only require two crew not four": staff never changed the order (no audit row after the email) | judging: nothing to compare with |
+| 1a15984f57ab3251 | The plan used place 7083, whose name the words equal; staff used 205. 7083 has never had a booking and is among the 91 newest ids, and places carry no date | judging: the time-correct world cannot hide a later place |
+| 1a158a5e6bd47095 | "An additional three crew": the plan adds a chief by V13; staff's own add was removed after the next email | judging, and V13 |
+
+**Fixed (S-0255):** interpret.ts counts a chief written as its own number on top of the crew (V13 then takes the chief out
+of the total, as staff did); professions.ts books "set builder" as Carpenter; plan.ts placesFor matches initials on the
+whole name as well and, when several places share them, takes the one the client booked; plan.ts MIN_CALL_MINUTES hands a
+call under 2 hours to a person. test/v2WrongWrites.ts goes red on the old code in all four, and showed one more: on the
+old code "RHLT" picked a place the client had never booked because only that name's shortened initials matched.
 
 ### R15: the V1 review: **DONE**, S-0253
 - **Published:** https://claude.ai/artifact/A3WyEdpcXRcehHoJVb6BQe (a doc: the owner can edit and comment).
