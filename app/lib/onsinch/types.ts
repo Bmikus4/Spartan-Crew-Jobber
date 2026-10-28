@@ -517,6 +517,12 @@ export interface Settings {
    */
   create_lead_enabled?: boolean;
   /**
+   * What the lead rule covers: new orders (the rule since 15 Oct, the default), changes to existing orders, or
+   * both (the owner, 28 Oct, DECISIONS O8: "the 14-day window, and whether it applies to creates, changes, or
+   * both" is a setting). Admin only and logged, like the write switches (routes/settings.ts).
+   */
+  create_lead_applies_to?: "creates" | "changes" | "both";
+  /**
    * AI email drafts: the ONE switch for any email the system writes into a Gmail thread for a
    * person, a reply to an inbound email and a chase on a job the TV marks Needs Follow Up alike.
    * A separate follow-up switch is the same thing twice (Ben, 2026-10-21), so a new kind of draft
@@ -580,6 +586,7 @@ export const DEFAULT_SETTINGS: Settings = {
   test_data_autoclear: false,
   create_lead_days: 14,
   create_lead_enabled: true,
+  create_lead_applies_to: "creates",
   jobs_board_enabled: false,
   analytics_tab_enabled: false,
   intake_paused: false,

@@ -5483,5 +5483,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0262",
+  "ts": "2026-10-28T05:38:23+00:00",
+  "kind": "measurement",
+  "headline": "P2.3: rule versions as planner options, variants stored at intake; lead settings admin-only with applies-to; 799 replays identical",
+  "subject": "Each new rule version is planned beside the decision; today's rules stay the default",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 117,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]

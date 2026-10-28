@@ -332,7 +332,7 @@ export const MIN_CALL_MINUTES = 120;
  * 78%. The chiefs come out of the plain crew, then out of the largest trade, so the people
  * who turn up are the number the client asked for.
  */
-function shiftGroups(news: Request[], clientOrders: any[], live: LiveProfession[]): ShiftGroup[] | string {
+function shiftGroups(news: Request[], clientOrders: any[], live: LiveProfession[], opts: PlanOpts = {}): ShiftGroup[] | string {
   const byWindow = new Map<string, Request[]>();
   for (const r of news) {
     const k = `${r.date}|${r.start}|${r.end}`;
@@ -344,10 +344,11 @@ function shiftGroups(news: Request[], clientOrders: any[], live: LiveProfession[
     if (venues.length > 1) return `one call at ${venues.length} venues`;
     const win = shiftWindow(rs[0].date!, rs[0].start!, rs[0].end!);
     const minutes = Math.round((Date.parse(win.end) - Date.parse(win.beginning)) / 60_000);
-    if (minutes < MIN_CALL_MINUTES) return `a call of ${minutes} minutes on ${rs[0].date} (${rs[0].start}-${rs[0].end}): Spartan books 2 hours at least, so a person sets it`;
+    if (minutes < MIN_CALL_MINUTES && opts.shortCall !== "default") return `a call of ${minutes} minutes on ${rs[0].date} (${rs[0].start}-${rs[0].end}): Spartan books 2 hours at least, so a person sets it`;
+    const twoHours = minutes < MIN_CALL_MINUTES ? addMinutes(rs[0].start!, MIN_CALL_MINUTES) : null;
     let crew = 0;
     const profs = new Map<string, number>();
-    const notes: string[] = [];
+    const notes: string[] = twoHours ? [`CHECK: asked for ${minutes} minutes (${rs[0].start}-${rs[0].end}); booked to ${twoHours}, Spartan's 2 hours`] : [];
     const labels: string[] = [];
     for (const r of rs) {
       const trade = tradeOf(r.trade);
@@ -376,7 +377,7 @@ function shiftGroups(news: Request[], clientOrders: any[], live: LiveProfession[
     for (const [id, size] of profs) if (size) positions.push({ size, profession_id: id });
     const r0 = rs[0];
     const place_id = rs.map((r) => r.place_id).find(Boolean);
-    out.push({ date: r0.date!, start: r0.start!, end: r0.end!, venue: venues[0], place_id, positions, label, notes });
+    out.push({ date: r0.date!, start: r0.start!, end: twoHours ?? r0.end!, venue: venues[0], place_id, positions, label, notes });
   }
   return out;
 }
@@ -454,6 +455,18 @@ function bookedAt(o: any, w: Call, sent: number, venue: Set<number> | null = nul
  */
 export type PlanOpts = {
   leadDays?: number | null;
+  /**
+   * What the two-week rule covers (Settings create_lead_applies_to): new orders (today's rule, the default),
+   * changes to existing orders, or both. The owner ruled both on 28 Oct (DECISIONS O8); it is switched after the
+   * loop's baseline (ADDENDUM §12.7). A PO is not a change here until the owner rules on it (§12.8).
+   */
+  leadOver?: "creates" | "changes" | "both";
+  /** A new start alone: the call keeps its length (V4, the default) or its end (the owner's 28 Oct ruling, O7). */
+  movedStart?: "length" | "end";
+  /** A call under 2 hours: a person's (the default) or planned at 2 hours with a note to check (§12.7). */
+  shortCall?: "handoff" | "default";
+  /** The client's yes to what the thread proposed: a person's (O5, the default) or drafted as the plan (O12). */
+  acceptance?: "handoff" | "draft";
   now?: number;
   /** The whole thread, ours included, for the finder: an R or J number in a quoted email names the order. */
   thread?: ThreadMsg[];
@@ -470,10 +483,41 @@ export type PlanOpts = {
 export async function plan(msg: Message, i: Interpretation, world0: World, threadOrderId: number | null = null, opts: PlanOpts = {}): Promise<Decision> {
   const world = once(world0);
   const ev = await evidenceOf(msg, i, world, threadOrderId, opts).catch(() => null);
-  return coded(settle(await decide(msg, i, world, threadOrderId, opts, ev), i, ev, !!opts.again));
+  return coded(await leadOverChanges(settle(await decide(msg, i, world, threadOrderId, opts, ev), i, ev, !!opts.again), msg, world, opts));
 }
 
-/** Each OnSinch read once per email: the finder and the planner ask for the same orders. */
+const CHANGE_KINDS = new Set(["set_position_size", "set_position_times", "cancel_position", "add_shift", "add_position"]);
+
+/**
+ * THE TWO-WEEK RULE OVER CHANGES (DECISIONS O8, a setting until the loop's baseline is in): a planned change to a
+ * day within the lead days of the email is for staff to make. A size or a cancel names only its position, so its
+ * day is read from its order. Off (the default, "creates"), the plan is returned as it came.
+ */
+async function leadOverChanges(d: Decision, msg: Message, world: World, opts: PlanOpts): Promise<Decision> {
+  const over = opts.leadOver ?? "creates";
+  const lead = opts.leadDays === null ? null : opts.leadDays ?? CREATE_LEAD_DAYS;
+  if (d.kind !== "write" || over === "creates" || lead === null) return d;
+  const sentDay = utcToLondon(msg.sentIso).date;
+  const days: string[] = [];
+  for (const { op } of d.ops) {
+    if (!CHANGE_KINDS.has(op.kind)) continue;
+    if ("date" in op && op.date) { days.push(op.date); continue; }
+    const o = "order_id" in op && world.orderById ? await world.orderById(Number(op.order_id)).catch(() => null) : null;
+    const slot = teams(o).flatMap((t) => t.slots).find((x) => "slot_id" in op && Number(x.id) === Number(op.slot_id));
+    // A change whose day cannot be read is held back with the rest: the rule exists for the near days.
+    days.push(slot ? dayOf(slot.beginning) : sentDay);
+  }
+  const near = days.sort().find((x) => daysBetween(sentDay, x) <= lead);
+  return near ? handoff(`a change on ${near}, within ${lead} days of the email, is for staff to make`) : d;
+}
+
+/**
+ * Each OnSinch read once per email: the finder and the planner ask for the same orders. Exported for the variants
+ * (loop/variants.ts): the same email planned again with one rule switched reads nothing new.
+ */
+export function shareReads(w: World): World {
+  return once(w);
+}
 function once(w: World): World {
   const memo = new Map<string, Promise<any>>();
   const m = <T,>(k: string, f: () => Promise<T>): Promise<T> => { if (!memo.has(k)) memo.set(k, f()); return memo.get(k)! as Promise<T>; };
@@ -621,12 +665,16 @@ async function decide(msg: Message, i: Interpretation, world: World, threadOrder
   // Two orders holding it equally still hold it: the card would say no order does.
   const holders = histNew.map((r) => { const id = identify({ refs: [], requests: [r], link: null, text: "", generic: ev?.facts.generic }, clientOrders, { companyIds: [companyId] }); return id.kind === "one" ? id.order : id.kind === "several" ? "several" as const : null; });
   const unheld = histNew.filter((_, k) => !holders[k]);
-  if (unheld.length) return handoff(`the client confirmed ${[...new Set(unheld.map((r) => r.date))].join(", ")}, and no order holds it yet`);
+  // DRAFTED, NOT BOOKED (the owner, 28 Oct, DECISIONS O12): the acceptance's plan is what the client said yes to;
+  // a person's Confirm still books it. Until O9 puts that plan on the card, it is a variant the loop judges.
+  if (unheld.length && opts.acceptance !== "draft") return handoff(`the client confirmed ${[...new Set(unheld.map((r) => r.date))].join(", ")}, and no order holds it yet`);
+  if (unheld.length) reqs = [...reqs, ...unheld.map((r) => ({ ...r, history: false }))];
   // A change from the thread that the client now confirms is a person's to make: "Can we confirm
   // this?" under our offer of "an additional three crew" (Light Motif R11662, 10-20). Without
   // their yes it is only the quoted email read again, and nothing is asked.
   const histChange = hist.filter((r) => r.action === "change_times" || r.action === "change_crew");
-  if (histChange.length && confirms(msg.text)) return handoff(`the client confirmed a change from the thread (${[...new Set(histChange.map((r) => r.target?.date ?? r.date ?? "a shift"))].join(", ")}): a person makes it`);
+  if (histChange.length && confirms(msg.text) && opts.acceptance !== "draft") return handoff(`the client confirmed a change from the thread (${[...new Set(histChange.map((r) => r.target?.date ?? r.date ?? "a shift"))].join(", ")}): a person makes it`);
+  if (histChange.length && confirms(msg.text)) reqs = [...reqs, ...histChange.map((r) => ({ ...r, history: false }))];
   if (!reqs.length && hist.length) {
     const held = [...new Map(holders.filter((h): h is OrderRef => !!h && h !== "several").map((h) => [h.id, h])).values()];
     const reason = held.length ? `already booked: ${held.map((o) => o.r).join(", ")}` : "nothing new asked for: the requests are the thread's earlier ones";
@@ -740,8 +788,16 @@ function planChange(d: Draft): Change {
       // whole call and keeps its length: "arrive for 17:00 instead of 14:00" on 14:00-17:00
       // was planned 17:00-17:00, and ops moved it to 17:00-20:00 (R11029, 10-15).
       const length = Math.round((Date.parse(first.end) - Date.parse(first.beginning)) / 60e3);
-      const end = r.end ?? (r.duration ? addMinutes(start, r.duration) : r.start ? addMinutes(start, length) : utcToLondon(first.end).time);
+      const keepEnd = d.opts.movedStart === "end" && !!r.start && !r.end && !r.duration;
+      const end = r.end ?? (r.duration ? addMinutes(start, r.duration) : r.start && !keepEnd ? addMinutes(start, length) : utcToLondon(first.end).time);
       if (start === end) return (`R${order.number} shift ${shift.id}: ${start}-${end} has no length`);
+      // KEEPING THE END (the owner, 28 Oct, DECISIONS O7): a start at or past the old end leaves no shift, and an end
+      // read onto another day is not the end kept, so either is for a person, never a shift made to fit.
+      if (keepEnd) {
+        const w = shiftWindow(date, start, end);
+        if (Date.parse(w.beginning) >= Date.parse(first.end) || Date.parse(w.end) !== Date.parse(first.end))
+          return (`R${order.number} shift ${shift.id}: a start of ${start} with the end kept at ${end} is no shift on ${date}`);
+      }
       // A position already at the asked times is left alone: a restated booking is not a change.
       for (const s of slots) {
         const w = shiftWindow(date, start, end);
@@ -863,7 +919,7 @@ async function addToNamed(d: Draft, change: Change, named: any, news: Request[])
   // (We Are Family R11349, replay 10-21).
   if (!fresh.length && !synth.length) return ops.length ? { kind: "write", ops, why: [...why, `already booked: R${named.number}`, ...assumed, ...(i.notes ?? [])] } : { kind: "none", reason: [`already booked: R${named.number}`, ...(i.notes ?? [])].join("; "), found: [Number(named.id)] };
   for (const [n, r] of synth.entries()) { const no = await change(300 + n, r); if (no) return handoff(no); }
-  const groups = shiftGroups(fresh, clientOrders, live);
+  const groups = shiftGroups(fresh, clientOrders, live, d.opts);
   if (typeof groups === "string") return handoff(groups);
   for (const [n, g] of groups.entries()) {
     let location_id = locations.size === 1 ? [...locations][0] : 0;
@@ -944,7 +1000,7 @@ async function bookNew(d: Draft, change: Change, news: Request[]): Promise<Decis
     const o = bookedV[0].order;
     const locs = new Set(teams(o).flatMap((t) => t.slots.map((x) => Number(x.slotlocation_id)).filter(Boolean)));
     const rest = verdicts.filter((v) => !v.order).flatMap((v) => v.w.rs);
-    const groups = hit.length === 1 && locs.size === 1 ? shiftGroups(rest, clientOrders, live) : null;
+    const groups = hit.length === 1 && locs.size === 1 ? shiftGroups(rest, clientOrders, live, opts) : null;
     if (!groups || typeof groups === "string") return handoff(`part of this is already booked (${[...new Set(bookedV.map((v) => `R${v.order.number}`))].join(", ")})`);
     for (const [n, g] of groups.entries()) {
       ops.push({ source: src(50 + n), op: { kind: "add_shift", order_id: Number(o.id), location_id: [...locs][0], name: "Crew", date: g.date, start: g.start, end: g.end, positions: g.positions } });
@@ -954,13 +1010,13 @@ async function bookNew(d: Draft, change: Change, news: Request[]): Promise<Decis
     return { kind: "write", ops, why: [...why, ...assumed, ...notes] };
   }
   const shifts: ShiftSpec[] = [];
-  const groups = shiftGroups(news, clientOrders, live);
+  const groups = shiftGroups(news, clientOrders, live, opts);
   if (typeof groups === "string") return handoff(groups);
   // Ben, 10-15: "we should only be creating orders that are more than two weeks out, all [DECISIONS V14]
   // updates still should be enabled". A new order nearer than that is staff's to create;
   // shifts added to an order that already exists are updates and go on as before.
   const earliest = groups.map((g) => g.date).sort()[0];
-  const lead = opts.leadDays === null ? null : opts.leadDays ?? CREATE_LEAD_DAYS;
+  const lead = opts.leadDays === null || opts.leadOver === "changes" ? null : opts.leadDays ?? CREATE_LEAD_DAYS;
   if (lead !== null && earliest && daysBetween(sentDay, earliest) <= lead) return handoff(`a new booking from ${earliest}, within ${lead} days of the email, is for staff to create`);
   const extra: string[] = [];
   for (const g of groups) {

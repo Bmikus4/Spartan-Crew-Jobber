@@ -6,12 +6,13 @@ import { reportError } from "../errorReport";
 import type { Caller } from "../apiAuth";
 
 /**
- * THE SWITCHES THAT DECIDE WHETHER THE SYSTEM ACTS WITHOUT A PERSON: writes to OnSinch, and replies to
- * clients. Until 27 Oct any signed-in staff member could flip them, and nothing recorded who or when
- * (addendum F34). Only an admin (apiAuth isSwitchAdmin) may change one; each change is stored with
- * its actor and time and raised to the owner. The other settings stay any signed-in user's.
+ * THE SWITCHES THAT DECIDE WHETHER THE SYSTEM ACTS WITHOUT A PERSON: writes to OnSinch, replies to clients, and
+ * the lead rule that hands near work to staff. Until 27 Oct any signed-in staff member could flip them, and
+ * nothing recorded who or when (addendum F34); the lead rule joined them on 28 Oct, when the owner made what it
+ * covers a setting (DECISIONS O8). Only an admin (apiAuth isSwitchAdmin) may change one; each change is stored
+ * with its actor and time and raised to the owner. The other settings stay any signed-in user's.
  */
-export const SWITCHES = ["bot_writes_enabled", "replies_enabled", "reply_delivery"] as const;
+export const SWITCHES = ["bot_writes_enabled", "replies_enabled", "reply_delivery", "create_lead_enabled", "create_lead_days", "create_lead_applies_to"] as const;
 
 export type SwitchChange = { field: string; from: unknown; to: unknown; actor: string; at: string };
 

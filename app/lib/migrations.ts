@@ -525,6 +525,10 @@ export const MIGRATIONS: ReadonlyArray<readonly [id: string, statement: string]>
   ["093_create_table_v2_loop_meta", `CREATE TABLE IF NOT EXISTS v2_loop_meta (key TEXT PRIMARY KEY, value JSONB NOT NULL, at TIMESTAMPTZ NOT NULL DEFAULT now())`],
   // The rows resolveOrders looks at every minute: a part made before 29 Jul stays unknown until its order is read.
   ["094_create_index_onsinch_timeline_unowned", `CREATE INDEX IF NOT EXISTS onsinch_timeline_unowned ON onsinch_timeline (part) WHERE order_id IS NULL`],
+  // lib/v2/loop/variants.ts: each rule that touched an email, planned the other way at intake (ADDENDUM §12.3).
+  ["095_create_table_v2_variants", `CREATE TABLE IF NOT EXISTS v2_variants (
+    message_id TEXT NOT NULL, variant TEXT NOT NULL, decision JSONB, same BOOLEAN NOT NULL, error TEXT, code_version TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(), PRIMARY KEY (message_id, variant))`],
 ];
 
 /**

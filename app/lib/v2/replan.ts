@@ -96,6 +96,7 @@ export async function replanOpen(sql: Sql, opts: { limit?: number; budgetMs?: nu
   const rep: ReplanReport = { cards: cards.length, planned: 0, changed: 0, linked: 0, notes: [] };
   const world = opts.world ?? cached(onsinchWorld());
   const leadDays = await getSettings().then((s) => (s.create_lead_enabled === false ? null : s.create_lead_days)).catch(() => undefined);
+  const leadOver = await getSettings().then((s) => s.create_lead_applies_to ?? "creates").catch(() => undefined);
 
   for (const row of cards.slice(0, opts.limit ?? 20)) {
     if (Date.now() > deadline) { rep.notes.push("stopped at the time budget"); break; }
@@ -112,6 +113,7 @@ export async function replanOpen(sql: Sql, opts: { limit?: number; budgetMs?: nu
         threadOrderId: () => linkedOrderId(sql, m0.thread_id, async (id) => (world.orderById ? !!(await world.orderById(id)) : true)),
         run: null,
         leadDays: async () => leadDays,
+        rules: async () => (leadOver ? { leadOver } : {}),
         now: () => now,
         again: true,
         // Every email's reading on the thread, later ones too: Bearded Kitten's "3 lifters" names

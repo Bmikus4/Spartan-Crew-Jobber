@@ -16,7 +16,7 @@ import InstallButton from "./InstallButton";
 
 type ReplyDelivery = "draft" | "send";
 type ReplyScope = "all" | "enquiries";
-interface Settings { replies_enabled: boolean; test_data_autoclear?: boolean; create_lead_days?: number; create_lead_enabled?: boolean; jobs_board_enabled?: boolean; analytics_tab_enabled?: boolean; intake_paused?: boolean; bot_writes_enabled?: boolean; reply_delivery: ReplyDelivery; reply_scope: ReplyScope; default_rate_card: number }
+interface Settings { replies_enabled: boolean; test_data_autoclear?: boolean; create_lead_days?: number; create_lead_enabled?: boolean; create_lead_applies_to?: "creates" | "changes" | "both"; jobs_board_enabled?: boolean; analytics_tab_enabled?: boolean; intake_paused?: boolean; bot_writes_enabled?: boolean; reply_delivery: ReplyDelivery; reply_scope: ReplyScope; default_rate_card: number }
 
 const SETTINGS_FALLBACK: Settings = { replies_enabled: false, reply_delivery: "draft", reply_scope: "all", default_rate_card: 315 };
 
@@ -234,8 +234,9 @@ export default function SettingsScreen({ signedInAs }: { signedInAs?: string }) 
             hands-free. Nothing about pricing behaviour changed; the knob is not on the
             wall any more. */}
 
-        <LeadDaysPanel days={s.create_lead_days ?? 14} enabled={s.create_lead_enabled !== false}
-          onSave={(v) => save({ ...s, create_lead_days: v })} onEnabled={(v) => save({ ...s, create_lead_enabled: v })} />
+        <LeadDaysPanel days={s.create_lead_days ?? 14} enabled={s.create_lead_enabled !== false} appliesTo={s.create_lead_applies_to ?? "creates"}
+          onSave={(v) => save({ ...s, create_lead_days: v })} onEnabled={(v) => save({ ...s, create_lead_enabled: v })}
+          onAppliesTo={(v) => save({ ...s, create_lead_applies_to: v })} />
 
         <TestDataPanel autoclear={!!s.test_data_autoclear} onAutoclear={(v) => save({ ...s, test_data_autoclear: v })} />
 
@@ -317,15 +318,16 @@ const BY: Record<string, string> = { sweep: "the 15-minute sweep", button: "this
  * Clearing is two steps on purpose: the list of what would go is shown first, and only the second
  * press removes it. The rules are lib/testData.ts; this screen only asks for them to run.
  */
-function LeadDaysPanel({ days, enabled, onSave, onEnabled }: { days: number; enabled: boolean; onSave: (v: number) => void; onEnabled: (v: boolean) => void }) {
+type LeadScope = "creates" | "changes" | "both";
+function LeadDaysPanel({ days, enabled, appliesTo, onSave, onEnabled, onAppliesTo }: { days: number; enabled: boolean; appliesTo: LeadScope; onSave: (v: number) => void; onEnabled: (v: boolean) => void; onAppliesTo: (v: LeadScope) => void }) {
   const [draft, setDraft] = useState(String(days));
   useEffect(() => { setDraft(String(days)); }, [days]);
   const n = Number(draft);
   const valid = draft.trim() !== "" && Number.isInteger(n) && n >= 0 && n <= 365;
   return (
     <Panel
-      title="New orders"
-      blurb={<>When this is on, the system creates a new order in Orders To Confirm only when the first day is <b style={{ color: SUB }}>more than this many days</b> after the email, and nearer bookings are for the office to create. When it is off, the system creates every new booking. Changes to orders that already exist are always made.</>}
+      title="Work this close is the office's"
+      blurb={<>When this is on, work for a day <b style={{ color: SUB }}>within this many days</b> of the email is for the office to do; further out, the system plans it. <b style={{ color: SUB }}>Applies to</b> says which work: new orders, changes to orders that already exist, or both. A PO is never held back. Only an admin can change these, and each change is recorded.</>}
     >
       <Segmented label="Only create orders this far ahead" value={enabled} onChange={onEnabled}
         options={[{ id: true, label: "On" }, { id: false, label: "Off" }]} />
@@ -335,6 +337,10 @@ function LeadDaysPanel({ days, enabled, onSave, onEnabled }: { days: number; ena
         <span style={{ fontSize: 13, color: SUB }}>days</span>
         <button type="button" disabled={!valid || n === days} onClick={() => onSave(n)}
           style={{ padding: "9px 16px", borderRadius: "var(--radius)", border: "1px solid var(--accent-border)", background: "var(--accent-subtle)", color: INK, fontSize: 13.5, fontWeight: 600, fontFamily: "inherit", cursor: !valid || n === days ? "default" : "pointer", opacity: !valid || n === days ? 0.5 : 1 }}>Save</button>
+      </div>}
+      {enabled && <div style={{ marginTop: 12 }}>
+        <Segmented label="Applies to" value={appliesTo} onChange={onAppliesTo}
+          options={[{ id: "creates" as LeadScope, label: "New orders" }, { id: "changes" as LeadScope, label: "Changes" }, { id: "both" as LeadScope, label: "Both" }]} />
       </div>}
     </Panel>
   );

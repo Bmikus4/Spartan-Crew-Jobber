@@ -16,7 +16,8 @@ import { matchCompanyBySender, normName } from "../onsinch/resolve";
 import { extractWithMeta, malformedReading, type Extraction, type ExtractMeta } from "./interpret/extract";
 import { ground, type Interpretation, type Request } from "./interpret/interpret";
 import { latestText } from "./interpret/ground";
-import { plan, type Decision, type World } from "./interpret/plan";
+import { plan, shareReads, type Decision, type PlanOpts, type World } from "./interpret/plan";
+import { planVariants, recordVariants, type Variant } from "./loop/variants";
 import { runOp, type RunResult } from "./bot/run";
 import type { Op } from "./bot/ops";
 import { utcToLondon } from "./bot/ops";
@@ -375,6 +376,13 @@ export type DecideDeps = {
   run: ((source: string, op: Op) => Promise<RunResult>) | null;
   /** Settings' create_lead_days; null when the rule is switched off; absent, the planner's own default. */
   leadDays?: () => Promise<number | null | undefined>;
+  /** Which version of each rule the planner runs (Settings create_lead_applies_to; plan.ts PlanOpts); absent, today's. */
+  rules?: () => Promise<Pick<PlanOpts, "leadOver" | "movedStart" | "shortCall" | "acceptance">>;
+  /**
+   * Intake only: each rule that touched the email planned the other way (loop/variants.ts), for the measurement
+   * loop to judge beside the decision (ADDENDUM §12.3). Never changes the decision.
+   */
+  variants?: (vs: Variant[]) => Promise<void>;
   /** The moment of deciding: a day before it is already over and is never written. Absent, only a day before the email is refused. */
   now?: () => number;
   /** Planned again after the fact (v2/replan.ts): staff's work since the email stands (plan.ts PlanOpts.again). */
@@ -491,15 +499,25 @@ async function understand(m: MessageIn, from: string, deps: DecideDeps, seen: { 
   deps.trace("ground", { problems: interpretation.problems.length + interpretation.requests.reduce((a, q) => a + q.problems.length, 0), notes: interpretation.notes ?? [] }, Date.now() - t1);
   const t2 = Date.now();
   const leadDays = deps.leadDays ? await deps.leadDays().catch(() => undefined) : undefined;
+  // A rules read that fails runs today's rules, as a failed lead-days read keeps the rule on.
+  const rules = deps.rules ? await deps.rules().catch(() => ({})) : {};
+  const planMsg = { message_id: m.message_id, from, subject: String(m.subject ?? ""), sentIso: m.date_iso, text: newest };
+  const world = deps.variants ? shareReads(deps.world) : deps.world;
+  const tid = await deps.threadOrderId();
+  const opts: PlanOpts = { leadDays, ...rules, now: deps.now?.(), again: deps.again, thread: deps.threadMessages ? await deps.threadMessages().catch(() => undefined) : undefined,
+    // The thread's earlier requests name its days too: SN ExCeL's 17th, 18th, 20th and 21st single out R10522.
+    raw: [...rawRequests(x), ...prior.map((r) => ({ date: r.date ?? r.target?.date, start: r.start, crew: r.crew, place_id: r.place_id, venue: r.venue, target: r.target })),
+      ...(deps.asked ? await deps.asked().catch(() => []) : [])] };
   // A PLAN THAT THROWS IS A CARD FOR A PERSON, like a read that fails: a time London's clock
   // skips, a window with no length or an OnSinch read that failed would otherwise lose the email.
-  const decision: Decision = await plan({ message_id: m.message_id, from, subject: String(m.subject ?? ""), sentIso: m.date_iso, text: newest }, interpretation, deps.world, await deps.threadOrderId(),
-    { leadDays, now: deps.now?.(), again: deps.again, thread: deps.threadMessages ? await deps.threadMessages().catch(() => undefined) : undefined,
-      // The thread's earlier requests name its days too: SN ExCeL's 17th, 18th, 20th and 21st single out R10522.
-      raw: [...rawRequests(x), ...prior.map((r) => ({ date: r.date ?? r.target?.date, start: r.start, crew: r.crew, place_id: r.place_id, venue: r.venue, target: r.target })),
-        ...(deps.asked ? await deps.asked().catch(() => []) : [])] })
+  const decision: Decision = await plan(planMsg, interpretation, world, tid, opts)
     .catch((e) => ({ kind: "handoff" as const, reasons: [`the system could not plan this email (${String((e as Error)?.message ?? e).slice(0, 120)})`] }));
   deps.trace("plan", { kind: decision.kind, ops: decision.kind === "write" ? decision.ops.map((o) => o.op.kind) : [], said: decision.kind === "write" ? decision.why : decision.kind === "handoff" ? decision.reasons : [decision.reason] }, Date.now() - t2);
+  if (deps.variants) {
+    const vs = await planVariants((o) => plan(planMsg, interpretation, world, tid, o), decision, interpretation, opts);
+    // A variant that cannot be stored is said to the owner: the loop would count the email as touched by no rule.
+    if (vs.length) await deps.variants(vs).catch((e) => void reportError({ route: "system-failed", where: "v2/variants", what: "the loop's variant plans could not be stored", detail: `message ${m.message_id}: ${String((e as Error)?.message ?? e).slice(0, 120)}` }));
+  }
   return { kind: decision.kind, interpretation: { extraction: x, grounded: interpretation, meta }, decision, executed: null, client };
 }
 
@@ -556,6 +574,8 @@ export async function processMessage(message_id: string, opts: { execute: boolea
     run: opts.execute ? runWhenFree : null,
     // A settings read that fails keeps the rule on: undefined is the planner's default, never null.
     leadDays: () => getSettings().then((s) => (s.create_lead_enabled === false ? null : s.create_lead_days)),
+    rules: () => getSettings().then((s) => ({ leadOver: s.create_lead_applies_to ?? "creates" })),
+    variants: (vs) => recordVariants(sql, message_id, vs, codeVersion()),
     now: () => Date.now(),
     link: async (order_id, source = "bot write") => {
       if (source === "bot write") await recordLink(sql, { thread_id: m.thread_id, order_id, source });

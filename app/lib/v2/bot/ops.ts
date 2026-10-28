@@ -37,7 +37,7 @@ export type Op =
   | { kind: "add_position"; order_id: number; shift_id: number; date: string; start: string; end: string; position: PositionSpec };
 
 /** Keys sorted at every depth; a field left undefined is left out, as JSON leaves it. */
-const canonical = (v: unknown): string => Array.isArray(v) ? `[${v.map(canonical).join(",")}]`
+export const canonical = (v: unknown): string => Array.isArray(v) ? `[${v.map(canonical).join(",")}]`
   : v && typeof v === "object" ? `{${Object.keys(v).sort().filter((k) => (v as Record<string, unknown>)[k] !== undefined).map((k) => `${JSON.stringify(k)}:${canonical((v as Record<string, unknown>)[k])}`).join(",")}}`
   : JSON.stringify(v);
 

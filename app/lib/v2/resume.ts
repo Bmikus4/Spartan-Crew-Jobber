@@ -154,6 +154,7 @@ function productionDeps(sql: Sql): ResumeDeps {
       world ??= onsinchWorld();
       const w = world;
       const leadDays = await getSettings().then((s) => (s.create_lead_enabled === false ? null : s.create_lead_days)).catch(() => undefined);
+      const leadOver = await getSettings().then((s) => s.create_lead_applies_to ?? "creates").catch(() => undefined);
       let got: Recorded | null = null;
       await decideMessage(m0, {
         ...threadReads(sql, m0),
@@ -162,6 +163,7 @@ function productionDeps(sql: Sql): ResumeDeps {
         threadOrderId: () => linkedOrderId(sql, m0.thread_id, async (id) => (w.orderById ? !!(await w.orderById(id)) : true)),
         run: null,
         leadDays: async () => leadDays,
+        rules: async () => (leadOver ? { leadOver } : {}),
         now: () => Date.now(),
         again: true,
         link: async () => {},
