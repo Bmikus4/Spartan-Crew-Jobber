@@ -5511,5 +5511,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0264",
+  "ts": "2026-10-28T12:33:07+00:00",
+  "kind": "measurement",
+  "headline": "P2.5: coverage 21 of 215 named the day, 67 followed a card showing no day; moved starts 157 length, 29 end; card exits",
+  "subject": "Each staff action is recorded with whether the TV showed it first; each need's exit too",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 120,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]

@@ -9,7 +9,7 @@
 // npx tsx --require ./test/fixtures/pg.ts test/loopTruth.ts
 // ============================================================================
 import { sql } from "./fixtures/pg";
-import { pullTimeline, refreshContacts, rememberOrder, TIMELINE_FROM_ID } from "../app/lib/v2/loop/truth";
+import { pullTimeline, refreshContacts, refreshPlaces, rememberOrder, TIMELINE_FROM_ID } from "../app/lib/v2/loop/truth";
 
 let fails = 0;
 const ok = (c: boolean, m: string, d?: unknown) => { console.log(`  ${c ? "PASS" : "FAIL"}  ${m}${c ? "" : "  " + JSON.stringify(d)}`); if (!c) fails++; };
@@ -18,6 +18,7 @@ const F = TIMELINE_FROM_ID;
 const row = (id: number, action: string, data: unknown, creator = 413, created = "2026-10-20T09:00:00+00:00") => ({ id, action, creator, created, data: JSON.stringify(data) });
 let rows: any[] = [];
 let companies: any[] = [];
+let places: any[] = [];
 let down = false, shuffled = false;
 const t = (async (_m: string, path: string) => {
   if (down) return { status: 500, data: null };
@@ -30,6 +31,7 @@ const t = (async (_m: string, path: string) => {
     if (shuffled) out.reverse();
     return { status: 200, data: { data: out, pagination: { pageCount: Math.ceil(hit.length / 100), count: hit.length } } };
   }
+  if (u.pathname === "/places") return { status: 200, data: { data: places.slice((page - 1) * 100, page * 100), pagination: { pageCount: Math.ceil(places.length / 100), count: places.length } } };
   if (u.pathname === "/companies") return { status: 200, data: { data: companies.slice((page - 1) * 100, page * 100), pagination: { pageCount: Math.ceil(companies.length / 100), count: companies.length } } };
   return { status: 404, data: null };
 }) as any;
@@ -93,11 +95,13 @@ const cursorNow = async () => Number(((await sql`SELECT value FROM v2_loop_meta 
   ok(/rising id order/.test(err2) && (await cursorNow()) === before, "a page whose ids fall is refused before anything moves", err2);
 
   console.log("\n[5] contacts: once a day, lowercased, never an empty list");
-  companies = [{ id: 10, Client: [{ email: " Ops@North.example " }, { email: "" }] }, { id: 11, Client: [{ email: "ops@north.example" }] }, { id: 12, Client: [] }];
+  companies = [{ id: 10, name: " North Events ", Client: [{ email: " Ops@North.example " }, { email: "" }] }, { id: 11, Client: [{ email: "ops@north.example" }] }, { id: 12, Client: [] }];
   const day1 = Date.parse("2026-10-28T06:00:00Z");
   const r1 = await refreshContacts(sql, t, day1);
   const list = async () => ((await sql`SELECT email, company_id FROM onsinch_contacts ORDER BY company_id`) as any[]).map((r) => `${r.email}>${r.company_id}`);
   ok(r1.refreshed && JSON.stringify(await list()) === JSON.stringify(["ops@north.example>10", "ops@north.example>11"]), "every contact, lowercased; one address on two companies is two rows", await list());
+  const named = (await sql`SELECT company_name FROM onsinch_contacts WHERE company_id = 10`) as any[];
+  ok(named[0]?.company_name === "North Events", "each contact carries its company's name, for the test company's (testData.ts)", named);
   companies = [{ id: 10, Client: [{ email: "new@north.example" }] }];
   ok(!(await refreshContacts(sql, t, day1 + 3600e3)).refreshed, "not again within the day");
   down = true;
@@ -106,6 +110,14 @@ const cursorNow = async () => Number(((await sql`SELECT value FROM v2_loop_meta 
   ok(/answered 500/.test(err3) && (await list()).length === 2, "a failed read keeps yesterday's list", err3);
   await refreshContacts(sql, t, day1 + 26 * 3600e3);
   ok(JSON.stringify(await list()) === JSON.stringify(["new@north.example>10"]), "the next day's list replaces it", await list());
+
+  console.log("\n[6] places: once a day, every page");
+  places = Array.from({ length: 150 }, (_, k) => ({ id: k + 1, name: ` Place ${k + 1} ` }));
+  const p1 = await refreshPlaces(sql, t, day1);
+  const pc = (await sql`SELECT count(*)::int AS n FROM onsinch_places WHERE name = 'Place 1'`) as any[];
+  const all = (await sql`SELECT count(*)::int AS n FROM onsinch_places`) as any[];
+  ok(p1.refreshed && all[0].n === 150 && pc[0].n === 1, "150 places over two pages, names trimmed", { all, pc });
+  ok(!(await refreshPlaces(sql, t, day1 + 3600e3)).refreshed, "not again within the day");
 
   console.log(fails ? `\n${fails} FAILED` : "\nALL PASS");
   process.exit(fails ? 1 : 0);

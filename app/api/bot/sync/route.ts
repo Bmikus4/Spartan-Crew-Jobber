@@ -7,6 +7,10 @@ import { replanOpen } from "../../../lib/v2/replan";
 import { pruneTrace } from "../../../lib/v2/traceLive";
 import { pullTruth } from "../../../lib/v2/loop/truth";
 import { scoreOutcomes } from "../../../lib/v2/loop/outcomes";
+import { recordActions } from "../../../lib/v2/loop/actions";
+import { recordCardExits } from "../../../lib/v2/loop/cards";
+import { serveFeed } from "../../../lib/feed/serve";
+import { liveFeedDeps } from "../../../lib/feed/live";
 import { neon } from "@neondatabase/serverless";
 import { httpTransport } from "../../../lib/onsinch/onsinch";
 import { getSettings } from "../../../lib/settingsDb";
@@ -54,6 +58,14 @@ async function sync(request: Request, labels: boolean): Promise<Response> {
     ["truth", () => pullTruth(sql, t as never)],
     // Every email since 9 Oct judged against what staff did once its window closed (ADDENDUM §12.2); GETs only.
     ["outcomes", () => scoreOutcomes(sql, t as never, { deadline: Date.now() + 90_000 })],
+    // Each staff action once: covered by a card first or not, a moved start, a new order against one per venue.
+    ["actions", () => recordActions(sql, t as never, { deadline: Date.now() + 60_000 })],
+    // How each need left the TV, from the TV as it is built, with no verifier and nothing written back.
+    ["cards", async () => {
+      const tv = await serveFeed({ ...liveFeedDeps(), verify: undefined, remember: undefined, jobs: undefined }, Date.now());
+      if (tv.status !== 200 || !tv.all) throw new Error(`the TV could not be read (${tv.status})`);
+      return recordCardExits(sql, tv.all);
+    }],
     ["testData", () => getSettings()
       .then(async (s) => maybeSweep(sql, t, !!s.test_data_autoclear, { writes: await botWrites() }))
       .then((r) => (typeof r === "string" ? r : { orders: r.orders.length, companies: r.companies.length, rows: Object.values(r.rows).reduce((a, b) => a + b, 0), refused: r.refused ?? null, failed: r.failed.length }))],

@@ -29,8 +29,8 @@ export type OrderInfo = { number: string; company_id: number };
  * number, a delete as an act on the part deleted, OnSinch's automated cancels left out. A row whose order is not
  * known is counted, not dropped silently.
  */
-export function actsOf(rows: Row[], info: (orderId: number) => OrderInfo | undefined, creator: "staff" | "bot" = "staff"): { acts: Act[]; unowned: number } {
-  const acts: Act[] = [];
+export function actsOf(rows: Row[], info: (orderId: number) => OrderInfo | undefined, creator: "staff" | "bot" = "staff"): { acts: Array<Act & { row_id: number }>; unowned: number } {
+  const acts: Array<Act & { row_id: number }> = [];
   let unowned = 0;
   for (const r of rows) {
     if ((Number(r.creator) === BOT) !== (creator === "bot")) continue;
@@ -50,7 +50,7 @@ export function actsOf(rows: Row[], info: (orderId: number) => OrderInfo | undef
     } else continue;
     const who = r.order_id ? info(Number(r.order_id)) : undefined;
     if (!who) { unowned++; continue; }
-    acts.push({ at: r.created, by: Number(r.creator), what, order_id: Number(r.order_id), number: who.number, company_id: who.company_id, model, model_id, ...(changes ? { changes } : {}) });
+    acts.push({ row_id: r.id, at: r.created, by: Number(r.creator), what, order_id: Number(r.order_id), number: who.number, company_id: who.company_id, model, model_id, ...(changes ? { changes } : {}) });
   }
   return { acts, unowned };
 }

@@ -538,6 +538,22 @@ export const MIGRATIONS: ReadonlyArray<readonly [id: string, statement: string]>
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(), PRIMARY KEY (message_id, variant))`],
   ["097_create_index_v2_outcomes_open", `CREATE INDEX IF NOT EXISTS v2_outcomes_open ON v2_outcomes (sent_at) WHERE scored_at IS NULL`],
   ["098_create_index_v2_outcomes_scored", `CREATE INDEX IF NOT EXISTS v2_outcomes_scored ON v2_outcomes (scored_at)`],
+  // lib/v2/loop/truth.ts: the company's name, for telling the test company apart by name (testData.ts).
+  ["099_alter_table_onsinch_contacts", `ALTER TABLE onsinch_contacts ADD COLUMN IF NOT EXISTS company_name TEXT`],
+  ["100_create_table_onsinch_places", `CREATE TABLE IF NOT EXISTS onsinch_places (id INTEGER PRIMARY KEY, name TEXT, refreshed_at TIMESTAMPTZ NOT NULL)`],
+  // lib/v2/loop/actions.ts: an order staff touched, as last read, for its client and days.
+  ["101_create_table_onsinch_orders", `CREATE TABLE IF NOT EXISTS onsinch_orders (order_id BIGINT PRIMARY KEY, number TEXT, company_id INTEGER, body JSONB, read_at TIMESTAMPTZ NOT NULL)`],
+  // lib/v2/loop/actions.ts: one row per staff action (one person's changes to one order, no 30-minute gap).
+  ["102_create_table_v2_staff_actions", `CREATE TABLE IF NOT EXISTS v2_staff_actions (
+    order_id BIGINT NOT NULL, by INTEGER NOT NULL, first_id BIGINT NOT NULL, first_at TIMESTAMPTZ NOT NULL, last_at TIMESTAMPTZ NOT NULL,
+    rows INTEGER NOT NULL, what JSONB, moved_start JSONB, acts JSONB, number TEXT, company_id INTEGER, days JSONB, bucket TEXT,
+    message_id TEXT, exception JSONB, recorded_at TIMESTAMPTZ NOT NULL DEFAULT now(), classified_at TIMESTAMPTZ,
+    PRIMARY KEY (order_id, by, first_id))`],
+  ["103_create_index_v2_staff_actions_open", `CREATE INDEX IF NOT EXISTS v2_staff_actions_open ON v2_staff_actions (first_at) WHERE classified_at IS NULL`],
+  // lib/v2/loop/cards.ts: each need the TV showed, and how it left.
+  ["104_create_table_v2_card_exits", `CREATE TABLE IF NOT EXISTS v2_card_exits (
+    item_key TEXT PRIMARY KEY, thread_id TEXT NOT NULL, kind TEXT, days JSONB, opened_at TIMESTAMPTZ, last_seen_at TIMESTAMPTZ,
+    exit TEXT, exit_by TEXT, exit_at TIMESTAMPTZ)`],
 ];
 
 /**

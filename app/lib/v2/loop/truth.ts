@@ -141,29 +141,55 @@ export async function refreshContacts(sql: Sql, t: Transport, now = Date.now()):
   await ensureSchema(sql);
   const last = await meta<string>(sql, "contacts_at");
   if (last && now - Date.parse(last) < CONTACTS_EVERY_MS) return { refreshed: false, contacts: 0 };
-  const rows: Array<{ email: string; company_id: number }> = [];
+  const rows: Array<{ email: string; company_id: number; company_name: string }> = [];
   for (let p = 1; p <= 50; p++) {
     const page = await readPage(t, `/companies?with=Client&limit=100&page=${p}`);
     for (const c of page.rows) for (const cl of [].concat(c.Client ?? []) as any[]) {
       const email = String(cl?.email ?? "").trim().toLowerCase();
-      if (email && Number(c.id)) rows.push({ email, company_id: Number(c.id) });
+      if (email && Number(c.id)) rows.push({ email, company_id: Number(c.id), company_name: String(c.name ?? "").trim() });
     }
     if (page.rows.length < 100 || p >= page.pageCount) break;
     if (p === 50) throw new Error("more than 5,000 companies: the contact list was not read whole");
   }
   if (!rows.length) throw new Error("OnSinch listed no contacts; yesterday's list is kept");
   const at = new Date(now).toISOString();
-  await sql`INSERT INTO onsinch_contacts (email, company_id, refreshed_at)
-    SELECT DISTINCT email, company_id, ${at}::timestamptz FROM jsonb_to_recordset(${JSON.stringify(rows)}::jsonb) AS x(email TEXT, company_id INTEGER)
-    ON CONFLICT (email, company_id) DO UPDATE SET refreshed_at = EXCLUDED.refreshed_at`;
+  await sql`INSERT INTO onsinch_contacts (email, company_id, company_name, refreshed_at)
+    SELECT DISTINCT email, company_id, company_name, ${at}::timestamptz FROM jsonb_to_recordset(${JSON.stringify(rows)}::jsonb) AS x(email TEXT, company_id INTEGER, company_name TEXT)
+    ON CONFLICT (email, company_id) DO UPDATE SET company_name = EXCLUDED.company_name, refreshed_at = EXCLUDED.refreshed_at`;
   await sql`DELETE FROM onsinch_contacts WHERE refreshed_at < ${at}::timestamptz`;
   await setMeta(sql, "contacts_at", at);
   return { refreshed: true, contacts: rows.length };
 }
 
-/** The minute sync's step: the timeline first, then the contacts when a day has passed. */
+/**
+ * OnSinch's places by id and name, once a day, for the exceptions' venue categories (a depot, one site; ADDENDUM
+ * §12.5). Written before the old list goes, as the contacts are.
+ */
+export async function refreshPlaces(sql: Sql, t: Transport, now = Date.now()): Promise<{ refreshed: boolean; places: number }> {
+  await ensureSchema(sql);
+  const last = await meta<string>(sql, "places_at");
+  if (last && now - Date.parse(last) < CONTACTS_EVERY_MS) return { refreshed: false, places: 0 };
+  const rows: Array<{ id: number; name: string }> = [];
+  for (let p = 1; p <= 100; p++) {
+    const page = await readPage(t, `/places?limit=100&page=${p}`);
+    for (const x of page.rows) if (Number(x.id)) rows.push({ id: Number(x.id), name: String(x.name ?? "").trim() });
+    if (page.rows.length < 100 || p >= page.pageCount) break;
+    if (p === 100) throw new Error("more than 10,000 places: the place list was not read whole");
+  }
+  if (!rows.length) throw new Error("OnSinch listed no places; yesterday's list is kept");
+  const at = new Date(now).toISOString();
+  for (let i = 0; i < rows.length; i += 1000) await sql`INSERT INTO onsinch_places (id, name, refreshed_at)
+    SELECT id, name, ${at}::timestamptz FROM jsonb_to_recordset(${JSON.stringify(rows.slice(i, i + 1000))}::jsonb) AS x(id INTEGER, name TEXT)
+    ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, refreshed_at = EXCLUDED.refreshed_at`;
+  await sql`DELETE FROM onsinch_places WHERE refreshed_at < ${at}::timestamptz`;
+  await setMeta(sql, "places_at", at);
+  return { refreshed: true, places: rows.length };
+}
+
+/** The minute sync's step: the timeline first, then the contacts and places when a day has passed. */
 export async function pullTruth(sql: Sql, t: Transport, now = Date.now()): Promise<Record<string, unknown>> {
   const timeline = await pullTimeline(sql, t, { deadline: now + 60_000 });
   const contacts = await refreshContacts(sql, t, now);
-  return { ...timeline, contacts: contacts.refreshed ? contacts.contacts : "fresh" };
+  const places = await refreshPlaces(sql, t, now);
+  return { ...timeline, contacts: contacts.refreshed ? contacts.contacts : "fresh", places: places.refreshed ? places.places : "fresh" };
 }
