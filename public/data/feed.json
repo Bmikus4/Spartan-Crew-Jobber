@@ -5427,5 +5427,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0258",
+  "ts": "2026-10-28T02:46:58+00:00",
+  "kind": "measurement",
+  "headline": "R22: decide() 499 lines to 187 (planChange, addToNamed, bookNew, setPo); 799 replayed decisions byte-identical",
+  "subject": "The planner's decide() runs as named steps over one Draft, no decision changed",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 114,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]

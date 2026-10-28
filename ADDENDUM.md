@@ -6,7 +6,7 @@
   below as findings and status.
 - Every step updates this file: its status line, its measurement, and what moved.
 
-**Last updated:** 28 October 2026, R21 DONE (S-0257): scripts/README.md says what each of 135 scripts can touch; R20 measured and deferred with a trigger. R19 DONE (S-0256): what a reason means is read only in reasons.ts. R17 planner part DONE (S-0255): dev-2 writes 21, 12 completed, 2 partial, 7 wrong (was 22, 11, 2, 9); the 7 left are owner rules or judging limits, listed under R17. R16 DONE (S-0254): F49 and F50, the review's two write-path gaps, closed; the review's other steps are R17-R22. R15 DONE (S-0253): the V1 review, https://claude.ai/artifact/A3WyEdpcXRcehHoJVb6BQe; its write-path gaps are F49-F54, to close before writes go back on. S-0252: the re-plan no longer counts every card as changed every minute (found by the live trace). R13 DONE (S-0251): the assisted-card design, docs/ASSISTED-MODE-DESIGN-2026-10-27.md; at most 90 of 155 dev handoffs are near-misses. R14 DONE, dormant (S-0250): the Gmail poll decides through v2 once the grant exists and INTAKE_PATH=routing. R12 held for the owner and Paz. R11 DONE (S-0249): the live trace is on; 5.7 counted, its outbound change waits on the owner. R10 DONE (S-0248): the email-to-board harness and its 20-email case study. R9 DONE (S-0247). R8 DONE but e (S-0244 to S-0246); e waits on the owner's yes to a paid measurement. R3's switch-over waits on CRON_SECRET. The baseline was 0f2dcef. App code changed since then in these
+**Last updated:** 28 October 2026, R22 DONE (S-0258): plan.ts decide() is 187 lines of steps in order, every decision of 799 replayed emails byte-identical. The review's builder steps are done; what is left is the owner's (§0 Blocked). R21 DONE (S-0257): scripts/README.md says what each of 135 scripts can touch; R20 measured and deferred with a trigger. R19 DONE (S-0256): what a reason means is read only in reasons.ts. R17 planner part DONE (S-0255): dev-2 writes 21, 12 completed, 2 partial, 7 wrong (was 22, 11, 2, 9); the 7 left are owner rules or judging limits, listed under R17. R16 DONE (S-0254): F49 and F50, the review's two write-path gaps, closed; the review's other steps are R17-R22. R15 DONE (S-0253): the V1 review, https://claude.ai/artifact/A3WyEdpcXRcehHoJVb6BQe; its write-path gaps are F49-F54, to close before writes go back on. S-0252: the re-plan no longer counts every card as changed every minute (found by the live trace). R13 DONE (S-0251): the assisted-card design, docs/ASSISTED-MODE-DESIGN-2026-10-27.md; at most 90 of 155 dev handoffs are near-misses. R14 DONE, dormant (S-0250): the Gmail poll decides through v2 once the grant exists and INTAKE_PATH=routing. R12 held for the owner and Paz. R11 DONE (S-0249): the live trace is on; 5.7 counted, its outbound change waits on the owner. R10 DONE (S-0248): the email-to-board harness and its 20-email case study. R9 DONE (S-0247). R8 DONE but e (S-0244 to S-0246); e waits on the owner's yes to a paid measurement. R3's switch-over waits on CRON_SECRET. The baseline was 0f2dcef. App code changed since then in these
 commits only:
 
 | commit | ticket | what |
@@ -39,6 +39,7 @@ commits only:
 | (R17) | S-0255 | A chief counted on its own is one more on the call; set builders are Carpenters; venue initials read on the whole name; a call under 2 hours is a person's |
 | (R19) | S-0256 | F52: feed/v2.ts and plan.ts ask reasons.ts (isReplyReason, isMissingDetail); the sweep reads the stored code for not-a-client |
 | (R21) | S-0257 | scripts/scripts-index.mjs and scripts/README.md (test/scriptsIndexed.ts); authorizeMailWebhook and the two /api/mail-inbound scripts deleted; stale route comments |
+| (R22) | S-0258 | plan.ts: decide() split into planChange, addToNamed, bookNew and setPo over one Draft; no decision changed |
 
 bd10dae (S-0213) moved the test suite onto PGlite. Line references below are at HEAD unless a line says "at 0f2dcef".
 
@@ -1470,7 +1471,7 @@ Still to come from §10: the identity owner (R8), and the move of what the old e
 | R19 | | F52: the reason code stored as a column; retries, the sweep, resume and the TV read the code. **DONE** S-0256 (the stored code; no column needed) | yes |
 | R20 | | F53: the minute reads limited to open cards and recent days. **MEASURED, deferred** 28 Oct: 324 rows, ~400 KB a minute; trigger in F53 | yes |
 | R21 | | scripts/ sorted (live, read-only, archive; write-capable ones marked); dead helpers, the Jobs screen's dead button, stale route comments. **DONE** S-0257 (the button is the owner's and Paz's) | yes |
-| R22 | | plan.ts `decide()` split along its sections, the replay as the check | yes |
+| R22 | | plan.ts `decide()` split along its sections, the replay as the check. **DONE** S-0258: 499 lines to 187, every decision of 799 replayed emails byte-identical | yes |
 
 ### Prompt 9: stop losing work, part 2 (F26, F29, F30, F31, F35, F36): **DONE**, S-0235
 **Goal:** a failed read heals itself, the owner hears of the system's own failures, and a pause loses no mail.
@@ -1622,6 +1623,15 @@ Zero references is permission to delete, never a reason to.
 
 **Done when:** app/lib/engine is gone or holds only what v2 uses, and nothing live changed (the harness and the suite
 agree).
+
+### R22: the planner's decide() in steps: **DONE**, S-0258
+- decide() was one function of about 500 lines. It is now 187: the stand-downs and intents, the client, the past and
+  over days, the thread's history, then one call per step. planChange (one change on one shift), addToNamed (new
+  shifts on the booking the email names), bookNew (already booked, added beside a booked part, or a new order) and
+  setPo share one Draft: what each reads, and the ops, why, assumed, asked and retimed every step adds to.
+- **The move was mechanical:** each body was cut out by a script and wrapped, word for word, with the names it uses
+  taken from the Draft. **Checked:** every decision of the dev and dev-2 replays (799 emails), full JSON with sorted
+  keys, before and after: byte-identical. The dump was run twice before the change and matched itself.
 
 ### R21: scripts/ and dead code: **DONE**, S-0257
 - **scripts/README.md** is made by scripts/scripts-index.mjs from each script's own code: 135 scripts, 43 can write
