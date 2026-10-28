@@ -9,6 +9,10 @@
 //             Until 10-27 nothing looked at it again: the rest of the email was simply not done;
 //   during    the run died inside one: the next operation has a ledger row and no result. It may have
 //             landed, so it is never sent again (bot/db.ts); it is recorded as unknown, a person's.
+//             Inside the FIRST one there is no result at all (F49), and that looks like a shadow
+//             decision, which writes never ran for: only the first operation's ledger row tells them
+//             apart. With no ledger row it is left as it is, or switching writes on would run every
+//             shadow plan of the last 6 hours.
 // Before anything runs again the email is planned again from its stored reading, against OnSinch as it
 // is now, with staff's edits since and today's settings (the same decideMessage as intake, writing
 // nothing). The rest runs only when that plan asks for exactly the operations still to do; otherwise the
@@ -62,12 +66,12 @@ export async function resumeStopped(sql: Sql, deps: Partial<ResumeDeps> = {}): P
   const d0 = { ...productionDeps(sql), ...deps };
   if (!(await d0.writes())) return { resumed: 0, closed: 0, results: [] };
   const rows = (await sql`SELECT message_id, thread_id, decision, executed FROM v2_decisions
-    WHERE kind = 'write' AND jsonb_typeof(executed) = 'array' AND created_at > now() - ${WINDOW}::interval ORDER BY created_at`) as any[];
+    WHERE kind = 'write' AND coalesce(jsonb_typeof(executed), 'null') IN ('array', 'null') AND created_at > now() - ${WINDOW}::interval ORDER BY created_at`) as any[];
   const today = utcToLondon(new Date(d0.now()).toISOString()).date;
   const out = { resumed: 0, closed: 0, results: [] as string[] };
   for (const row of rows) {
     const ops = (row.decision?.ops ?? []) as Planned[];
-    const ex = row.executed as RunResult[];
+    const ex = (row.executed ?? []) as RunResult[];
     const last = ex[ex.length - 1];
     const tries = Number(row.decision?.retries ?? 0);
     let done: RunResult[], todo: Planned[];
@@ -88,6 +92,13 @@ export async function resumeStopped(sql: Sql, deps: Partial<ResumeDeps> = {}): P
         continue;
       }
       done = ex; todo = ops.slice(ex.length);
+    } else if (!ex.length && ops.length) {
+      const first = await d0.ledger(ops[0].source, ops[0].op);
+      if (!first || d0.now() - first.at < RESUME_AFTER_MS) continue; // a shadow plan, or still running
+      const r: RunResult = { op_key: opKey(ops[0].source, ops[0].op), status: "unknown", reasons: [`the run stopped inside its first operation (ledger: ${first.status}); OnSinch may hold it: a person checks`] };
+      await close(sql, row, [r], tries);
+      out.closed++; out.results.push(`${row.message_id}: unknown (first operation)`);
+      continue;
     } else continue;
     // Never a day already gone.
     if (todo.some(({ op }) => [(op as any).date, ...(((op as any).shifts ?? []) as any[]).map((s) => s.date)].some((x) => typeof x === "string" && x < today))) {

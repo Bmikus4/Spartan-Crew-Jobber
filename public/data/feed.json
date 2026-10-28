@@ -5371,5 +5371,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0254",
+  "ts": "2026-10-28T02:21:08+00:00",
+  "kind": "measurement",
+  "headline": "R16: F49 (resume sees a first-op death by its ledger row) and F50 (a re-decision keeps the write record)",
+  "subject": "A write that died in its first operation is closed as unknown, not left",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 111,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]

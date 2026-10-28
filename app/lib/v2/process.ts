@@ -344,6 +344,20 @@ export type Client = { id: number | null; name: string | null };
 export type Recorded = { kind: Decision["kind"]; interpretation: { extraction: Extraction; grounded: Interpretation; meta?: ExtractMeta } | null; decision: Decision; executed: RunResult[] | null; client: Client };
 
 /**
+ * One email's decision, inserted or replaced. No result yet is written as SQL NULL, so `coalesce` keeps a
+ * write's record: `JSON.stringify(null)::jsonb` is a JSON null, a value, and it overwrote the array (addendum F50).
+ * processMessage's check for something sent runs before this and is not atomic with it; this is the second guard.
+ */
+export async function recordDecision(sql: NeonQueryFunction<false, false>, m: { message_id: string; thread_id: string; from: string; sent_at: string }, d: Recorded): Promise<void> {
+  await sql`
+    INSERT INTO v2_decisions (message_id, thread_id, from_address, sent_at, kind, interpretation, decision, executed, code_version, company_id, company)
+    VALUES (${m.message_id}, ${m.thread_id}, ${m.from}, ${m.sent_at}, ${d.kind}, ${JSON.stringify(d.interpretation)}::jsonb, ${JSON.stringify(d.decision)}::jsonb, ${d.executed ? JSON.stringify(d.executed) : null}::jsonb, ${codeVersion()}, ${d.client.id}, ${d.client.name})
+    ON CONFLICT (message_id) DO UPDATE SET kind = EXCLUDED.kind, interpretation = EXCLUDED.interpretation, decision = EXCLUDED.decision,
+      executed = coalesce(EXCLUDED.executed, v2_decisions.executed), code_version = EXCLUDED.code_version,
+      company_id = EXCLUDED.company_id, company = EXCLUDED.company`;
+}
+
+/**
  * Everything one message's handling needs from outside, so the office and the harness run
  * the SAME decision code: production passes the database, OnSinch and the bot; the harness
  * passes recordings, a fake OnSinch and a recording runner. There is no test branch here.
@@ -516,10 +530,11 @@ export function threadReads(sql: NeonQueryFunction<false, false>, m0: MessageIn,
 
 export async function processMessage(message_id: string, opts: { execute: boolean; world?: World; with?: string[] } = { execute: false }): Promise<Processed> {
   const sql = await db();
-  // WHAT WAS SENT FOR AN EMAIL IS ITS RECORD, so such an email is never decided again here. The
-  // upsert below writes `executed` as JSON null, which `coalesce` keeps, so a replay through
+  // WHAT WAS SENT FOR AN EMAIL IS ITS RECORD, so such an email is never decided again here. Until
+  // F50 the upsert wrote `executed` as a JSON null, which `coalesce` keeps, so a replay through
   // /api/bot/process (the route intake's alarm names) erased the only account of what reached
-  // OnSinch (audit/pipeline-trace-addendum.md R4, 10-25). The replan refuses these rows too (replan.ts:63).
+  // OnSinch (audit/pipeline-trace-addendum.md R4, 10-25). recordDecision now keeps it as well; the
+  // replan refuses these rows too (replan.ts:63).
   // `<> '[]'`, not jsonb_array_length: Postgres need not short-circuit AND, and the length of a scalar throws.
   const sent = (await sql`SELECT 1 FROM v2_decisions WHERE message_id = ${message_id} AND jsonb_typeof(executed) = 'array' AND executed <> '[]'::jsonb`) as any[];
   if (sent.length) return { message_id, skipped: "something was sent for this email: its record stands" };
@@ -547,12 +562,7 @@ export async function processMessage(message_id: string, opts: { execute: boolea
       else await linkFound(sql, { thread_id: m.thread_id, order_id, source });
     },
     record: async (d) => {
-      await sql`
-        INSERT INTO v2_decisions (message_id, thread_id, from_address, sent_at, kind, interpretation, decision, executed, code_version, company_id, company)
-        VALUES (${message_id}, ${m.thread_id}, ${from}, ${m.date_iso}, ${d.kind}, ${JSON.stringify(d.interpretation)}::jsonb, ${JSON.stringify(d.decision)}::jsonb, ${JSON.stringify(d.executed)}::jsonb, ${codeVersion()}, ${d.client.id}, ${d.client.name})
-        ON CONFLICT (message_id) DO UPDATE SET kind = EXCLUDED.kind, interpretation = EXCLUDED.interpretation, decision = EXCLUDED.decision,
-          executed = coalesce(EXCLUDED.executed, v2_decisions.executed), code_version = EXCLUDED.code_version,
-          company_id = EXCLUDED.company_id, company = EXCLUDED.company`;
+      await recordDecision(sql, { message_id, thread_id: m.thread_id, from, sent_at: m.date_iso }, d);
       // THE SYSTEM'S OWN FAILURES GO TO THE OWNER (addendum F30): 5 of the live week's 81
       // listed cards were the system failing, shown to staff as ordinary needs and reported to
       // nobody (audit/reconstruction.md §6.7). errorReport collapses repeats inside its window,

@@ -6,7 +6,7 @@
   below as findings and status.
 - Every step updates this file: its status line, its measurement, and what moved.
 
-**Last updated:** 27 October 2026, R15 DONE (S-0253): the V1 review, https://claude.ai/artifact/A3WyEdpcXRcehHoJVb6BQe; its write-path gaps are F49-F54, to close before writes go back on. S-0252: the re-plan no longer counts every card as changed every minute (found by the live trace). R13 DONE (S-0251): the assisted-card design, docs/ASSISTED-MODE-DESIGN-2026-10-27.md; at most 90 of 155 dev handoffs are near-misses. R14 DONE, dormant (S-0250): the Gmail poll decides through v2 once the grant exists and INTAKE_PATH=routing. R12 held for the owner and Paz. R11 DONE (S-0249): the live trace is on; 5.7 counted, its outbound change waits on the owner. R10 DONE (S-0248): the email-to-board harness and its 20-email case study. R9 DONE (S-0247). R8 DONE but e (S-0244 to S-0246); e waits on the owner's yes to a paid measurement. R3's switch-over waits on CRON_SECRET. The baseline was 0f2dcef. App code changed since then in these
+**Last updated:** 28 October 2026, R16 DONE (S-0254): F49 and F50, the review's two write-path gaps, closed; the review's other steps are R17-R22. R15 DONE (S-0253): the V1 review, https://claude.ai/artifact/A3WyEdpcXRcehHoJVb6BQe; its write-path gaps are F49-F54, to close before writes go back on. S-0252: the re-plan no longer counts every card as changed every minute (found by the live trace). R13 DONE (S-0251): the assisted-card design, docs/ASSISTED-MODE-DESIGN-2026-10-27.md; at most 90 of 155 dev handoffs are near-misses. R14 DONE, dormant (S-0250): the Gmail poll decides through v2 once the grant exists and INTAKE_PATH=routing. R12 held for the owner and Paz. R11 DONE (S-0249): the live trace is on; 5.7 counted, its outbound change waits on the owner. R10 DONE (S-0248): the email-to-board harness and its 20-email case study. R9 DONE (S-0247). R8 DONE but e (S-0244 to S-0246); e waits on the owner's yes to a paid measurement. R3's switch-over waits on CRON_SECRET. The baseline was 0f2dcef. App code changed since then in these
 commits only:
 
 | commit | ticket | what |
@@ -35,6 +35,7 @@ commits only:
 | (R13) | S-0251 | Prompt 7: docs/ASSISTED-MODE-DESIGN-2026-10-27.md (design only) |
 | (R11) | S-0252 | replan.ts sameAnswer: an answer read back from JSONB is compared by content, not key order |
 | (R15) | S-0253 | The V1 review (builder and an independent reviewer, every claim checked); F49-F54 added; two misplaced process.ts comments moved |
+| (R16) | S-0254 | F49: resume closes a write that died in its first operation as unknown, by its ledger row; F50: recordDecision keeps a write's record |
 
 bd10dae (S-0213) moved the test suite onto PGlite. Line references below are at HEAD unless a line says "at 0f2dcef".
 
@@ -115,8 +116,8 @@ and §3 ends with the findings added after 23 Oct (F29 onward). §11 is the rebu
 | F44 schema at request time; preview on production's database | **DONE for the schema** S-0240: app/lib/migrations.ts, migrate() once per database, checked against production's schema. **OPEN: Preview's own branch** (needs access) | test/migrations.ts |
 | F45 the old engine is 40% of the app | **DONE** S-0241 to S-0243: 53 app files (14,624 lines) deleted, 122 of 226 test files with them; the 7 files v2 imports are app/lib/onsinch/ | test/automationPaused.ts; scripts as in Prompt 12 |
 | F48 a failed test file passed the gate | **DONE** S-0242 | test/exitCodeSurvivesPglite.ts |
-| F49 a death inside a write's first operation is never resumed | **OPEN**, before writes go on (R15) | resume.ts:64; process.ts:404 |
-| F50 the decision upsert's coalesce never keeps a record | **OPEN**, before writes go on (R15) | process.ts:554 |
+| F49 a death inside a write's first operation is never resumed | **DONE** S-0254 | test/resumeStopped.ts [3b] |
+| F50 the decision upsert's coalesce never keeps a record | **DONE** S-0254 | test/replayKeepsWriteRecord.ts |
 | F51 a link takes new shifts whatever days its order holds | **OPEN, owner decision** (R15) | identity/index.ts:137 |
 | F52 behaviour keyed to reason wording | **OPEN** (R15) | process.ts:119, :308; resume.ts:42; feed/v2.ts:45 |
 | F53 the minute reads grow with history | **OPEN** (R15) | replan.ts; feed/live.ts |
@@ -811,11 +812,14 @@ medium).**
 **F49 to F54: found by the V1 review (R15, 27 Oct), each checked against the code.** The review: https://claude.ai/artifact/A3WyEdpcXRcehHoJVb6BQe
 - **F49. A death inside a write's first operation is never resumed (Write, high once writes are on).** resume.ts:64
   takes only rows whose `executed` is an array, and the first record writes it as JSON null (process.ts:404). The
-  ledger then holds intent or submitted, and the card shows a need for work OnSinch may hold. **Fix:** resume closes
-  such a row as unknown after RESUME_AFTER_MS and reports it.
+  ledger then holds intent or submitted, and the card shows a need for work OnSinch may hold. **DONE S-0254:** resume
+  also takes a write with no result, and closes it as unknown when its first operation's ledger row has been still for
+  RESUME_AFTER_MS. With no ledger row it is left: a write with no result is also every shadow decision, and taking
+  those would run the last 6 hours' shadow plans the moment writes go on (test/resumeStopped.ts [3b] pins both).
 - **F50. The decision upsert's `coalesce` never keeps a stored record (Write, medium).** `JSON.stringify(null)::jsonb`
   is a JSON null, not SQL NULL, so it overwrites the array (tested on PGlite). Only the non-atomic pre-check at
-  process.ts:524 guards a replay. **Fix:** write SQL NULL; a replay test over a recorded write.
+  process.ts:524 guards a replay. **DONE S-0254:** recordDecision (process.ts) writes no result as SQL NULL, so
+  `coalesce` keeps a write's record; test/replayKeepsWriteRecord.ts drives it past the guard, with the old form as control.
 - **F51. A thread's link takes new shifts whatever days its order holds (Wrong booking, owner decision).**
   identity/index.ts:137. A client reusing an old thread for a new job gets shifts on the old order. **Proposal:** the
   link takes new shifts only when its order holds an asked day or the venue.
@@ -1441,6 +1445,13 @@ Still to come from §10: the identity owner (R8), and the move of what the old e
 | R13 | 7 | Assisted mode design, from R10's numbers. **DONE** S-0251 (docs/ASSISTED-MODE-DESIGN-2026-10-27.md) | design |
 | R14 | | Mail intake through v2 (F43), live with the Gmail grant; then intake, labels and alarms leave n8n entirely. **DONE, dormant** S-0250; labels and alarms after the grant | dormant until the grant |
 | R15 | | **The V1 review:** a thorough review of the whole system (code cleanliness, what works and what doesn't, what to do next), by me and by an independent agent. Published and opened in the owner's browser. **DONE** S-0253: https://claude.ai/artifact/A3WyEdpcXRcehHoJVb6BQe | report |
+| R16 | | F49, F50: the review's two write-path gaps. **DONE** S-0254 | test |
+| R17 | | The 9 wrong dev-2 writes, one by one: each a planner fix or a refusal (harness/real/writes-run.ts) | before writes go back on; writes on is the owner's |
+| R18 | | F51: a link takes new shifts only when its order holds an asked day or the venue | **owner decision** |
+| R19 | | F52: the reason code stored as a column; retries, the sweep, resume and the TV read the code | yes |
+| R20 | | F53: the minute reads limited to open cards and recent days | yes |
+| R21 | | scripts/ sorted (live, read-only, archive; write-capable ones marked); dead helpers, the Jobs screen's dead button, stale route comments | yes |
+| R22 | | plan.ts `decide()` split along its sections, the replay as the check | yes |
 
 ### Prompt 9: stop losing work, part 2 (F26, F29, F30, F31, F35, F36): **DONE**, S-0235
 **Goal:** a failed read heals itself, the owner hears of the system's own failures, and a pause loses no mail.

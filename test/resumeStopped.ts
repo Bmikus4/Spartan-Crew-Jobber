@@ -87,6 +87,20 @@ const old = NOW - RESUME_AFTER_MS - 60_000;
     ok(ex.length === 2 && ex[1].status === "unknown" && /a person checks/.test(ex[1].reasons[0]), "one final result, unknown, for a person", ex);
   }
 
+  console.log("\n[3b] died inside the FIRST operation: no result at all, only the ledger knows (F49)");
+  {
+    await decision("f1", null as any);
+    await sql`INSERT INTO v2_decisions (message_id, thread_id, sent_at, kind, decision, code_version)
+      VALUES ('f2', 't-f2', ${new Date(NOW).toISOString()}, 'write', ${JSON.stringify(write("f2"))}::jsonb, 'build-2')`;
+    await decision("f3", null as any);
+    const r = rig({ ledger: { "f1#0": { status: "intent", at: old }, "f2#0": { status: "submitted", at: NOW - 60_000 } } });
+    const rep = await resumeStopped(sql, r.deps);
+    const f1 = await executedOf("f1");
+    ok(r.ran.length === 0 && f1?.length === 1 && f1[0].status === "unknown" && /first operation/.test(f1[0].reasons[0]), "a still run with a ledger row: unknown, nothing sent again", { ran: r.ran, f1, rep });
+    ok(!(await executedOf("f2")), "one that moved a minute ago may still be running: left alone", await executedOf("f2"));
+    ok(!(await executedOf("f3")), "no ledger row is a shadow plan: never run, never closed", await executedOf("f3"));
+  }
+
   console.log("\n[4] staff overtook it, or the plan changed: closed, not resumed");
   {
     await decision("c1", [verified("c1#0")]);
