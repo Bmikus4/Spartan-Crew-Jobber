@@ -19,7 +19,7 @@ import { fillTimes, pastShifts } from "./assume";
 import { tradeOf, pickProfession, PROFESSION_NAME, type LiveProfession } from "./professions";
 import { matchCompanyBySender, rNumbersIn, normName, domainOfEmail, CONSUMER_DOMAINS } from "../../onsinch/resolve";
 import { BOT_USER } from "../evidence";
-import { coded } from "../reasons";
+import { coded, isMissingDetail } from "../reasons";
 import { companiesOf, stampedSince, type ThreadIn, type ThreadMsg, type StateWorld, type Grounded } from "../threadState";
 import { identify, covered, refsIn, atVenue, nearStart, placesOn, GENERIC_PLACE, type Facts, type OrderRef } from "../identity";
 
@@ -55,8 +55,6 @@ const handoff = (...reasons: string[]): Decision => ({ kind: "handoff", reasons 
 export const CREATE_LEAD_DAYS = 14;
 const daysBetween = (from: string, to: string) => Math.round((Date.parse(`${to}T12:00:00Z`) - Date.parse(`${from}T12:00:00Z`)) / 864e5);
 const ask = (...reasons: string[]): Decision => ({ kind: "handoff", reasons, reply: true });
-/** A detail the client did not write: the client is asked, nobody can book it without them. */
-const MISSING = /: no (day|start time|end time or duration|crew count|new time or length) the client wrote$|^no venue in the email$/;
 
 /**
  * THE CREW CHIEF RULE (Ben, 10-15): 4 or more on a shift carry a Crew Chief, 10+ two, 20+ [DECISIONS V13]
@@ -522,7 +520,7 @@ async function decide(msg: Message, i: Interpretation, world: World, threadOrder
   // answered by a reply: "If you can check availability for Sunday" (Vivid), "send me a quote
   // for Friday 16th" (Blackout) were order cards before.
   const asking = i.intent === "quote_request" || i.intent === "unclear" || i.intent === "info_only";
-  if (problems.length) return problems.every((p) => MISSING.test(p) || (asking && /not an operation the system performs$/.test(p))) ? ask(...problems) : handoff(...problems);
+  if (problems.length) return problems.every((p) => isMissingDetail(p) || (asking && /not an operation the system performs$/.test(p))) ? ask(...problems) : handoff(...problems);
   // A QUOTE IS BOOKED as an order in To Confirm, as ops book it: of the quote requests 9-13 Oct
   // that named their shifts, ops raised an order for every one (scripts/score-vs-ops.mts).
   if (i.intent === "quote_request" && !i.requests.length) return ask("the client asked for a quote");

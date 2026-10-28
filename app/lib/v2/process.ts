@@ -24,7 +24,7 @@ import { type Tracer } from "./trace";
 import { liveTracer } from "./traceLive";
 import { automationPausedFlag, v2Writes } from "../paused";
 import { isTestId, isTestSender } from "../testData";
-import { coded, systemFailureOf } from "./reasons";
+import { coded, systemFailureOf, NOT_CLIENT } from "./reasons";
 import { reportError } from "../errorReport";
 
 /**
@@ -179,7 +179,7 @@ export async function decideDelivery(newIds: string[], decide: Decide = decideNe
   // Every inbound message ends in a recorded state, filtered mail too: bounces and system
   // mail had no row (10 on 10-09/10), so "was this email handled?" had no answer for them.
   for (const r of rows.filter((r) => !r.is_from_spartan && notClient(addr(r.from_address)))) {
-    const decision: Decision = coded({ kind: "none", reason: "not a client's email" });
+    const decision: Decision = coded({ kind: "none", reason: NOT_CLIENT });
     await sql`
       INSERT INTO v2_decisions (message_id, thread_id, from_address, sent_at, kind, decision, code_version)
       VALUES (${r.message_id}, ${r.thread_id}, ${addr(r.from_address)}, ${r.date_iso}, 'none', ${JSON.stringify(decision)}::jsonb, ${codeVersion()})
@@ -296,7 +296,7 @@ export async function sweepUndecided(opts: { decide?: Decide; limit?: number } =
     VALUES (${r.message_id}, ${r.thread_id}, ${addr(r.from_address)}, ${r.date_iso}, ${kind}, ${JSON.stringify(decision)}::jsonb, ${codeVersion()})
     ON CONFLICT (message_id) DO NOTHING RETURNING message_id` as Promise<any[]>;
   for (const r of rows.filter((r) => notClient(addr(r.from_address)))) {
-    if ((await record(r, "none", coded({ kind: "none", reason: "not a client's email" }))).length) rep.filtered.push(r.message_id);
+    if ((await record(r, "none", coded({ kind: "none", reason: NOT_CLIENT }))).length) rep.filtered.push(r.message_id);
   }
   const byThread = new Map<string, any[]>();
   for (const r of rows.filter((r) => !notClient(addr(r.from_address)))) byThread.set(r.thread_id, [...(byThread.get(r.thread_id) ?? []), r]);
@@ -306,7 +306,7 @@ export async function sweepUndecided(opts: { decide?: Decide; limit?: number } =
     rep.threads++;
     const newest = list[list.length - 1];
     const overtaken = ((await sql`SELECT 1 FROM v2_decisions WHERE thread_id = ${newest.thread_id} AND sent_at > ${newest.date_iso}
-      AND NOT (kind = 'none' AND decision->>'reason' = 'not a client''s email') LIMIT 1`) as any[]).length > 0;
+      AND NOT (kind = 'none' AND (decision->>'code' = 'none_not_client' OR decision->>'reason' = ${NOT_CLIENT})) LIMIT 1`) as any[]).length > 0;
     const reason = overtaken ? `${NOT_DECIDED}, and a later email on the thread was decided first: read it by hand` : `${NOT_DECIDED}; the system is reading it again`;
     const claimed = new Set<string>();
     for (const m of list) if ((await record(m, "handoff", coded({ kind: "handoff", reasons: [reason] }))).length) claimed.add(m.message_id);
@@ -396,7 +396,7 @@ export type DecideDeps = {
 export async function decideMessage(m: MessageIn, deps: DecideDeps): Promise<Recorded> {
   const from = addr(m.from_address);
   if (m.is_from_spartan || notClient(from)) {
-    const r: Recorded = { kind: "none", interpretation: null, decision: coded({ kind: "none", reason: "not a client's email" }), executed: null, client: { id: null, name: null } };
+    const r: Recorded = { kind: "none", interpretation: null, decision: coded({ kind: "none", reason: NOT_CLIENT }), executed: null, client: { id: null, name: null } };
     deps.trace("filter", { client: false });
     await deps.record(r);
     deps.trace("final", { kind: r.kind });
@@ -572,6 +572,6 @@ export async function processMessage(message_id: string, opts: { execute: boolea
     },
     trace,
   }).finally(trace.flush);
-  if (!r.interpretation) return { message_id, skipped: "not a client's email", decision: r.decision };
+  if (!r.interpretation) return { message_id, skipped: NOT_CLIENT, decision: r.decision };
   return { message_id, interpretation: r.interpretation.grounded, decision: r.decision, ...(r.executed ? { executed: r.executed } : {}) };
 }

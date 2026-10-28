@@ -75,6 +75,17 @@ export function systemFailureOf(decision: Decision, executed: ReadonlyArray<Pick
 
 export const codeOfReason = (reason: string): string => REASON_CODES.find(([, re]) => re.test(reason))?.[0] ?? "other";
 
+/**
+ * WHAT A REASON MEANS IS READ HERE AND NOWHERE ELSE (addendum F52). The TV's reply test and the planner's
+ * "ask the client" test each kept their own copy of these words, and both had already lost the venue
+ * form this table holds. A reason reworded with its code here keeps every reader right.
+ */
+export const isReplyReason = (reason: string): boolean => codeOfReason(reason).startsWith("reply_");
+/** A detail only the client can give: the client is asked, nobody can book it without them. */
+export const isMissingDetail = (reason: string): boolean => codeOfReason(reason) === "reply_detail_missing";
+/** Mail that is not a client's: one wording, written and matched from here. */
+export const NOT_CLIENT = "not a client's email";
+
 /** The decision with its code, and for a write the defaults it used. A decision already coded keeps its code. */
 export function coded<D extends Decision>(d: D): D {
   if (d.code) return d;

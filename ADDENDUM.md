@@ -6,7 +6,7 @@
   below as findings and status.
 - Every step updates this file: its status line, its measurement, and what moved.
 
-**Last updated:** 28 October 2026, R17 planner part DONE (S-0255): dev-2 writes 21, 12 completed, 2 partial, 7 wrong (was 22, 11, 2, 9); the 7 left are owner rules or judging limits, listed under R17. R16 DONE (S-0254): F49 and F50, the review's two write-path gaps, closed; the review's other steps are R17-R22. R15 DONE (S-0253): the V1 review, https://claude.ai/artifact/A3WyEdpcXRcehHoJVb6BQe; its write-path gaps are F49-F54, to close before writes go back on. S-0252: the re-plan no longer counts every card as changed every minute (found by the live trace). R13 DONE (S-0251): the assisted-card design, docs/ASSISTED-MODE-DESIGN-2026-10-27.md; at most 90 of 155 dev handoffs are near-misses. R14 DONE, dormant (S-0250): the Gmail poll decides through v2 once the grant exists and INTAKE_PATH=routing. R12 held for the owner and Paz. R11 DONE (S-0249): the live trace is on; 5.7 counted, its outbound change waits on the owner. R10 DONE (S-0248): the email-to-board harness and its 20-email case study. R9 DONE (S-0247). R8 DONE but e (S-0244 to S-0246); e waits on the owner's yes to a paid measurement. R3's switch-over waits on CRON_SECRET. The baseline was 0f2dcef. App code changed since then in these
+**Last updated:** 28 October 2026, R19 DONE (S-0256): what a reason means is read only in reasons.ts. R17 planner part DONE (S-0255): dev-2 writes 21, 12 completed, 2 partial, 7 wrong (was 22, 11, 2, 9); the 7 left are owner rules or judging limits, listed under R17. R16 DONE (S-0254): F49 and F50, the review's two write-path gaps, closed; the review's other steps are R17-R22. R15 DONE (S-0253): the V1 review, https://claude.ai/artifact/A3WyEdpcXRcehHoJVb6BQe; its write-path gaps are F49-F54, to close before writes go back on. S-0252: the re-plan no longer counts every card as changed every minute (found by the live trace). R13 DONE (S-0251): the assisted-card design, docs/ASSISTED-MODE-DESIGN-2026-10-27.md; at most 90 of 155 dev handoffs are near-misses. R14 DONE, dormant (S-0250): the Gmail poll decides through v2 once the grant exists and INTAKE_PATH=routing. R12 held for the owner and Paz. R11 DONE (S-0249): the live trace is on; 5.7 counted, its outbound change waits on the owner. R10 DONE (S-0248): the email-to-board harness and its 20-email case study. R9 DONE (S-0247). R8 DONE but e (S-0244 to S-0246); e waits on the owner's yes to a paid measurement. R3's switch-over waits on CRON_SECRET. The baseline was 0f2dcef. App code changed since then in these
 commits only:
 
 | commit | ticket | what |
@@ -37,6 +37,7 @@ commits only:
 | (R15) | S-0253 | The V1 review (builder and an independent reviewer, every claim checked); F49-F54 added; two misplaced process.ts comments moved |
 | (R16) | S-0254 | F49: resume closes a write that died in its first operation as unknown, by its ledger row; F50: recordDecision keeps a write's record |
 | (R17) | S-0255 | A chief counted on its own is one more on the call; set builders are Carpenters; venue initials read on the whole name; a call under 2 hours is a person's |
+| (R19) | S-0256 | F52: feed/v2.ts and plan.ts ask reasons.ts (isReplyReason, isMissingDetail); the sweep reads the stored code for not-a-client |
 
 bd10dae (S-0213) moved the test suite onto PGlite. Line references below are at HEAD unless a line says "at 0f2dcef".
 
@@ -120,7 +121,7 @@ and §3 ends with the findings added after 23 Oct (F29 onward). §11 is the rebu
 | F49 a death inside a write's first operation is never resumed | **DONE** S-0254 | test/resumeStopped.ts [3b] |
 | F50 the decision upsert's coalesce never keeps a record | **DONE** S-0254 | test/replayKeepsWriteRecord.ts |
 | F51 a link takes new shifts whatever days its order holds | **OPEN, owner decision** (R15) | identity/index.ts:137 |
-| F52 behaviour keyed to reason wording | **OPEN** (R15) | process.ts:119, :308; resume.ts:42; feed/v2.ts:45 |
+| F52 behaviour keyed to reason wording | **DONE** S-0256 for decisions; resume.ts's TRANSIENT reads the bot's own error words | test/reasonsOneSource.ts |
 | F53 the minute reads grow with history | **OPEN** (R15) | replan.ts; feed/live.ts |
 | F54 the n8n path cannot see our unsent drafts | **OPEN** (R15) | test/draftIsNotAMessage.ts [5] |
 | F38 a deploy cancels a stopped write's retry | **DONE** S-0247: any build's stopped write is planned again and resumed or closed | test/resumeStopped.ts [5] |
@@ -824,8 +825,13 @@ medium).**
 - **F51. A thread's link takes new shifts whatever days its order holds (Wrong booking, owner decision).**
   identity/index.ts:137. A client reusing an old thread for a new job gets shifts on the old order. **Proposal:** the
   link takes new shifts only when its order holds an asked day or the venue.
-- **F52. Behaviour is keyed to reason wording (Process, medium).** Retries, the sweep's claim, resume and the TV
-  match stored reason text. **Fix:** a reason-code column read by each.
+- **F52. Behaviour is keyed to reason wording (Process, medium). DONE S-0256.** Retries, the sweep's claim, resume and the TV
+  match stored reason text. **As done:** decisions carry their code since 24 Oct, so no column was needed. The TV's reply
+  test and the planner's ask test kept their own copies of the words, and both had lost the venue form reasons.ts holds;
+  they now ask reasons.ts (isReplyReason, isMissingDetail). The sweep's not-a-client test reads the stored code, with the
+  one wording (NOT_CLIENT) for rows older than codes. The retry's "could not read" and the sweep's own claim match
+  words written from one constant in the same file, so they cannot drift apart. resume.ts TRANSIENT reads the bot's error
+  words, not a decision's. cardNote.ts words the card from the reason, which is display, not behaviour.
 - **F53. The minute reads grow with history (Process, low now).** The re-plan and the TV read every decision since
   9 Oct, every minute. **Fix:** open cards and recent days only.
 - **F54. The n8n path cannot see our unsent drafts (Display, low).** n8n sends no label ids, so a draft of ours can
@@ -1449,7 +1455,7 @@ Still to come from §10: the identity owner (R8), and the move of what the old e
 | R16 | | F49, F50: the review's two write-path gaps. **DONE** S-0254 | test |
 | R17 | | The 9 wrong dev-2 writes, one by one: each a planner fix or a refusal (harness/real/writes-run.ts). **Planner part DONE** S-0255: 7 wrong of 21; the rest are the owner's rules or judging limits | before writes go back on; writes on is the owner's |
 | R18 | | F51: a link takes new shifts only when its order holds an asked day or the venue | **owner decision** |
-| R19 | | F52: the reason code stored as a column; retries, the sweep, resume and the TV read the code | yes |
+| R19 | | F52: the reason code stored as a column; retries, the sweep, resume and the TV read the code. **DONE** S-0256 (the stored code; no column needed) | yes |
 | R20 | | F53: the minute reads limited to open cards and recent days | yes |
 | R21 | | scripts/ sorted (live, read-only, archive; write-capable ones marked); dead helpers, the Jobs screen's dead button, stale route comments | yes |
 | R22 | | plan.ts `decide()` split along its sections, the replay as the check | yes |

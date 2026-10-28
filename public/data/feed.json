@@ -5399,5 +5399,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0256",
+  "ts": "2026-10-28T02:34:33+00:00",
+  "kind": "measurement",
+  "headline": "R19 (F52): TV reply test, planner ask test and the sweep read reasons.ts and the stored code",
+  "subject": "What a decision's reason means is read in one place, by its code",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 113,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]

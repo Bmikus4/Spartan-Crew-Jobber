@@ -19,6 +19,7 @@ import type { Op } from "../v2/bot/ops";
 import { londonToUtc, shiftWindow } from "../v2/bot/ops";
 import { rNumbersIn } from "../onsinch/resolve";
 import { cardNote } from "./cardNote";
+import { isReplyReason } from "../v2/reasons";
 
 /** One v2_decisions row of kind write or handoff, with its message's subject. */
 export interface V2Row {
@@ -41,8 +42,7 @@ export interface V2Row {
 
 const REF = /\b[A-Z]{2,5}-?\d{3,6}\b/g;
 
-/** A decision recorded before plan.ts flagged replies (10-11) is one when every reason is a quote, a question or a detail the client must give. */
-const REPLY_REASON = /asked for a quote|the request is unclear|: no (day|start time|end time or duration|crew count|new time or length) the client wrote$|^no venue in the email$/;
+/** A decision recorded before plan.ts flagged replies (10-11) is one when every reason is a quote, a question or a detail the client must give (reasons.ts isReplyReason). */
 
 function opDays(op: Op): Array<{ date: string; start: string; end: string; place_id?: number; venue?: string }> {
   if (op.kind === "create_order") return op.shifts.map((s) => ({ date: s.date, start: s.start, end: s.end, place_id: Number(s.place_id), venue: s.place_label }));
@@ -87,7 +87,7 @@ function classify(row: V2Row, d: Decision) {
   let kind: FeedKind;
   if (d.kind === "write" && written) kind = creates ? "created-check" : "updated-check";
   else if (d.kind === "write") kind = creates ? "needs-created" : "needs-updated";
-  else if (d.kind === "handoff" && (d.reply ?? d.reasons.every((x) => REPLY_REASON.test(x)))) kind = "needs-reply";
+  else if (d.kind === "handoff" && (d.reply ?? d.reasons.every(isReplyReason))) kind = "needs-reply";
   else kind = asksNew ? "needs-created" : "needs-updated";
   return { kind, ops, r_numbers, executed, written, order_id, made };
 }
@@ -232,7 +232,7 @@ function openNeedUnder(list: V2Row[]): V2Row | null {
     if (r.decision.kind === "handoff") { need = r; break; }
   }
   // A need answered by writing back (Needs Reply) is closed by our email, not by a write.
-  if (!need || need.decision.kind !== "handoff" || (need.decision.reply ?? need.decision.reasons.every((x) => REPLY_REASON.test(x)))) return null;
+  if (!need || need.decision.kind !== "handoff" || (need.decision.reply ?? need.decision.reasons.every(isReplyReason))) return null;
   const wroteDays = new Set(newest.decision.ops.flatMap((o) => opDays(o.op)).map((d) => d.date));
   const needDays = (need.grounded?.requests ?? []).map((q) => q.target?.date ?? q.date).filter((d): d is string => !!d);
   const needOrders = rNumbersIn(`${need.subject ?? ""}\n${need.decision.reasons.join("\n")}`);
