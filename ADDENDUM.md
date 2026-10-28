@@ -6,7 +6,7 @@
   below as findings and status.
 - Every step updates this file: its status line, its measurement, and what moved.
 
-**Last updated:** 28 October 2026, S-0260: **the owner's Part 2, the measurement loop, is the work now (§12).** P2.1 DONE: OnSinch's booking timeline is stored from 29 Jul on, read forward every minute, with the contact lists daily. The Part 1 audit is in §12.1; the owner's five rulings are O6-O12 (decisions/2026-10-28-measurement-loop-and-rulings.md); the loop's spec and build steps P2.1-P2.6 are §12.2-§12.6, and the rulings go into code one a day after a 5-7 day baseline (§12.7). S-0259: F46 measured, not built (2 of 395 replies carry a parent from another thread). R22 DONE (S-0258): plan.ts decide() is 187 lines of steps in order, every decision of 799 replayed emails byte-identical. The review's builder steps are done; what is left is the owner's (§0 Blocked). R21 DONE (S-0257): scripts/README.md says what each of 135 scripts can touch; R20 measured and deferred with a trigger. R19 DONE (S-0256): what a reason means is read only in reasons.ts. R17 planner part DONE (S-0255): dev-2 writes 21, 12 completed, 2 partial, 7 wrong (was 22, 11, 2, 9); the 7 left are owner rules or judging limits, listed under R17. R16 DONE (S-0254): F49 and F50, the review's two write-path gaps, closed; the review's other steps are R17-R22. R15 DONE (S-0253): the V1 review, https://claude.ai/artifact/A3WyEdpcXRcehHoJVb6BQe; its write-path gaps are F49-F54, to close before writes go back on. S-0252: the re-plan no longer counts every card as changed every minute (found by the live trace). R13 DONE (S-0251): the assisted-card design, docs/ASSISTED-MODE-DESIGN-2026-10-27.md; at most 90 of 155 dev handoffs are near-misses. R14 DONE, dormant (S-0250): the Gmail poll decides through v2 once the grant exists and INTAKE_PATH=routing. R12 held for the owner and Paz. R11 DONE (S-0249): the live trace is on; 5.7 counted, its outbound change waits on the owner. R10 DONE (S-0248): the email-to-board harness and its 20-email case study. R9 DONE (S-0247). R8 DONE but e (S-0244 to S-0246); e waits on the owner's yes to a paid measurement. R3's switch-over waits on CRON_SECRET. The baseline was 0f2dcef. App code changed since then in these
+**Last updated:** 28 October 2026, S-0261: **the owner's Part 2, the measurement loop, is the work now (§12).** P2.2 DONE: the judge matches staff's orders by day and venue; on the 32 shadow writes it finds 15 matched, 2 partial, 3 wrong, 3 staff did nothing, 9 can't tell. P2.1 DONE (S-0260): OnSinch's booking timeline is stored from 29 Jul on, read forward every minute, with the contact lists daily. The Part 1 audit is in §12.1; the owner's five rulings are O6-O12 (decisions/2026-10-28-measurement-loop-and-rulings.md); the loop's spec and build steps P2.1-P2.6 are §12.2-§12.6, and the rulings go into code one a day after a 5-7 day baseline (§12.7). S-0259: F46 measured, not built (2 of 395 replies carry a parent from another thread). R22 DONE (S-0258): plan.ts decide() is 187 lines of steps in order, every decision of 799 replayed emails byte-identical. The review's builder steps are done; what is left is the owner's (§0 Blocked). R21 DONE (S-0257): scripts/README.md says what each of 135 scripts can touch; R20 measured and deferred with a trigger. R19 DONE (S-0256): what a reason means is read only in reasons.ts. R17 planner part DONE (S-0255): dev-2 writes 21, 12 completed, 2 partial, 7 wrong (was 22, 11, 2, 9); the 7 left are owner rules or judging limits, listed under R17. R16 DONE (S-0254): F49 and F50, the review's two write-path gaps, closed; the review's other steps are R17-R22. R15 DONE (S-0253): the V1 review, https://claude.ai/artifact/A3WyEdpcXRcehHoJVb6BQe; its write-path gaps are F49-F54, to close before writes go back on. S-0252: the re-plan no longer counts every card as changed every minute (found by the live trace). R13 DONE (S-0251): the assisted-card design, docs/ASSISTED-MODE-DESIGN-2026-10-27.md; at most 90 of 155 dev handoffs are near-misses. R14 DONE, dormant (S-0250): the Gmail poll decides through v2 once the grant exists and INTAKE_PATH=routing. R12 held for the owner and Paz. R11 DONE (S-0249): the live trace is on; 5.7 counted, its outbound change waits on the owner. R10 DONE (S-0248): the email-to-board harness and its 20-email case study. R9 DONE (S-0247). R8 DONE but e (S-0244 to S-0246); e waits on the owner's yes to a paid measurement. R3's switch-over waits on CRON_SECRET. The baseline was 0f2dcef. App code changed since then in these
 commits only:
 
 | commit | ticket | what |
@@ -1841,9 +1841,10 @@ All of it lands in new tables, filled by the minute sync with OnSinch GETs only.
   whole and never deleted. Each row carries the order it belongs to where that can be known.
 - **How the order is known:** from a create's path, from an order's number, or from a part of an order read since.
   1,732 of 1,753 staff edits on 21-27 Oct can be tied to their order from the create paths alone.
-- **Supporting tables:**
-  - `onsinch_orders`: orders read when scored.
-  - `onsinch_contacts`: each OnSinch contact's address and company, refreshed daily (9 pages).
+- **Supporting tables:** `onsinch_contacts`, each OnSinch contact's address and company, refreshed daily (9 pages).
+  No order is cached: an email is scored with its client's newest orders read from OnSinch then (up to 5 pages),
+  which also ties rows on orders older than the store. With the create paths, that ties 7,386 of 7,552 staff rows
+  on 7-27 Oct.
 
 **Per email (`v2_outcomes`, one row per decision and plan variant).** Each row carries:
 1. **The client:**
@@ -1862,7 +1863,7 @@ All of it lands in new tables, filled by the minute sync with OnSinch GETs only.
 5. **What staff did:**
    - every staff booking change in the window on the client's orders that hold one of those days;
    - matched by day, then by venue;
-   - each order read as it stood when the window closed, from OnSinch now, with later timeline rows undone.
+   - each order read as it stood when the window closed: OnSinch's order now, with later timeline rows undone.
 6. **The bucket, one per plan:**
    - **matched:** staff left exactly what the plan says;
    - **partial:** the plan is right, and staff did more;
@@ -1991,12 +1992,23 @@ mostly unrelated venues over several days (26 of 32).
 
 | step | what | status |
 |---|---|---|
-| P2.1 | `onsinch_timeline`, `onsinch_parts`, `onsinch_contacts`, `v2_loop_meta` (`app/lib/v2/loop/truth.ts`); the minute step "truth" reads new timeline pages (20 a minute; the 29 Jul backfill takes about 90 minutes) and the contacts once a day. `onsinch_orders` comes with P2.4, where orders are read | **DONE** S-0260 (test/loopTruth.ts) |
-| P2.2 | the scorer, `app/lib/v2/outcome/`: pure, matched by day and venue, orders rewound to the window's close; checked offline against §12.1 | |
+| P2.1 | `onsinch_timeline`, `onsinch_parts`, `onsinch_contacts`, `v2_loop_meta` (`app/lib/v2/loop/truth.ts`); the minute step "truth" reads new timeline pages (20 a minute; the 29 Jul backfill takes about 90 minutes) and the contacts once a day | **DONE** S-0260 (test/loopTruth.ts) |
+| P2.2 | the judge, `app/lib/v2/loop/judge.ts`: pure, matched by day and venue, orders rewound to the window's close | **DONE** S-0261 (test/loopJudge.ts); checked offline below |
 | P2.3 | variants: planner options (start keeps the end, lead over changes, short call and acceptance plans) with defaults unchanged; `v2_variants`; the settings field, admin-only and logged. The replay proves every production decision unchanged | |
 | P2.4 | `v2_outcomes` and the minute step that scores closed windows, back to 9 Oct for production plans | |
 | P2.5 | `v2_staff_actions` (coverage, moved starts, exceptions) and `v2_card_exits` | |
 | P2.6 | `v2_daily`, `/report`, `/api/report`, the 50-case alert | |
+
+**P2.2 checked offline** (`.tmp-v2/p22check.ts`, `p22check2.ts`, gitignored):
+- **The 32 shadow writes since 22 Oct** (28 Oct copy):
+  - 15 matched, 2 partial, 3 wrong (2 the venue, 1 a PO), 3 staff did nothing, 9 can't tell (7 windows still open
+    at the copy's end, 1 no company, 1 several).
+  - The audit's client-wide judging had said 10 matched and 10 wrong.
+- **The 53 two-week hand-offs of the dev replay,** each plan the rule held back (10-26 copy):
+  - 14 matched, 24 wrong, 4 staff did nothing, 11 can't tell (client).
+  - Of the 24 wrong: 13 the venue, 6 staff changed an existing order instead of making one, 5 times or crew.
+  - **The venue is the planner's main error on creates.**
+- **A plan staff did nothing about counts against the bar.** Written, it would have changed what staff left alone.
 
 **The baseline starts when P2.6 is live and runs 5-7 days.** Variants exist only from P2.3's deploy. Older emails are
 scored on their production plans only, since the world they were decided in cannot be rebuilt in production.

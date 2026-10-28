@@ -5469,5 +5469,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0261",
+  "ts": "2026-10-28T05:28:56+00:00",
+  "kind": "measurement",
+  "headline": "P2.2: the loop's judge; 32 shadow writes 15 matched, 3 wrong; two-week plans wrong mostly by venue",
+  "subject": "A plan is judged against staff's changes on its own day and venue, not the client's week",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 116,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]
