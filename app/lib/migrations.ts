@@ -511,6 +511,20 @@ export const MIGRATIONS: ReadonlyArray<readonly [id: string, statement: string]>
     at TIMESTAMPTZ NOT NULL, ms INTEGER, data JSONB NOT NULL)`],
   ["086_create_index_v2_trace_at", `CREATE INDEX IF NOT EXISTS v2_trace_at ON v2_trace (at)`],
   ["087_create_index_v2_trace_trace_id", `CREATE INDEX IF NOT EXISTS v2_trace_trace_id ON v2_trace (trace_id)`],
+  // lib/v2/loop/truth.ts: OnSinch's booking timeline, never deleted; part is the entity a row is about, parent
+  // the one a delete row names; order_id is filled once either is known (ADDENDUM §12.2).
+  ["088_create_table_onsinch_timeline", `CREATE TABLE IF NOT EXISTS onsinch_timeline (
+    id BIGINT PRIMARY KEY, action TEXT NOT NULL, creator INTEGER, created TIMESTAMPTZ NOT NULL, model TEXT,
+    model_id TEXT, part TEXT, parent TEXT, order_id BIGINT, data JSONB NOT NULL,
+    stored_at TIMESTAMPTZ NOT NULL DEFAULT now())`],
+  ["089_create_index_onsinch_timeline_created", `CREATE INDEX IF NOT EXISTS onsinch_timeline_created ON onsinch_timeline (created)`],
+  ["090_create_index_onsinch_timeline_order_id", `CREATE INDEX IF NOT EXISTS onsinch_timeline_order_id ON onsinch_timeline (order_id)`],
+  ["091_create_table_onsinch_parts", `CREATE TABLE IF NOT EXISTS onsinch_parts (part TEXT PRIMARY KEY, order_id BIGINT NOT NULL)`],
+  ["092_create_table_onsinch_contacts", `CREATE TABLE IF NOT EXISTS onsinch_contacts (
+    email TEXT NOT NULL, company_id INTEGER NOT NULL, refreshed_at TIMESTAMPTZ NOT NULL, PRIMARY KEY (email, company_id))`],
+  ["093_create_table_v2_loop_meta", `CREATE TABLE IF NOT EXISTS v2_loop_meta (key TEXT PRIMARY KEY, value JSONB NOT NULL, at TIMESTAMPTZ NOT NULL DEFAULT now())`],
+  // The rows resolveOrders looks at every minute: a part made before 29 Jul stays unknown until its order is read.
+  ["094_create_index_onsinch_timeline_unowned", `CREATE INDEX IF NOT EXISTS onsinch_timeline_unowned ON onsinch_timeline (part) WHERE order_id IS NULL`],
 ];
 
 /**

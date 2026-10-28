@@ -169,6 +169,13 @@ the owner's where the comment quotes them. Owner decisions still OPEN are in ADD
 | O3 | 25 Oct | The 40 emails from the 21 Oct pause are stored, not decided ("store them without deciding"). Mail that arrives during a pause is stored only | decisions/2026-10-25-pause-window-store-only.md; app/lib/paused.ts |
 | O4 | 26 Oct | Display and TV changes go only with the owner's and Paz's yes | ADDENDUM §0 |
 | O5 | 20 Oct | A client's acceptance of a quote ("yes, book that") hands off to a person | ADDENDUM F27, 5.9 |
+| O6 | 28 Oct | Ground truth is what staff do in OnSinch; the system measures itself daily against it, with no model labels. Nothing automatic until live data proves it; a person's Confirm always books | decisions/2026-10-28-measurement-loop-and-rulings.md; ADDENDUM §12 |
+| O7 | 28 Oct | A moved start keeps the end; a start at or after the old end goes to staff with a plan and a Confirm (replaces V4's keep-the-length) | same; interpret/plan.ts planChange |
+| O8 | 28 Oct | The two-week rule covers changes as well as creates; the window and what it covers are settings | same; interpret/plan.ts |
+| O9 | 28 Oct | Nothing is hard-wired to a person: every hand-off carries a plan and a Confirm; "day already over" stays a card | same |
+| O10 | 28 Oct | One order per venue; at one venue, one order across days and weeks | same |
+| O11 | 28 Oct | Loop first, a 5-7 day baseline, then rule changes one at a time, both versions shadow-scored where cheap | same |
+| O12 | 28 Oct | A new client's first order is allowed; "yes, book that" drafts the order and hands off (O5 with a draft) | same |
 
 ## Rulings in v2 code
 

@@ -5455,5 +5455,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0260",
+  "ts": "2026-10-28T05:21:34+00:00",
+  "kind": "measurement",
+  "headline": "P2.1: the loop's truth store; owner rulings O6-O12 and the loop spec recorded",
+  "subject": "OnSinch's booking timeline is stored from 29 Jul on, read forward every minute",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 115,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]

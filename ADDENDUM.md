@@ -6,7 +6,7 @@
   below as findings and status.
 - Every step updates this file: its status line, its measurement, and what moved.
 
-**Last updated:** 28 October 2026, S-0259: F46 measured, not built (2 of 395 replies carry a parent from another thread). **Every step the builder can take is done; the rest waits on the owner (§0 Blocked, items 1-8).** R22 DONE (S-0258): plan.ts decide() is 187 lines of steps in order, every decision of 799 replayed emails byte-identical. The review's builder steps are done; what is left is the owner's (§0 Blocked). R21 DONE (S-0257): scripts/README.md says what each of 135 scripts can touch; R20 measured and deferred with a trigger. R19 DONE (S-0256): what a reason means is read only in reasons.ts. R17 planner part DONE (S-0255): dev-2 writes 21, 12 completed, 2 partial, 7 wrong (was 22, 11, 2, 9); the 7 left are owner rules or judging limits, listed under R17. R16 DONE (S-0254): F49 and F50, the review's two write-path gaps, closed; the review's other steps are R17-R22. R15 DONE (S-0253): the V1 review, https://claude.ai/artifact/A3WyEdpcXRcehHoJVb6BQe; its write-path gaps are F49-F54, to close before writes go back on. S-0252: the re-plan no longer counts every card as changed every minute (found by the live trace). R13 DONE (S-0251): the assisted-card design, docs/ASSISTED-MODE-DESIGN-2026-10-27.md; at most 90 of 155 dev handoffs are near-misses. R14 DONE, dormant (S-0250): the Gmail poll decides through v2 once the grant exists and INTAKE_PATH=routing. R12 held for the owner and Paz. R11 DONE (S-0249): the live trace is on; 5.7 counted, its outbound change waits on the owner. R10 DONE (S-0248): the email-to-board harness and its 20-email case study. R9 DONE (S-0247). R8 DONE but e (S-0244 to S-0246); e waits on the owner's yes to a paid measurement. R3's switch-over waits on CRON_SECRET. The baseline was 0f2dcef. App code changed since then in these
+**Last updated:** 28 October 2026, S-0260: **the owner's Part 2, the measurement loop, is the work now (§12).** P2.1 DONE: OnSinch's booking timeline is stored from 29 Jul on, read forward every minute, with the contact lists daily. The Part 1 audit is in §12.1; the owner's five rulings are O6-O12 (decisions/2026-10-28-measurement-loop-and-rulings.md); the loop's spec and build steps P2.1-P2.6 are §12.2-§12.6, and the rulings go into code one a day after a 5-7 day baseline (§12.7). S-0259: F46 measured, not built (2 of 395 replies carry a parent from another thread). R22 DONE (S-0258): plan.ts decide() is 187 lines of steps in order, every decision of 799 replayed emails byte-identical. The review's builder steps are done; what is left is the owner's (§0 Blocked). R21 DONE (S-0257): scripts/README.md says what each of 135 scripts can touch; R20 measured and deferred with a trigger. R19 DONE (S-0256): what a reason means is read only in reasons.ts. R17 planner part DONE (S-0255): dev-2 writes 21, 12 completed, 2 partial, 7 wrong (was 22, 11, 2, 9); the 7 left are owner rules or judging limits, listed under R17. R16 DONE (S-0254): F49 and F50, the review's two write-path gaps, closed; the review's other steps are R17-R22. R15 DONE (S-0253): the V1 review, https://claude.ai/artifact/A3WyEdpcXRcehHoJVb6BQe; its write-path gaps are F49-F54, to close before writes go back on. S-0252: the re-plan no longer counts every card as changed every minute (found by the live trace). R13 DONE (S-0251): the assisted-card design, docs/ASSISTED-MODE-DESIGN-2026-10-27.md; at most 90 of 155 dev handoffs are near-misses. R14 DONE, dormant (S-0250): the Gmail poll decides through v2 once the grant exists and INTAKE_PATH=routing. R12 held for the owner and Paz. R11 DONE (S-0249): the live trace is on; 5.7 counted, its outbound change waits on the owner. R10 DONE (S-0248): the email-to-board harness and its 20-email case study. R9 DONE (S-0247). R8 DONE but e (S-0244 to S-0246); e waits on the owner's yes to a paid measurement. R3's switch-over waits on CRON_SECRET. The baseline was 0f2dcef. App code changed since then in these
 commits only:
 
 | commit | ticket | what |
@@ -107,7 +107,8 @@ and §3 ends with the findings added after 23 Oct (F29 onward). §11 is the rebu
 | 5.8 assisted mode | **DESIGNED** S-0251; the build needs the owner's and Paz's yes | docs/ASSISTED-MODE-DESIGN-2026-10-27.md |
 | 5.9 acceptance | policy, see F27 | |
 | 5.10 small fixes | **DONE**: F15 S-0214; README and harness STATE S-0236; F13, F14, F18, the op key and run.ts:5 S-0239 | |
-| §6 rules | **OPEN, owner** | |
+| §6 rules | **1-5 RULED** 28 Oct (O7-O9, O12); 6, 8, 9 open | §6; §12.7 |
+| Part 2 measurement loop | **BUILDING** from 28 Oct: P2.1-P2.6, then a 5-7 day baseline | §12 |
 | §10 / Prompt 8 docs | **DONE** S-0236: CLAUDE.md is the v2 map; engine invariants in app/lib/engine/README.md; docs/README.md; 35 code rulings and 5 standing ones in DECISIONS.md (V1-V35, O1-O5), each comment tagged | CLAUDE.md; DECISIONS.md |
 | F29 one read attempt | **DONE** S-0235 | test/extractRetry.ts; extract.ts extractWithMeta |
 | F30 owner never told of system failures | **DONE** S-0235 (system-failed alert) | test/systemFailureToOwner.ts |
@@ -167,8 +168,9 @@ items-1-3-runtime, item-4-scoring, n1-write-judging and c-current-mail's C2 and 
 5. **SPARTAN_TRACE_SALT in Vercel's production environment** (5.2), any long random string. Without it the live trace
    blanks every address, so one sender's rows cannot be joined. Not urgent.
 6. **The owner's yes to 5.7** (an R number in Spartan's subjects): outbound mail.
-7. **R17's four rules** (the dev-2 writes still wrong are these): when one email makes several orders (staff split
-   1a144942ca8851d1 by weekend); whether a quote with shifts becomes an order (13 Oct says To Confirm; staff made none
+7. **R17's four rules** (the dev-2 writes still wrong are these). **The first is ruled (O10, 28 Oct): one order per
+   venue, one order across days and weeks at one venue; the exceptions are flagged by the loop (§12.5).** When one
+   email makes several orders (staff split 1a144942ca8851d1 by weekend); whether a quote with shifts becomes an order (13 Oct says To Confirm; staff made none
    for 1a1541de84b036b8); whether V15's default length should look at night starts; whether driver seats come from
    the client's history.
 8. **The Jobs screen's confirm button** posts to /api/confirm-order, deleted in R7. 16 old tickets still show it as
@@ -1091,6 +1093,12 @@ If Spartan wants it automated:
 
 ## 6. Rules to settle with Spartan (one short session)
 
+**Status 28 Oct:** 1 to 4 ruled by the owner (DECISIONS O7, O8, O9, O12; §12.7 says when each reaches the code):
+the two-week rule covers changes, counted from the email's date, as a setting; a new client's first order is allowed;
+a moved start keeps the end; "yes, book that" drafts the order and hands off. 5 is answered by O9: rules decide what
+is automatic, every hand-off carries a plan and a Confirm. 7: in the one case measured, staff added no chief (§12.1,
+question 8, 1a158a5e6bd47095); still open. 6, 8 and 9 are open. Open since: is a PO a change under the two-week rule (§12.8)?
+
 **Status 26 Oct:** all OPEN; none is in DECISIONS.md yet.
 1. **The two-week rule:** new orders only, or changes too? Counted from the email's date or from today? (F5)
 2. **New clients:** can the system ever create a brand-new client's first order, or does a new client always go to a
@@ -1778,3 +1786,228 @@ other code is deterministic and costs $0. OpenRouter is never called.
 - **The undecided sweep decides fresh mail.** Anything stored inside 24 h and sent within 7 days costs a model call.
 - **Privacy slips** have come through log tails. Filter every log first.
 - **A push is a deploy.**
+
+---
+
+## 12. The measurement loop (the owner, 28 Oct)
+
+**The purpose, in the owner's words:** "Every urgent decision for Spartan on the TV, by reading their email and syncing
+with OnSinch. Create and update eventually fully automatic. Nothing automatic goes to OnSinch until live data proves
+it's accurate. A person's Confirm always books."
+- **The bar:** 1 failed order in 100.
+- **The judge:** what staff do in OnSinch, read from its timeline. No model labels, and no judging by the agent.
+- **Part 2's limits:** additive only (new tables or columns), never a change to a decision, never a write to OnSinch.
+  Writes stay off; a person's Confirm is the only write.
+- **Rulings:** decisions/2026-10-28-measurement-loop-and-rulings.md (DECISIONS O6-O12).
+
+### 12.1 Part 1: the audit (28 Oct, read-only)
+Run on a fresh copy, `.tmp-data/gold-1028`: production read in a read-only transaction, plus OnSinch GETs; 7-27 Oct,
+11,770 timeline rows and the newest 1,500 orders. The scripts are `.tmp-v2/audit23.ts`, `audit4.ts`, `a2b.ts`,
+`a3.mts`, `a5.mts`, `a7.ts` and `d1.ts` to `d4.ts`, all gitignored.
+
+| question | answer |
+|---|---|
+| 1 ground truth | OnSinch `GET /timelineAudits`: who, when, field-level old and new values. Production stored none of it |
+| 2 coverage, 21-27 Oct | 62 of 209 staff actions had a card naming the day staff worked on; 149 of 209 had a card for that client. The rest: 15 had a client email with no card, 10 can't tell (sender on the client's domain but not a contact), 35 had no email from that client in 7 days |
+| 3 shadow writes since 22 Oct | 32: 10 matched, 9 partial, 10 wrong, 2 staff did nothing, 1 can't tell yet |
+| 4 hand-offs, dev replay | No reason has staff always doing the plan. Re-scored by day: two-week plans 13 match, 15 differ (the venue), 11 no staff order on those days, 1 split |
+| 5 the TV as a log | 178 of 275 needs have a recorded exit; nothing is written when a card's day passes; the verifier's marks carry no person |
+| 6 circularity | Matched with no resolver: the sender is a contact of exactly one OnSinch company (433 of 691 client emails; 253 none, 5 several) |
+| 7 rulings against the code | two-week: creates only; moved start: keeps the length; "yes, book that": hands off with no plan; six rules hand off with no plan |
+| 8 the 7 wrong dev-2 writes | All 7 wrong by the staff-action standard; dev-2: 12 of 21 matched |
+
+**Corrections made since the audit report:**
+- The split rule explains 1 of 40 two-week plans, not 7. The extra orders were other jobs in the same window.
+- The "nothing asked" flag at the client level is mostly base rate: 59% against 51% in a control window. At the day
+  level it is about half signal (33 against 17 of 100).
+- So the loop matches staff's orders by day and venue, and the reader-miss flag is the day-level one.
+
+**Data behind the rulings:**
+- **Moved start.** Staff kept the length on 11 of 12 start-only requests (1 mixed). Of all staff start moves since
+  29 Jul, 840 kept the length, 154 kept the end and 396 moved both by different amounts.
+- **Changes by lead time.** 31 of 32 planned changes since 9 Oct were within 14 days.
+- **Orders per venue.** 656 of 688 staff orders hold one venue.
+  - Same-venue pairs that staff split: 66. Of these, 40 have different POs, 45 different order names and 5 a
+    different contact.
+  - Multi-venue orders: 32. Of these, 26 are at unrelated venues, 27 run over several days, 3 include a depot and 3
+    share a word in the venue name.
+
+### 12.2 What the loop records
+
+All of it lands in new tables, filled by the minute sync with OnSinch GETs only.
+
+**The truth: `onsinch_timeline`.**
+- **What it holds:** every OnSinch timeline row of the eight booking actions from 29 Jul (id 867675) onward, kept
+  whole and never deleted. Each row carries the order it belongs to where that can be known.
+- **How the order is known:** from a create's path, from an order's number, or from a part of an order read since.
+  1,732 of 1,753 staff edits on 21-27 Oct can be tied to their order from the create paths alone.
+- **Supporting tables:**
+  - `onsinch_orders`: orders read when scored.
+  - `onsinch_contacts`: each OnSinch contact's address and company, refreshed daily (9 pages).
+
+**Per email (`v2_outcomes`, one row per decision and plan variant).** Each row carries:
+1. **The client:**
+   - the company whose contact list holds the sender exactly;
+   - otherwise "can't tell: no company" or "can't tell: several companies".
+2. **The window:** 1 hour before the email to the first of 96 hours after it, or the thread's next client email that
+   got a card. The row records which one ended it.
+3. **The days and venues:**
+   - the plan's own days and venues;
+   - with no plan, the days the deterministic date parser finds in the email's newest text. Never the model's
+     reading.
+4. **The plan:**
+   - the decision's operations (production);
+   - for a rule-based hand-off, the plan without that rule (§12.3);
+   - any variant plan that differs from production.
+5. **What staff did:**
+   - every staff booking change in the window on the client's orders that hold one of those days;
+   - matched by day, then by venue;
+   - each order read as it stood when the window closed, from OnSinch now, with later timeline rows undone.
+6. **The bucket, one per plan:**
+   - **matched:** staff left exactly what the plan says;
+   - **partial:** the plan is right, and staff did more;
+   - **wrong:** the plan holds something staff did not do, with why: the venue, the days, the times, the crew, or
+     another order;
+   - **staff did nothing:** nothing on those days in the window;
+   - **staff acted, no plan:** a hand-off or nothing-to-do with staff work on its days;
+   - **can't tell:** with why, for example no single company, the window still open, an order deleted, or the
+     timeline behind.
+7. **The plan's keys and staff's keys,** in words (day, times, venue, crew per trade, R number), for the daily list.
+8. **For an email read as nothing to do:**
+   - the day flag: staff acted on an order holding a day the email names, within 48 hours;
+   - the same test over the 48 hours before the email, as its noise floor.
+9. **A person's Confirm,** when Confirm exists: when, by whom and what it booked. Until then, a person's tick on the
+   card.
+
+**Per hand-off,** on top of the above:
+- its reason code;
+- the without-the-rule plan, when a rule held one back;
+- what staff did on its days.
+
+The running count per code is: scored, matched, and matched every time. **The 50-case alert:** when a code reaches 50
+scored cases with staff doing the without-the-rule plan every time, the owner is told once, and the report shows it.
+
+**Per staff action (`v2_staff_actions`).** An action is one person's consecutive booking changes to one order, at most
+30 minutes apart. It is recorded once 30 minutes have passed since its last row. Each carries:
+- who, the order, the days touched and what changed;
+- its coverage bucket:
+  - a card before it, for that client, naming that day;
+  - a card for the client but not that day;
+  - a client email with no card;
+  - can't tell (sender not a contact);
+  - no client email in the 7 days before;
+- **for a start moved:** whether staff kept the length or the end. This is the count ruling O7 asked for.
+- **for an order staff created:** the exceptions check (§12.5).
+
+**Per card (`v2_card_exits`).** Every need the TV showed, and how it left:
+- a person's tick;
+- the verifier, which records the OnSinch user from the timeline;
+- the order found;
+- superseded;
+- its day passed;
+- the job ended.
+
+A need open for 7 days with no exit is listed.
+
+### 12.3 Variants: both versions of a rule on the same emails
+At decision time, after the decision is recorded, the planner runs again with a rule switched or off. This costs no
+model call. Each variant is stored in `v2_variants`, and only when it differs from production. A failed variant is
+stored as a failure and never touches the decision.
+
+| variant | when | why |
+|---|---|---|
+| without the two-week rule | a policy_lead_days hand-off | the plan the rule held back (O9) |
+| two-week rule over changes | a change planned within the window | what O8 will hand off; the plan is the same, only automatic or not differs |
+| start keeps the end | a start-only move | O7 against today's keep-the-length; after O7 ships, keep-the-length becomes the variant |
+| without the short-call rule | a policy_short_call hand-off | the 2-hour plan (my R17 rule becomes a default) |
+| the drafted acceptance | a policy_confirmed_proposal hand-off | the order O12 drafts |
+
+**Settings:**
+- `create_lead_applies_to` (creates, changes or both) is added beside the lead days, defaulting to creates, which is
+  what the code does today.
+- The three lead fields become admin-only and logged, like the write switches.
+- They live in Settings → Lead days (`app/components/SettingsScreen.tsx` LeadDaysPanel; `app/lib/settingsDb.ts`).
+  Today the fields control new orders only, any staff member can change them, and no change is recorded.
+
+### 12.4 The daily numbers, and where they are seen
+**A screen, `/report`,** admin-only. It shows one day at a time, opens on yesterday, and has a date picker. The same
+data is at `/api/report?date=`.
+
+**The day's numbers,** each with its can't-tell count and noise floor:
+1. Coverage: X of Y staff actions had a card naming the day, by bucket.
+2. Plans scored that day:
+   - by kind (create, PO, times, crew) and by reason code;
+   - matched, partial, wrong (with why), staff did nothing, can't tell.
+   - **The bar:** failed orders out of orders planned since the baseline began. An order fails when any part of the
+     plan for it differs from what staff left.
+3. Hand-offs by code: staff acted or did nothing, the without-the-rule plan's buckets, and the running count toward 50.
+4. Read as nothing to do: how many, the day-flag hits, and the control.
+5. Moved starts: staff kept the length or the end.
+6. Exceptions: multi-venue orders and same-venue splits, by category.
+7. Card exits by kind, and needs open over 7 days with no exit.
+8. The loop's own health:
+   - how far behind the timeline is;
+   - windows closed but not scored;
+   - variant failures;
+   - the minute steps that failed.
+
+**Every miss is listed below the numbers.** A miss is a wrong plan, a staff action with no card, or a hand-off staff
+did differently. Each shows the time, the client and subject, the plan in words, what staff did in words with R
+numbers, and the bucket.
+
+**How a day is fixed:**
+- Each night the day's numbers are written to `v2_daily`, append-only, as they stood. An outcome counts on the day it
+  was scored, so a day's row never needs rewriting.
+- A loop step that fails turns the minute sync red, and the 5-minute heartbeat raises a stalled sync to the owner.
+  Nothing in the loop fails silently.
+- An emailed daily summary would be outbound mail, so it is not built without the owner's yes.
+
+### 12.5 The exceptions protocol (O10: one order per venue; same venue, one order across days and weeks)
+**Flagged daily, from staff's own creates:**
+- **Multi-venue:** an order staff made that holds 2 or more venues.
+- **Same-venue split:** a new order at a venue where the client already has an order within 14 days of its days.
+
+**Categorised by fields OnSinch holds, never by a model:**
+- PO differs;
+- order name differs;
+- contact differs;
+- a week or more between the days;
+- a depot or warehouse among the venues;
+- the venues share a site word;
+- none of these.
+
+**Measured on the copy (§12.1):** splits mostly differ in PO (40 of 66) and name (45 of 66); multi-venue orders are
+mostly unrelated venues over several days (26 of 32).
+
+**How a pattern becomes a rule:**
+1. A category reaches 20 cases in which 90% or more of the client's comparable orders follow it. For example: "a
+   different PO at the same venue is always its own order".
+2. The report then shows it as a proposed rule with its count.
+3. The owner decides.
+4. The rule runs as a shadow variant for 5 days.
+5. It goes live on its own day, so its effect can be read.
+
+### 12.6 Build steps, each through the gate
+
+| step | what | status |
+|---|---|---|
+| P2.1 | `onsinch_timeline`, `onsinch_parts`, `onsinch_contacts`, `v2_loop_meta` (`app/lib/v2/loop/truth.ts`); the minute step "truth" reads new timeline pages (20 a minute; the 29 Jul backfill takes about 90 minutes) and the contacts once a day. `onsinch_orders` comes with P2.4, where orders are read | **DONE** S-0260 (test/loopTruth.ts) |
+| P2.2 | the scorer, `app/lib/v2/outcome/`: pure, matched by day and venue, orders rewound to the window's close; checked offline against §12.1 | |
+| P2.3 | variants: planner options (start keeps the end, lead over changes, short call and acceptance plans) with defaults unchanged; `v2_variants`; the settings field, admin-only and logged. The replay proves every production decision unchanged | |
+| P2.4 | `v2_outcomes` and the minute step that scores closed windows, back to 9 Oct for production plans | |
+| P2.5 | `v2_staff_actions` (coverage, moved starts, exceptions) and `v2_card_exits` | |
+| P2.6 | `v2_daily`, `/report`, `/api/report`, the 50-case alert | |
+
+**The baseline starts when P2.6 is live and runs 5-7 days.** Variants exist only from P2.3's deploy. Older emails are
+scored on their production plans only, since the world they were decided in cannot be rebuilt in production.
+
+### 12.7 After the baseline: the rulings into code, one a day
+1. O7: a moved start keeps the end. A new start at or after the old end becomes a hand-off with a plan.
+2. O8: the setting flips to both (a logged settings change, no code).
+3. O9: every rule hand-off carries its plan and a Confirm. This is the TV change, so it needs Paz (§0 blocked item 4).
+4. O10: one order per venue. Venue accuracy on creates is first on the builder's list.
+5. The short-call rule becomes a 2-hour default with a plan.
+
+### 12.8 Open for the owner
+- **Is a PO a "change" under the two-week rule?** It moves no crew and no time. Proposed: no, a PO stays automatic.
+  Until the owner rules, "changes" means times, crew, positions, shifts and cancellations.
