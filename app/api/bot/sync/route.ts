@@ -6,6 +6,7 @@ import { resumeStopped } from "../../../lib/v2/resume";
 import { replanOpen } from "../../../lib/v2/replan";
 import { pruneTrace } from "../../../lib/v2/traceLive";
 import { pullTruth } from "../../../lib/v2/loop/truth";
+import { scoreOutcomes } from "../../../lib/v2/loop/outcomes";
 import { neon } from "@neondatabase/serverless";
 import { httpTransport } from "../../../lib/onsinch/onsinch";
 import { getSettings } from "../../../lib/settingsDb";
@@ -51,6 +52,8 @@ async function sync(request: Request, labels: boolean): Promise<Response> {
     // OnSinch's booking timeline and contact lists, stored for the measurement loop (ADDENDUM §12.2): GETs only,
     // so it runs paused too; a read that fails turns the sync red rather than leaving a gap nobody sees.
     ["truth", () => pullTruth(sql, t as never)],
+    // Every email since 9 Oct judged against what staff did once its window closed (ADDENDUM §12.2); GETs only.
+    ["outcomes", () => scoreOutcomes(sql, t as never, { deadline: Date.now() + 90_000 })],
     ["testData", () => getSettings()
       .then(async (s) => maybeSweep(sql, t, !!s.test_data_autoclear, { writes: await botWrites() }))
       .then((r) => (typeof r === "string" ? r : { orders: r.orders.length, companies: r.companies.length, rows: Object.values(r.rows).reduce((a, b) => a + b, 0), refused: r.refused ?? null, failed: r.failed.length }))],

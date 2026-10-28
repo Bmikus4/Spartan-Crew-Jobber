@@ -529,6 +529,15 @@ export const MIGRATIONS: ReadonlyArray<readonly [id: string, statement: string]>
   ["095_create_table_v2_variants", `CREATE TABLE IF NOT EXISTS v2_variants (
     message_id TEXT NOT NULL, variant TEXT NOT NULL, decision JSONB, same BOOLEAN NOT NULL, error TEXT, code_version TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(), PRIMARY KEY (message_id, variant))`],
+  // lib/v2/loop/outcomes.ts: each decision and differing variant judged against what staff did (ADDENDUM §12.2).
+  ["096_create_table_v2_outcomes", `CREATE TABLE IF NOT EXISTS v2_outcomes (
+    message_id TEXT NOT NULL, variant TEXT NOT NULL, thread_id TEXT, sent_at TIMESTAMPTZ, kind TEXT, code TEXT, plan JSONB,
+    company_id INTEGER, client_match TEXT, window_from TIMESTAMPTZ, window_to TIMESTAMPTZ, cut_by TEXT, days JSONB, venues JSONB,
+    bucket TEXT, why TEXT, orders JSONB, acts INTEGER, plan_keys JSONB, staff_keys JSONB, staff_other JSONB, ahead_days INTEGER,
+    day_flag TEXT, day_control TEXT, confirm JSONB, scored_at TIMESTAMPTZ, scorer TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(), PRIMARY KEY (message_id, variant))`],
+  ["097_create_index_v2_outcomes_open", `CREATE INDEX IF NOT EXISTS v2_outcomes_open ON v2_outcomes (sent_at) WHERE scored_at IS NULL`],
+  ["098_create_index_v2_outcomes_scored", `CREATE INDEX IF NOT EXISTS v2_outcomes_scored ON v2_outcomes (scored_at)`],
 ];
 
 /**

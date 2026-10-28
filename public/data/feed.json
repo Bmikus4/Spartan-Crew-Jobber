@@ -5497,5 +5497,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0263",
+  "ts": "2026-10-28T12:18:48+00:00",
+  "kind": "measurement",
+  "headline": "P2.4: v2_outcomes from the minute sync; on production's data writes 26 matched, 23 wrong (9 venue), 11 staff did nothing",
+  "subject": "Every client email since 9 Oct is judged against what staff did once its window closes",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 118,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]

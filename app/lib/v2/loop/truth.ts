@@ -67,6 +67,7 @@ async function setMeta(sql: Sql, key: string, value: unknown): Promise<void> {
  */
 export async function pullTimeline(sql: Sql, t: Transport, opts: { pages?: number; deadline?: number } = {}): Promise<{ read: number; kept: number; cursor: number; behind: boolean; newest: string | null }> {
   await ensureSchema(sql);
+  const started = new Date().toISOString();
   let cursor = (await meta<number>(sql, "timeline_cursor")) ?? TIMELINE_FROM_ID - 1;
   let read = 0, kept = 0, behind = true, newest: string | null = null;
   for (let p = 0; p < (opts.pages ?? PAGES_PER_RUN) && behind && Date.now() < (opts.deadline ?? Infinity); p++) {
@@ -96,6 +97,8 @@ export async function pullTimeline(sql: Sql, t: Transport, opts: { pages?: numbe
     behind = rows.length >= 100;
   }
   await resolveOrders(sql);
+  // Caught up, every row made before this run began is stored: the loop judges no window that closes later.
+  if (!behind) await setMeta(sql, "timeline_complete_at", started);
   return { read, kept, cursor, behind, newest };
 }
 
@@ -107,22 +110,28 @@ export async function resolveOrders(sql: Sql): Promise<number> {
   return r.length;
 }
 
-/** The parts of an order read whole (Job, SlotTeam, Slot, and its number), so its rows can be tied to it. */
-export async function rememberOrder(sql: Sql, o: any): Promise<void> {
-  const id = Number(o?.id);
-  if (!id) return;
-  const parts: Array<{ part: string; order_id: number }> = [{ part: `Order:${id}`, order_id: id }];
-  if (o.number != null) parts.push({ part: `OrderNo:${o.number}`, order_id: id });
-  for (const j of [].concat(o.Job ?? []) as any[]) {
-    parts.push({ part: `Job:${j.id}`, order_id: id });
-    for (const tm of [].concat(j.SlotTeam ?? []) as any[]) {
-      parts.push({ part: `SlotTeam:${tm.id}`, order_id: id });
-      for (const s of [].concat(tm.Slot ?? []) as any[]) parts.push({ part: `Slot:${s.id}`, order_id: id });
+/** The parts of orders read whole (Job, SlotTeam, Slot, and each number), so their rows can be tied to them. */
+export async function rememberOrders(sql: Sql, orders: any[]): Promise<void> {
+  const parts: Array<{ part: string; order_id: number }> = [];
+  for (const o of orders) {
+    const id = Number(o?.id);
+    if (!id) continue;
+    parts.push({ part: `Order:${id}`, order_id: id });
+    if (o.number != null) parts.push({ part: `OrderNo:${o.number}`, order_id: id });
+    for (const j of [].concat(o.Job ?? []) as any[]) {
+      parts.push({ part: `Job:${j.id}`, order_id: id });
+      for (const tm of [].concat(j.SlotTeam ?? []) as any[]) {
+        parts.push({ part: `SlotTeam:${tm.id}`, order_id: id });
+        for (const s of [].concat(tm.Slot ?? []) as any[]) parts.push({ part: `Slot:${s.id}`, order_id: id });
+      }
     }
   }
+  if (!parts.length) return;
   await sql`INSERT INTO onsinch_parts (part, order_id) SELECT DISTINCT ON (part) part, order_id FROM jsonb_to_recordset(${JSON.stringify(parts)}::jsonb) AS x(part TEXT, order_id BIGINT) ON CONFLICT (part) DO NOTHING`;
   await resolveOrders(sql);
 }
+
+export const rememberOrder = (sql: Sql, o: any): Promise<void> => rememberOrders(sql, [o]);
 
 /**
  * Every OnSinch contact's address and company, once a day. The new list is written before the old one goes, so a

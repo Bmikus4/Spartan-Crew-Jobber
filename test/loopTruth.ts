@@ -54,6 +54,8 @@ const cursorNow = async () => Number(((await sql`SELECT value FROM v2_loop_meta 
   ok(!s.some((r) => Number(r.id) < F), "nothing before 29 Jul is read", s.map((r) => r.id));
   ok(s.length === 6 && !s.some((r) => /login|attendance/.test(r.action)), "the 6 booking rows are kept, the other actions are not", s.map((r) => r.action));
   ok(a.cursor === F + 7 && (await cursorNow()) === F + 7 && !a.behind, "the cursor stands on the last row read, kept or not", a);
+  const complete = ((await sql`SELECT value FROM v2_loop_meta WHERE key = 'timeline_complete_at'`) as any[])[0]?.value;
+  ok(!!complete && Date.parse(complete) <= Date.now(), "caught up, it says when the stored timeline is complete to", complete);
 
   console.log("\n[2] each row reaches its order, or waits for it");
   const by = new Map(s.map((r) => [Number(r.id), r]));
@@ -67,8 +69,10 @@ const cursorNow = async () => Number(((await sql`SELECT value FROM v2_loop_meta 
 
   console.log("\n[3] a run reads at most its pages; the next goes on; nothing is stored twice");
   rows.push(...Array.from({ length: 250 }, (_, k) => row(F + 10 + k, k % 2 ? "common_change" : "login", { id: String(k), model: "Slot", diffChanges: {} })));
+  await sql`DELETE FROM v2_loop_meta WHERE key = 'timeline_complete_at'`;
   const b = await pullTimeline(sql, t, { pages: 2 });
-  ok(b.read === 200 && b.behind, "two pages: 200 read, still behind", b);
+  const notYet = ((await sql`SELECT 1 FROM v2_loop_meta WHERE key = 'timeline_complete_at'`) as any[]).length;
+  ok(b.read === 200 && b.behind && !notYet, "two pages: 200 read, still behind, and not called complete", b);
   const c = await pullTimeline(sql, t, { pages: 2 });
   ok(c.read === 50 && !c.behind && c.cursor === F + 259, "the next run reads the 50 left and is caught up", c);
   await sql`DELETE FROM v2_loop_meta WHERE key = 'timeline_cursor'`;
