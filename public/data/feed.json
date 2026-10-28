@@ -5413,5 +5413,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0257",
+  "ts": "2026-10-28T02:42:49+00:00",
+  "kind": "measurement",
+  "headline": "R21: scripts/README.md (135: 43 write, 66 read production, 26 offline); mail-inbound leftovers gone; R20 deferred",
+  "subject": "Each script is listed with what it can touch, read from its own code",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 114,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]

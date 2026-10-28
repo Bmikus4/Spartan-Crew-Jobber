@@ -106,7 +106,7 @@ export async function authorizeAction(request: Request): Promise<Caller> {
 /**
  * The same decision for a route that only ever has a MACHINE caller.
  *
- * /api/n8n-inbound, /api/dedupe and /api/sweep-ingest sit in the middleware SKIP list,
+ * /api/n8n-inbound and /api/dedupe sit in the middleware SKIP list,
  * so the check inside each route is the only gate in front of them — and each had
  * written that check by hand as `if (!secret) return true`, with the production guard
  * that decideCaller already had simply missing. On a preview deployment, where
@@ -134,45 +134,10 @@ export function authorizeMachineCall(request: Request): Caller {
 }
 
 /**
- * The same decision for /api/mail-inbound, whose caller CANNOT SEND A HEADER.
- *
- * SendGrid Inbound Parse, Mailgun routes and CloudMailin each POST a fixed request
- * shape with no way to add `x-webhook-secret`. What all of them do support is a
- * secret carried in the webhook URL: HTTP Basic credentials, or a query parameter.
- *
- * Only the PRESENTATION of the secret differs, so only that is re-implemented — the
- * decision itself is still decideMachineCall. Writing a second gate by hand is how
- * /api/n8n-inbound ended up with `if (secret && ...)`, which made every preview
- * deployment an unauthenticated way into the production database; test/machineRouteAuth
- * caught this route repeating that shape on the day it was written.
- */
-export function authorizeMailWebhook(request: Request): Caller {
-  const secret = (process.env.MAIL_INBOUND_SECRET || process.env.N8N_WEBHOOK_SECRET || "").trim();
-
-  const presented: string[] = [request.headers.get("x-webhook-secret") || ""];
-  try { presented.push(new URL(request.url).searchParams.get("k") || ""); } catch { /* not a URL we can read */ }
-  const basic = request.headers.get("authorization") || "";
-  if (/^basic /i.test(basic)) {
-    try {
-      const decoded = Buffer.from(basic.slice(6).trim(), "base64").toString("utf8");
-      // Only the password half. The username is the provider's own label and varies.
-      presented.push(decoded.slice(decoded.indexOf(":") + 1));
-    } catch { /* an undecodable header is simply not a match */ }
-  }
-
-  return decideMachineCall({
-    secretMatches: Boolean(secret) && presented.some((p) => p !== "" && safeEqual(p, secret)),
-    secretConfigured: Boolean(secret),
-    authRequired: process.env.AUTH_REQUIRED === "true",
-    isProduction: process.env.NODE_ENV === "production",
-  });
-}
-
-/**
  * The same decision for a VERCEL CRON, which cannot send `x-webhook-secret` either.
  *
  * Vercel invokes a cron with `Authorization: Bearer $CRON_SECRET` and no way to add a
- * header of our own, so — exactly as with the mail webhook — only the PRESENTATION of
+ * header of our own, so only the PRESENTATION of
  * the secret is re-implemented and the decision itself stays in decideMachineCall. A
  * manual trigger carrying `x-webhook-secret` is still accepted, because being able to
  * run the poll by hand is how it gets tested.

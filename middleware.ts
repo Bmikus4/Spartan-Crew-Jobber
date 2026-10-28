@@ -16,28 +16,22 @@ import { safeEqual } from "./app/lib/safeEqual";
 //  - /api/bot           the OnSinch browser bot; authenticated by its own BOT_SECRET
 //  - /api/n8n-inbound    authenticated by its own N8N_WEBHOOK_SECRET
 //  - /api/dedupe         same secret; the n8n dedupe claim (replaces Airtable)
-//  - /api/sweep-ingest   same secret; the 12-month historical sweep (test corpus)
 //  - /api/health/intake  same secret; the outside watchdog that asks whether anything is
 //    still arriving. It has to answer a caller holding a header rather than a session,
 //    because the whole point of it is that it is asked from OUTSIDE the app -- an engine
 //    that is not running cannot report that it is not running. Read-only: one MAX() over
 //    inbound_raw.received_at, and it refuses an unconfigured caller in production like
 //    every other machine route.
-//  - /api/reconcile      same secret; the nightly sweep that re-binds deleted orders and
-//    catches silent write failures. It is driven from outside on a schedule, so like the
-//    watchdog it can only ever hold a header.
+//  - /api/mail-poll      the Gmail-API intake; a Vercel cron, authenticated by CRON_SECRET
+//    (authorizeCronCall). Dormant until the Gmail grant.
 //
 // THIS LIST IS NOT A CONVENIENCE. It is the only way a route's own machine gate is ever
 // reached: a route left out of it is answered 401 by the session check here and its
 // authorizeMachineCall never runs, so the route looks correctly guarded while being
-// unreachable. /api/reconcile was omitted and the sweep failed silently for a day --
+// unreachable. A route left out once (since deleted) failed silently for a day --
 // telling the two apart needs the capital U, because this file answers
 // {"error":"Unauthorized"} and a route's own gate answers {"ok":false,"error":"unauthorized"}.
 // test/writeRoutesAuthorised.ts now fails if a machine-gated route is missing from here.
-//  - /api/mail-inbound   the routing-rule intake. Its caller is a mail provider, which
-//    POSTs a fixed request shape and cannot add a custom header — so it authenticates on
-//    a secret inside the webhook URL (HTTP Basic, or ?k=) and the route does that check
-//    itself. Same fail-closed-in-production rule as the others.
 const SKIP = ["/api/auth", "/api/bot", "/api/n8n-inbound", "/api/mail-poll", "/api/dedupe", "/api/health"];
 
 export async function middleware(req: NextRequest) {

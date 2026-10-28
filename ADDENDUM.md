@@ -6,7 +6,7 @@
   below as findings and status.
 - Every step updates this file: its status line, its measurement, and what moved.
 
-**Last updated:** 28 October 2026, R19 DONE (S-0256): what a reason means is read only in reasons.ts. R17 planner part DONE (S-0255): dev-2 writes 21, 12 completed, 2 partial, 7 wrong (was 22, 11, 2, 9); the 7 left are owner rules or judging limits, listed under R17. R16 DONE (S-0254): F49 and F50, the review's two write-path gaps, closed; the review's other steps are R17-R22. R15 DONE (S-0253): the V1 review, https://claude.ai/artifact/A3WyEdpcXRcehHoJVb6BQe; its write-path gaps are F49-F54, to close before writes go back on. S-0252: the re-plan no longer counts every card as changed every minute (found by the live trace). R13 DONE (S-0251): the assisted-card design, docs/ASSISTED-MODE-DESIGN-2026-10-27.md; at most 90 of 155 dev handoffs are near-misses. R14 DONE, dormant (S-0250): the Gmail poll decides through v2 once the grant exists and INTAKE_PATH=routing. R12 held for the owner and Paz. R11 DONE (S-0249): the live trace is on; 5.7 counted, its outbound change waits on the owner. R10 DONE (S-0248): the email-to-board harness and its 20-email case study. R9 DONE (S-0247). R8 DONE but e (S-0244 to S-0246); e waits on the owner's yes to a paid measurement. R3's switch-over waits on CRON_SECRET. The baseline was 0f2dcef. App code changed since then in these
+**Last updated:** 28 October 2026, R21 DONE (S-0257): scripts/README.md says what each of 135 scripts can touch; R20 measured and deferred with a trigger. R19 DONE (S-0256): what a reason means is read only in reasons.ts. R17 planner part DONE (S-0255): dev-2 writes 21, 12 completed, 2 partial, 7 wrong (was 22, 11, 2, 9); the 7 left are owner rules or judging limits, listed under R17. R16 DONE (S-0254): F49 and F50, the review's two write-path gaps, closed; the review's other steps are R17-R22. R15 DONE (S-0253): the V1 review, https://claude.ai/artifact/A3WyEdpcXRcehHoJVb6BQe; its write-path gaps are F49-F54, to close before writes go back on. S-0252: the re-plan no longer counts every card as changed every minute (found by the live trace). R13 DONE (S-0251): the assisted-card design, docs/ASSISTED-MODE-DESIGN-2026-10-27.md; at most 90 of 155 dev handoffs are near-misses. R14 DONE, dormant (S-0250): the Gmail poll decides through v2 once the grant exists and INTAKE_PATH=routing. R12 held for the owner and Paz. R11 DONE (S-0249): the live trace is on; 5.7 counted, its outbound change waits on the owner. R10 DONE (S-0248): the email-to-board harness and its 20-email case study. R9 DONE (S-0247). R8 DONE but e (S-0244 to S-0246); e waits on the owner's yes to a paid measurement. R3's switch-over waits on CRON_SECRET. The baseline was 0f2dcef. App code changed since then in these
 commits only:
 
 | commit | ticket | what |
@@ -38,6 +38,7 @@ commits only:
 | (R16) | S-0254 | F49: resume closes a write that died in its first operation as unknown, by its ledger row; F50: recordDecision keeps a write's record |
 | (R17) | S-0255 | A chief counted on its own is one more on the call; set builders are Carpenters; venue initials read on the whole name; a call under 2 hours is a person's |
 | (R19) | S-0256 | F52: feed/v2.ts and plan.ts ask reasons.ts (isReplyReason, isMissingDetail); the sweep reads the stored code for not-a-client |
+| (R21) | S-0257 | scripts/scripts-index.mjs and scripts/README.md (test/scriptsIndexed.ts); authorizeMailWebhook and the two /api/mail-inbound scripts deleted; stale route comments |
 
 bd10dae (S-0213) moved the test suite onto PGlite. Line references below are at HEAD unless a line says "at 0f2dcef".
 
@@ -122,7 +123,7 @@ and §3 ends with the findings added after 23 Oct (F29 onward). §11 is the rebu
 | F50 the decision upsert's coalesce never keeps a record | **DONE** S-0254 | test/replayKeepsWriteRecord.ts |
 | F51 a link takes new shifts whatever days its order holds | **OPEN, owner decision** (R15) | identity/index.ts:137 |
 | F52 behaviour keyed to reason wording | **DONE** S-0256 for decisions; resume.ts's TRANSIENT reads the bot's own error words | test/reasonsOneSource.ts |
-| F53 the minute reads grow with history | **OPEN** (R15) | replan.ts; feed/live.ts |
+| F53 the minute reads grow with history | **MEASURED, deferred** (R20): 324 rows, about 400 KB a minute | replan.ts; feed/live.ts |
 | F54 the n8n path cannot see our unsent drafts | **OPEN** (R15) | test/draftIsNotAMessage.ts [5] |
 | F38 a deploy cancels a stopped write's retry | **DONE** S-0247: any build's stopped write is planned again and resumed or closed | test/resumeStopped.ts [5] |
 | F39 a part-way write raises no alarm | **DONE** S-0235 (systemFailureOf) and S-0247 (resume.ts closes each with one result, told to the owner) | test/resumeStopped.ts [3] [4] |
@@ -165,6 +166,12 @@ items-1-3-runtime, item-4-scoring, n1-write-judging and c-current-mail's C2 and 
 5. **SPARTAN_TRACE_SALT in Vercel's production environment** (5.2), any long random string. Without it the live trace
    blanks every address, so one sender's rows cannot be joined. Not urgent.
 6. **The owner's yes to 5.7** (an R number in Spartan's subjects): outbound mail.
+7. **R17's four rules** (the dev-2 writes still wrong are these): when one email makes several orders (staff split
+   1a144942ca8851d1 by weekend); whether a quote with shifts becomes an order (13 Oct says To Confirm; staff made none
+   for 1a1541de84b036b8); whether V15's default length should look at night starts; whether driver seats come from
+   the client's history.
+8. **The Jobs screen's confirm button** posts to /api/confirm-order, deleted in R7. 16 old tickets still show it as
+   "proposed". Removing or rewording it changes what staff see, so it is for the owner and Paz.
 
 ### Dates
 - **28 Oct 16:06Z:** the pause-window store.
@@ -834,6 +841,11 @@ medium).**
   words, not a decision's. cardNote.ts words the card from the reason, which is display, not behaviour.
 - **F53. The minute reads grow with history (Process, low now).** The re-plan and the TV read every decision since
   9 Oct, every minute. **Fix:** open cards and recent days only.
+  **Measured 28 Oct (R20, read only):** the re-plan reads 324 write and hand-off rows, about 400 KB of JSON a minute, half
+  of it readings only the 20 re-planned cards need; it grows about 17 rows a day. The TV's inbound() reads four small
+  columns of 7,712 messages, about 460 KB a refresh. Neither is a cost yet, and narrowing the re-plan's read means
+  splitting a query fixed two days ago (S-0252). **Trigger:** do it when write and hand-off rows since 9 Oct pass 3,000,
+  or the sync's re-plan step stops at its 90-second budget (its note says "stopped at the time budget").
 - **F54. The n8n path cannot see our unsent drafts (Display, low).** n8n sends no label ids, so a draft of ours can
   count as a reply in the reply lanes. Pinned as a known hole by test/draftIsNotAMessage.ts [5].
 
@@ -1456,8 +1468,8 @@ Still to come from §10: the identity owner (R8), and the move of what the old e
 | R17 | | The 9 wrong dev-2 writes, one by one: each a planner fix or a refusal (harness/real/writes-run.ts). **Planner part DONE** S-0255: 7 wrong of 21; the rest are the owner's rules or judging limits | before writes go back on; writes on is the owner's |
 | R18 | | F51: a link takes new shifts only when its order holds an asked day or the venue | **owner decision** |
 | R19 | | F52: the reason code stored as a column; retries, the sweep, resume and the TV read the code. **DONE** S-0256 (the stored code; no column needed) | yes |
-| R20 | | F53: the minute reads limited to open cards and recent days | yes |
-| R21 | | scripts/ sorted (live, read-only, archive; write-capable ones marked); dead helpers, the Jobs screen's dead button, stale route comments | yes |
+| R20 | | F53: the minute reads limited to open cards and recent days. **MEASURED, deferred** 28 Oct: 324 rows, ~400 KB a minute; trigger in F53 | yes |
+| R21 | | scripts/ sorted (live, read-only, archive; write-capable ones marked); dead helpers, the Jobs screen's dead button, stale route comments. **DONE** S-0257 (the button is the owner's and Paz's) | yes |
 | R22 | | plan.ts `decide()` split along its sections, the replay as the check | yes |
 
 ### Prompt 9: stop losing work, part 2 (F26, F29, F30, F31, F35, F36): **DONE**, S-0235
@@ -1610,6 +1622,18 @@ Zero references is permission to delete, never a reason to.
 
 **Done when:** app/lib/engine is gone or holds only what v2 uses, and nothing live changed (the harness and the suite
 agree).
+
+### R21: scripts/ and dead code: **DONE**, S-0257
+- **scripts/README.md** is made by scripts/scripts-index.mjs from each script's own code: 135 scripts, 43 can write
+  (database, OnSinch, n8n, Gmail or the bot routes), 66 read production, 26 are offline. test/scriptsIndexed.ts fails
+  when a script is missing or its class has changed, so a script that starts writing cannot do it unmarked. Nothing
+  was moved: the index carries the warning, and moving 135 files would break every path written down for them.
+- **Deleted:** authorizeMailWebhook (its route went in R7), and scripts/verify-mail-inbound.mjs and
+  verify-mail-inbound-engine.ts with their npm scripts and MAIL_INBOUND_SECRET.
+- **Kept, against the review:** threadState() (the sim harness and test/threadState.ts use it), threadIdForMessageIds
+  (the reply-chain lookup F46 needs) and rebuildThread.
+- **Comments:** middleware.ts and apiAuth.ts no longer name /api/sweep-ingest, /api/reconcile or /api/mail-inbound;
+  middleware names /api/mail-poll. onsinch.ts gives its timeout and retry budget their reason now, not n8n's 60 s.
 
 ### R17: the wrong dev-2 writes: planner part **DONE**, S-0255
 Each of the 9 was diagnosed from values only (dates, times, counts, trades, place ids; no email text). Before:

@@ -50,11 +50,8 @@ const WRITES = /export\s+async\s+function\s+(POST|PUT|PATCH|DELETE)\b/;
  * terms acceptance, or a profile, IN A NAMED PERSON'S NAME. Every row that route writes is
  * filed under the caller's own email, so the caller has to be somebody.
  *
- * authorizeMailWebhook is the machine rule again with the secret read from the URL instead
- * of a header, because a mail provider POSTs a fixed request shape and cannot add one.
- *
  * authorizeCronCall is the same rule once more, for a Vercel cron: it presents
- * `Authorization: Bearer $CRON_SECRET` and can add no header of ours either. All three
+ * `Authorization: Bearer $CRON_SECRET` and can add no header of ours either. Both
  * defer to decideMachineCall; only how the secret arrives differs.
  *
  * This list is the weakness test/machineRouteAuth.ts deliberately gave up on -- naming
@@ -64,7 +61,7 @@ const WRITES = /export\s+async\s+function\s+(POST|PUT|PATCH|DELETE)\b/;
  * this to anything that merely looks like a check is not.
  */
 const AUTHORITY =
-  /authorizeAction|authorizeMachineCall|authorizeMailWebhook|authorizeCronCall|authorizeBotCall|ADMIN_SECRET|WEBHOOK_SECRET|INTERNAL_API_SECRET|safeEqual|getIronSession/;
+  /authorizeAction|authorizeMachineCall|authorizeCronCall|authorizeBotCall|ADMIN_SECRET|WEBHOOK_SECRET|INTERNAL_API_SECRET|safeEqual|getIronSession/;
 
 console.log("\n[1] the sweep found the routes");
 ok(routes.length >= 8, `${routes.length} route files under app/api`, routes.join(" "));

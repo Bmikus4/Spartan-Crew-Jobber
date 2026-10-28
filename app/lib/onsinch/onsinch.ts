@@ -25,9 +25,8 @@ export interface OnsinchConfig {
 /** Real fetch transport. `apikey ` prefix is mandatory. */
 export function httpTransport(cfg: OnsinchConfig): Transport {
   // A call with no deadline is the worst failure mode we have: the serverless
-  // invocation dies at 60s having logged nothing, and because the n8n workflow
-  // strips the Gmail label before the engine is reached, that email is simply
-  // gone. Better to fail one request loudly and fast.
+  // invocation dies at its ceiling having logged nothing, with the email undecided.
+  // Better to fail one request loudly and fast.
   const TIMEOUT_MS = Number(process.env.ONSINCH_TIMEOUT_MS || 12_000);
   /**
    * ONSINCH 500s UNDER CONCURRENT LOAD, AND A 500 USED TO LOSE THE BOOKING.
@@ -68,10 +67,10 @@ export function httpTransport(cfg: OnsinchConfig): Transport {
    * the order exists instead of guessing — a read, repeated safely, in place of a write
    * repeated dangerously.
    *
-   * The budget is deliberately small. The whole pipeline runs inside n8n's 60s ceiling
-   * and this transport already has a 12s per-request timeout, so two retries at 400ms and
-   * 1200ms is the most that fits without turning a slow failure into a timeout — which is
-   * the worse failure, because the email's Gmail label is already gone by then.
+   * The budget is deliberately small. A decision runs inside one function call and this
+   * transport already has a 12s per-request timeout, so two retries at 400ms and 1200ms
+   * is the most that fits without turning a slow failure into a timeout, the worse
+   * failure: it ends the call with nothing recorded.
    */
   const RETRY_BACKOFF_MS = [400, 1200];
   const retriable = (method: string, path: string, status: number) =>

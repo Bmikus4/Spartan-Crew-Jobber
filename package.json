@@ -23,8 +23,6 @@
     "backfill:envelope": "node scripts/backfill-envelope.mjs",
     "db:reclaim": "node scripts/db-reclaim.mjs",
     "verify:e2e": "node scripts/verify-intake-e2e.mjs",
-    "verify:mail": "node scripts/verify-mail-inbound.mjs",
-    "verify:mail:engine": "tsx scripts/verify-mail-inbound-engine.ts",
     "verify:gmail:sa": "tsx scripts/verify-gmail-sa.ts"
   },
   "dependencies": {
