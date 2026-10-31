@@ -5539,5 +5539,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0266",
+  "ts": "2026-10-31T03:18:25+00:00",
+  "kind": "measurement",
+  "headline": "TV handoff: six steps, absolute-data inventory, plain descriptions (docs only)",
+  "subject": "The TV build is handed off step by step, resting only on absolute data",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 120,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]
