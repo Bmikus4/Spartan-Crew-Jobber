@@ -163,6 +163,45 @@ to the last sync (`.tmp-v2/truthsync.ts`):
     R2: check" (amber).
   - **A need with no day** is matched by rungs 1-2. 28 of 29 undated needs since 9 Oct have a linked order or a PO.
     Otherwise it stays open.
+- **Links (O17, O18).** The owner: "absolutes overrule everything else, so any absolute links both ways, should
+  override existing ones, be careful with this", and "the system should be built to handle multiple orders".
+  - **A link is one thing:** a thread joined to an order, whichever side the search began from. Each link stores its
+    proof, absolute or inferred.
+  - **One function grades the proof,** in `app/lib/v2/links.ts`. The evaluator and the minute sync both call it.
+  - **Match again when either side changes:**
+    - a new email against stored orders;
+    - a new or changed order (the minute sync already reads them) against stored threads.
+
+    Since 9 Oct, 80 of 148 absolute links name an order made after the email. A search at intake cannot see these.
+  - **An absolute link overrules inferred links** from that thread to orders outside its set. This replaces
+    `links.ts`'s rule that a live link is never displaced. Today (`.tmp-v2/abslinks.ts`):
+    - 63 threads gain a link;
+    - 57 already agree;
+    - 7 are linked only to another order, and would be overruled.
+  - **An overruled link is marked replaced, with the proof,** never deleted.
+  - **Two absolutes that disagree overrule nothing.** For example, the order is not the sender's company, or the
+    bot's own order differs from the client's PO. The card is amber, "check".
+  - **Several orders are normal.** Of the 13 threads naming 2+ orders, checked 30 Oct (`.tmp-v2/multiorder.ts`):
+    - 5 name several orders one by one, up to 6 POs in one email. Link every one, one need per order.
+    - 3 name one PO that OnSinch holds on two orders. Link both. The need's day picks the order; with no day the card
+      says "R1 or R2: check".
+    - 4 name one real order, and their other hits are false.
+    - 1 has no real hit at all.
+  - **What counts as absolute.** All 8 false hits fail one of these rules:
+    - **A PO is a whole token of at least 6 characters,** not inside a link, an address or a tracking string. 7
+      false hits were POs of 4-5 characters found inside such strings. Every real PO hit was 6 or more characters,
+      stood alone, and mostly followed "PO number".
+    - **An R counts in the subject, the client's new words, or a Spartan message on the same thread.** An R that
+      appears only in history quoted from another thread does not count. That was the 8th false hit.
+    - **An R counts only if the order now holding that number existed when the email was sent.** OnSinch reuses
+      an R number after a delete (DECISIONS D6).
+    - **A deleted order never counts** (step 0).
+    - Recount the 9 "another company" conflicts (`.tmp-v2/abslinks.ts`) under these rules. Both such conflicts
+      among the 13 were false PO hits.
+  - **Not proof: staff working on an order after the email.** One falsely matched order had 64 rows of staff work
+    that week, because staff touch many orders every day. The day is the check.
+  - **Before it goes live:** list every link that changes, with the cards and Gmail labels that move with it, and
+    check each one. One wrong link blocks the ship.
 - **Data:** `onsinch_timeline` and `onsinch_orders` (read the client's orders when a need's client has none stored,
   as `loop/outcomes.ts` does), `onsinch_contacts` and `job_links` (source column says absolute or inferred).
 - **Before it goes live:**

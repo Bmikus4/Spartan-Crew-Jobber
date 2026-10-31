@@ -180,6 +180,8 @@ the owner's where the comment quotes them. Owner decisions still OPEN are in ADD
 | O14 | 29 Oct | A need staff have handled in OnSinch leaves the needs list; it never clears on another job's work | same |
 | O15 | 30 Oct | A card's name: the linked OnSinch order's title; else client and venue; else the original sender's email (never a Spartan Crew address, never a subject line) | same |
 | O16 | 30 Oct | A three-line tile (owner and Paz), the UI tight and orderly; a need does not depend on having a day | same |
+| O17 | 30 Oct | "absolutes overrule everything else, so any absolute links both ways, should override existing ones, be careful with this": a link is the same whichever side found it, and an absolute one overrules inferred ones | fleet/resume/Spartan-TV-Handoff-2026-10-30.md step 1 |
+| O18 | 30 Oct | "the system should be built to handle multiple orders": one email may name several orders, and one PO may be on several | same |
 
 ## Rulings in v2 code
 

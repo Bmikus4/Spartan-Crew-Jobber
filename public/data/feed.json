@@ -5567,5 +5567,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0268",
+  "ts": "2026-10-31T03:41:56+00:00",
+  "kind": "measurement",
+  "headline": "Link rulings O17/O18 in the TV handoff: absolute overrules, several orders per email (docs only)",
+  "subject": "An absolute link overrules a guessed one; one email may name several orders",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 120,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]
