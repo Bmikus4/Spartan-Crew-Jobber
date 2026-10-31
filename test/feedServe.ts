@@ -121,8 +121,8 @@ void (async () => {
     const bare = { ...created, thread_id: "b", classification: "update", status: "error", order_action_log: [], onsinch_order_id: undefined } as unknown as ConversationState;
     const lastIn = new Map([["n", NOW - 30 * H], ["b", NOW - 30 * H]]);
     const held: HeldLink[] = [
-      { thread_id: "h", r_number: "11562", company: "EMS Events", subject: "J46434", since: new Date(NOW - 2 * H).toISOString(), note: null, days: ["2026-10-02"] },
-      { thread_id: "h2", r_number: "11600", company: "Later", subject: "x", since: new Date(NOW - 2 * H).toISOString(), note: null, days: ["2026-10-09"] },
+      { thread_id: "h", r_number: "11562", sender: { address: "ops@ems.example", client: "EMS Events" }, since: new Date(NOW - 2 * H).toISOString(), note: null, days: ["2026-10-02"] },
+      { thread_id: "h2", r_number: "11600", sender: { address: "x@later.example", client: "Later" }, since: new Date(NOW - 2 * H).toISOString(), note: null, days: ["2026-10-09"] },
     ];
     const r = await serveFeed(deps({ sources: async (inb, at) => fromStates([numbered, bare], inb, at), inbound: async () => ({ byThread: lastIn, latest: NOW - 10 * 60_000 }), held: async () => held }), NOW);
     const items = r.body.items as FeedCard[];
@@ -133,11 +133,18 @@ void (async () => {
     ok(!items.some((c) => c.thread_id === "h") && !!h2 && h2.r_number === null && /R11600 is no longer in OnSinch/.test(h2.note ?? ""), "a held link's job that is over leaves; one still to come shows no R: the number is a gone order's, and may be reused", JSON.stringify(h2));
     // The jobs board's tiles: numbers from the thread's live link, or no tile.
     const tickets = [{ thread_id: "p1", classification: "new-job", status: "ordered", order_id: 1, order_number: "999", job_id: 5, dates: [], subject: "s" }, { thread_id: "p2", classification: "new-job", status: "ordered", order_id: 2, order_number: "11029", job_id: 6, dates: [], subject: "s" }] as any[];
-    const p = await serveFeed(deps({ sources: async (inb, at) => fromStates([], inb, at), jobs: async () => tickets, links: async () => new Map([["p2", { order_id: 16100, r_number: "11777", job_id: 16200 }]]) }), NOW);
+    const order = (days: string[]) => ({ title: "Gala @ Roundhouse", days, crew: 6, venue: "Roundhouse" });
+    const more = [...tickets, { thread_id: "p3", classification: "new-job", status: "ordered", dates: [], subject: "s" }, { thread_id: "p4", classification: "new-job", status: "ordered", dates: [], subject: "s" }] as any[];
+    const p = await serveFeed(deps({ sources: async (inb, at) => fromStates([], inb, at), jobs: async () => more, links: async () => new Map([
+      ["p2", { order_id: 16100, r_number: "11777", job_id: 16200, order: order(["2026-10-09"]) }],
+      ["p3", { order_id: 16101, r_number: "11778", job_id: 16201, order: order(["2026-10-01"]) }],
+      ["p4", { order_id: 16102, r_number: "11779", job_id: 16202, order: null }]]) }), NOW);
     const tiles = (p.body.items as FeedCard[]).filter((c) => /^ported:/.test(c.items[0].item_key));
     ok(tiles.length === 1 && tiles[0].thread_id === "p2" && tiles[0].r_number === "R11777" && tiles[0].j_number === "J16200", "a carried-over tile shows its order's numbers as OnSinch has them now, and one with no live order is not shown", JSON.stringify(tiles.map((c) => [c.thread_id, c.r_number, c.j_number])));
+    ok(tiles[0]?.company === "Gala @ Roundhouse" && tiles[0].crew === 6 && tiles[0].venue === "Roundhouse" && tiles[0].dates[0] === "2026-10-09", "its name, days, crew and venue are its order's, not the old ticket's", JSON.stringify(tiles[0]));
+    ok(!tiles.some((c) => c.thread_id === "p3" || c.thread_id === "p4"), "one whose days have all passed is not shown (DECISIONS O13), nor one whose order is not stored yet");
     const live = readFileSync("app/lib/feed/live.ts", "utf8");
-    ok(!/states:/.test(live) && /portedStates: pausedStates/.test(live) && /\blinks,/.test(live), "production draws nothing from the paused engine (approved 10-20, Q4) and gives the tiles the live links");
+    ok(!/FROM conversation_state/.test(live) && /\blinks,/.test(live), "production draws nothing from the paused engine (approved 10-20, Q4) and gives the tiles the live links");
   }
 
   console.log("\n[5] the route is guarded and serves through serveFeed");

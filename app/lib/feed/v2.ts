@@ -10,19 +10,19 @@
 // later "nothing to do" ("thanks!") does not clear it: only a tick or a staff edit does,
 // exactly as for the old engine's needs.
 // ============================================================================
-import type { FeedItem, FeedKind, FeedSource, FeedWant } from "./project";
+import type { FeedItem, FeedKind, FeedSource } from "./project";
 import { STATUS_TEXT } from "./project";
 import type { Decision } from "../v2/interpret/plan";
 import type { Interpretation } from "../v2/interpret/interpret";
 import type { RunResult } from "../v2/bot/run";
 import type { Op } from "../v2/bot/ops";
-import { londonToUtc, shiftWindow } from "../v2/bot/ops";
+import { londonToUtc, utcToLondon } from "../v2/bot/ops";
 import { rNumbersIn } from "../onsinch/resolve";
 import { cardNote } from "./cardNote";
 import { isReplyReason } from "../v2/reasons";
 import type { Ask } from "./done";
 
-/** One v2_decisions row of kind write or handoff, with its message's subject. */
+/** One v2_decisions row of kind write or handoff. */
 export interface V2Row {
   thread_id: string;
   message_id: string;
@@ -32,16 +32,43 @@ export interface V2Row {
   decision: Decision;
   executed: RunResult[] | null;
   company_id: number | null;
-  company: string | null;
   from_address: string;
-  subject: string | null;
-  /** The thread's link (job_links): the order it is about, whoever made it, and when OnSinch made that order. */
-  link?: { order_id: number; r_number: string | null; job_id: number | null; made?: string | null } | null;
+  /** The thread's original sender (feed/live.ts clientSenders), and the client company whose contact list holds it. */
+  sender?: { address: string; client: string | null } | null;
+  /** The thread's link (job_links): the order it is about, whoever made it, when OnSinch made it, and the stored order. */
+  link?: { order_id: number; r_number: string | null; job_id: number | null; made?: string | null; absolute?: boolean; order?: OrderFacts | null } | null;
   /** The planner's answer on this email now (v2/replan.ts), when it has been planned again. */
   replan?: Decision | null;
 }
 
-const REF = /\b[A-Z]{2,5}-?\d{3,6}\b/g;
+/** What a card shows of a stored OnSinch order: its title, its live shifts' days, its largest call and first venue. */
+export type OrderFacts = { title: string | null; days: string[]; crew: number | null; venue: string | null };
+
+export function orderFacts(body: any, placeName: (id: number) => string | null): OrderFacts {
+  const live = (x: any) => !(x?.cancelled === true || Number(x?.cancelled) > 0);
+  const teams = ([].concat(body?.Job ?? []) as any[]).flatMap((j) => [].concat(j?.SlotTeam ?? []) as any[]).filter(live)
+    .map((t) => ([].concat(t?.Slot ?? []) as any[]).filter((s) => live(s) && s?.beginning));
+  const slots = teams.flat().sort((a, b) => Date.parse(a.beginning) - Date.parse(b.beginning));
+  const crews = teams.map((t) => t.reduce((n, s) => n + (Number(s.size) || 0), 0)).filter((n) => n > 0);
+  const loc = (s: any) => Number((Array.isArray(s?.SlotLocation) ? s.SlotLocation[0] : s?.SlotLocation)?.place_id) || 0;
+  return {
+    title: String(body?.name ?? "").trim() || null,
+    days: [...new Set(slots.map((s) => utcToLondon(String(s.beginning)).date))].sort(),
+    crew: crews.length ? Math.max(...crews) : null,
+    venue: slots.length && loc(slots[0]) ? placeName(loc(slots[0])) : null,
+  };
+}
+
+/**
+ * A CARD'S NAME, ONE RULE (DECISIONS O15): the linked OnSinch order's title; else the client and venue; else the
+ * original sender's address. Never a Spartan Crew address and never a subject line: 17 of 238 cards were named by
+ * their subject on 29 Oct.
+ */
+export function cardName(x: { title?: string | null; client?: string | null; venue?: string | null; sender?: string | null }): string | null {
+  if (x.title?.trim()) return x.title.trim();
+  if (x.client) return x.venue ? `${x.client} @ ${x.venue}` : x.client;
+  return x.sender && !/@spartancrew\.co\.uk$/i.test(x.sender) ? x.sender : null;
+}
 
 /** A decision recorded before plan.ts flagged replies (10-11) is one when every reason is a quote, a question or a detail the client must give (reasons.ts isReplyReason). */
 
@@ -49,15 +76,6 @@ function opDays(op: Op): Array<{ date: string; start: string; end: string; place
   if (op.kind === "create_order") return op.shifts.map((s) => ({ date: s.date, start: s.start, end: s.end, place_id: Number(s.place_id), venue: s.place_label }));
   if (op.kind === "set_position_times" || op.kind === "add_shift" || op.kind === "add_position") return [{ date: op.date, start: op.start, end: op.end }];
   return [];
-}
-
-function window(date: string, start: string, end: string): { b: number; e: number } | null {
-  try {
-    const w = shiftWindow(date, start, end);
-    return { b: Date.parse(w.beginning), e: Date.parse(w.end) };
-  } catch {
-    return null; // a time London's clock skips or repeats; the card still shows the day
-  }
 }
 
 /** A day with no time counts from its first minute, so the date never promises more time than there is. */
@@ -70,7 +88,7 @@ function classify(row: V2Row, d: Decision) {
   const g = row.grounded;
   const ops = d.kind === "write" ? d.ops.map((o) => o.op) : [];
   const said = d.kind === "write" ? d.why : d.kind === "handoff" ? d.reasons : [d.reason];
-  const r_numbers = [...new Set(rNumbersIn(`${row.subject ?? ""}\n${said.join("\n")}`))];
+  const r_numbers = [...new Set(rNumbersIn(said.join("\n")))];
   const creates = ops.some((o) => o.kind === "create_order");
   // What the bot ran belongs to the decision it ran for: a decision planned again sent nothing.
   const executed = d === row.decision ? row.executed : null;
@@ -83,7 +101,7 @@ function classify(row: V2Row, d: Decision) {
   // A thread that names an order, or a request aimed at an existing shift, is an update even
   // when it also adds a shift: "move the de-rig to Tuesday, and 6 more on Wednesday" (The
   // Events House, 10-11) read as Needs Created because one of its requests was a new shift.
-  const aimsAtOrder = !!r_numbers.length || !!order_id || !!g?.requests.some((r) => r.action !== "new_shift" || r.target);
+  const aimsAtOrder = !!row.link?.absolute || !!r_numbers.length || !!order_id || !!g?.requests.some((r) => r.action !== "new_shift" || r.target);
   const asksNew = g ? !aimsAtOrder && (g.intent === "booking" || g.intent === "quote_request" || g.requests.some((r) => r.action === "new_shift")) : !r_numbers.length;
   let kind: FeedKind;
   if (d.kind === "write" && written) kind = creates ? "created-check" : "updated-check";
@@ -109,7 +127,9 @@ export function v2Source(row: V2Row, now: number): FeedSource {
   // OnSinch already held when the email came is a change to that order. 11 of 44 "needs created" cards carried an
   // R and J on 29 Oct. An order made after the email is the booking done, which done.ts finds.
   if (c.kind === "needs-created" && row.link?.made && Date.parse(row.link.made) < (Date.parse(row.sent_at) || now)) c.kind = "needs-updated";
-  const first = row.replan ? classify(row, row.decision) : c;
+  // The key is the email's first decision as read without the link: a link found or proved later changes what the
+  // card says, never which need it is, or the need would lose its marks (31 Oct: the kind moving moved the key).
+  const first = classify({ ...row, link: null }, row.decision);
   const g = row.grounded;
   const note = d.kind === "none" ? null : cardNote({ decision: d, grounded: g, executed: c.executed, written: c.written });
   const at = Date.parse(row.sent_at) || now;
@@ -127,16 +147,14 @@ export function v2Source(row: V2Row, now: number): FeedSource {
     ...over.map((date) => ({ date })),
   ].filter((s) => /^\d{4}-\d{2}-\d{2}$/.test(s.date));
   const days = [...new Set(shifts.map((s) => s.date))].sort();
-  const windows = shifts.flatMap((s) => (s.start && s.end ? [{ ...window(s.date, s.start, s.end), p: s.place_id ?? null }] : []))
-    .filter((w): w is { b: number; e: number; p: number | null } => Number.isFinite(w.b) && Number.isFinite(w.e));
   const starts = shifts.map((s) => startOf(s.date, s.start)).filter((v) => v >= now).sort((a, b) => a - b);
   const crews = shifts.map((s) => s.crew ?? 0).filter((n) => n > 0);
   const places = [...new Set(shifts.map((s) => s.place_id).filter((p): p is number => !!p))];
 
-  const refs = new Set<string>();
-  if (g?.po) refs.add(g.po);
-  for (const m of (row.subject ?? "").matchAll(REF)) if (!/^R-?\d+$/i.test(m[0])) refs.add(m[0]);
-  const want: FeedWant = { r_numbers: c.r_numbers, refs: [...refs], place_id: places.length === 1 ? places[0] : null, shifts: windows, sender: row.from_address || null };
+  // The linked order names the card only when the link is absolute, or its order holds a day the email names.
+  const order = row.link?.order ?? null;
+  const agreed = !!row.link?.absolute || !!order?.days.some((x) => days.includes(x));
+  const venue = shifts.find((s) => s.venue)?.venue ?? (agreed ? order?.venue ?? null : null);
 
   return {
     thread_id: row.thread_id,
@@ -153,14 +171,13 @@ export function v2Source(row: V2Row, now: number): FeedSource {
     r_number: row.link?.r_number ? `R${String(row.link.r_number).replace(/^R/i, "")}` : null,
     j_number: row.link?.job_id ? `J${row.link.job_id}` : null,
     company_id: row.company_id,
-    company: row.company,
+    company: cardName({ title: agreed ? order?.title : null, client: row.sender?.client, venue, sender: row.sender?.address }),
     contact: null,
-    venue: shifts.find((s) => s.venue)?.venue ?? null,
-    subject: row.subject ?? "",
+    venue,
     crew: crews.length ? Math.max(...crews) : null,
     starts_at: starts[0] ?? null,
     last_write: c.written ? at : 0,
-    want,
+    want: { sender: row.sender?.address ?? (row.from_address || null) },
     need: {
       at,
       asks: [...new Set([...(g?.requests ?? []).map((r) => ASK[r.action] ?? "any"), ...(g?.requests.length ? [] : c.ops.map((o) => OP_ASK[o.kind]))])],
@@ -219,8 +236,7 @@ function answers(later: V2Row, need: V2Row): boolean {
     ...(x.kind === "write" ? x.ops.flatMap((o) => opDays(o.op)).map((o) => o.date) : [])].filter((v): v is string => !!v);
   const needDays = daysOf(need, n);
   const sameDay = daysOf(later, d).some((v) => needDays.includes(v));
-  // The need's subject counts, the later one's does not: every reply on a thread repeats it.
-  const needOrders = rNumbersIn(`${need.subject ?? ""}\n${(n.kind === "write" ? n.why : n.reasons).join("\n")}`);
+  const needOrders = rNumbersIn((n.kind === "write" ? n.why : n.reasons).join("\n"));
   const sameOrder = needOrders.length > 0 && rNumbersIn((d.kind === "write" ? d.why : d.reasons).join("\n")).some((v) => needOrders.includes(v));
   return sameDay || sameOrder;
 }
@@ -251,7 +267,7 @@ function openNeedUnder(list: V2Row[]): V2Row | null {
   if (!need || need.decision.kind !== "handoff" || (need.decision.reply ?? need.decision.reasons.every(isReplyReason))) return null;
   const wroteDays = new Set(newest.decision.ops.flatMap((o) => opDays(o.op)).map((d) => d.date));
   const needDays = (need.grounded?.requests ?? []).map((q) => q.target?.date ?? q.date).filter((d): d is string => !!d);
-  const needOrders = rNumbersIn(`${need.subject ?? ""}\n${need.decision.reasons.join("\n")}`);
+  const needOrders = rNumbersIn(need.decision.reasons.join("\n"));
   const sameOrder = needOrders.length > 0 && rNumbersIn(newest.decision.why.join("\n")).some((n) => needOrders.includes(n));
   const sameDay = needDays.some((d) => wroteDays.has(d));
   return sameDay || sameOrder ? null : need;

@@ -5609,5 +5609,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0271",
+  "ts": "2026-10-31T04:33:03+00:00",
+  "kind": "measurement",
+  "headline": "Steps 3+4: passed jobs dropped; names 31/37 order or client, 0 subject (was 17/238); item key no longer moves with the link",
+  "subject": "A passed job leaves the TV, and every card is named by its order, client or sender, never its subject",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 120,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]

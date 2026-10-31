@@ -31,6 +31,8 @@ const CONTACTS_EVERY_MS = 24 * 3600e3;
 const CONFIRMS_PER_RUN = 40;
 const CLIENT_ORDERS_EVERY_MS = 30 * 60e3;
 const CLIENTS_PER_RUN = 5;
+/** 177 jobs-board links on 30 Oct, 171 to orders never read: filled in about 9 minutes, then a few a minute. */
+const LINKED_PER_RUN = 20;
 
 const parse = (v: unknown): any => { if (typeof v !== "string") return v ?? {}; try { return JSON.parse(v); } catch { return {}; } };
 /** An audit time with no zone is UTC (test/zonelessIsUtc.ts). */
@@ -273,11 +275,35 @@ export async function readClientOrders(sql: Sql, t: Transport, companies: number
   return due.length;
 }
 
+/**
+ * Every order a thread is linked to, stored and kept as OnSinch holds it: a card takes its name, days, crew and venue
+ * from it (feed/v2.ts orderFacts), and the TV never reads OnSinch. Read when not stored, or when the history shows a
+ * change after it was read; one OnSinch no longer holds is deleted. A few a minute.
+ */
+export async function readLinkedOrders(sql: Sql, t: Transport, now = Date.now()): Promise<number> {
+  await ensureSchema(sql);
+  const due = (await sql`SELECT DISTINCT l.order_id FROM job_links l LEFT JOIN onsinch_orders o ON o.order_id = l.order_id
+    WHERE l.state IN ('linked', 'relinked') AND l.order_id > 0 AND o.deleted_at IS NULL
+      AND (o.order_id IS NULL OR EXISTS (SELECT 1 FROM onsinch_timeline h WHERE h.order_id = l.order_id AND h.created > o.read_at))
+    LIMIT ${LINKED_PER_RUN}`) as Array<{ order_id: string | number }>;
+  const at = new Date(now).toISOString();
+  for (const { order_id } of due) {
+    const o = (await readPage(t, `/orders?id[eq]=${Number(order_id)}&with=Job__SlotTeam__Slot__SlotLocation`)).rows[0];
+    await sql`INSERT INTO onsinch_orders (order_id, number, company_id, body, read_at, deleted_at)
+      VALUES (${Number(order_id)}, ${o ? String(o.number) : null}, ${o ? Number(o.company_id) : null}, ${o ? JSON.stringify(o) : null}::jsonb, ${at}::timestamptz, ${o ? null : at}::timestamptz)
+      ON CONFLICT (order_id) DO UPDATE SET number = coalesce(EXCLUDED.number, onsinch_orders.number), company_id = coalesce(EXCLUDED.company_id, onsinch_orders.company_id),
+        body = coalesce(EXCLUDED.body, onsinch_orders.body), read_at = EXCLUDED.read_at, deleted_at = EXCLUDED.deleted_at`;
+    if (o) await rememberOrder(sql, o);
+  }
+  return due.length;
+}
+
 /** The minute sync's step: the timeline first, then the contacts, places and deleted orders when a day has passed. */
 export async function pullTruth(sql: Sql, t: Transport, now = Date.now()): Promise<Record<string, unknown>> {
   const timeline = await pullTimeline(sql, t, { deadline: now + 60_000 });
   const contacts = await refreshContacts(sql, t, now);
   const places = await refreshPlaces(sql, t, now);
   const orders = await refreshOrders(sql, t, now);
-  return { ...timeline, contacts: contacts.refreshed ? contacts.contacts : "fresh", places: places.refreshed ? places.places : "fresh", deleted: orders.refreshed ? orders.deleted.length : "fresh" };
+  const linked = await readLinkedOrders(sql, t, now);
+  return { ...timeline, contacts: contacts.refreshed ? contacts.contacts : "fresh", places: places.refreshed ? places.places : "fresh", deleted: orders.refreshed ? orders.deleted.length : "fresh", linked };
 }

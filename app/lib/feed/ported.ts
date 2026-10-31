@@ -17,9 +17,11 @@
 // 23 a cancelled order and 74 none at all. Each tile now takes its R and J from its thread's
 // link, which the minute sync makes from the ticket's J (links.ts backfillBoardLinks) and
 // sweepLinks keeps true; a ticket whose order is gone has no live link, and no tile.
+//
+// ITS NAME, DAYS, CREW AND VENUE ARE ITS ORDER'S TOO (ADDENDUM §13.2 change 4): the ticket's crew was wrong on 89
+// of 186 on 29 Oct. A tile whose order is not stored yet waits for the minute sync to read it (truth.ts).
 // ============================================================================
 import type { Job } from "../jobsDb";
-import type { ConversationState } from "../onsinch/types";
 import type { FeedCard, FeedKind } from "./project";
 import type { LiveLink } from "./serve";
 import { STATUS_TEXT } from "./project";
@@ -27,12 +29,12 @@ import { STATUS_TEXT } from "./project";
 const dismissed = (j: Job) => j.classification === "not-a-job" || j.status === "ignored" || (j as { is_client_inquiry?: boolean }).is_client_inquiry === false;
 const first = (v: unknown) => (typeof v === "string" && v.trim() && v.trim() !== "—" ? v.trim().split(/\s+/)[0] : null);
 
-export function portedCards(jobs: Job[], states: ConversationState[], onTv: Set<string>, links: Map<string, LiveLink> = new Map(), _now = Date.now()): FeedCard[] {
-  const company = new Map(states.map((s) => [s.thread_id, typeof s.facts?.company_name === "string" && s.facts.company_name.trim() ? s.facts.company_name.trim() : null]));
+export function portedCards(jobs: Job[], onTv: Set<string>, links: Map<string, LiveLink> = new Map()): FeedCard[] {
   const out: FeedCard[] = [];
   for (const j of jobs) {
     const link = links.get(j.thread_id);
-    if (dismissed(j) || onTv.has(j.thread_id) || !link?.r_number || !link.job_id) continue;
+    const order = link?.order;
+    if (dismissed(j) || onTv.has(j.thread_id) || !link?.r_number || !link.job_id || !order) continue;
     const kind: FeedKind = j.classification === "update" ? "updated-check" : "created-check";
     const at = Date.parse(String((j as { updated_at?: unknown }).updated_at ?? "")) || 0;
     out.push({
@@ -44,16 +46,15 @@ export function portedCards(jobs: Job[], states: ConversationState[], onTv: Set<
       at,
       order_id: link.order_id,
       company_id: j.company_id,
-      company: company.get(j.thread_id) ?? null,
+      company: order.title,
       contact: first(j.contact),
-      dates: [...(j.dates ?? [])].map((d) => String(d).slice(0, 10)).filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d)).sort(),
+      dates: order.days,
       starts_at: null,
       awaiting_reply_since: null,
-      crew: j.crew_size ?? null,
-      venue: j.location ?? null,
+      crew: order.crew,
+      venue: order.venue,
       r_number: `R${String(link.r_number).replace(/^R/i, "")}`,
       j_number: `J${link.job_id}`,
-      subject: j.subject,
       quiet: false,
       follow_up: false,
       note: null,

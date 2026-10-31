@@ -88,7 +88,7 @@ console.log("\n[4] keys");
 console.log("\n[5] ordering: a day-long reply wait first, then needs by job date, then done newest first");
 {
   const inbound = new Map([["n-old", NOW - 9 * H], ["n-new", NOW - 1 * H]]);
-  const p = project(inbound, [], [{ thread_id: "r", since_iso: new Date(NOW - 30 * H).toISOString(), company: "Acme", contact: "Jo Bloggs", subject: "Re: quote" }], NOW, new Map(), [...fromStates([created("c-old", NOW - 8 * H), needsCreated("n-new"), created("c-new", NOW - 2 * H), needsUpdated("n-old")], inbound, NOW)]);
+  const p = project(inbound, [], [{ thread_id: "r", since_iso: new Date(NOW - 30 * H).toISOString(), company: "Acme", contact: "Jo Bloggs" }], NOW, new Map(), [...fromStates([created("c-old", NOW - 8 * H), needsCreated("n-new"), created("c-new", NOW - 2 * H), needsUpdated("n-old")], inbound, NOW)]);
   const order = p.cards.map((c) => c.thread_id).join(",");
   // n-old is an update on a booked job, so it has no clock (Ben, 2026-10-06) and no wait to
   // rank by; on the same job day the enquiry still waiting on a reply goes first.
@@ -98,7 +98,7 @@ console.log("\n[5] ordering: a day-long reply wait first, then needs by job date
 
 console.log("\n[6] one card carries two needs");
 {
-  const p = project(new Map(), [], [{ thread_id: "b", since_iso: new Date(NOW - 30 * H).toISOString(), company: null, contact: null, subject: "s" }], NOW, new Map(), [...fromStates([needsUpdated("b")], new Map(), NOW)]);
+  const p = project(new Map(), [], [{ thread_id: "b", since_iso: new Date(NOW - 30 * H).toISOString(), company: null, contact: null }], NOW, new Map(), [...fromStates([needsUpdated("b")], new Map(), NOW)]);
   ok(p.cards.length === 1, "one card for the thread");
   ok(p.cards[0].items.map((i) => i.kind).join("+") === "needs-updated+needs-reply", "carrying the order need and the reply");
   ok(p.cards[0].colour === "blue" && p.cards[0].lane === "reply", "keeps its order colour and rises with the replies");
@@ -249,28 +249,27 @@ console.log("\n[15] the rebuild's decisions reach ops on the TV and nowhere else
   const row = (thread: string, over: Partial<V2Row>): V2Row => ({
     thread_id: thread, message_id: `m-${thread}`, sent_at: new Date(NOW - H).toISOString(), kind: "handoff",
     grounded: { intent: "change", requests: [], problems: [] }, decision: { kind: "handoff", reasons: ["the request is unclear"] },
-    executed: null, company_id: 343, company: "Impact Collective", from_address: "sam@impact.example", subject: "Re: R11475 Monday", ...over,
+    executed: null, company_id: 343, from_address: "sam@impact.example", sender: { address: "sam@impact.example", client: "Impact Collective" }, ...over,
   });
-  const quote = row("q", { grounded: { intent: "quote_request", requests: [], problems: [] }, decision: { kind: "handoff", reasons: ["the client asked for a quote"] }, subject: "Crew prices" });
+  const quote = row("q", { grounded: { intent: "quote_request", requests: [], problems: [] }, decision: { kind: "handoff", reasons: ["the client asked for a quote"] } });
   const change = row("c", { grounded: { intent: "change", requests: [{ action: "change_crew", date: "2026-10-12", crew: 6, problems: [] }], problems: [] }, decision: { kind: "handoff", reasons: ["R11475 shift 7: the email says 6 crew, the shift has 5"] } });
   const ops = [{ source: "m-w#0", op: { kind: "set_position_times" as const, order_id: 950, slot_id: 5, date: "2026-10-10", start: "11:00", end: "15:00" } }];
-  const shadow = row("w", { kind: "write", decision: { kind: "write", ops, why: ["R11275 shift 41719: times to 11:00-15:00"] }, subject: "Saturday" });
+  const shadow = row("w", { kind: "write", decision: { kind: "write", ops, why: ["R11275 shift 41719: times to 11:00-15:00"] } });
   const written = row("x", { kind: "write", decision: { kind: "write", ops, why: ["R11275 shift 41719: times to 11:00-15:00"] }, executed: [{ op_key: "k", status: "verified", reasons: [] }] });
   const p = project(new Map(), [], null, NOW, new Map(), v2Sources([quote, change, shadow, written], NOW));
   const by = new Map(p.cards.map((c) => [c.thread_id, c]));
   // A quote is answered by a reply, not an order (Ben, 10-11), and the line is cardNote's.
   ok(by.get("q")?.items[0].kind === "needs-reply" && /Price it and send the quote$/.test(by.get("q")?.note ?? "") && by.get("q")?.company === "Impact Collective", "a quote is a reply for a person, with what to do on the card", by.get("q")?.note ?? "");
   ok(by.get("c")?.items[0].kind === "needs-updated" && by.get("c")?.r_number === null && by.get("c")?.dates[0] === "2026-10-12" && by.get("c")?.crew === 6, "a change it could not make reads needs updated; the R its reason names is not shown until the planner links that order (Ben 10-21: always the correct numbers)");
-  ok(p.wants.get("c")?.r_numbers[0] === "11475", "and the verifier looks for that order, so a staff edit there closes it");
   ok(by.get("w")?.items[0].kind === "needs-updated" && by.get("w")?.order_id === 950 && by.get("w")?.note === "Times now 11:00-15:00 · Not written, do it by hand", "a planned write not yet made is still a person's job, saying what the system would do");
   ok(by.get("x")?.items[0].kind === "updated-check" && !by.get("x")?.green && p.counts.to_check === 1, "a write the system made is a check, never an automatic green");
   ok(p.counts.needs_reply === 1 && p.counts.needs_created === 0 && p.counts.needs_updated === 2, "counted with the rest", JSON.stringify(p.counts));
 
-  const later = row("c", { message_id: "m-c2", sent_at: new Date(NOW - 30 * 60_000).toISOString(), decision: { kind: "handoff", reasons: ["no venue in the email"] }, grounded: { intent: "booking", requests: [], problems: [] }, subject: "Another" });
+  const later = row("c", { message_id: "m-c2", sent_at: new Date(NOW - 30 * 60_000).toISOString(), decision: { kind: "handoff", reasons: ["no venue in the email"] }, grounded: { intent: "booking", requests: [], problems: [] } });
   const both = v2Sources([change, later], NOW);
   ok(both.length === 1 && both[0].note === "New booking · No venue given", "a thread shows its newest decision that needs a person");
   // B79 (10-11): a newer write about another day does not answer an older need.
-  const need14 = row("b79", { message_id: "m-n", sent_at: new Date(NOW - 3 * 3600_000).toISOString(), decision: { kind: "handoff", reasons: ["R11475: 2 shifts on 2026-10-14 could be the one meant"] }, grounded: { intent: "change", requests: [{ action: "change_times", date: "2026-10-14", start: "10:00", problems: [] }], problems: [] }, subject: "Re: R11475" });
+  const need14 = row("b79", { message_id: "m-n", sent_at: new Date(NOW - 3 * 3600_000).toISOString(), decision: { kind: "handoff", reasons: ["R11475: 2 shifts on 2026-10-14 could be the one meant"] }, grounded: { intent: "change", requests: [{ action: "change_times", date: "2026-10-14", start: "10:00", problems: [] }], problems: [] } });
   const po20 = row("b79", { message_id: "m-w", sent_at: new Date(NOW - 3600_000).toISOString(), kind: "write", decision: { kind: "write", ops: [{ source: "s", op: { kind: "set_position_times", order_id: 950, slot_id: 1, date: "2026-10-20", start: "09:00", end: "17:00" } }], why: ["R11999 shift 1: times to 09:00-17:00"] }, executed: [{ op_key: "k", status: "verified", reasons: [] }] });
   const kept = v2Sources([need14, po20], NOW);
   ok(kept.length === 1 && kept[0].item?.kind === "needs-updated", "a newer write on another day leaves the older need on the card (B79)", kept[0].item?.kind ?? "");
@@ -284,7 +283,7 @@ console.log("\n[15] the rebuild's decisions reach ops on the TV and nowhere else
   const made = v2Sources([row("n", { kind: "write", decision: { kind: "write", ops: [create], why: ["new order: 1 shift(s) at Roundhouse"] }, executed: [{ op_key: "k", status: "verified", reasons: [], detail: { order_id: 16600, number: 11520 } }] })], NOW)[0];
   ok(made.item?.kind === "created-check" && made.order_id === 16600 && made.r_number === null, "an order the bot created carries its id for the verifier; its R and J come with its link, made within the minute (links.ts backfillLinks)");
   // 10-15: 15 of 19 open cards showed no R or J number though the thread was linked.
-  const linked = v2Sources([row("L", { subject: "Crew Thursday", link: { order_id: 16655, r_number: "11599", job_id: 16718 } })], NOW)[0];
+  const linked = v2Sources([row("L", { link: { order_id: 16655, r_number: "11599", job_id: 16718 } })], NOW)[0];
   ok(linked.r_number === "R11599" && linked.j_number === "J16718" && linked.order_id === 16655, "a card shows the R and J number of the order its thread is linked to", JSON.stringify([linked.r_number, linked.j_number, linked.order_id]));
   const own = v2Sources([row("N", { kind: "write", decision: { kind: "write", ops: [create], why: [] }, executed: [{ op_key: "k", status: "verified", reasons: [], detail: { order_id: 16600, number: 11520 } }], link: { order_id: 16000, r_number: "11000", job_id: 1 } })], NOW)[0];
   ok(own.r_number === "R11000" && own.order_id === 16000, "the thread's link wins over the order the decision wrote: the sweep moves it when that order is rebuilt or deleted (R11615 -> R11617)");

@@ -107,7 +107,7 @@ const NOW = Date.parse("2026-10-20T09:00:00Z");
     const row: V2Row = {
       thread_id: "t1", message_id: "m1", sent_at: "2026-10-16T11:58:00Z", kind: "handoff",
       grounded: { intent: "quote_request", requests: [], problems: [] }, decision: { kind: "handoff", reasons: ["the client asked for a quote"], reply: true },
-      executed: null, company_id: 320, company: "Subfrantic", from_address: "jobs@subfrantic.com", subject: "Crew Quote",
+      executed: null, company_id: 320, from_address: "jobs@subfrantic.com", sender: { address: "jobs@subfrantic.com", client: "Subfrantic" },
     };
     const was = v2Source(row, NOW);
     const done = v2Source({ ...row, replan: { kind: "none", reason: "already booked: R11698, R11701", found: [16820, 16821] } }, NOW);

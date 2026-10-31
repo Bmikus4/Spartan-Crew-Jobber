@@ -73,7 +73,7 @@ function wantOf(s: ConversationState): FeedWant {
   const shifts = teams
     .map((t) => ({ b: Date.parse(String(t?.beginning ?? "")), e: Date.parse(String(t?.end ?? "")), p: real((t as { place_id?: unknown })?.place_id) }))
     .filter((x) => Number.isFinite(x.b) && Number.isFinite(x.e));
-  return { r_numbers, refs: [...refs], place_id: real(s.place_id), shifts, sender: str(s.sender_email) };
+  return { sender: str(s.sender_email) };
 }
 
 function jobDays(s: ConversationState): string[] {
@@ -132,7 +132,6 @@ export function stateSource(s: ConversationState, lastInbound: Map<string, numbe
     company: str(s.facts?.company_name),
     contact: firstName(s.facts?.contact_name),
     venue: str(s.facts?.location_text),
-    subject: s.subject ?? "",
     crew: crewOf(s),
     starts_at: nextStart(s, now),
     last_write: Math.max(0, ...(s.order_action_log ?? []).filter((a) => a.ok).map((a) => epochMs(a.ts))),

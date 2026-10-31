@@ -308,9 +308,8 @@ const JobTile = memo(function JobTile({ card, now, s, phase, onTick }: { card: F
     }}>
       <div style={{ minWidth: 0, display: "flex", flexDirection: "column", gap: 8 * s, paddingRight: 20 * s }}>
         <div style={{ display: "flex", alignItems: "center", gap: 14 * s, minWidth: 0 }}>
-          {/* No client matched: the subject line, quoted and dimmer, so it never reads as a client's name. */}
           <span style={{ fontSize: 30 * s, fontWeight: 700, letterSpacing: "-0.015em", color: card.company ? "var(--text-primary)" : "var(--text-secondary)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", minWidth: 0 }}>
-            {card.company || (card.subject ? `“${card.subject}”` : "Unknown client")}
+            {card.company || "Unknown client"}
           </span>
           <Badge s={s} text={label.text} ok={label.ok} />
           {hasReply(card) && it && <Badge s={s} text="Needs Reply" ok={false} />}

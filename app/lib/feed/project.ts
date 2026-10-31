@@ -111,7 +111,6 @@ export interface FeedCard {
   venue: string | null;
   r_number: string | null;
   j_number: string | null;
-  subject: string;
   /** Open, with nothing done on it by anyone for QUIET_MS: listed below the fresh ones. */
   quiet: boolean;
   /** Open, and nothing on the job from anyone for FOLLOW_UP_MS: the TV raises "Needs Follow Up". */
@@ -128,7 +127,6 @@ export interface ReplyNeed {
   since_iso: string;
   company: string | null;
   contact: string | null;
-  subject: string;
 }
 
 export interface FeedCounts {
@@ -148,21 +146,12 @@ export interface FeedCounts {
 export interface Projection {
   cards: FeedCard[];
   counts: FeedCounts;
-  /** Per thread, what the verifier looks for in OnSinch. Never served: it holds the client's address. */
-  wants: Map<string, FeedWant>;
   /** `open` and `resolved` marks for serveFeed to store; the projection itself writes nothing. */
   remember: Array<Omit<FeedMark, "at">>;
 }
 
-/** What a thread asks for, in the terms an OnSinch order can be compared on. */
+/** Who a thread's need came from, for the minute sync's evaluator (loop/cards.ts): never served, it is an address. */
 export interface FeedWant {
-  /** R numbers (digits only) and client references ("EAV6695") the thread names. */
-  r_numbers: string[];
-  refs: string[];
-  /** The resolved venue; null when it is one of the engine's placeholders, which name no building. */
-  place_id: number | null;
-  /** Every block the engine wants, as instants, with its venue when it names a real one. */
-  shifts: Array<{ b: number; e: number; p: number | null }>;
   sender: string | null;
 }
 
@@ -200,7 +189,6 @@ export interface FeedSource {
   company: string | null;
   contact: string | null;
   venue: string | null;
-  subject: string;
   crew: number | null;
   starts_at: number | null;
   /** The newest write made on the thread (ms), 0 for none. */
@@ -263,7 +251,6 @@ export function project(
     if (t > (actedAt.get(m.thread_id) ?? 0)) actedAt.set(m.thread_id, t);
   }
   const cards = new Map<string, FeedCard>();
-  const wants = new Map<string, FeedWant>();
   const remember: Projection["remember"] = [];
   // The newest need each thread showed on the TV, and every need key already remembered.
   const lastOpen = new Map<string, FeedMark>();
@@ -379,13 +366,11 @@ export function project(
       venue: s.venue,
       r_number,
       j_number,
-      subject: s.subject,
       quiet: !g && now - lastActivity > QUIET_MS,
       follow_up: followUp,
       note: s.note,
       check: g ? null : possibly.get(it.item_key) ?? null,
     });
-    if (!g) wants.set(s.thread_id, s.want);
     // Needs only: a check's key is its write, and a remembered check would read as resolved
     // on the next refresh, the write being older than the moment it was first seen.
     for (const e of entries.filter(openNeed)) {
@@ -412,11 +397,11 @@ export function project(
     cards.set(r.thread_id, {
       thread_id: r.thread_id, colour: "neutral", lane: "reply", items: [item], green: false, at: item.at,
       order_id: null, company_id: null, company: r.company, contact: firstName(r.contact),
-      dates: [], starts_at: null, awaiting_reply_since: item.at, crew: null, venue: null, r_number: null, j_number: null, subject: r.subject, quiet: false, follow_up: false, note: null,
+      dates: [], starts_at: null, awaiting_reply_since: item.at, crew: null, venue: null, r_number: null, j_number: null, quiet: false, follow_up: false, note: null,
     });
   }
 
-  return { cards: orderCards([...cards.values()], now), counts, wants, remember };
+  return { cards: orderCards([...cards.values()], now), counts, remember };
 }
 
 

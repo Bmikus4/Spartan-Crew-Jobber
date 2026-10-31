@@ -12,15 +12,14 @@
 import type { Job } from "../jobsDb";
 import { portedCards } from "./ported";
 import { project, type FeedCard, type FeedMark, type FeedSource, type ReplyNeed } from "./project";
-import { v2Sources, type V2Row } from "./v2";
+import { cardName, v2Sources, type OrderFacts, type V2Row } from "./v2";
 import { intakeHealth } from "../intakeHealth";
-import type { ConversationState } from "../onsinch/types";
 
 /** An order the minute sweep cannot find (links.ts), on the TV once held long enough. `days`: the London days its shifts were on. */
-export type HeldLink = { thread_id: string; r_number: string | null; company: string | null; subject: string | null; since: string; note: string | null; days?: string[] };
+export type HeldLink = { thread_id: string; r_number: string | null; sender: { address: string; client: string | null } | null; since: string; note: string | null; days?: string[] };
 
-/** A thread's live link (job_links), the one source of the R and J any card shows. */
-export type LiveLink = { order_id: number; r_number: string | null; job_id: number | null };
+/** A thread's live link (job_links), the one source of the R and J any card shows, with its stored order's facts. */
+export type LiveLink = { order_id: number; r_number: string | null; job_id: number | null; absolute?: boolean; order?: OrderFacts | null };
 
 export interface FeedDeps {
   held?: () => Promise<HeldLink[]>;
@@ -49,8 +48,6 @@ export interface FeedDeps {
   intakePaused?: () => Promise<boolean>;
   /** Every thread's live link: the jobs board's carried-over tiles take their numbers from it (ported.ts). */
   links?: () => Promise<Map<string, LiveLink>>;
-  /** The paused engine's threads, read only for the jobs board's company names (ported.ts). */
-  portedStates?: () => Promise<ConversationState[]>;
 }
 
 /**
@@ -90,7 +87,7 @@ export async function serveFeed(deps: FeedDeps, now: number): Promise<{ status: 
   // The board's history is extra: if it cannot be read the live list is still the live list.
   const jobs = deps.jobs ? await deps.jobs().catch((err) => { console.error("[feed] jobs board read failed", err); return [] as Job[]; }) : [];
   const links = deps.links ? await deps.links().catch(() => new Map<string, LiveLink>()) : new Map<string, LiveLink>();
-  const ported = portedCards(jobs, deps.portedStates ? await deps.portedStates().catch(() => []) : [], new Set(p.cards.map((c) => c.thread_id)), links, now);
+  const ported = portedCards(jobs, new Set(p.cards.map((c) => c.thread_id)), links);
 
   // THE TV SHOWS ONLY WHAT THE SYSTEM COULD NOT DO (Ben, 10-13: "Only those cases should be [DECISIONS V12]
   // moved to the display TV"). An order the bot made or changed is the system's own work and a
@@ -113,9 +110,9 @@ export async function serveFeed(deps: FeedDeps, now: number): Promise<{ status: 
   const heldCards = held.filter((h) => !shown.some((c) => c.thread_id === h.thread_id) && !(h.days?.length && h.days.every((d) => d < today))).map((h) => ({
     thread_id: h.thread_id, colour: "blue" as const, lane: "need" as const,
     items: [{ item_key: `held:${h.thread_id}:${h.r_number ?? ""}`, kind: "needs-updated" as const, status: "Order not found in OnSinch", at: Date.parse(h.since) || now, green: null }],
-    green: false, at: Date.parse(h.since) || now, order_id: null, company_id: null, company: h.company, contact: null,
+    green: false, at: Date.parse(h.since) || now, order_id: null, company_id: null, company: cardName({ client: h.sender?.client, sender: h.sender?.address }), contact: null,
     dates: [...(h.days ?? [])].sort(), starts_at: null, awaiting_reply_since: null, crew: null, venue: null, r_number: null, j_number: null,
-    subject: h.subject ?? "", quiet: false, follow_up: false, note: `${h.r_number ? `R${h.r_number} is` : "Its order is"} no longer in OnSinch · Find it or rebuild it`,
+    quiet: false, follow_up: false, note: `${h.r_number ? `R${h.r_number} is` : "Its order is"} no longer in OnSinch · Find it or rebuild it`,
   }));
 
   const intake = intakeHealth({ lastReceivedAt: inbound.latest, now });
@@ -139,7 +136,9 @@ export async function serveFeed(deps: FeedDeps, now: number): Promise<{ status: 
       // The header counts what the list holds: "Needs Follow Up" counted every card (9 against
       // the 8 badges on the list, 10-21).
       counts: { ...p.counts, needs_follow_up: shown.filter((c) => c.follow_up).length, done_by_system, held: heldCards.length },
-      items: [...shown, ...heldCards, ...ported],
+      // A JOB WHOSE DAYS HAVE ALL PASSED NEVER APPEARS (DECISIONS O13), live, carried over or held: 181 of 186
+      // carried-over cards were for past days on 29 Oct. A card with no day leaves when done or after 14 quiet days.
+      items: [...shown, ...heldCards, ...ported].filter((c) => !c.dates.length || c.dates[c.dates.length - 1] >= today),
     },
     all: [...p.cards, ...heldCards],
   };

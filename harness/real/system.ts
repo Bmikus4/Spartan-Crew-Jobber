@@ -46,7 +46,7 @@ export const carrierOf = (d: any): string | null => /^read together with the lat
 /** The card the TV draws for a decision. `grounded` splits needs-created from needs-updated only. */
 export function cardOf(m: { thread_id: string; message_id: string; sent_at: string; subject: string | null; from_address: string }, kind: SystemRow["kind"], decision: any, executed: any[] | null, grounded: Interpretation | null, company_id: number | null): string | null {
   if (kind === "none") return null;
-  const row: V2Row = { thread_id: m.thread_id, message_id: m.message_id, sent_at: m.sent_at, kind, grounded, decision, executed, company_id, company: null, from_address: m.from_address, subject: m.subject };
+  const row: V2Row = { thread_id: m.thread_id, message_id: m.message_id, sent_at: m.sent_at, kind, grounded, decision, executed, company_id, from_address: m.from_address };
   const item = v2Source(row, Date.parse(m.sent_at) || 0).item as { kind: string; work?: boolean } | null;
   // A reply card that asks for crew is listed where the TV lists it (serve.ts isFailure, once `work` exists).
   return item ? (item.kind === "needs-reply" && item.work ? "needs-reply+work" : item.kind) : null;

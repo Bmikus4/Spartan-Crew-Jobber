@@ -22,7 +22,7 @@ const H = 3_600_000;
 const row = (id: string, hoursAgo: number, over: Partial<V2Row>): V2Row => ({
   thread_id: "T", message_id: id, sent_at: new Date(NOW - hoursAgo * H).toISOString(), kind: "handoff",
   grounded: { intent: "booking", requests: [], problems: [] }, decision: { kind: "handoff", reasons: ["a new client: a person books the first order"] },
-  executed: null, company_id: 343, company: "Impact Collective", from_address: "sam@impact.example", subject: "Crew", ...over,
+  executed: null, company_id: 343, from_address: "sam@impact.example", sender: { address: "sam@impact.example", client: "Impact Collective" }, ...over,
 });
 const booking = (id: string, hoursAgo: number, date: string, crew: number) =>
   row(id, hoursAgo, { grounded: { intent: "booking", requests: [{ action: "new_shift", date, crew, problems: [] }], problems: [] } });
