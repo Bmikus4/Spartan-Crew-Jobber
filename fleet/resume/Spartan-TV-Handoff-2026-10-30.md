@@ -1,7 +1,8 @@
 # Spartan TV build: handoff (30 Oct 2026)
 
-**For the next session.** Work this file down, top to bottom. It is the owner's §13 meta plan (ADDENDUM.md §13) turned
-into build steps, with the data each step rests on.
+**For the next session. This is the final handoff.** Work it down, top to bottom. It turns the owner's §13 meta plan
+(ADDENDUM.md §13) into build steps, with the data each step rests on. It also covers the owner's last two checks and
+how the code is to be written.
 
 **Read first:**
 - CLAUDE.md, the repo map;
@@ -10,7 +11,7 @@ into build steps, with the data each step rests on.
 - decisions/2026-10-30-tv-shows-only-what-needs-doing.md.
 
 **State at handoff:**
-- HEAD e837963 (S-0265), pushed; the tree is clean.
+- HEAD is this handoff's ticket (S-0267), pushed; the tree is clean.
 - Writes to OnSinch are off.
 - The loop's P2.1-P2.5 are live: OnSinch history stored every minute, outcomes, staff actions, card exits.
 - P2.6, the daily report screen, is parked in `.tmp-v2/p26-draft/`. Its test crashed PGlite; it is not part of this
@@ -53,10 +54,85 @@ into build steps, with the data each step rests on.
 - A need's job is anchored only by absolute evidence: an R, J or PO the thread names that OnSinch holds, or the bot's
   own order.
 - An inferred link counts only when the day and the venue agree with it.
-- Card exits: 45 of 68 recorded exits are "left the TV" with no known reason. Find out why in step 1, since it likely
-  means item keys change under the TV.
+- An order OnSinch no longer holds was deleted, and is never work done (below, check 2).
+
+## The owner's two checks (30 Oct, read-only)
+
+### Check 1. Were the cards that vanished ones the owner asked to delete?
+The owner: "the reason that some of those may have been disappeared is because I asked for them to be deleted. So
+make sure that that's not the case." **None of the 45 "left the TV" exits was a deletion** (`.tmp-v2/exitsdeleted.ts`,
+`.tmp-v2/exits2.ts`):
+- each one's decision and email are still stored; none was archived; no person dismissed its thread;
+- 37 still had a day to come, 7 had no day, and only 1 had every day passed;
+- they left one to four an hour across 28-30 Oct, not in one clear-out;
+- 9 are on threads that have another need open now, 10 left along with their thread's other needs, and 26 have no
+  explanation. Step 1 still finds out why.
+
+**Where deletions do show:** staff created two orders and then deleted them in OnSinch: 16957 on 29 Oct and 16990 on
+30 Oct. These may be the deletions the owner meant. Neither was linked to a thread, so no card rested on them.
+
+### Check 2. Is OnSinch's change history synced and right?
+The owner: "OnSinch has changed history. We need to verify that that is actually synced and right." For the 3 days up
+to the last sync (`.tmp-v2/truthsync.ts`):
+- **Synced:** OnSinch holds 7,104 history rows, and 1,692 of them are the 8 booking actions the store keeps. All 1,692
+  are stored with the same data, author and time. None is missing and none differs.
+- **OnSinch changes its history when an order is deleted.** The store holds 3 rows OnSinch no longer returns. They
+  are the create rows of the two deleted orders:
+  - OnSinch removes a deleted order's create row;
+  - it logs no delete action;
+  - it keeps the order's shift rows.
+
+  Our store keeps what it read, so it still shows both orders as created. Step 0 fixes that.
+- **Not kept:** 45 other action names, such as applicants, attendance, clock-ins, calendar and invoice items. Step 0
+  checks the few that could touch a booking.
+- **Not yet seen:** the "changed via API" entries OnSinch support described. Writes are off, so none has appeared.
+- **Not yet checked:** the whole range since 29 Jul. Step 0 checks it.
+
+## How the code is written (the owner, 30 Oct: "focus on clean, efficient code in your build")
+- **One rule, one function, one place.**
+  - `done.ts` alone answers "is this need done".
+  - One function gives the name.
+  - `cardNote.ts`'s templates alone write the description.
+  - Nothing else decides these again.
+- **Replace, never layer.** Each step deletes what it supersedes in the same ship:
+  - `verify.ts`'s cursor, stamps and steps (a), (c) and (d);
+  - `classify()`'s frozen kind;
+  - every fallback to the subject.
+
+  Before deleting, grep every caller and run the suite.
+- **Pure where it decides.**
+  - The evaluator, the name and the note take plain rows and return plain values.
+  - No database, no network, no clock: pass `now`.
+  - Their tests feed rows directly; PGlite is only for store code.
+- **Read once.**
+  - One query per table for each TV build, keyed by the threads and orders on the board, never a query per card.
+  - OnSinch is read only in the minute sync. The TV's read path reads only the database, so `verify.ts`'s OnSinch
+    reads on each TV request go away.
+  - A test pins the number of queries one TV build makes, whatever the card count.
+- **Small and plain.**
+  - Match the code around it.
+  - Comments only for constraints the code cannot show.
+  - No options or flags kept "in case".
+- **Measured:** each ticket states the lines added and removed under `app/lib/feed` and `app/lib/v2/loop`.
 
 ## The build, in order (each step through the gate, each with its measurement)
+
+### Step 0. The stored history stays right, deletions included (check 2)
+- **Where:** `app/lib/v2/loop/truth.ts`. Read orders with the daily contacts and places refresh, not every minute.
+- **Rule:** an order OnSinch no longer holds is deleted.
+  - Page through recent orders with `/orders?id[gt]=N`, the lowest order id with a create row in the last 30 days.
+    About 10 reads a day. First check that the filter works on orders as it does on history.
+  - A stored order missing from those pages gets `onsinch_orders.deleted_at`: a new migration, append only.
+  - Stored history rows are never deleted. What happened stays.
+- **Readers:** step 1's evaluator, `loop/judge.ts` and `loop/outcomes.ts` all treat a deleted order as not booked.
+  Re-score any outcome that rested on one.
+- **Before it ships:**
+  - Run `.tmp-v2/truthsync.ts` once over the whole range since 29 Jul: about 1,950 pages, read-only, with a hard
+    timeout.
+  - Expect 0 rows missing and 0 different. Every stored row OnSinch no longer returns must belong to a deleted order.
+  - Sample the skipped actions that could touch a booking: `order_item_*`, `slot_team_close`, `order_copied`,
+    `order_finish_without_invoice`. Keep any that changes a shift's day, time, size or place.
+- **Gives:** deleted orders known. Two so far: 16957 and 16990.
 
 ### Step 1. One evaluator: is this need done? (§13 change 1, O14)
 - **Where:**
@@ -82,6 +158,7 @@ into build steps, with the data each step rests on.
   Then:
   - **The work must fit the ask:** a create (or shifts added) for a booking; a size, time or position change on that
     shift for a change; a cancel or delete for a cancellation; any of these for an undated ask.
+  - **A deleted order (step 0) never counts.** A create followed by a delete is no booking.
   - **Two or more candidate jobs and nothing absolute to choose:** never green. The card says "Possibly done in R1 or
     R2: check" (amber).
   - **A need with no day** is matched by rungs 1-2. 28 of 29 undated needs since 9 Oct have a linked order or a PO.
@@ -95,6 +172,8 @@ into build steps, with the data each step rests on.
     - the 6 needs of 29 Oct must all clear (cards 1-6 in `.tmp-data/tv-1029/v2brief.txt`);
     - the 18 same-day multi-job cases (`.tmp-v2/sameday.ts`) must clear none wrongly.
   - **Any wrong clear blocks the ship.**
+- **Also find why needs leave the TV unexplained** (26 of 45, check 1). The likely cause is an item key that changes
+  under the TV. Each exit gets a named reason or is fixed. The evaluator's own reasons replace "left the TV".
 - **Gives:** open needs staff already handled go from 6 of 6 to 0, and wrong clears are 0.
 
 ### Step 2. A need's state from now, not from arrival (§13 change 2)
@@ -151,7 +230,8 @@ into build steps, with the data each step rests on.
 ## After each ship
 - Re-check every card on the live TV as on 29 Oct, and report what is right and wrong. The scripts:
   - `.tmp-v2/tvcards.ts`, `tvverify.ts` and `tvv2.ts`;
-  - `.tmp-v2/ro-neon.ts`, which runs the app's own read paths against production in read-only transactions.
+  - `.tmp-v2/ro-neon.ts`, which runs the app's own read paths against production in read-only transactions;
+  - `.tmp-v2/truthsync.ts`, the stored history against OnSinch's.
 - The ADDENDUM's status line and §13 table are updated with each step's measured numbers.
 
 ## Traps (from this session)
@@ -168,5 +248,7 @@ into build steps, with the data each step rests on.
   - Python patch scripts: read and write with `newline=''`; check `git diff --stat` for line-ending churn.
   - The pinned Neon driver has no `.query`; use the call form `sql(text, params)`.
   - PGlite runs out of memory on large `jsonb_to_recordset` inserts; batch at 250 rows.
+- **OnSinch's history is not append-only.** Deleting an order removes its create row and logs nothing. A gap in
+  OnSinch's ids is not a sync fault. A stored row OnSinch no longer returns means a deleted order.
 - **Watch for after writes return:** "changed via API" history entries (OnSinch support, 30 Oct). The truth store
   keeps 8 action names, so add the new ones when seen.

@@ -5553,5 +5553,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0267",
+  "ts": "2026-10-31T03:26:23+00:00",
+  "kind": "measurement",
+  "headline": "Final TV handoff: history synced for 3 days, deleted orders found, clean-code rule (docs only)",
+  "subject": "A deleted OnSinch order loses its create row; the TV handoff adds step 0",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 120,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]
