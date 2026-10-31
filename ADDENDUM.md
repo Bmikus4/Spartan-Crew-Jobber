@@ -6,7 +6,7 @@
   below as findings and status.
 - Every step updates this file: its status line, its measurement, and what moved.
 
-**Last updated:** 31 October 2026, S-0273: **§13 steps 0-6 BUILT AND LIVE (S-0269 to S-0272); the status of each, with its numbers, is §13.5.** Checked on production after the last ship (`.tmp-v2/tvnow.ts`, read-only): the TV lists 40 cards, none for a passed day, none named by a subject (34 by order or client and venue, 1 client, 5 the sender's address, senders on no contact list); 15 open needs, each saying in plain sentences what to do and the one thing to check, 13 with who wrote; the minute sync holds 186 done and 10 "possibly" marks, 102 absolute links, every linked order stored; the history is under a minute behind. Open for the owner: the 29 Oct need whose sender is on no contact list cannot be matched by absolute data (a tick clears it), and 4 needs the old verifier cleared are open again for want of fitting staff work. S-0269: **§13 step 0 DONE: the stored OnSinch history is right since 29 Jul, deletions included.** All 42,903 booking rows OnSinch holds to 31 Oct 03:44 are stored with the same data, author and time (0 missing, 0 different); the only 3 stored rows it no longer returns are the create rows of its 2 deleted orders. Deleted orders are now recorded once a day (`onsinch_orders.deleted_at`): 169 of the orders created in the last 30 days are gone, 166 of them the bot's test orders, 3 staff's (16957, 16990 and one more); 14 thread links name one. Three skipped actions change shifts and are now kept, read back once: slot_team_move 64, shift_client_change 49, order_uncancel 8. S-0268: **§13, the TV shows only what still needs doing. The final handoff is `fleet/resume/Spartan-TV-Handoff-2026-10-30.md`: steps 0-6, absolute data only, plain descriptions, clean and efficient code. Nothing is built yet. OnSinch's history is synced for the 3 days checked; a deleted order loses its create row there, and step 0 records it. Step 1 now carries the link rulings O17 (an absolute link overrules inferred ones) and O18 (several orders per email).** S-0264: **the owner's Part 2, the measurement loop (§12).** P2.5 DONE: each staff action is recorded once with whether a card came first (21-27 Oct: 21 of 215 had a card naming the day; 67 followed a card that showed no day), moved starts and one-order-per-venue exceptions; each TV need's exit is recorded. P2.4 DONE (S-0263): every client email since 9 Oct gets a judged outcome per plan from the minute sync; on production's data, planned writes 26 matched, 23 wrong (9 the venue), 11 staff did nothing, 19 can't tell. P2.3 DONE (S-0262): each new rule version is a planner option, today's rules the default (799 replayed decisions byte-identical); intake stores each rule that touched an email planned the other way; the lead rule's settings are an admin's, logged, with "applies to". P2.2 DONE (S-0261): the judge matches staff's orders by day and venue; on the 32 shadow writes it finds 15 matched, 2 partial, 3 wrong, 3 staff did nothing, 9 can't tell. P2.1 DONE (S-0260): OnSinch's booking timeline is stored from 29 Jul on, read forward every minute, with the contact lists daily. The Part 1 audit is in §12.1; the owner's five rulings are O6-O12 (decisions/2026-10-28-measurement-loop-and-rulings.md); the loop's spec and build steps P2.1-P2.6 are §12.2-§12.6, and the rulings go into code one a day after a 5-7 day baseline (§12.7). S-0259: F46 measured, not built (2 of 395 replies carry a parent from another thread). R22 DONE (S-0258): plan.ts decide() is 187 lines of steps in order, every decision of 799 replayed emails byte-identical. The review's builder steps are done; what is left is the owner's (§0 Blocked). R21 DONE (S-0257): scripts/README.md says what each of 135 scripts can touch; R20 measured and deferred with a trigger. R19 DONE (S-0256): what a reason means is read only in reasons.ts. R17 planner part DONE (S-0255): dev-2 writes 21, 12 completed, 2 partial, 7 wrong (was 22, 11, 2, 9); the 7 left are owner rules or judging limits, listed under R17. R16 DONE (S-0254): F49 and F50, the review's two write-path gaps, closed; the review's other steps are R17-R22. R15 DONE (S-0253): the V1 review, https://claude.ai/artifact/A3WyEdpcXRcehHoJVb6BQe; its write-path gaps are F49-F54, to close before writes go back on. S-0252: the re-plan no longer counts every card as changed every minute (found by the live trace). R13 DONE (S-0251): the assisted-card design, docs/ASSISTED-MODE-DESIGN-2026-10-27.md; at most 90 of 155 dev handoffs are near-misses. R14 DONE, dormant (S-0250): the Gmail poll decides through v2 once the grant exists and INTAKE_PATH=routing. R12 held for the owner and Paz. R11 DONE (S-0249): the live trace is on; 5.7 counted, its outbound change waits on the owner. R10 DONE (S-0248): the email-to-board harness and its 20-email case study. R9 DONE (S-0247). R8 DONE but e (S-0244 to S-0246); e waits on the owner's yes to a paid measurement. R3's switch-over waits on CRON_SECRET. The baseline was 0f2dcef. App code changed since then in these
+**Last updated:** 31 October 2026, S-0274: **§14, the simulated business, is planned: a fake OnSinch speaking the app's own transport, the whole pipeline to the TV on a simulated clock, simulated staff, a job grammar measured from 2,335 production orders, 15 categories of 50 generated jobs on a cheap Gemini reader plus 100 on the production reader (about $0.0076 an email, measured). Steps 1-3, 5 and 6 cost nothing; the model runs wait on the owner's choice of OpenRouter key (14.10).** S-0273: **§13 steps 0-6 BUILT AND LIVE (S-0269 to S-0272); the status of each, with its numbers, is §13.5.** Checked on production after the last ship (`.tmp-v2/tvnow.ts`, read-only): the TV lists 40 cards, none for a passed day, none named by a subject (34 by order or client and venue, 1 client, 5 the sender's address, senders on no contact list); 15 open needs, each saying in plain sentences what to do and the one thing to check, 13 with who wrote; the minute sync holds 186 done and 10 "possibly" marks, 102 absolute links, every linked order stored; the history is under a minute behind. Open for the owner: the 29 Oct need whose sender is on no contact list cannot be matched by absolute data (a tick clears it), and 4 needs the old verifier cleared are open again for want of fitting staff work. S-0269: **§13 step 0 DONE: the stored OnSinch history is right since 29 Jul, deletions included.** All 42,903 booking rows OnSinch holds to 31 Oct 03:44 are stored with the same data, author and time (0 missing, 0 different); the only 3 stored rows it no longer returns are the create rows of its 2 deleted orders. Deleted orders are now recorded once a day (`onsinch_orders.deleted_at`): 169 of the orders created in the last 30 days are gone, 166 of them the bot's test orders, 3 staff's (16957, 16990 and one more); 14 thread links name one. Three skipped actions change shifts and are now kept, read back once: slot_team_move 64, shift_client_change 49, order_uncancel 8. S-0268: **§13, the TV shows only what still needs doing. The final handoff is `fleet/resume/Spartan-TV-Handoff-2026-10-30.md`: steps 0-6, absolute data only, plain descriptions, clean and efficient code. Nothing is built yet. OnSinch's history is synced for the 3 days checked; a deleted order loses its create row there, and step 0 records it. Step 1 now carries the link rulings O17 (an absolute link overrules inferred ones) and O18 (several orders per email).** S-0264: **the owner's Part 2, the measurement loop (§12).** P2.5 DONE: each staff action is recorded once with whether a card came first (21-27 Oct: 21 of 215 had a card naming the day; 67 followed a card that showed no day), moved starts and one-order-per-venue exceptions; each TV need's exit is recorded. P2.4 DONE (S-0263): every client email since 9 Oct gets a judged outcome per plan from the minute sync; on production's data, planned writes 26 matched, 23 wrong (9 the venue), 11 staff did nothing, 19 can't tell. P2.3 DONE (S-0262): each new rule version is a planner option, today's rules the default (799 replayed decisions byte-identical); intake stores each rule that touched an email planned the other way; the lead rule's settings are an admin's, logged, with "applies to". P2.2 DONE (S-0261): the judge matches staff's orders by day and venue; on the 32 shadow writes it finds 15 matched, 2 partial, 3 wrong, 3 staff did nothing, 9 can't tell. P2.1 DONE (S-0260): OnSinch's booking timeline is stored from 29 Jul on, read forward every minute, with the contact lists daily. The Part 1 audit is in §12.1; the owner's five rulings are O6-O12 (decisions/2026-10-28-measurement-loop-and-rulings.md); the loop's spec and build steps P2.1-P2.6 are §12.2-§12.6, and the rulings go into code one a day after a 5-7 day baseline (§12.7). S-0259: F46 measured, not built (2 of 395 replies carry a parent from another thread). R22 DONE (S-0258): plan.ts decide() is 187 lines of steps in order, every decision of 799 replayed emails byte-identical. The review's builder steps are done; what is left is the owner's (§0 Blocked). R21 DONE (S-0257): scripts/README.md says what each of 135 scripts can touch; R20 measured and deferred with a trigger. R19 DONE (S-0256): what a reason means is read only in reasons.ts. R17 planner part DONE (S-0255): dev-2 writes 21, 12 completed, 2 partial, 7 wrong (was 22, 11, 2, 9); the 7 left are owner rules or judging limits, listed under R17. R16 DONE (S-0254): F49 and F50, the review's two write-path gaps, closed; the review's other steps are R17-R22. R15 DONE (S-0253): the V1 review, https://claude.ai/artifact/A3WyEdpcXRcehHoJVb6BQe; its write-path gaps are F49-F54, to close before writes go back on. S-0252: the re-plan no longer counts every card as changed every minute (found by the live trace). R13 DONE (S-0251): the assisted-card design, docs/ASSISTED-MODE-DESIGN-2026-10-27.md; at most 90 of 155 dev handoffs are near-misses. R14 DONE, dormant (S-0250): the Gmail poll decides through v2 once the grant exists and INTAKE_PATH=routing. R12 held for the owner and Paz. R11 DONE (S-0249): the live trace is on; 5.7 counted, its outbound change waits on the owner. R10 DONE (S-0248): the email-to-board harness and its 20-email case study. R9 DONE (S-0247). R8 DONE but e (S-0244 to S-0246); e waits on the owner's yes to a paid measurement. R3's switch-over waits on CRON_SECRET. The baseline was 0f2dcef. App code changed since then in these
 commits only:
 
 | commit | ticket | what |
@@ -2171,3 +2171,255 @@ scored on their production plans only, since the world they were decided in cann
 | 3. Passed jobs leave; 4. names by the owner's order | **DONE S-0271** | Live after S-0270: the minute sync wrote 169 done and 9 "possibly" marks, 87 absolute links, 2 guessed ones replaced; the first exits read "staff's work found in OnSinch". S-0270's kind change moved some needs' item keys (and so their marks); the key is now read without the link. Every card, live, carried over or held, whose days have all passed is dropped. Names on the TV read from production with this code (`.tmp-v2/tvnow.ts`): 31 of 37 from the order's title or the client and venue, 1 the client alone, 5 the original sender's address (senders on no contact list), 0 a subject line (was 17 of 238). Carried-over tiles take name, days, crew and venue from their order, read into the store by the minute sync (20 a minute; 171 of 177 board orders had never been read), and wait until it is stored. The subject is gone from the card, the R reading and the refs. |
 | 1. One evaluator: is this need done? (+2 kind from now, +6 history age on the TV) | **DONE S-0270** | Offline over production before shipping (`.tmp-v2/donerun.ts`), 241 needs since 9 Oct: 5 of the 6 needs of 29 Oct clear; the 6th (`1a183598d00b7d62`) is from a sender on no company's contact list on a thread naming no order, so no absolute rule finds its job, and it stays open for a person. 22 same-day multi-job cases: 13 cleared, each on the order at the named venue or holding the named times (`.tmp-v2/sametimes.ts`), 4 possibly, 5 open: 0 wrong clears. Of the needs the TV would show, 59 turn done (staff did them), 4 the old verifier cleared reopen (a misread year, a status-only edit, work on another day, a day staff deleted) and 1 becomes "possibly". The 45 unexplained exits: 29 were the re-plan answering "none" (now never clears a need), 15 a later email answering the need (now named), 1 still on the TV. Links (`.tmp-v2/linkdry.ts`): 88 absolute links added or proved, 2 guessed links replaced (both checked: the PO the client wrote names the other order on the same day), 0 conflicts; 7 absolute links hold none of the need's days (6 from one email naming 6 POs, 1 an older PO beside the J). The first dry run replaced a right link on a PO our own email quoted, so a PO counts only in the client's words. The verifier (verify.ts, 429 lines) is deleted: the TV reads only the database. |
 | 0. Stored history right, deletions included | **DONE S-0269** | 29 Jul-31 Oct: 42,903 booking rows, 0 missing, 0 different; 3 extra rows, all on the 2 deleted orders. `/orders?id[gt]=N` filters and pages (346 listed, all > N). 169 of 515 orders created in 30 days are deleted (166 bot test orders). Skipped actions sampled: slot_team_close, order_item_*, order_finish_without_invoice, order_copied change no shift; slot_team_move (place, job), shift_client_change (end, size), order_uncancel do, and are kept. `.tmp-v2/truthsyncall.ts`, `.tmp-v2/ordersgt.ts`, `.tmp-v2/ordersgone2.ts` |
+
+
+## 14. The simulated business: a fake OnSinch and generated jobs through the whole pipeline (plan, 31 Oct)
+
+**Asked (the owner, 31 Oct):** a test harness in which everything that faces OnSinch talks to a false OnSinch, the live
+business pieces of the pipeline run on it, and simulated jobs go through them: many types, each kept and reported
+separately, then one analysis across all of them, to find the gaps. The jobs are drawn from the fundamental rules of how
+a job is made (venue, crew types, days, calls) and from how clients write, with wide variance and bespoke requests the
+system should still be able to build. Cheap: a cheap Gemini model with a strong logic harness for the AI steps, and 100
+cases on the production model as well.
+
+**Assumption:** "the display" is the TV: a case ends at what the TV and the Gmail labels show, not at the decision.
+
+### 14.1 What exists, and what this adds
+- `harness/` (10-11, S-0155/S-0157) runs `decideMessage` on generated mail against a planner-only fake (`adapters/spartan/world.ts`,
+  71 lines: companies, places, orders behind the `World` interface), 24 templates (`generate.ts`, `generate-complex.ts`), with a
+  perfect reader (oracle), a mutant control, and record/replay of model calls. It stops at the decision.
+- `harness/real/` replays real mail on the world as it stood; `harness/board/` follows 20 real emails to the board.
+- **Missing, and built here:**
+  - a fake OnSinch that speaks the app's own transport, not just the planner's `World`;
+  - the rest of the pipeline after the decision: the bot's writes, the minute sync, done.ts, the TV and the labels;
+  - simulated staff, since the TV's truth is what staff do in OnSinch;
+  - a time line per case;
+  - a job grammar measured from production, instead of templates written by hand;
+  - a language layer;
+  - categories with per-stage observations.
+
+### 14.2 The fake OnSinch (`harness/sim/onsinch.ts`)
+- **One in-memory store per case:**
+  - companies with contacts (name, surname, email);
+  - places, professions, users;
+  - orders as OnSinch nests them: Order, Job, SlotTeam (the call), Slot (the position, with size, profession, role,
+    times and SlotLocation);
+  - the timeline audit.
+- **It speaks `Transport`**, so production code runs unchanged. It serves every path the app calls (counted 31 Oct):
+  - `GET /orders`, with `id[eq]`, `id[gt]`, `number[eq]`, `company_id[eq]`, `Job__id[eq]` and `with=` nesting;
+  - `GET /timelineAudits`, with `id[gt]` and `action[eq]`;
+  - `GET /companies?with=Client`, `/places`, `/users/profile`, `/users`, `/attendance`;
+  - `POST /orders` (apiCreate), `POST /places`, `POST /companies`, `POST /slotTeams`;
+  - `PATCH /orders`, `/jobs`, `/slotTeams`, `/places`;
+  - `DELETE /orders`, `/places` (test cleanup).
+- **OnSinch's measured quirks, so the fake is not kinder than OnSinch:**
+  - lists come newest first, and `sort=` is refused as `read.ts` refuses it;
+  - pages of 100 with a `pagination` block;
+  - zoneless audit times are UTC;
+  - audit ids rise;
+  - a delete drops the order's create row and logs no delete (S-0269);
+  - staff's own cancels are flagged `automated` (S-0270);
+  - an R number is reused after a delete (DECISIONS D6);
+  - a failed read answers `{status: 500, data: null}`.
+
+  Each quirk is a switch the fault category (14.6 O) turns on.
+- **The bot's edits:** live, they go through a headless browser on OnSinch's order builder (`bot/builder.ts`). Faking
+  those web screens is out of scope. The sim replaces the builder at `runOp`: each `Op` is applied to the store, logged as
+  audit rows by the bot's user (2257), and read back through the same verify path. Creates already use the API
+  (`apiCreate.ts`), so they run unchanged.
+- **Simulated staff (`harness/sim/staff.ts`):** each case's script says what staff do and when. They may:
+  - do the job right;
+  - do it on the wrong order;
+  - do part of it;
+  - do nothing;
+  - delete and recreate;
+  - work another job of the client's on the same day (the 18 cases of §13).
+
+  They write audit rows under staff user ids, exactly as OnSinch logs them.
+- **Fidelity:** a contract test compares the fake's answers, field for field, with response shapes recorded once from
+  production (read-only, scrubbed of names) for each path. A field OnSinch has and the fake lacks fails the test, so the
+  fake cannot drift from OnSinch unseen.
+
+### 14.3 The pipeline under test (`harness/sim/run.ts`)
+- **Production's code end to end, every boundary injected:**
+  - intake: `n8nInbound` stores, then `decideDelivery`;
+  - the reader (`extract.ts`, the only AI step in the live pipeline), then grounding and the planner;
+  - the decision row;
+  - the bot's write, with writes switched on in the sim only;
+  - every minute-sync step: links, `linkAbsolute`, the truth pull from the fake, `refreshOrders`, `readLinkedOrders`,
+    `readClientOrders`, the re-plan, `markNeeds`, card exits, outcomes;
+  - `serveFeed`, which is the TV;
+  - the labels route's computation.
+- **Time:** one simulated clock drives PGlite (`syncSqlClock`) and the fake. A case is a time line:
+  - the client's email at T0;
+  - sync ticks every simulated minute;
+  - staff actions at their scripted times;
+  - the client's later emails (confirmations, corrections);
+  - TV snapshots at T0+1 minute, +1 hour, +1 day, and after the job's day.
+- **Isolation (as the existing preflight):**
+  - no production credential in the process;
+  - the network shut to everything but the model provider;
+  - PGlite per run;
+  - a fresh fake per case.
+
+### 14.4 The job grammar, measured from production (31 Oct, `.tmp-v2/jobgrammar.ts`, read-only)
+The generator draws each field from these distributions (2,335 orders with live calls; 1,252 readings of client emails
+since 9 Oct):
+- **Days per order:** 1 (62%), 2 (27%), 3 (5%), 4-5 (3%), 6-10 (2%), more than 10 (1%).
+- **Venues per order:** 1 (95%), 2 (4%), 3 or more (under 1%). One per venue is the rule (DECISIONS O10).
+- **Calls (shifts):**
+  - calls per day: 1 (75%), 2 (23%), 3 or more (2%);
+  - calls per order: 1-2 (85%), up to 117 shown.
+- **Crew per call:** 1 (24%), 2 (29%), 3 (8%), 4 (20%), 5-6 (10%), 7-8 (5%), 9-15 (3%), 16+ (1%).
+- **Chiefs:** 39% of calls have one (the 3/4 rule in the planner).
+- **Professions (positions):**
+  - Crew 4,671 and Crew Chief 1,781;
+  - then Carpool Driver 218, MCR Crew 131, Carpenter 102, MCR Crew Chief 95, Minivan Driver 58, Counterbalance 52;
+  - 20 rarer professions under 50 each.
+- **Start times:**
+  - by hour: 08-09 (30%), 16-17 (13%), 22-23 (8%), 06-07 (10%), small hours (3%);
+  - on the hour (73%), half past (22%), quarter past or to (5%).
+- **Call length:** up to 2 h (26%), 3 h (11%), 4 h (30%), 5-6 h (12%), 7-8 h (10%), 9-12 h (10%), more than 12 h (under 1%).
+  11% cross midnight.
+- **Lead time, order made to first call:**
+  - 2 days or less: 26%;
+  - 3-7 days: 33% (cumulative to here 59%);
+  - 8-30 days: 30%;
+  - more: 11%.
+- **Weekday of the first call:** Mon-Thu 70%, Fri 13%, weekend 14%.
+- **POs:** 80% of orders carry one; 57 client emails gave one.
+- **What clients write:**
+  - intents: info only 50%, booking 14%, change 9%, quote 8%, cancellation 3%, unclear 1%, unread 14%;
+  - request actions: new shift 72%, time change 13%, cancel 9%, crew change 7%;
+  - fields named: day + start + end + crew + venue + trade is the commonest (176), then without trade (61); 15% name a
+    day alone or the day and the venue.
+- **Trades asked:** crew 327, then LED engineer, event crew, carpenter, local crew, client-approved crew, forklift, IPAF,
+  installation assistant, AV, audio, video, bar staff, van and driver.
+
+**The rules a buildable job must keep** come from the code, not from habit. Each becomes a generator constraint, and its
+opposite becomes a control case:
+- one call holds fewer than 10 crew of one shape;
+- a crew chief from 4 crew;
+- professions are OnSinch's live list;
+- the venue is a place OnSinch has, or one the planner may make (6922 "No Location" exempt);
+- the day is not past;
+- the two-week rule applies;
+- a partial email refuses;
+- the day alone never picks a call;
+- a sender must be one company's contact.
+
+### 14.5 The language layer
+- **Truth apart from words:** every case is a structured spec (the job and the client's ask) with its expected outcome
+  derived by code. The email is generated from the spec, never the reverse, so the expected answer is exact whatever the
+  wording.
+- **Templates with combinatorial variation:**
+  - register: terse, chatty, formal, rushed;
+  - order of facts;
+  - date forms: "Mon 16th", "16/11", "the 16th", "next Tuesday", "Monday the 16th", a range;
+  - time forms: "6-12", "18:00-00:00", "6pm to midnight", "from 7:45 for 4 hours";
+  - crew forms: "4 crew", "four guys", "x4", "2 + a chief";
+  - venue forms: a known name, with its address, a district, a misspelling;
+  - noise: signatures with phone numbers, disclaimers, forwarded chains, quoted history from another thread, a PO
+    inside a tracking link, out-of-office replies, a reply on an old thread.
+
+  Weights come from counts of these shapes in the real corpus (counted by script, never copied: `DATA_POLICY.md`).
+- **An LLM rewriter (the cheap Gemini model) adds variance a template cannot.** It paraphrases a template email under a
+  strict brief. The **logic harness** accepts the result only if a deterministic checker still finds every truth value in
+  the words in a form `ground.ts` reads:
+  - each day, time, count and venue present;
+  - no fact added or dropped;
+  - no real client's name or address.
+
+  A rejected rewrite is redone once, then the template text stands. Every accepted rewrite is stored with its spec, so a
+  set is reproducible at $0.
+
+### 14.6 Categories (each a separate set and report)
+| | category | what it holds | expected end state |
+|---|---|---|---|
+| A | Simple new booking | 1 day, 1 call, known client and venue | write (shadow) or the right card; TV names it right |
+| B | Multi-day and multi-call | 2-10 days, 1-3 calls a day, overnight calls | every call planned; nothing on another day |
+| C | Multi-venue | 2-3 venues in one email | one order per venue (O10) |
+| D | Trades and roles | chiefs (the 3/4 line), carpenters, drivers, MCR, forklift, LED | right profession, or "booked as Crew, check" |
+| E | Changes | times, a move to another day, crew up or down, crossing the chief line, total versus added | the right call changed, nothing else |
+| F | Cancellations | one call, one day, all, part of a day | cancel only what is named |
+| G | References | R, J, PO only, PO on two orders, a reused R, an R quoted from another thread | absolute links right; a false hit ignored |
+| H | Thread dynamics | a confirmation of our proposal, a correction, a later email answering an earlier need, replies after the job | the right need open or answered |
+| I | Quotes and questions | price requests, availability, rates | Needs Reply, no write |
+| J | Incomplete and ambiguous | no day, no time, no crew, no venue, two calls that day | a card whose check says exactly what is missing |
+| K | Staff behaviour (the TV's truth) | done right, wrong order, part done, nothing, delete and recreate, the same-day other job | done.ts: done, possibly or open, never a wrong clear |
+| L | Bespoke but buildable | rare combinations inside the rules (6 days at 2 venues with mixed trades; a 4am call; an 11-crew call split in two) | built, or handed off for a stated rule, never wrong |
+| M | Out-of-rule controls | past day, 10+ crew in one shape, unknown sender, a day alone | no write, ever |
+| N | Adversarial language | forwards, signatures with numbers, PO inside links, out-of-office, wrong year | no wrong write; the check names the trouble |
+| O | OnSinch faults | a 500 on a read, a delete mid-sync, a slow history | a 500 is never "no orders"; the TV says it is behind |
+
+**Size:**
+- 50 cases per category with the cheap reader (750);
+- 100 with the production reader, stratified across all 15 (6-7 each);
+- seeds fixed, so any case can be rerun alone.
+
+### 14.7 What is observed, and the analysis
+- **Per case, 1-or-0 observations at every stage:**
+  - stored;
+  - each field read right (day, start, end, crew, venue, trade, PO, intent);
+  - grounded;
+  - planned right;
+  - written right;
+  - the TV card's kind, name, days, ask and check;
+  - done.ts's state at each snapshot;
+  - the label.
+
+  The first stage that went wrong is the case's stage of failure.
+- **Invariants, reported apart and never averaged in:**
+  - no wrong write;
+  - no email lost;
+  - never cleared on another job;
+  - no name from a subject;
+  - no passed job listed;
+  - no write in category M.
+- **Per category:** accuracy per stage with Wilson intervals, and the failure signatures clustered.
+- **Across categories (the gap analysis):**
+  - a stage-by-category heat map;
+  - a field-by-category heat map;
+  - the top failure signatures with their counts;
+  - cheap reader against production reader on the shared 100 (where they differ, and which was right).
+
+  Each real gap becomes a finding in §3 with its count, so the fix is measured on the same seed.
+
+### 14.8 Models and cost
+- **The reader under test:** the cheap Gemini model for the 750, through OpenRouter, behind the existing logic harness:
+  - the schema check;
+  - `ground.ts`, so a value not in the words never exists;
+  - one retry on invalid JSON.
+
+  Production's reader is not changed; whether it should be is the owner's call once the 100 are compared.
+- **The rewriter:** the same cheap model.
+- **The model:** a Flash-Lite-class Gemini, its slug and price read from OpenRouter's list when it is built. At list
+  prices of that class it is roughly 15-25 times cheaper than production's reader, which costs $0.0076 an email on
+  average (3,021 tokens in, 290 out, about 6 s; measured on 565 readings of 17-31 Oct).
+- **Estimated spend:**
+  - 750 reads plus about 900 rewrites on the cheap model: under $1;
+  - 100 reads on gpt-6.1-sol: about $0.80 (at most $2.90 at the dearest email seen).
+  - Every call is recorded, so every rescore after that is $0.
+  - The harness's `--cap` stops a run at its budget.
+- **Blocker:** these calls use the OpenRouter key that HoH production also uses (a spend cap there is a production
+  outage; $9.02 left on 29 Oct). The runs wait on the owner choosing a separate key or a top-up (14.10).
+
+### 14.9 Build steps (each through the gate, each measured)
+1. **The fake OnSinch and its contract test.** Shapes recorded read-only from production; every path in 14.2.
+   **Gives:** production's read code runs on it unchanged.
+2. **The sim runner and simulated staff.** Clock, time line, the whole pipeline of 14.3, the perfect reader.
+   **Gives:** the 29 Oct cards replayed from specs reach the same TV states measured live.
+3. **The job grammar and the spec generator.** The distributions of 14.4 as weights, the rules as constraints, the
+   expected outcome derived per case.
+4. **The language layer.** Templates, noise, and the rewriter with its checker (the rewriter waits on the key).
+5. **The 15 categories.** 50 specs each, plus the 100 stratified.
+6. **Validation at $0.** The perfect reader must reach 100% on every buildable category, and the mutant (dates a day
+   late) must make 0 wrong writes.
+7. **Runs.** 750 on the cheap reader, then 100 on the production reader.
+8. **The analysis of 14.7,** published to the owner, with each gap entered as a finding.
+
+### 14.10 For the owner
+1. **The key for model calls:** a separate OpenRouter key with its own limit, or a top-up of the shared one. Until then
+   steps 1-3, 5 and 6 are built at $0, and steps 4 (the rewriter) and 7 (the runs) wait.
+2. **Budget:** a cap of $3 for the cheap runs and $3 for the 100 on the production model, unless you set others.
+3. **Whether the cheap reader may replace production's** if it matches on the 100: a decision after the analysis, not before.

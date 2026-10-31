@@ -5651,5 +5651,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0274",
+  "ts": "2026-10-31T17:28:11+00:00",
+  "kind": "measurement",
+  "headline": "Plan: fake OnSinch + whole pipeline + 15 categories x 50 jobs (cheap Gemini) + 100 on the production reader; runs wait on the OpenRouter key (docs only)",
+  "subject": "The simulated-business harness is planned in ADDENDUM 14, on a job grammar measured from production",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 120,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]
