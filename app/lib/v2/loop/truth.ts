@@ -168,22 +168,24 @@ export const rememberOrder = (sql: Sql, o: any): Promise<void> => rememberOrders
 export async function refreshContacts(sql: Sql, t: Transport, now = Date.now()): Promise<{ refreshed: boolean; contacts: number }> {
   await ensureSchema(sql);
   const last = await meta<string>(sql, "contacts_at");
-  if (last && now - Date.parse(last) < CONTACTS_EVERY_MS) return { refreshed: false, contacts: 0 };
-  const rows: Array<{ email: string; company_id: number; company_name: string }> = [];
+  // A list stored before contacts had names (31 Oct) is read again at once, not a day later.
+  const unnamed = ((await sql`SELECT count(*)::int AS n FROM onsinch_contacts WHERE name IS NULL`) as Array<{ n: number }>)[0]?.n ?? 0;
+  if (last && now - Date.parse(last) < CONTACTS_EVERY_MS && !unnamed) return { refreshed: false, contacts: 0 };
+  const rows: Array<{ email: string; company_id: number; company_name: string; name: string }> = [];
   for (let p = 1; p <= 50; p++) {
     const page = await readPage(t, `/companies?with=Client&limit=100&page=${p}`);
     for (const c of page.rows) for (const cl of [].concat(c.Client ?? []) as any[]) {
       const email = String(cl?.email ?? "").trim().toLowerCase();
-      if (email && Number(c.id)) rows.push({ email, company_id: Number(c.id), company_name: String(c.name ?? "").trim() });
+      if (email && Number(c.id)) rows.push({ email, company_id: Number(c.id), company_name: String(c.name ?? "").trim(), name: `${cl?.name ?? ""} ${cl?.surname ?? ""}`.trim() });
     }
     if (page.rows.length < 100 || p >= page.pageCount) break;
     if (p === 50) throw new Error("more than 5,000 companies: the contact list was not read whole");
   }
   if (!rows.length) throw new Error("OnSinch listed no contacts; yesterday's list is kept");
   const at = new Date(now).toISOString();
-  await sql`INSERT INTO onsinch_contacts (email, company_id, company_name, refreshed_at)
-    SELECT DISTINCT email, company_id, company_name, ${at}::timestamptz FROM jsonb_to_recordset(${JSON.stringify(rows)}::jsonb) AS x(email TEXT, company_id INTEGER, company_name TEXT)
-    ON CONFLICT (email, company_id) DO UPDATE SET company_name = EXCLUDED.company_name, refreshed_at = EXCLUDED.refreshed_at`;
+  await sql`INSERT INTO onsinch_contacts (email, company_id, company_name, name, refreshed_at)
+    SELECT DISTINCT ON (email, company_id) email, company_id, company_name, name, ${at}::timestamptz FROM jsonb_to_recordset(${JSON.stringify(rows)}::jsonb) AS x(email TEXT, company_id INTEGER, company_name TEXT, name TEXT)
+    ON CONFLICT (email, company_id) DO UPDATE SET company_name = EXCLUDED.company_name, name = EXCLUDED.name, refreshed_at = EXCLUDED.refreshed_at`;
   await sql`DELETE FROM onsinch_contacts WHERE refreshed_at < ${at}::timestamptz`;
   await setMeta(sql, "contacts_at", at);
   return { refreshed: true, contacts: rows.length };

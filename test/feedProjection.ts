@@ -259,15 +259,15 @@ console.log("\n[15] the rebuild's decisions reach ops on the TV and nowhere else
   const p = project(new Map(), [], null, NOW, new Map(), v2Sources([quote, change, shadow, written], NOW));
   const by = new Map(p.cards.map((c) => [c.thread_id, c]));
   // A quote is answered by a reply, not an order (Ben, 10-11), and the line is cardNote's.
-  ok(by.get("q")?.items[0].kind === "needs-reply" && /Price it and send the quote$/.test(by.get("q")?.note ?? "") && by.get("q")?.company === "Impact Collective", "a quote is a reply for a person, with what to do on the card", by.get("q")?.note ?? "");
+  ok(by.get("q")?.items[0].kind === "needs-reply" && by.get("q")?.ask === "Price this and send a quote." && by.get("q")?.check === null && by.get("q")?.company === "Impact Collective", "a quote is a reply for a person, with what to do on the card", by.get("q")?.ask ?? "");
   ok(by.get("c")?.items[0].kind === "needs-updated" && by.get("c")?.r_number === null && by.get("c")?.dates[0] === "2026-10-12" && by.get("c")?.crew === 6, "a change it could not make reads needs updated; the R its reason names is not shown until the planner links that order (Ben 10-21: always the correct numbers)");
-  ok(by.get("w")?.items[0].kind === "needs-updated" && by.get("w")?.order_id === 950 && by.get("w")?.note === "Times now 11:00-15:00 · Not written, do it by hand", "a planned write not yet made is still a person's job, saying what the system would do");
+  ok(by.get("w")?.items[0].kind === "needs-updated" && by.get("w")?.order_id === 950 && by.get("w")?.ask === "Change the times on Sat 10 Oct: 11am to 3pm." && by.get("w")?.check === "Not written: do it by hand.", "a planned write not yet made is still a person's job, saying what the system would do");
   ok(by.get("x")?.items[0].kind === "updated-check" && !by.get("x")?.green && p.counts.to_check === 1, "a write the system made is a check, never an automatic green");
   ok(p.counts.needs_reply === 1 && p.counts.needs_created === 0 && p.counts.needs_updated === 2, "counted with the rest", JSON.stringify(p.counts));
 
   const later = row("c", { message_id: "m-c2", sent_at: new Date(NOW - 30 * 60_000).toISOString(), decision: { kind: "handoff", reasons: ["no venue in the email"] }, grounded: { intent: "booking", requests: [], problems: [] } });
   const both = v2Sources([change, later], NOW);
-  ok(both.length === 1 && both[0].note === "New booking · No venue given", "a thread shows its newest decision that needs a person");
+  ok(both.length === 1 && both[0].ask === "Book a new order." && both[0].check === "The email does not say where.", "a thread shows its newest decision that needs a person", JSON.stringify([both[0].ask, both[0].check]));
   // B79 (10-11): a newer write about another day does not answer an older need.
   const need14 = row("b79", { message_id: "m-n", sent_at: new Date(NOW - 3 * 3600_000).toISOString(), decision: { kind: "handoff", reasons: ["R11475: 2 shifts on 2026-10-14 could be the one meant"] }, grounded: { intent: "change", requests: [{ action: "change_times", date: "2026-10-14", start: "10:00", problems: [] }], problems: [] } });
   const po20 = row("b79", { message_id: "m-w", sent_at: new Date(NOW - 3600_000).toISOString(), kind: "write", decision: { kind: "write", ops: [{ source: "s", op: { kind: "set_position_times", order_id: 950, slot_id: 1, date: "2026-10-20", start: "09:00", end: "17:00" } }], why: ["R11999 shift 1: times to 09:00-17:00"] }, executed: [{ op_key: "k", status: "verified", reasons: [] }] });
@@ -277,8 +277,8 @@ console.log("\n[15] the rebuild's decisions reach ops on the TV and nowhere else
   ok(v2Sources([need14, po14], NOW)[0].item?.kind === "updated-check", "a newer write on the need's own day is its answer: a check");
   const state = needsUpdated("c");
   const merged = project(new Map(), [], null, NOW, new Map(), [...fromStates([state], new Map(), NOW), ...v2Sources([change], NOW)]);
-  ok(merged.cards.length === 1 && /6 crew/.test(merged.cards[0].note ?? ""), "the rebuild's decision replaces the paused engine's state for the same thread");
-  ok(project(new Map(), [], null, NOW, new Map(), [...fromStates([state], new Map(), NOW)]).cards[0]?.note === null, "the paused engine's own cards carry no note");
+  ok(merged.cards.length === 1 && /6 crew/.test(merged.cards[0].ask ?? ""), "the rebuild's decision replaces the paused engine's state for the same thread");
+  ok(project(new Map(), [], null, NOW, new Map(), [...fromStates([state], new Map(), NOW)]).cards[0]?.ask === null, "the paused engine's own cards carry no note");
   const create = { source: "m-n#100", op: { kind: "create_order" as const, company_id: "343", company_name: "Impact Collective", client_email: "sam@impact.example", job_name: "Impact @ Roundhouse", shifts: [{ name: "Crew", date: "2026-10-14", start: "04:00", end: "08:00", place_id: "11", place_label: "Roundhouse", positions: [{ size: 3, profession_id: "1" }] }] } };
   const made = v2Sources([row("n", { kind: "write", decision: { kind: "write", ops: [create], why: ["new order: 1 shift(s) at Roundhouse"] }, executed: [{ op_key: "k", status: "verified", reasons: [], detail: { order_id: 16600, number: 11520 } }] })], NOW)[0];
   ok(made.item?.kind === "created-check" && made.order_id === 16600 && made.r_number === null, "an order the bot created carries its id for the verifier; its R and J come with its link, made within the minute (links.ts backfillLinks)");

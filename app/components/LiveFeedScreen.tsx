@@ -193,7 +193,6 @@ function numbersOf(c: FeedCard): string | null {
 }
 
 /** The system's reason, minus the Gmail message ids it quotes: ops cannot act on a hex id. */
-const cleanNote = (n: string) => n.replace(/\s*\((?:[0-9a-f]{16})\)/g, "");
 
 /**
  * The job's own timing: its next day, said as Today or Tomorrow when it is, amber within
@@ -279,10 +278,11 @@ type Phase = "steady" | "hold" | "fade";
 const clamp = (lines: number): React.CSSProperties => ({ display: "-webkit-box", WebkitLineClamp: lines, WebkitBoxOrient: "vertical", overflow: "hidden", overflowWrap: "anywhere" });
 
 /**
- * One job, one tile, one line of the list. Left to right: the client and its labels, then
- * the R number, the J number and the date, each right-aligned in its own column between
- * dark tan lines, then Confirm. Fixed columns keep every line and every Confirm on one
- * vertical down the screen.
+ * One job, one tile of three lines (DECISIONS O16, the owner and Paz), the numbers in fixed columns beside them:
+ *   1. the name and its labels; the R number, the J number and the day in their columns, then Confirm;
+ *   2. what the job is and what needs doing, in full sentences, every shift (cardNote.ts);
+ *   3. the one thing to check, the PO, who wrote and how long ago; on a done tile, what was done.
+ * Fixed columns keep every number and every Confirm on one vertical down the screen.
  */
 const JobTile = memo(function JobTile({ card, now, s, phase, onTick }: { card: FeedCard; now: number; s: number; phase: Phase; onTick: (c: FeedCard, it: FeedItem, checked: boolean) => void }) {
   const it = orderItem(card);
@@ -290,15 +290,14 @@ const JobTile = memo(function JobTile({ card, now, s, phase, onTick }: { card: F
   const done = card.green;
   const evidence = it ? evidenceLine(it) : null;
   const shown = card.colour !== "neutral";
-  const note = !done && card.note ? cleanNote(card.note) : null;
-  const detail = [note, card.contact, card.crew ? `${card.crew} crew` : null, card.venue].filter(Boolean).join(" · ");
+  const facts = [card.po ? `PO ${card.po}` : null, card.contact ? `from ${card.contact}` : null, ago(lead.at, now)].filter(Boolean).join(" · ");
   const label = labelOf(card, it);
   const cell = (line: boolean): React.CSSProperties => ({ alignSelf: "stretch", display: "flex", alignItems: "center", justifyContent: "flex-end", padding: `0 ${22 * s}px`, borderLeft: line ? `${2 * s}px solid ${TAN}` : undefined, minWidth: 0 });
   const num = (v: string | null) => <span className="mono" style={{ fontSize: 24 * s, fontWeight: 600, color: "var(--text-primary)", whiteSpace: "nowrap" }}>{shown ? v : null}</span>;
   return (
     <article className="feed-tile" data-open={isOpen(card) ? "" : undefined} style={{
       display: "grid", gridTemplateColumns: `minmax(0, 1fr) ${165 * s}px ${165 * s}px ${200 * s}px ${200 * s}px`, alignItems: "center",
-      minHeight: 104 * s, padding: `${16 * s}px ${24 * s}px ${16 * s}px ${(24 + STRIPE) * s}px`,
+      minHeight: 104 * s, flexShrink: 0, padding: `${16 * s}px ${24 * s}px ${16 * s}px ${(24 + STRIPE) * s}px`,
       background: done ? `color-mix(in srgb, ${GREEN} 9%, var(--surface))` : "var(--surface)",
       border: "1px solid var(--border)", borderRadius: 14 * s,
       boxShadow: `inset ${STRIPE * s}px 0 0 0 ${EDGE}`,
@@ -306,7 +305,7 @@ const JobTile = memo(function JobTile({ card, now, s, phase, onTick }: { card: F
       transition: `background-color 200ms ease, opacity ${FADE_MS}ms ease`,
       animation: phase === "steady" ? "feedTileIn 400ms ease" : undefined,
     }}>
-      <div style={{ minWidth: 0, display: "flex", flexDirection: "column", gap: 8 * s, paddingRight: 20 * s }}>
+      <div style={{ minWidth: 0, display: "flex", flexDirection: "column", gap: 6 * s, paddingRight: 20 * s }}>
         <div style={{ display: "flex", alignItems: "center", gap: 14 * s, minWidth: 0 }}>
           <span style={{ fontSize: 30 * s, fontWeight: 700, letterSpacing: "-0.015em", color: card.company ? "var(--text-primary)" : "var(--text-secondary)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", minWidth: 0 }}>
             {card.company || "Unknown client"}
@@ -315,10 +314,13 @@ const JobTile = memo(function JobTile({ card, now, s, phase, onTick }: { card: F
           {hasReply(card) && it && <Badge s={s} text="Needs Reply" ok={false} />}
           {card.follow_up && <Badge s={s} text="Needs Follow Up" ok={false} />}
         </div>
-        <div style={{ fontSize: 17 * s, fontWeight: 500, color: "var(--text-secondary)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+        {card.ask && <div style={{ fontSize: 20 * s, fontWeight: 500, lineHeight: 1.3, color: "var(--text-primary)", ...clamp(2) }}>{card.ask}</div>}
+        <div style={{ fontSize: 17 * s, fontWeight: 500, color: "var(--text-muted)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
           {evidence
             ? <span style={{ color: GREEN }}>{evidence}</span>
-            : <>{card.check ? <><span style={{ color: AMBER }}>{card.check}</span><span style={{ color: "var(--text-faint)" }}> · </span></> : null}{detail}{detail ? <span style={{ color: "var(--text-faint)" }}> · </span> : null}<span style={{ color: "var(--text-muted)" }}>{ago(lead.at, now)}</span></>}
+            : card.check ? <span style={{ color: AMBER, fontWeight: 600 }}>{card.check}</span> : null}
+          {(evidence || card.check) && <span style={{ color: "var(--text-faint)" }}> · </span>}
+          {facts}
         </div>
       </div>
 

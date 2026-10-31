@@ -112,7 +112,7 @@ export async function serveFeed(deps: FeedDeps, now: number): Promise<{ status: 
     items: [{ item_key: `held:${h.thread_id}:${h.r_number ?? ""}`, kind: "needs-updated" as const, status: "Order not found in OnSinch", at: Date.parse(h.since) || now, green: null }],
     green: false, at: Date.parse(h.since) || now, order_id: null, company_id: null, company: cardName({ client: h.sender?.client, sender: h.sender?.address }), contact: null,
     dates: [...(h.days ?? [])].sort(), starts_at: null, awaiting_reply_since: null, crew: null, venue: null, r_number: null, j_number: null,
-    quiet: false, follow_up: false, note: `${h.r_number ? `R${h.r_number} is` : "Its order is"} no longer in OnSinch · Find it or rebuild it`,
+    quiet: false, follow_up: false, ask: `${h.r_number ? `R${h.r_number} is` : "Its order is"} no longer in OnSinch.`, check: "Find the order, or build it again.",
   }));
 
   const intake = intakeHealth({ lastReceivedAt: inbound.latest, now });

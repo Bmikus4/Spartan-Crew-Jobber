@@ -115,10 +115,12 @@ export interface FeedCard {
   quiet: boolean;
   /** Open, and nothing on the job from anyone for FOLLOW_UP_MS: the TV raises "Needs Follow Up". */
   follow_up: boolean;
-  /** What the system says about this item: why it needs a person, or what it did. Null for the paused engine's. */
-  note: string | null;
-  /** Staff's work found on more than one of the candidate jobs (done.ts): what a person must check. */
-  check?: string | null;
+  /** The tile's second line: what the job is and what needs doing, in plain sentences (cardNote.ts). */
+  ask: string | null;
+  /** The tile's third line: the one thing a person must check, or the jobs staff may have done it in (done.ts). */
+  check: string | null;
+  /** The PO the email gives. */
+  po?: string | null;
 }
 
 /** One follow-up alert, already narrowed to the fields the TV may show. */
@@ -196,7 +198,9 @@ export interface FeedSource {
   want: FeedWant;
   /** What the evaluator needs to find the need's job and its work (done.ts); the sender's company is the caller's. */
   need?: Omit<Need, "company_id">;
-  note: string | null;
+  ask: string | null;
+  check: string | null;
+  po?: string | null;
   resolvedText: string;
 }
 
@@ -368,8 +372,9 @@ export function project(
       j_number,
       quiet: !g && now - lastActivity > QUIET_MS,
       follow_up: followUp,
-      note: s.note,
-      check: g ? null : possibly.get(it.item_key) ?? null,
+      ask: s.ask,
+      check: g ? null : possibly.get(it.item_key) ?? s.check,
+      po: s.po ?? null,
     });
     // Needs only: a check's key is its write, and a remembered check would read as resolved
     // on the next refresh, the write being older than the moment it was first seen.
@@ -397,7 +402,7 @@ export function project(
     cards.set(r.thread_id, {
       thread_id: r.thread_id, colour: "neutral", lane: "reply", items: [item], green: false, at: item.at,
       order_id: null, company_id: null, company: r.company, contact: firstName(r.contact),
-      dates: [], starts_at: null, awaiting_reply_since: item.at, crew: null, venue: null, r_number: null, j_number: null, quiet: false, follow_up: false, note: null,
+      dates: [], starts_at: null, awaiting_reply_since: item.at, crew: null, venue: null, r_number: null, j_number: null, quiet: false, follow_up: false, ask: null, check: null,
     });
   }
 

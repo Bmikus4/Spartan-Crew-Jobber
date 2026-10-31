@@ -109,7 +109,7 @@ const map = (...os: Order[]) => new Map(os.map((o) => [o.order_id, o]));
     ok(!gradeThread([m("track it at https://x.example/p/4521 or ref 4521")], po, [], [7]).links.length, "a PO under 6 characters, or inside a link, is no PO");
     ok(!gradeThread([m("your PO INV-12450", { ours: true })], po, [], [7]).links.length, "a PO in our words only is not the client naming the job");
     ok(JSON.stringify(ids(gradeThread([m("hi")], [o(1, "11001")], [1], [7]))) === "[1]" && gradeThread([m("hi")], [o(1, "11001")], [1], [7]).links[0].proof === "the bot's own order", "the bot's own order");
-    ok(/another company's order/.test(String(gradeThread([m("R11001")], [o(1, "11001", { company_id: 9 })], [], [7]).conflict)), "an order of another company than the sender's: a conflict");
+    ok(/belongs to another company/.test(String(gradeThread([m("R11001")], [o(1, "11001", { company_id: 9 })], [], [7]).conflict)), "an order of another company than the sender's: a conflict");
     ok(/the bot's order is not the one the PO names/.test(String(gradeThread([m("PO INV-12450")], [...po, o(3, "11003")], [3], [7]).conflict)), "the bot's order beside a PO naming another: a conflict");
     ok(JSON.stringify(ids(gradeThread([m("PO INV-12450 and PO ABC-99999")], [...po, o(3, "11003", { po: "ABC-99999" })], [], [7]))) === "[1,3]", "one email naming several orders links each");
   }

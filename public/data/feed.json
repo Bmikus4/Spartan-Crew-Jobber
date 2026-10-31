@@ -5623,5 +5623,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0272",
+  "ts": "2026-10-31T04:42:30+00:00",
+  "kind": "measurement",
+  "headline": "Step 5: three-line tile from fixed templates; 16/16 open cards with ask and check, 0 Read-the-email fallbacks; contact names from OnSinch",
+  "subject": "A TV tile says the job and what needs doing in plain sentences, every shift, on three lines",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 120,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]

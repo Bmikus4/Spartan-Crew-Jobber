@@ -34,7 +34,7 @@ export interface V2Row {
   company_id: number | null;
   from_address: string;
   /** The thread's original sender (feed/live.ts clientSenders), and the client company whose contact list holds it. */
-  sender?: { address: string; client: string | null } | null;
+  sender?: { address: string; client: string | null; name?: string | null } | null;
   /** The thread's link (job_links): the order it is about, whoever made it, when OnSinch made it, and the stored order. */
   link?: { order_id: number; r_number: string | null; job_id: number | null; made?: string | null; absolute?: boolean; order?: OrderFacts | null } | null;
   /** The planner's answer on this email now (v2/replan.ts), when it has been planned again. */
@@ -108,7 +108,7 @@ function classify(row: V2Row, d: Decision) {
   else if (d.kind === "write") kind = creates ? "needs-created" : "needs-updated";
   else if (d.kind === "handoff" && (d.reply ?? d.reasons.every(isReplyReason))) kind = "needs-reply";
   else kind = asksNew ? "needs-created" : "needs-updated";
-  return { kind, ops, r_numbers, executed, written, order_id, made };
+  return { kind, asksNew, ops, r_numbers, executed, written, order_id, made };
 }
 
 const ASK: Record<string, Ask> = { new_shift: "book", change_times: "change", change_crew: "change", cancel_shift: "cancel", other: "any" };
@@ -131,7 +131,9 @@ export function v2Source(row: V2Row, now: number): FeedSource {
   // card says, never which need it is, or the need would lose its marks (31 Oct: the kind moving moved the key).
   const first = classify({ ...row, link: null }, row.decision);
   const g = row.grounded;
-  const note = d.kind === "none" ? null : cardNote({ decision: d, grounded: g, executed: c.executed, written: c.written });
+  // A question about a new booking is still about a new booking: only a need aimed at an order is a change to one.
+  const fresh = c.kind === "needs-created" || (c.kind === "needs-reply" && c.asksNew);
+  const note = cardNote({ decision: d, grounded: g, executed: c.executed, written: c.written, fresh });
   const at = Date.parse(row.sent_at) || now;
   const item: (Omit<FeedItem, "green"> & { order_id: number | null }) | null = d.kind === "none" ? null : {
     item_key: `${first.kind}:${row.thread_id}:${first.order_id ?? 0}:${row.message_id}`,
@@ -172,7 +174,7 @@ export function v2Source(row: V2Row, now: number): FeedSource {
     j_number: row.link?.job_id ? `J${row.link.job_id}` : null,
     company_id: row.company_id,
     company: cardName({ title: agreed ? order?.title : null, client: row.sender?.client, venue, sender: row.sender?.address }),
-    contact: null,
+    contact: row.sender?.name ?? null,
     venue,
     crew: crews.length ? Math.max(...crews) : null,
     starts_at: starts[0] ?? null,
@@ -181,10 +183,12 @@ export function v2Source(row: V2Row, now: number): FeedSource {
     need: {
       at,
       asks: [...new Set([...(g?.requests ?? []).map((r) => ASK[r.action] ?? "any"), ...(g?.requests.length ? [] : c.ops.map((o) => OP_ASK[o.kind]))])],
-      fresh: c.kind === "needs-created",
+      fresh,
       days, places, venues: [...new Set(shifts.map((s) => s.venue).filter((v): v is string => !!v))],
     },
-    note,
+    ask: note.ask,
+    check: note.check,
+    po: g?.po ?? null,
     resolvedText: "Answered by a later email",
   };
 }

@@ -136,7 +136,8 @@ export function stateSource(s: ConversationState, lastInbound: Map<string, numbe
     starts_at: nextStart(s, now),
     last_write: Math.max(0, ...(s.order_action_log ?? []).filter((a) => a.ok).map((a) => epochMs(a.ts))),
     want: wantOf(s),
-    note: null,
+    ask: null,
+    check: null,
     resolvedText: resolvedText(s),
   };
 }

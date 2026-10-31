@@ -180,7 +180,7 @@ export function gradeThread(msgs: GradeMessage[], orders: GradeOrder[], botOrder
   const links = [...out].map(([order_id, proof]) => ({ order_id, proof }));
   const other = senderCompanies.length ? links.find((l) => !senderCompanies.includes(Number(live.find((o) => o.order_id === l.order_id)?.company_id))) : undefined;
   const bot = botOrders.filter((id) => out.has(id));
-  const conflict = other ? `${other.proof} is another company's order`
+  const conflict = other ? `${other.proof === "the bot's own order" ? "the order the bot made" : other.proof} belongs to another company`
     : bot.length && byPo.length && !byPo.some((id) => bot.includes(id)) ? "the bot's order is not the one the PO names" : null;
   return { links, conflict };
 }

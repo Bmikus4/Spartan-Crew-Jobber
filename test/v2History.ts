@@ -136,7 +136,7 @@ const NOW_1020 = Date.parse("2026-10-20T10:00:00Z");
     const g = { intent: "booking" as const, requests: [{ action: "new_shift" as const, date: "2026-11-12", start: "07:00", end: "08:00", crew: 2, problems: [] }, { action: "new_shift" as const, date: "2026-10-18", start: "08:00", end: "18:00", crew: 8, problems: [] }], problems: [] };
     const d = await plan(msg("charlie.simmons@theroofgardens.com", "Re: crew", "2 crew 7-8am on the 12th Nov and 8 on 18 Oct", "2026-07-27T17:27:36Z"), g, world, 20001, { now: Date.parse("2026-10-19T13:16:00Z") });
     ok(d.kind === "handoff" && /2026-10-18 is already over: a person adjusts it/.test(d.reasons.join()), "a request for yesterday raises a card and writes nothing", JSON.stringify(d));
-    ok(checkOf(d.kind === "handoff" ? d.reasons[0] : "") === "Day already over, adjust by hand", "and the card says so in plain words");
+    ok(checkOf(d.kind === "handoff" ? d.reasons[0] : "") === "That day is already over: adjust it by hand.", "and the card says so in plain words");
   }
 
   console.log("A history request no order holds stays a card");
@@ -144,7 +144,7 @@ const NOW_1020 = Date.parse("2026-10-20T10:00:00Z");
     const g = { intent: "booking" as const, requests: [{ action: "new_shift" as const, date: "2026-11-20", start: "08:00", end: "12:00", crew: 4, problems: [], history: true }], problems: [] };
     const d = await plan(msg("charlie.simmons@theroofgardens.com", "Re: quote", "Yes please, go ahead", "2026-10-20T08:54:00Z"), g, world, null, { now: NOW_1020 });
     ok(d.kind === "handoff" && /the client confirmed 2026-11-20, and no order holds it yet/.test(d.reasons.join()), "\"client confirmed, no order holds it yet\": nothing is booked from history", JSON.stringify(d));
-    ok(checkOf(d.kind === "handoff" ? d.reasons[0] : "") === "Client confirmed, not booked yet", "and the card says so");
+    ok(checkOf(d.kind === "handoff" ? d.reasons[0] : "") === "The client has confirmed, and no order holds it yet.", "and the card says so");
   }
 
   console.log("Light Motif R11662 (10-20): \"Can we confirm this?\" under our offer of three more crew");

@@ -130,7 +130,7 @@ void (async () => {
     ok(items.some((c) => c.thread_id === "n") && items.some((c) => c.thread_id === "b"), "the job with its numbers and the one still without are both listed: no job is hidden for lacking them", items.map((c) => c.thread_id).join());
     ok(counts.needs_follow_up === 2 && !("unlinked" in counts), "Needs Follow Up counts the list, and nothing is counted as hidden", JSON.stringify(counts));
     const h2 = items.find((c) => c.thread_id === "h2");
-    ok(!items.some((c) => c.thread_id === "h") && !!h2 && h2.r_number === null && /R11600 is no longer in OnSinch/.test(h2.note ?? ""), "a held link's job that is over leaves; one still to come shows no R: the number is a gone order's, and may be reused", JSON.stringify(h2));
+    ok(!items.some((c) => c.thread_id === "h") && !!h2 && h2.r_number === null && /R11600 is no longer in OnSinch/.test(h2.ask ?? ""), "a held link's job that is over leaves; one still to come shows no R: the number is a gone order's, and may be reused", JSON.stringify(h2));
     // The jobs board's tiles: numbers from the thread's live link, or no tile.
     const tickets = [{ thread_id: "p1", classification: "new-job", status: "ordered", order_id: 1, order_number: "999", job_id: 5, dates: [], subject: "s" }, { thread_id: "p2", classification: "new-job", status: "ordered", order_id: 2, order_number: "11029", job_id: 6, dates: [], subject: "s" }] as any[];
     const order = (days: string[]) => ({ title: "Gala @ Roundhouse", days, crew: 6, venue: "Roundhouse" });

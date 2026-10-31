@@ -83,14 +83,18 @@ async function v2(): Promise<V2Row[]> {
  * Each thread's original sender: the first client message's address that is not Spartan's own (O15: "It should never
  * be an internal Spartan Crew email"), with the client company whose contact list holds it, when exactly one does.
  */
-async function clientSenders(threads: string[]): Promise<Map<string, { address: string; client: string | null }>> {
+async function clientSenders(threads: string[]): Promise<Map<string, { address: string; client: string | null; name: string | null }>> {
   if (!threads.length) return new Map();
   const first = (await db()`SELECT DISTINCT ON (thread_id) thread_id, lower(trim(regexp_replace(regexp_replace(from_address, '.*<', ''), '>.*', ''))) AS address
     FROM thread_messages WHERE thread_id = ANY(${threads}) AND NOT is_from_spartan AND from_address NOT ILIKE '%spartancrew.co.uk%'
     ORDER BY thread_id, date_iso`) as Array<{ thread_id: string; address: string }>;
   const companies = new Map<string, string[]>();
-  for (const c of (await db()`SELECT email, company_name FROM onsinch_contacts WHERE email = ANY(${first.map((f) => f.address)})`) as any[]) companies.set(c.email, [...new Set([...(companies.get(c.email) ?? []), String(c.company_name ?? "").trim()])]);
-  return new Map(first.map((f) => { const cs = (companies.get(f.address) ?? []).filter(Boolean); return [f.thread_id, { address: f.address, client: cs.length === 1 ? cs[0] : null }]; }));
+  const names = new Map<string, string>();
+  for (const c of (await db()`SELECT email, company_name, name FROM onsinch_contacts WHERE email = ANY(${first.map((f) => f.address)})`) as any[]) {
+    companies.set(c.email, [...new Set([...(companies.get(c.email) ?? []), String(c.company_name ?? "").trim()])]);
+    if (c.name) names.set(c.email, String(c.name));
+  }
+  return new Map(first.map((f) => { const cs = (companies.get(f.address) ?? []).filter(Boolean); return [f.thread_id, { address: f.address, client: cs.length === 1 ? cs[0] : null, name: names.get(f.address) ?? null }]; }));
 }
 
 /** The stored OnSinch orders behind the threads' links, as the facts a card shows (v2.ts orderFacts). */

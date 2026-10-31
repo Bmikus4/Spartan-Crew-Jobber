@@ -57,7 +57,8 @@ export function portedCards(jobs: Job[], onTv: Set<string>, links: Map<string, L
       j_number: `J${link.job_id}`,
       quiet: false,
       follow_up: false,
-      note: null,
+      ask: null,
+      check: null,
     });
   }
   return out.sort((a, b) => b.at - a.at);

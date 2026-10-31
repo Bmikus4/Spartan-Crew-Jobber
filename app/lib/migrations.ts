@@ -560,6 +560,8 @@ export const MIGRATIONS: ReadonlyArray<readonly [id: string, statement: string]>
   // lib/v2/links.ts linkAbsolute: what makes a link absolute (an R, J or PO the thread names, the bot's own order);
   // null is a guess (the planner, the finder, the jobs board), which an absolute link overrules.
   ["106_alter_table_job_links", `ALTER TABLE job_links ADD COLUMN IF NOT EXISTS proof TEXT`],
+  // lib/v2/loop/truth.ts refreshContacts: the contact's own name in OnSinch, for the TV tile's "from" (feed/live.ts).
+  ["107_alter_table_onsinch_contacts", `ALTER TABLE onsinch_contacts ADD COLUMN IF NOT EXISTS name TEXT`],
 ];
 
 /**
