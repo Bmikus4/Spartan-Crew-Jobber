@@ -9,6 +9,7 @@
 // test/fixtures/stateSource.ts.
 // ============================================================================
 import { FOLLOW_UP_MS, londonDay, orderCards, QUIET_MS } from "./order";
+import type { Need } from "./done";
 
 export type FeedKind = "needs-created" | "needs-updated" | "created-check" | "updated-check" | "needs-reply";
 export type FeedColour = "red" | "blue" | "neutral";
@@ -34,8 +35,13 @@ export type FeedLane = "reply" | "need" | "done";
  * stopped yielding it. Without them the card vanished mid-list, which on a full screen
  * reads as a job lost, not a job done.
  */
-export type MarkKind = "checked" | "staff-edit" | "order-found" | "stamps" | "matched" | "dismissed" | "open" | "resolved";
-const GREEN_MARKS = new Set<MarkKind>(["checked", "staff-edit", "order-found", "resolved"]);
+export type MarkKind = "checked" | "staff-edit" | "order-found" | "stamps" | "matched" | "dismissed" | "open" | "resolved" | "done" | "possibly";
+/**
+ * Done is a person's tick, staff's work found by the one evaluator (done.ts, marked by the minute sync's cards step),
+ * or a later email answering the need. The old verifier's marks (staff-edit, order-found) are kept as history and
+ * clear nothing: they were the system's guesses, and one in eight named another order (10-21).
+ */
+const GREEN_MARKS = new Set<MarkKind>(["checked", "done", "resolved"]);
 
 /** The requester's wording, byte for byte (test/feedProjection.ts pins it). */
 export const STATUS_TEXT: Record<FeedKind, string> = {
@@ -112,6 +118,8 @@ export interface FeedCard {
   follow_up: boolean;
   /** What the system says about this item: why it needs a person, or what it did. Null for the paused engine's. */
   note: string | null;
+  /** Staff's work found on more than one of the candidate jobs (done.ts): what a person must check. */
+  check?: string | null;
 }
 
 /** One follow-up alert, already narrowed to the fields the TV may show. */
@@ -198,6 +206,8 @@ export interface FeedSource {
   /** The newest write made on the thread (ms), 0 for none. */
   last_write: number;
   want: FeedWant;
+  /** What the evaluator needs to find the need's job and its work (done.ts); the sender's company is the caller's. */
+  need?: Omit<Need, "company_id">;
   note: string | null;
   resolvedText: string;
 }
@@ -226,6 +236,7 @@ export function project(
   for (const m of [...marks].sort((a, b) => a.at - b.at)) if (GREEN_MARKS.has(m.mark) && !byKey.has(m.item_key)) byKey.set(m.item_key, m);
   // A tick outranks automatic evidence for what the card SAYS, not for when it went green.
   const ticked = new Map(marks.filter((m) => m.mark === "checked").map((m) => [m.item_key, m]));
+  const possibly = new Map(marks.filter((m) => m.mark === "possibly").map((m) => [m.item_key, String((m.evidence as { text?: unknown } | null)?.text ?? "")]));
   // A card's R and J are its thread's own (the link the planner keeps, v2.ts), never the
   // verifier's find for the screen: 11 of its 83 finds named another order than the evidence
   // finder (10-21), and the R/J-only list (serve.ts) would have listed those as known jobs.
@@ -372,6 +383,7 @@ export function project(
       quiet: !g && now - lastActivity > QUIET_MS,
       follow_up: followUp,
       note: s.note,
+      check: g ? null : possibly.get(it.item_key) ?? null,
     });
     if (!g) wants.set(s.thread_id, s.want);
     // Needs only: a check's key is its write, and a remembered check would read as resolved

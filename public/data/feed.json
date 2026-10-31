@@ -5595,5 +5595,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0270",
+  "ts": "2026-10-31T04:25:53+00:00",
+  "kind": "measurement",
+  "headline": "Step 1: done.ts replaces the verifier and the re-plan's settle; 5/6 of 29 Oct clear, 0 wrong clears on 22 same-day cases; 88 absolute links",
+  "subject": "Whether a need is done is one evaluator over the stored OnSinch history, on the need's own job",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 120,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]

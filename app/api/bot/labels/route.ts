@@ -44,7 +44,7 @@ export async function POST(request: Request): Promise<Response> {
   }
 
   // The TV's projection without its side work: no verifier, no jobs board, no marks written.
-  const feed = await serveFeed({ ...liveFeedDeps(), verify: undefined, verifyStatus: undefined, jobs: undefined, remember: undefined }, now);
+  const feed = await serveFeed({ ...liveFeedDeps(), jobs: undefined, remember: undefined }, now);
   if (feed.status !== 200) return NextResponse.json({ ok: false, error: "the feed could not be read; no labels change this minute" }, { status: 503 });
   // Every card, not the TV's list: the system's own orders are labelled though not listed.
   const cards: FeedCard[] = feed.all ?? [];

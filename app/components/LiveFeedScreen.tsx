@@ -25,7 +25,7 @@ import AnalyticsPopup from "./AnalyticsPopup";
 interface FeedResponse {
   ok: boolean;
   generated_at: string;
-  health: { last_email_at: string | null; minutes_since_email: number | null; intake_stale: boolean; intake_paused?: boolean; replies_enabled: boolean; verify?: { last_at: string | null; note: string | null } };
+  health: { last_email_at: string | null; minutes_since_email: number | null; intake_stale: boolean; intake_paused?: boolean; replies_enabled: boolean; history_at?: string | null };
   counts: FeedCounts;
   items: FeedCard[];
   /** The deployment that answered (api/feed/route.ts). */
@@ -34,6 +34,9 @@ interface FeedResponse {
 
 const REFRESH_MS = 20_000;
 const STALE_DATA_MS = 2 * 60_000;
+/** The stored OnSinch history is read forward every minute (loop/truth.ts); a few minutes is one slow sync. */
+const HISTORY_AMBER_MS = 5 * 60_000;
+const HISTORY_RED_MS = 15 * 60_000;
 const CHIME_GAP_MS = 10_000;
 const UNDO_MS = 10_000;
 const IDLE_CURSOR_MS = 3_000;
@@ -87,6 +90,7 @@ function evidenceLine(it: FeedItem): string | null {
   if ((g.evidence as { ported?: boolean } | null)?.ported) return "Completed, carried over from the jobs board";
   if (g.mark === "checked") { const who = personName(g.by, e.name); return `Confirmed${who ? ` by ${who}` : ""} ${when}`; }
   if (e.held) return "Already in OnSinch: every shift asked for";
+  if (g.mark === "done") return `Done in OnSinch: ${e.text ?? "staff did it"}, ${when}`;
   if (g.mark === "staff-edit") return `Changed in OnSinch by staff: ${e.text ?? "edited"}, ${when}`;
   // The tile's own columns carry its R and J; a mark's number may be another order's (a date-only
   // find named R11029 on We Are Family's R11772, 10-21), so the line never repeats one.
@@ -247,24 +251,25 @@ function Tick({ card, it, s, height, onTick }: { card: FeedCard; it: FeedItem; s
 }
 
 /**
- * THE SYNC STATE (Ben, 2026-10-04: no timers; green, grey or red).
+ * THE SYNC STATE (Ben, 2026-10-04: no timers; green, grey or red; amber added 31 Oct, §13.2 change 6).
  *   grey   offline: the screen cannot reach the system, or has had nothing for 2 minutes
  *   red    an error: the system answered with a failure, Gmail has gone quiet in working
- *          hours, or OnSinch could not be read
+ *          hours, or OnSinch's history is over 15 minutes behind
+ *   amber  OnSinch's history is over 5 minutes behind: a need staff just did may still show
  *   green  connected, and both are coming through
  *   grey   paused, as well: email intake is off on purpose (Settings), OnSinch still syncs
  */
-function Sync({ s, state, why }: { s: number; state: "ok" | "offline" | "error" | "paused"; why: string }) {
-  const color = state === "ok" ? GREEN : state === "error" ? RED : GREY;
+function Sync({ s, state, why }: { s: number; state: "ok" | "offline" | "error" | "behind" | "paused"; why: string }) {
+  const color = state === "ok" ? GREEN : state === "error" ? RED : state === "behind" ? AMBER : GREY;
   const title = state === "ok" ? "Synced" : state === "error" ? "Sync Error" : state === "paused" ? "Intake Paused" : "Offline";
-  const full = state === "ok" ? "Synced with Gmail and OnSinch" : state === "error" ? `Sync error: ${why || "Gmail or OnSinch"}` : state === "paused" ? "Email intake is paused; jobs still sync with OnSinch" : "Offline: not syncing";
+  const full = state === "ok" ? "Synced with Gmail and OnSinch" : state === "error" ? `Sync error: ${why || "Gmail or OnSinch"}` : state === "behind" ? `${why}: a job staff just did in OnSinch may still show` : state === "paused" ? "Email intake is paused; jobs still sync with OnSinch" : "Offline: not syncing";
   return (
     <div role="status" aria-label={full} title={full} style={{ display: "flex", alignItems: "center", gap: 8 * s, whiteSpace: "nowrap" }}>
       <svg width={44 * s} height={44 * s} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden style={{ flexShrink: 0, transition: "stroke 300ms" }}>
         <path d="M20.5 12a8.5 8.5 0 0 0-14.8-5.7L3.5 8.5" /><path d="M3.5 3.5v5h5" />
         <path d="M3.5 12a8.5 8.5 0 0 0 14.8 5.7l2.2-2.2" /><path d="M15.5 15.5h5v5" />
       </svg>
-      <span style={{ fontSize: 14 * s, fontWeight: 600, color: state === "ok" ? "var(--text-muted)" : color, maxWidth: 260 * s, overflow: "hidden", textOverflow: "ellipsis" }}>{state === "error" && why ? `${title}: ${why}` : title}</span>
+      <span style={{ fontSize: 14 * s, fontWeight: 600, color: state === "ok" ? "var(--text-muted)" : color, maxWidth: 260 * s, overflow: "hidden", textOverflow: "ellipsis" }}>{state === "behind" ? why : state === "error" && why ? `${title}: ${why}` : title}</span>
     </div>
   );
 }
@@ -314,7 +319,7 @@ const JobTile = memo(function JobTile({ card, now, s, phase, onTick }: { card: F
         <div style={{ fontSize: 17 * s, fontWeight: 500, color: "var(--text-secondary)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
           {evidence
             ? <span style={{ color: GREEN }}>{evidence}</span>
-            : <>{detail}{detail ? <span style={{ color: "var(--text-faint)" }}> · </span> : null}<span style={{ color: "var(--text-muted)" }}>{ago(lead.at, now)}</span></>}
+            : <>{card.check ? <><span style={{ color: AMBER }}>{card.check}</span><span style={{ color: "var(--text-faint)" }}> · </span></> : null}{detail}{detail ? <span style={{ color: "var(--text-faint)" }}> · </span> : null}<span style={{ color: "var(--text-muted)" }}>{ago(lead.at, now)}</span></>}
         </div>
       </div>
 
@@ -547,10 +552,12 @@ export default function LiveFeedScreen({ isActive, tv = false }: { isActive: boo
   const c = data?.counts;
   const dataAge = okAt == null ? null : now - okAt;
   const emailStale = !!data?.health.intake_stale;
-  const onsinchUnread = /unreadable|failed/i.test(data?.health.verify?.note ?? "");
-  const sync: "ok" | "offline" | "error" | "paused" =
+  // How far the stored OnSinch history (and so every done mark) is behind; unknown counts as far behind.
+  const historyAge = data ? now - (Date.parse(data.health.history_at ?? "") || 0) : 0;
+  const sync: "ok" | "offline" | "error" | "behind" | "paused" =
     failKind === "offline" || data == null || (dataAge != null && dataAge > STALE_DATA_MS && failKind == null) ? "offline"
-    : failKind === "error" || emailStale || onsinchUnread ? "error"
+    : failKind === "error" || emailStale || historyAge > HISTORY_RED_MS ? "error"
+    : historyAge > HISTORY_AMBER_MS ? "behind"
     : data.health.intake_paused ? "paused"
     : "ok";
   const warn = sync !== "ok" && sync !== "paused";
@@ -584,7 +591,7 @@ export default function LiveFeedScreen({ isActive, tv = false }: { isActive: boo
             </div>
           ))}
           <span style={{ width: 1, alignSelf: "stretch", background: "var(--border)" }} />
-          <Sync s={s} state={sync} why={failKind === "error" ? "the feed returned an error" : emailStale ? "no new email for 90+ min" : onsinchUnread ? "OnSinch could not be read" : ""} />
+          <Sync s={s} state={sync} why={failKind === "error" ? "the feed returned an error" : emailStale ? "no new email for 90+ min" : sync === "error" || sync === "behind" ? (historyAge > 864e5 ? "OnSinch not read" : `OnSinch ${Math.round(historyAge / 60e3)} min behind`) : ""} />
           <button onClick={() => void goFull()} aria-label={full ? "Exit fullscreen" : "Fullscreen"} title={full ? "Exit fullscreen" : "Fullscreen"}
             style={{ width: 56 * s, height: 56 * s, border: "none", background: "transparent", color: "var(--text-secondary)", cursor: "pointer", display: "grid", placeItems: "center", padding: 0, flexShrink: 0, opacity: idle ? 0 : 1, transition: "opacity 200ms" }}>
             <svg width={44 * s} height={44 * s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

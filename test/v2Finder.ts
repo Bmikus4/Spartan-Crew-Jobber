@@ -111,7 +111,7 @@ const NOW = Date.parse("2026-10-20T09:00:00Z");
     };
     const was = v2Source(row, NOW);
     const done = v2Source({ ...row, replan: { kind: "none", reason: "already booked: R11698, R11701", found: [16820, 16821] } }, NOW);
-    ok(was.item?.kind === "needs-reply" && done.item === null && done.resolvedText === "Already booked in OnSinch: R11698, R11701", "planned again to \"already booked\": the card has nothing open and goes green with the orders", JSON.stringify(done.resolvedText));
+    ok(was.item?.kind === "needs-reply" && done.item?.item_key === was.item?.item_key && done.item?.kind === "needs-reply", "planned again to \"already booked\": the need stays, for done.ts alone to clear from what staff did (ADDENDUM §13.2 change 1)", JSON.stringify(done.item));
     const found = v2Source({ ...row, decision: { kind: "handoff", reasons: ["no order is named"] }, replan: { kind: "handoff", reasons: ["no order is named"], order_id: 16624 } }, NOW);
     const first = v2Source({ ...row, decision: { kind: "handoff", reasons: ["no order is named"] } }, NOW);
     ok(found.item?.kind === "needs-updated" && found.order_id === 16624 && found.item.item_key === first.item?.item_key, "an order found since makes it an update on that order, under the same key", `${found.item?.item_key} vs ${first.item?.item_key}`);

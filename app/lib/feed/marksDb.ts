@@ -25,7 +25,6 @@ function db(): NeonQueryFunction<false, false> | null {
 async function ensure(sql: NeonQueryFunction<false, false>): Promise<void> {
   if (_ready) return;
   await ensureSchema(sql);
-  await sql`INSERT INTO feed_meta (id) VALUES (1) ON CONFLICT (id) DO NOTHING`;
   _ready = true;
 }
 function need(): NeonQueryFunction<false, false> {
@@ -58,36 +57,4 @@ export async function removeCheck(item_key: string): Promise<void> {
   const sql = need();
   await ensure(sql);
   await sql`DELETE FROM feed_marks WHERE item_key = ${item_key} AND mark = 'checked'`;
-}
-
-/**
- * Claim this round of verification, or return null when another screen already has.
- *
- * One UPDATE with the age test in its WHERE, so two TVs refreshing in the same second
- * cannot both win: Postgres serialises the row and the loser sees a fresh timestamp.
- */
-export async function claimVerify(everyMs: number): Promise<{ timeline_last_id: number | null } | null> {
-  const sql = need();
-  await ensure(sql);
-  const rows = (await sql`
-    UPDATE feed_meta SET last_verify_at = now()
-    WHERE id = 1 AND (last_verify_at IS NULL OR last_verify_at < now() - make_interval(secs => ${everyMs / 1000}))
-    RETURNING timeline_last_id`) as { timeline_last_id: string | number | null }[];
-  if (!rows.length) return null;
-  const id = rows[0].timeline_last_id;
-  return { timeline_last_id: id == null ? null : Number(id) };
-}
-
-export async function saveVerify(timeline_last_id: number | null, note: string): Promise<void> {
-  const sql = need();
-  await ensure(sql);
-  await sql`UPDATE feed_meta SET timeline_last_id = COALESCE(${timeline_last_id}, timeline_last_id), verify_note = ${note} WHERE id = 1`;
-}
-
-export async function verifyStatus(): Promise<{ last_verify_at: string | null; note: string | null }> {
-  const sql = need();
-  await ensure(sql);
-  const rows = (await sql`SELECT last_verify_at, verify_note FROM feed_meta WHERE id = 1`) as { last_verify_at: string | Date | null; verify_note: string | null }[];
-  const r = rows[0];
-  return { last_verify_at: r?.last_verify_at ? new Date(r.last_verify_at).toISOString() : null, note: r?.verify_note ?? null };
 }

@@ -29,6 +29,8 @@ export const PAGES_PER_RUN = 20;
 const CONTACTS_EVERY_MS = 24 * 3600e3;
 /** Reads by id a minute: 169 orders were unlisted on 30 Oct (166 the bot's deleted test orders), once. */
 const CONFIRMS_PER_RUN = 40;
+const CLIENT_ORDERS_EVERY_MS = 30 * 60e3;
+const CLIENTS_PER_RUN = 5;
 
 const parse = (v: unknown): any => { if (typeof v !== "string") return v ?? {}; try { return JSON.parse(v); } catch { return {}; } };
 /** An audit time with no zone is UTC (test/zonelessIsUtc.ts). */
@@ -248,6 +250,27 @@ export async function refreshOrders(sql: Sql, t: Transport, now = Date.now()): P
   // A day's check is done only once every unlisted order has been read; until then each minute reads the next ones.
   if (!more) await setMeta(sql, "orders_at", new Date(now).toISOString());
   return { refreshed: true, deleted };
+}
+
+/**
+ * The orders of each client with an open need, read whole every half hour: done.ts finds a need's job among the
+ * client's orders that day, and "the only order that day" is only true of a list read whole, not of the orders
+ * staff happened to touch since 9 Oct. A few clients a minute; a client not read stays as last read.
+ */
+export async function readClientOrders(sql: Sql, t: Transport, companies: number[], now = Date.now()): Promise<number> {
+  await ensureSchema(sql);
+  const at = (await meta<Record<string, string>>(sql, "client_orders_at")) ?? {};
+  const due = companies.filter((c) => !at[c] || now - Date.parse(at[c]) >= CLIENT_ORDERS_EVERY_MS).slice(0, CLIENTS_PER_RUN);
+  for (const c of due) {
+    const orders = (await readPage(t, `/orders?company_id[eq]=${c}&with=Job__SlotTeam__Slot__SlotLocation&limit=100&page=1`)).rows;
+    for (let i = 0; i < orders.length; i += 50) await sql`INSERT INTO onsinch_orders (order_id, number, company_id, body, read_at)
+      SELECT (o->>'id')::bigint, o->>'number', (o->>'company_id')::int, o, ${new Date(now).toISOString()}::timestamptz FROM jsonb_array_elements(${JSON.stringify(orders.slice(i, i + 50))}::jsonb) o
+      ON CONFLICT (order_id) DO UPDATE SET number = EXCLUDED.number, company_id = EXCLUDED.company_id, body = EXCLUDED.body, read_at = EXCLUDED.read_at`;
+    await rememberOrders(sql, orders);
+    at[c] = new Date(now).toISOString();
+  }
+  if (due.length) await setMeta(sql, "client_orders_at", at);
+  return due.length;
 }
 
 /** The minute sync's step: the timeline first, then the contacts, places and deleted orders when a day has passed. */

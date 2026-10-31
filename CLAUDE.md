@@ -24,7 +24,10 @@ every step update its status line, its §0 table and any measurement.**
    (`app/lib/v2/replan.ts`), test data; ok only when every step succeeded. A Vercel cron (`vercel.json`); n8n's
    schedule until the switch-over (ADDENDUM R3). Every 5 minutes `/api/health/heartbeat` (`app/lib/heartbeat.ts`)
    raises a stalled intake, sweep, sync or labels to the owner.
-8. **TV.** `app/lib/feed/` (`v2.ts` rowsOnCard, `serve.ts`, `live.ts`) behind `/api/feed`.
+8. **TV.** `app/lib/feed/` (`v2.ts` rowsOnCard, `serve.ts`, `live.ts`) behind `/api/feed`; it reads only the
+   database. **Whether a need is done is `done.ts` alone**, run each minute by the sync's cards step
+   (`app/lib/v2/loop/cards.ts` markNeeds) on the stored OnSinch history, written as `done`/`possibly` marks;
+   a thread's absolute links (an R, J or PO it names, the bot's order) are `links.ts` gradeThread/linkAbsolute.
    **Labels:** `/api/bot/labels` from `app/lib/mail/threadLabels.ts`, applied by n8n with the mailbox's Gmail
    credential after each sync. **Alarms:** `app/lib/errorReport.ts`.
 

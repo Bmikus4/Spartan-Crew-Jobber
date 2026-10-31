@@ -20,6 +20,7 @@ import { londonToUtc, shiftWindow } from "../v2/bot/ops";
 import { rNumbersIn } from "../onsinch/resolve";
 import { cardNote } from "./cardNote";
 import { isReplyReason } from "../v2/reasons";
+import type { Ask } from "./done";
 
 /** One v2_decisions row of kind write or handoff, with its message's subject. */
 export interface V2Row {
@@ -34,8 +35,8 @@ export interface V2Row {
   company: string | null;
   from_address: string;
   subject: string | null;
-  /** The thread's link (job_links): the order it is about, whoever made it. */
-  link?: { order_id: number; r_number: string | null; job_id: number | null } | null;
+  /** The thread's link (job_links): the order it is about, whoever made it, and when OnSinch made that order. */
+  link?: { order_id: number; r_number: string | null; job_id: number | null; made?: string | null } | null;
   /** The planner's answer on this email now (v2/replan.ts), when it has been planned again. */
   replan?: Decision | null;
 }
@@ -92,16 +93,22 @@ function classify(row: V2Row, d: Decision) {
   return { kind, ops, r_numbers, executed, written, order_id, made };
 }
 
+const ASK: Record<string, Ask> = { new_shift: "book", change_times: "change", change_crew: "change", cancel_shift: "cancel", other: "any" };
+const OP_ASK: Record<Op["kind"], Ask> = { create_order: "book", add_shift: "book", add_position: "book", set_position_times: "change", set_position_size: "change", cancel_position: "cancel", set_po: "any" };
+
 /**
  * A thread's card is the planner's CURRENT answer on its email: the decision made when it
- * arrived, or the one v2/replan.ts made since against OnSinch as it is now. An answer of "none"
- * leaves nothing to show, so a card that was on the TV turns green with the reason (project.ts).
- * The item key stays the email's first decision's, so a tick or a remembered need survives the
- * card being planned again with another kind or order (a re-keyed card loses its marks).
+ * arrived, or the one v2/replan.ts made since against OnSinch as it is now. The item key stays
+ * the email's first decision's, so a tick or a remembered need survives the card being planned
+ * again with another kind or order (a re-keyed card loses its marks).
  */
 export function v2Source(row: V2Row, now: number): FeedSource {
-  const d = row.replan ?? row.decision;
+  const d = answerOf(row);
   const c = classify(row, d);
+  // A NEED'S KIND IS ITS JOB AS IT IS NOW (ADDENDUM §13.2 change 2): a new booking on a thread linked to an order
+  // OnSinch already held when the email came is a change to that order. 11 of 44 "needs created" cards carried an
+  // R and J on 29 Oct. An order made after the email is the booking done, which done.ts finds.
+  if (c.kind === "needs-created" && row.link?.made && Date.parse(row.link.made) < (Date.parse(row.sent_at) || now)) c.kind = "needs-updated";
   const first = row.replan ? classify(row, row.decision) : c;
   const g = row.grounded;
   const note = d.kind === "none" ? null : cardNote({ decision: d, grounded: g, executed: c.executed, written: c.written });
@@ -130,7 +137,6 @@ export function v2Source(row: V2Row, now: number): FeedSource {
   if (g?.po) refs.add(g.po);
   for (const m of (row.subject ?? "").matchAll(REF)) if (!/^R-?\d+$/i.test(m[0])) refs.add(m[0]);
   const want: FeedWant = { r_numbers: c.r_numbers, refs: [...refs], place_id: places.length === 1 ? places[0] : null, shifts: windows, sender: row.from_address || null };
-  const booked = d.kind === "none" && /^already booked: /.test(d.reason) ? d.reason.replace(/^already booked: /, "").split(";")[0] : null;
 
   return {
     thread_id: row.thread_id,
@@ -155,8 +161,14 @@ export function v2Source(row: V2Row, now: number): FeedSource {
     starts_at: starts[0] ?? null,
     last_write: c.written ? at : 0,
     want,
+    need: {
+      at,
+      asks: [...new Set([...(g?.requests ?? []).map((r) => ASK[r.action] ?? "any"), ...(g?.requests.length ? [] : c.ops.map((o) => OP_ASK[o.kind]))])],
+      fresh: c.kind === "needs-created",
+      days, places, venues: [...new Set(shifts.map((s) => s.venue).filter((v): v is string => !!v))],
+    },
     note,
-    resolvedText: booked ? `Already booked in OnSinch: ${booked}` : "Cleared by the system",
+    resolvedText: "Answered by a later email",
   };
 }
 
@@ -188,8 +200,12 @@ export function rowsOnCard<T extends V2Row>(list: T[]): T[] {
   return [lead, ...open.reverse()];
 }
 
-/** The planner's current answer on a row: re-planned, or as decided. */
-const answerOf = (r: V2Row): Decision => r.replan ?? r.decision;
+/**
+ * The planner's current answer on a row: re-planned, or as decided. A re-plan that finds nothing to do no longer
+ * clears the need (ADDENDUM §13.2 change 1): 29 of the 45 needs that "left the TV" by 30 Oct went that way, some
+ * because "nothing is booked" on the day, which is the work not done. Whether staff did it is done.ts's to say.
+ */
+function answerOf(r: V2Row): Decision { return r.replan && r.replan.kind !== "none" ? r.replan : r.decision; }
 function needsWork(r: V2Row): boolean {
   const d = answerOf(r);
   if (d.kind === "none") return false;

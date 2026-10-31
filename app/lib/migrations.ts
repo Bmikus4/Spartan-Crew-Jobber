@@ -557,6 +557,9 @@ export const MIGRATIONS: ReadonlyArray<readonly [id: string, statement: string]>
   // lib/v2/loop/truth.ts refreshOrders: OnSinch logs no delete for an order and drops its create row, so a deleted
   // order is known only by OnSinch no longer holding it.
   ["105_alter_table_onsinch_orders", `ALTER TABLE onsinch_orders ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ`],
+  // lib/v2/links.ts linkAbsolute: what makes a link absolute (an R, J or PO the thread names, the bot's own order);
+  // null is a guess (the planner, the finder, the jobs board), which an absolute link overrules.
+  ["106_alter_table_job_links", `ALTER TABLE job_links ADD COLUMN IF NOT EXISTS proof TEXT`],
 ];
 
 /**

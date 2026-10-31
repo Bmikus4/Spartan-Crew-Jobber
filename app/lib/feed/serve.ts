@@ -6,12 +6,12 @@
 // as "all clear", and intake was silently down for 53 hours on 2026-10-01..03 — so the
 // one thing this must never do is answer a broken query with nothing to do.
 //
-// Verification is the opposite: it is extra evidence, and the feed is right without it.
-// A verifier that throws is reported in `health.verify` and the feed is served anyway.
+// It reads only the database. Whether a need is done is the minute sync's mark (loop/cards.ts,
+// done.ts), so the TV is only as fresh as the stored OnSinch history it reports (`history_at`).
 // ============================================================================
 import type { Job } from "../jobsDb";
 import { portedCards } from "./ported";
-import { project, type FeedCard, type FeedMark, type FeedSource, type FeedWant, type ReplyNeed } from "./project";
+import { project, type FeedCard, type FeedMark, type FeedSource, type ReplyNeed } from "./project";
 import { v2Sources, type V2Row } from "./v2";
 import { intakeHealth } from "../intakeHealth";
 import type { ConversationState } from "../onsinch/types";
@@ -35,9 +35,8 @@ export interface FeedDeps {
   marks(): Promise<FeedMark[]>;
   /** Null when the follow-up feature is switched off: the reply lane does not exist. */
   replies: (() => Promise<ReplyNeed[]>) | null;
-  /** Runs at most once per window across every screen; returns how many marks it wrote. */
-  verify?: (cards: FeedCard[], now: number, marks: FeedMark[], wants: Map<string, FeedWant>) => Promise<{ ran: boolean; wrote: number; note: string }>;
-  verifyStatus?: () => Promise<{ last_verify_at: string | null; note: string | null }>;
+  /** When the stored OnSinch history was last complete (v2_loop_meta timeline_complete_at): the marks are no newer. */
+  historyAt?: () => Promise<string | null>;
   /** Stores the projection's `open` and `resolved` marks; insert-once, so two screens agree. */
   remember?: (marks: Array<Omit<FeedMark, "at">>) => Promise<void>;
   /** The rebuild's decisions that need a person or made a change (v2_decisions). */
@@ -75,31 +74,18 @@ export async function serveFeed(deps: FeedDeps, now: number): Promise<{ status: 
 
   const v2 = [...other, ...v2Sources(v2rows, now)];
   let p = project(inbound.byThread, marks, replies, now, inbound.outByThread, v2, deps.from);
-  let reread = false;
 
-  // Like verification, memory is extra: a failed write leaves a resolved need off the list
-  // for one refresh, which is what the feed did before it had memory at all.
+  // Memory is extra: a failed write leaves a resolved need off the list for one refresh, which is
+  // what the feed did before it had memory at all.
   if (deps.remember && p.remember.length) {
     try {
       await deps.remember(p.remember);
-      reread = p.remember.some((m) => m.mark === "resolved");
+      if (p.remember.some((m) => m.mark === "resolved")) p = project(inbound.byThread, await deps.marks(), replies, now, inbound.outByThread, v2, deps.from);
     } catch (err) {
       console.error("[feed] remember failed", err);
     }
   }
-
-  let verify: { ran: boolean; wrote: number; note: string } | null = null;
-  if (deps.verify) {
-    try {
-      verify = await deps.verify(p.cards, now, marks, p.wants);
-      if (verify.wrote > 0) reread = true;
-    } catch (err) {
-      console.error("[feed] verify failed", err);
-      verify = { ran: true, wrote: 0, note: `verify failed: ${String((err as Error)?.message ?? err).slice(0, 160)}` };
-    }
-  }
-  if (reread) p = project(inbound.byThread, await deps.marks(), replies, now, inbound.outByThread, v2, deps.from);
-  const status = deps.verifyStatus ? await deps.verifyStatus().catch(() => null) : null;
+  const historyAt = deps.historyAt ? await deps.historyAt().catch(() => null) : null;
 
   // The board's history is extra: if it cannot be read the live list is still the live list.
   const jobs = deps.jobs ? await deps.jobs().catch((err) => { console.error("[feed] jobs board read failed", err); return [] as Job[]; }) : [];
@@ -148,7 +134,7 @@ export async function serveFeed(deps: FeedDeps, now: number): Promise<{ status: 
         within_working_hours: intake.within_working_hours,
         quiet_minutes: intake.quiet_minutes,
         replies_enabled: deps.replies !== null,
-        verify: { last_at: status?.last_verify_at ?? null, note: verify?.note ?? status?.note ?? null },
+        history_at: historyAt,
       },
       // The header counts what the list holds: "Needs Follow Up" counted every card (9 against
       // the 8 badges on the list, 10-21).

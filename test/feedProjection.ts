@@ -69,8 +69,8 @@ console.log("\n[3] what the engine made stays open until somebody checks it (Ben
   const c = p.cards.find((x) => x.thread_id === "c")!;
   ok(!c.green && c.lane === "need" && c.items[0].green === null && c.items[0].status === "Order was created, check to verify", "a create is open, reading check to verify");
   ok(p.counts.to_check === 2 && p.counts.done === 0 && p.counts.needs_created === 0 && p.counts.needs_updated === 0, "both counted to check, not done and not as needs");
-  const ed = project(new Map(), [{ ...mark(`updated-check:902:${NOW - 2 * H}`, "d", NOW - H, "staff-edit"), by: null }], null, NOW, new Map(), [...fromStates([updated("d", NOW - 2 * H)], new Map(), NOW)]);
-  ok(ed.cards[0].green && ed.cards[0].items[0].green?.mark === "staff-edit", "a staff edit after the write closes it");
+  const ed = project(new Map(), [{ ...mark(`updated-check:902:${NOW - 2 * H}`, "d", NOW - H, "done"), by: null }], null, NOW, new Map(), [...fromStates([updated("d", NOW - 2 * H)], new Map(), NOW)]);
+  ok(ed.cards[0].green && ed.cards[0].items[0].green?.mark === "done", "staff's work found after the write (done.ts) closes it");
   const t = project(new Map(), [mark(`created-check:901:${NOW - H}`, "c", NOW - 60_000)], null, NOW, new Map(), [...fromStates([created("c", NOW - H)], new Map(), NOW)]);
   ok(t.cards[0].items[0].green?.mark === "checked" && t.cards[0].items[0].green?.by === "kate@spartancrew.co.uk", "a tick on it shows who checked it");
   ok(t.cards[0].items[0].green?.at === NOW - 60_000 && t.counts.done === 1, "and it went green when it was checked");
@@ -108,8 +108,8 @@ console.log("\n[6] one card carries two needs");
 console.log("\n[7] green needs, and how long done work stays");
 {
   const key = `needs-updated:b:900:${NOW - 3 * H}`;
-  let p = project(new Map([["b", NOW - 3 * H]]), [mark(key, "b", NOW - 10 * 60_000, "staff-edit")], null, NOW, new Map(), [...fromStates([needsUpdated("b")], new Map([["b", NOW - 3 * H]]), NOW)]);
-  ok(p.cards[0]?.green === true && p.cards[0].lane === "done" && p.counts.done === 1 && p.counts.needs_updated === 0, "a staff edit closes a need");
+  let p = project(new Map([["b", NOW - 3 * H]]), [mark(key, "b", NOW - 10 * 60_000, "done")], null, NOW, new Map(), [...fromStates([needsUpdated("b")], new Map([["b", NOW - 3 * H]]), NOW)]);
+  ok(p.cards[0]?.green === true && p.cards[0].lane === "done" && p.counts.done === 1 && p.counts.needs_updated === 0, "staff's work found (done.ts) closes a need");
   p = project(new Map([["b", NOW - 3 * H]]), [mark(key, "b", NOW - DONE_DWELL_MS - 1)], null, NOW, new Map(), [...fromStates([needsUpdated("b")], new Map([["b", NOW - 3 * H]]), NOW)]);
   ok(p.cards.length === 0, "a done card leaves after a day");
   p = project(new Map(), [], null, NOW, new Map(), [...fromStates([created("c", NOW - DONE_DWELL_MS + H)], new Map(), NOW)]);

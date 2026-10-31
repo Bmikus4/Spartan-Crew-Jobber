@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { authorizeCronCall } from "../../../lib/apiAuth";
-import { backfillBoardLinks, backfillLinks, sweepLinks } from "../../../lib/v2/links";
+import { backfillBoardLinks, backfillLinks, linkAbsolute, sweepLinks } from "../../../lib/v2/links";
 import { botWrites, retryUnread, sweepUndecided } from "../../../lib/v2/process";
 import { resumeStopped } from "../../../lib/v2/resume";
 import { replanOpen } from "../../../lib/v2/replan";
@@ -8,7 +8,8 @@ import { pruneTrace } from "../../../lib/v2/traceLive";
 import { pullTruth } from "../../../lib/v2/loop/truth";
 import { scoreOutcomes } from "../../../lib/v2/loop/outcomes";
 import { recordActions } from "../../../lib/v2/loop/actions";
-import { recordCardExits } from "../../../lib/v2/loop/cards";
+import { markNeeds, recordCardExits } from "../../../lib/v2/loop/cards";
+import { v2Sources } from "../../../lib/feed/v2";
 import { serveFeed } from "../../../lib/feed/serve";
 import { liveFeedDeps } from "../../../lib/feed/live";
 import { neon } from "@neondatabase/serverless";
@@ -43,6 +44,9 @@ async function sync(request: Request, labels: boolean): Promise<Response> {
     ["backfilled", () => backfillLinks(sql)],
     ["board", () => backfillBoardLinks(sql)],
     ["sweep", () => sweepLinks(sql)],
+    // Each thread's absolute links (an R, J or PO it names, the bot's own order), again whenever an email or an order
+    // changes; an absolute link overrules a guessed one (DECISIONS O17).
+    ["links", () => linkAbsolute(sql).then((r) => ({ graded: r.graded, added: r.added.length, replaced: r.replaced.length, conflicts: Object.keys(r.conflicts).length }))],
     ["retry", () => resumeStopped(sql)],
     // A stored client email with no decision is decided, or becomes a card (process.ts sweepUndecided).
     ["undecided", () => sweepUndecided()],
@@ -60,11 +64,16 @@ async function sync(request: Request, labels: boolean): Promise<Response> {
     ["outcomes", () => scoreOutcomes(sql, t as never, { deadline: Date.now() + 90_000 })],
     // Each staff action once: covered by a card first or not, a moved start, a new order against one per venue.
     ["actions", () => recordActions(sql, t as never, { deadline: Date.now() + 60_000 })],
-    // How each need left the TV, from the TV as it is built, with no verifier and nothing written back.
+    // Is each need done (done.ts), written as the marks the TV reads; then how each need left the TV, from the TV as
+    // it is built, with nothing written back.
     ["cards", async () => {
-      const tv = await serveFeed({ ...liveFeedDeps(), verify: undefined, remember: undefined, jobs: undefined }, Date.now());
+      const deps = liveFeedDeps();
+      const rows = await deps.v2!();
+      const marked = await markNeeds(sql, t as never, rows, Date.now());
+      const tv = await serveFeed({ ...deps, v2: async () => rows, remember: undefined, jobs: undefined }, Date.now());
       if (tv.status !== 200 || !tv.all) throw new Error(`the TV could not be read (${tv.status})`);
-      return recordCardExits(sql, tv.all);
+      const onCard = new Set(v2Sources(rows, Date.now()).flatMap((s) => [s, ...(s.also ?? [])]).map((s) => String(s.item?.item_key ?? "").split(":").pop()!));
+      return { ...marked, ...(await recordCardExits(sql, tv.all, onCard)) };
     }],
     ["testData", () => getSettings()
       .then(async (s) => maybeSweep(sql, t, !!s.test_data_autoclear, { writes: await botWrites() }))

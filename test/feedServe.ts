@@ -85,19 +85,18 @@ void (async () => {
     ok(/replies: followupsEnabled\(\) \? replies : null/.test(src), "production wires the lane through followupsEnabled()");
   }
 
-  console.log("\n[4] verification is extra evidence: its failure never costs the feed");
+  console.log("\n[4] the TV says how fresh its OnSinch history is; a failed read of it never costs the feed");
   {
-    const r = await serveFeed(deps({ verify: boom }), NOW);
-    ok(r.status === 200 && (r.body.counts as Record<string, number>).done_by_system === 1, "verifier throws -> feed still served");
-    ok(/verify failed: connection refused/.test(String(((r.body.health as Record<string, unknown>).verify as Record<string, unknown>).note)), "and the failure is reported");
-    const marks: FeedMark[] = [];
+    const r = await serveFeed(deps({ historyAt: async () => "2026-10-05T11:58:00.000Z" }), NOW);
+    ok((r.body.health as Record<string, unknown>).history_at === "2026-10-05T11:58:00.000Z", "the history's completeness time is reported");
+    const b = await serveFeed(deps({ historyAt: boom }), NOW);
+    ok(b.status === 200 && (b.body.health as Record<string, unknown>).history_at === null, "unreadable: served, with no time, which the TV shows as behind");
     const need = { ...created, classification: "update", status: "error", order_action_log: [] } as unknown as ConversationState;
-    const g = await serveFeed(deps({
-      sources: async (inb, at) => fromStates([need], inb, at),
-      marks: async () => marks,
-      verify: async () => { marks.push({ item_key: "needs-updated:c:901:0", thread_id: "c", mark: "staff-edit", by: null, evidence: null, at: NOW }); return { ran: true, wrote: 1, note: "ok" }; },
-    }), NOW);
-    ok((g.body.items as { green: boolean }[])[0]?.green === true, "marks it writes show on the same refresh");
+    const marks: FeedMark[] = [{ item_key: "needs-updated:c:901:0", thread_id: "c", mark: "done", by: null, evidence: { text: "R11312, staff changed the crew" }, at: NOW }];
+    const g = await serveFeed(deps({ sources: async (inb, at) => fromStates([need], inb, at), marks: async () => marks }), NOW);
+    ok((g.body.items as { green: boolean }[])[0]?.green === true, "the minute sync's done mark turns the need green");
+    const old = await serveFeed(deps({ sources: async (inb, at) => fromStates([need], inb, at), marks: async () => [{ ...marks[0], mark: "staff-edit" as const }] }), NOW);
+    ok((old.body.items as { green: boolean }[])[0]?.green === false, "the old verifier's mark clears nothing");
   }
 
   console.log("\n[6] the feed remembers a need, so one that resolves without a write turns green");
