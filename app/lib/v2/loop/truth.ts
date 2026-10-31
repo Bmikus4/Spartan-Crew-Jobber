@@ -17,10 +17,18 @@ type Sql = NeonQueryFunction<false, false>;
 
 /** The first row of 29 Jul 2026, where the gold copies begin: 1,732 of 1,753 staff edits on 21-27 Oct name a part created since. */
 export const TIMELINE_FROM_ID = 867675;
-export const BOOKING_ACTIONS = new Set(["order_create", "order_create_by_copy", "order_created_via_api", "order_cancel", "order_confirm_provisional", "common_create", "common_change", "common_delete"]);
+/**
+ * Kept from 31 Oct and read back to 29 Jul once by action: a shift moved to another place or job, a shift's end or
+ * size changed through the client's login, a cancel undone (121 rows to 31 Oct). The other 45 actions OnSinch logs
+ * (applicants, attendance, clock-ins, invoice items, closing a shift to applicants) change no shift.
+ */
+const LATE_ACTIONS = ["order_uncancel", "slot_team_move", "shift_client_change"];
+export const BOOKING_ACTIONS = new Set(["order_create", "order_create_by_copy", "order_created_via_api", "order_cancel", "order_confirm_provisional", "common_create", "common_change", "common_delete", ...LATE_ACTIONS]);
 /** Pages of 100 a minute: the 29 Jul backfill (about 1,900 pages of every action) takes about 90 minutes, then 1 a minute. */
 export const PAGES_PER_RUN = 20;
 const CONTACTS_EVERY_MS = 24 * 3600e3;
+/** Reads by id a minute: 169 orders were unlisted on 30 Oct (166 the bot's deleted test orders), once. */
+const CONFIRMS_PER_RUN = 40;
 
 const parse = (v: unknown): any => { if (typeof v !== "string") return v ?? {}; try { return JSON.parse(v); } catch { return {}; } };
 /** An audit time with no zone is UTC (test/zonelessIsUtc.ts). */
@@ -78,16 +86,7 @@ export async function pullTimeline(sql: Sql, t: Transport, opts: { pages?: numbe
     if (rows.some((r, k) => !(r.id > cursor) || (k > 0 && r.id <= rows[k - 1].id))) throw new Error(`timeline page after ${cursor} is not in rising id order`);
     const keep = rows.filter((r) => BOOKING_ACTIONS.has(String(r.action)));
     if (keep.length) {
-      const recs = keep.map((r) => ({ id: r.id, action: String(r.action), creator: Number(r.creator) || null, created: utc(r.created), model: r.d?.model ?? null, model_id: r.d?.id != null ? String(r.d.id) : null, ...partOf(String(r.action), r.d), data: r.d }));
-      await sql`INSERT INTO onsinch_timeline (id, action, creator, created, model, model_id, part, parent, data)
-        SELECT id, action, creator, created, model, model_id, part, parent, data
-        FROM jsonb_to_recordset(${JSON.stringify(recs)}::jsonb)
-          AS x(id BIGINT, action TEXT, creator INTEGER, created TIMESTAMPTZ, model TEXT, model_id TEXT, part TEXT, parent TEXT, data JSONB)
-        ON CONFLICT (id) DO NOTHING`;
-      const parts = keep.flatMap((r) => partsOf(String(r.action), r.d)).map(([part, order_id]) => ({ part, order_id }));
-      if (parts.length) await sql`INSERT INTO onsinch_parts (part, order_id)
-        SELECT DISTINCT ON (part) part, order_id FROM jsonb_to_recordset(${JSON.stringify(parts)}::jsonb) AS x(part TEXT, order_id BIGINT)
-        ON CONFLICT (part) DO NOTHING`;
+      await store(sql, keep);
       kept += keep.length;
       newest = utc(keep[keep.length - 1].created);
     }
@@ -96,10 +95,35 @@ export async function pullTimeline(sql: Sql, t: Transport, opts: { pages?: numbe
     await setMeta(sql, "timeline_cursor", cursor);
     behind = rows.length >= 100;
   }
+  // The late actions, read back once each: the cursor passed them before they were kept.
+  const late = (await meta<string[]>(sql, "late_actions_read")) ?? [];
+  for (const a of LATE_ACTIONS.filter((x) => !late.includes(x))) {
+    for (let p = 1; ; p++) {
+      const page = await readPage(t, `/timelineAudits?action[eq]=${a}&id[gt]=${TIMELINE_FROM_ID - 1}&limit=100&page=${p}`);
+      const rows = page.rows.filter((r) => r.action === a).map((r) => ({ ...r, id: Number(r.id), d: parse(r.data) }));
+      if (rows.length) await store(sql, rows);
+      if (page.rows.length < 100 || p >= page.pageCount) break;
+    }
+    late.push(a);
+    await setMeta(sql, "late_actions_read", late);
+  }
   await resolveOrders(sql);
   // Caught up, every row made before this run began is stored: the loop judges no window that closes later.
   if (!behind) await setMeta(sql, "timeline_complete_at", started);
   return { read, kept, cursor, behind, newest };
+}
+
+async function store(sql: Sql, keep: Array<{ id: number; action: unknown; creator: unknown; created: unknown; d: any }>): Promise<void> {
+  const recs = keep.map((r) => ({ id: r.id, action: String(r.action), creator: Number(r.creator) || null, created: utc(r.created), model: r.d?.model ?? null, model_id: r.d?.id != null ? String(r.d.id) : null, ...partOf(String(r.action), r.d), data: r.d }));
+  await sql`INSERT INTO onsinch_timeline (id, action, creator, created, model, model_id, part, parent, data)
+    SELECT id, action, creator, created, model, model_id, part, parent, data
+    FROM jsonb_to_recordset(${JSON.stringify(recs)}::jsonb)
+      AS x(id BIGINT, action TEXT, creator INTEGER, created TIMESTAMPTZ, model TEXT, model_id TEXT, part TEXT, parent TEXT, data JSONB)
+    ON CONFLICT (id) DO NOTHING`;
+  const parts = keep.flatMap((r) => partsOf(String(r.action), r.d)).map(([part, order_id]) => ({ part, order_id }));
+  if (parts.length) await sql`INSERT INTO onsinch_parts (part, order_id)
+    SELECT DISTINCT ON (part) part, order_id FROM jsonb_to_recordset(${JSON.stringify(parts)}::jsonb) AS x(part TEXT, order_id BIGINT)
+    ON CONFLICT (part) DO NOTHING`;
 }
 
 /** Rows whose order is still unknown, given what onsinch_parts now holds: by the part, else by the parent a delete names. */
@@ -186,10 +210,51 @@ export async function refreshPlaces(sql: Sql, t: Transport, now = Date.now()): P
   return { refreshed: true, places: rows.length };
 }
 
-/** The minute sync's step: the timeline first, then the contacts and places when a day has passed. */
+/**
+ * Orders OnSinch no longer holds, once a day: deleting an order logs nothing and removes its create row from
+ * OnSinch's history (30 Oct: 16957, 16990), so the stored create would otherwise stand as a booking forever. Every
+ * order with a stored create in the last 30 days that the list leaves out is read once by id before it is marked,
+ * so an order shifted between pages by a delete mid-read is never taken for deleted. Its stored history is kept;
+ * outcomes judged while it existed are judged again.
+ */
+export async function refreshOrders(sql: Sql, t: Transport, now = Date.now()): Promise<{ refreshed: boolean; deleted: number[] }> {
+  await ensureSchema(sql);
+  const last = await meta<string>(sql, "orders_at");
+  if (last && now - Date.parse(last) < CONTACTS_EVERY_MS) return { refreshed: false, deleted: [] };
+  const created = ((await sql`SELECT DISTINCT (data->>'id')::bigint AS id FROM onsinch_timeline
+    WHERE action IN ('order_create', 'order_created_via_api') AND created > ${new Date(now - 30 * 864e5).toISOString()}::timestamptz`) as Array<{ id: number }>).map((r) => Number(r.id));
+  const deleted: number[] = [];
+  let more = false;
+  if (created.length) {
+    const from = Math.min(...created) - 1;
+    const held = new Set<number>();
+    for (let p = 1; p <= 100; p++) {
+      const page = await readPage(t, `/orders?id[gt]=${from}&limit=100&page=${p}`);
+      for (const o of page.rows) held.add(Number(o.id));
+      if (page.rows.length < 100 || p >= page.pageCount) break;
+      if (p === 100) throw new Error("more than 10,000 orders in 30 days: the order list was not read whole");
+    }
+    const known = new Set(((await sql`SELECT order_id FROM onsinch_orders WHERE deleted_at IS NOT NULL`) as any[]).map((r) => Number(r.order_id)));
+    const unlisted = created.filter((id) => !held.has(id) && !known.has(id));
+    for (const id of unlisted.slice(0, CONFIRMS_PER_RUN)) if (!(await readPage(t, `/orders?id[eq]=${id}`)).rows.length) deleted.push(id);
+    more = unlisted.length > CONFIRMS_PER_RUN;
+  }
+  if (deleted.length) {
+    const at = new Date(now).toISOString();
+    await sql`INSERT INTO onsinch_orders (order_id, body, read_at, deleted_at) SELECT x, NULL, ${at}::timestamptz, ${at}::timestamptz FROM unnest(${deleted}::bigint[]) AS x
+      ON CONFLICT (order_id) DO UPDATE SET deleted_at = EXCLUDED.deleted_at`;
+    await sql`UPDATE v2_outcomes SET scored_at = NULL WHERE scored_at IS NOT NULL AND EXISTS (SELECT 1 FROM jsonb_array_elements_text(orders) o WHERE o::bigint = ANY(${deleted}::bigint[]))`;
+  }
+  // A day's check is done only once every unlisted order has been read; until then each minute reads the next ones.
+  if (!more) await setMeta(sql, "orders_at", new Date(now).toISOString());
+  return { refreshed: true, deleted };
+}
+
+/** The minute sync's step: the timeline first, then the contacts, places and deleted orders when a day has passed. */
 export async function pullTruth(sql: Sql, t: Transport, now = Date.now()): Promise<Record<string, unknown>> {
   const timeline = await pullTimeline(sql, t, { deadline: now + 60_000 });
   const contacts = await refreshContacts(sql, t, now);
   const places = await refreshPlaces(sql, t, now);
-  return { ...timeline, contacts: contacts.refreshed ? contacts.contacts : "fresh", places: places.refreshed ? places.places : "fresh" };
+  const orders = await refreshOrders(sql, t, now);
+  return { ...timeline, contacts: contacts.refreshed ? contacts.contacts : "fresh", places: places.refreshed ? places.places : "fresh", deleted: orders.refreshed ? orders.deleted.length : "fresh" };
 }

@@ -5,11 +5,12 @@
 // and keeps only the eight booking actions, while its cursor passes the rest; a run reads at most its pages and
 // the next goes on from there, storing nothing twice; each row reaches its order by a create's path, an order's
 // number or a delete's part, and a part older than the store by an order read whole; a failed read throws and
-// keeps every row already stored; contacts are read once a day, lowercased, and a failed read keeps yesterday's.
+// keeps every row already stored; contacts are read once a day, lowercased, and a failed read keeps yesterday's;
+// an order with a recent create that OnSinch no longer holds is marked deleted, its history kept.
 // npx tsx --require ./test/fixtures/pg.ts test/loopTruth.ts
 // ============================================================================
 import { sql } from "./fixtures/pg";
-import { pullTimeline, refreshContacts, refreshPlaces, rememberOrder, TIMELINE_FROM_ID } from "../app/lib/v2/loop/truth";
+import { pullTimeline, refreshContacts, refreshOrders, refreshPlaces, rememberOrder, TIMELINE_FROM_ID } from "../app/lib/v2/loop/truth";
 
 let fails = 0;
 const ok = (c: boolean, m: string, d?: unknown) => { console.log(`  ${c ? "PASS" : "FAIL"}  ${m}${c ? "" : "  " + JSON.stringify(d)}`); if (!c) fails++; };
@@ -19,6 +20,7 @@ const row = (id: number, action: string, data: unknown, creator = 413, created =
 let rows: any[] = [];
 let companies: any[] = [];
 let places: any[] = [];
+let held: number[] = [], hiddenFromList: number[] = [];
 let down = false, shuffled = false;
 const t = (async (_m: string, path: string) => {
   if (down) return { status: 500, data: null };
@@ -26,10 +28,17 @@ const t = (async (_m: string, path: string) => {
   const page = Number(u.searchParams.get("page") ?? 1);
   if (u.pathname === "/timelineAudits") {
     const after = Number(u.searchParams.get("id[gt]"));
-    let hit = rows.filter((r) => r.id > after).sort((a, b) => a.id - b.id);
+    const act = u.searchParams.get("action[eq]");
+    let hit = rows.filter((r) => r.id > after && (!act || r.action === act)).sort((a, b) => a.id - b.id);
     const out = hit.slice((page - 1) * 100, page * 100);
     if (shuffled) out.reverse();
     return { status: 200, data: { data: out, pagination: { pageCount: Math.ceil(hit.length / 100), count: hit.length } } };
+  }
+  if (u.pathname === "/orders") {
+    const eq = u.searchParams.get("id[eq]");
+    if (eq) return { status: 200, data: { data: held.filter((x) => x === Number(eq)).map((id) => ({ id })), pagination: { pageCount: 1, count: 1 } } };
+    const hit = held.filter((x) => x > Number(u.searchParams.get("id[gt]")) && !hiddenFromList.includes(x)).sort((a, b) => b - a);
+    return { status: 200, data: { data: hit.slice((page - 1) * 100, page * 100).map((id) => ({ id })), pagination: { pageCount: Math.ceil(hit.length / 100), count: hit.length } } };
   }
   if (u.pathname === "/places") return { status: 200, data: { data: places.slice((page - 1) * 100, page * 100), pagination: { pageCount: Math.ceil(places.length / 100), count: places.length } } };
   if (u.pathname === "/companies") return { status: 200, data: { data: companies.slice((page - 1) * 100, page * 100), pagination: { pageCount: Math.ceil(companies.length / 100), count: companies.length } } };
@@ -118,6 +127,39 @@ const cursorNow = async () => Number(((await sql`SELECT value FROM v2_loop_meta 
   const all = (await sql`SELECT count(*)::int AS n FROM onsinch_places`) as any[];
   ok(p1.refreshed && all[0].n === 150 && pc[0].n === 1, "150 places over two pages, names trimmed", { all, pc });
   ok(!(await refreshPlaces(sql, t, day1 + 3600e3)).refreshed, "not again within the day");
+
+  console.log("\n[7] deleted orders: OnSinch no longer holds them, so they are marked, and their history is kept");
+  const created = (await sql`SELECT DISTINCT (data->>'id')::bigint AS id FROM onsinch_timeline WHERE action = 'order_create'`) as any[];
+  await sql`INSERT INTO onsinch_timeline (id, action, creator, created, part, data) VALUES
+    (${F + 900}, 'order_create', 413, '2026-10-25T09:00:00Z', 'Order:9001', ${JSON.stringify({ id: "9001", model: "Order", data: { number: 19001, path: "Order:9001" } })}::jsonb),
+    (${F + 901}, 'order_create', 413, '2026-10-25T09:00:00Z', 'Order:9002', ${JSON.stringify({ id: "9002", model: "Order", data: { number: 19002, path: "Order:9002" } })}::jsonb),
+    (${F + 902}, 'order_create', 413, '2026-08-01T09:00:00Z', 'Order:7001', ${JSON.stringify({ id: "7001", model: "Order", data: { number: 17001, path: "Order:7001" } })}::jsonb)`;
+  const histBefore = (await stored()).length;
+  await sql`INSERT INTO v2_outcomes (message_id, variant, orders, scored_at) VALUES ('m-del', 'production', '[9002]'::jsonb, now()), ('m-kept', 'production', '[9001]'::jsonb, now())`;
+  held = [...created.map((r) => Number(r.id)), 9001];
+  hiddenFromList = [9001];
+  down = true;
+  const err4 = await refreshOrders(sql, t, day1).then(() => "no throw", (e) => String(e.message));
+  down = false;
+  const marked = async () => ((await sql`SELECT order_id FROM onsinch_orders WHERE deleted_at IS NOT NULL ORDER BY order_id`) as any[]).map((r) => Number(r.order_id));
+  ok(/answered 500/.test(err4) && !(await marked()).length, "a failed read marks nothing", err4);
+  const d1 = await refreshOrders(sql, t, day1);
+  ok(JSON.stringify(d1.deleted) === "[9002]" && JSON.stringify(await marked()) === "[9002]", "only the order OnSinch does not hold is marked: one left off the list but held by id stays, one created over 30 days ago is not looked for", { d1, m: await marked() });
+  ok((await stored()).length === histBefore, "its stored history is kept");
+  const sc = new Map(((await sql`SELECT message_id, scored_at FROM v2_outcomes`) as any[]).map((r) => [r.message_id, r.scored_at]));
+  ok(sc.get("m-del") === null && sc.get("m-kept") !== null, "an outcome judged on the deleted order is judged again; others stand", [...sc]);
+  ok(!(await refreshOrders(sql, t, day1 + 3600e3)).refreshed, "not again within the day");
+
+  console.log("\n[8] an action kept late is read back once, behind the cursor");
+  await sql`DELETE FROM v2_loop_meta WHERE key = 'late_actions_read'`;
+  await sql`UPDATE v2_loop_meta SET value = ${JSON.stringify(F + 1000)}::jsonb WHERE key = 'timeline_cursor'`;
+  rows.push(row(F + 950, "slot_team_move", { model: "SlotTeam", id: "77", diffChanges: { SlotTeam: { Place: { old: 1, new: 2 } } } }), row(F + 951, "applicant_create", { model: "Slot", id: "1" }));
+  await pullTimeline(sql, t);
+  const late = async () => (await stored()).filter((r) => r.id === F + 950 || r.id === F + 951).map((r) => `${r.action}:${r.part}`);
+  ok(JSON.stringify(await late()) === JSON.stringify(["slot_team_move:SlotTeam:77"]), "the move behind the cursor is stored, the applicant is not", await late());
+  rows.push(row(F + 952, "order_uncancel", { model: "Order", id: "11500", data: { automated: false } }));
+  await pullTimeline(sql, t);
+  ok(!(await stored()).some((r) => r.id === F + 952), "read back once only: later the forward read keeps them", await late());
 
   console.log(fails ? `\n${fails} FAILED` : "\nALL PASS");
   process.exit(fails ? 1 : 0);

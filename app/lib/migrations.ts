@@ -554,6 +554,9 @@ export const MIGRATIONS: ReadonlyArray<readonly [id: string, statement: string]>
   ["104_create_table_v2_card_exits", `CREATE TABLE IF NOT EXISTS v2_card_exits (
     item_key TEXT PRIMARY KEY, thread_id TEXT NOT NULL, kind TEXT, days JSONB, opened_at TIMESTAMPTZ, last_seen_at TIMESTAMPTZ,
     exit TEXT, exit_by TEXT, exit_at TIMESTAMPTZ)`],
+  // lib/v2/loop/truth.ts refreshOrders: OnSinch logs no delete for an order and drops its create row, so a deleted
+  // order is known only by OnSinch no longer holding it.
+  ["105_alter_table_onsinch_orders", `ALTER TABLE onsinch_orders ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ`],
 ];
 
 /**

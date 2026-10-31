@@ -5581,5 +5581,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0269",
+  "ts": "2026-10-31T03:57:26+00:00",
+  "kind": "measurement",
+  "headline": "Step 0: history right since 29 Jul (42,903 rows, 0 missing, 0 differ); 169 deleted orders recorded; 3 shift actions kept",
+  "subject": "A deleted OnSinch order is recorded as deleted, and its stored create no longer reads as a booking",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 120,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]
