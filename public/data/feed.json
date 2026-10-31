@@ -5525,5 +5525,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0265",
+  "ts": "2026-10-31T03:12:33+00:00",
+  "kind": "measurement",
+  "headline": "\u00a713: owner rulings O13-O16 and the TV meta plan (docs only)",
+  "subject": "The TV's rules for what it lists are recorded, with the plan to meet them",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 120,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]

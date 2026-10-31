@@ -176,6 +176,10 @@ the owner's where the comment quotes them. Owner decisions still OPEN are in ADD
 | O10 | 28 Oct | One order per venue; at one venue, one order across days and weeks | same |
 | O11 | 28 Oct | Loop first, a 5-7 day baseline, then rule changes one at a time, both versions shadow-scored where cheap | same |
 | O12 | 28 Oct | A new client's first order is allowed; "yes, book that" drafts the order and hands off (O5 with a draft) | same |
+| O13 | 29 Oct | A job whose days have all passed never appears on the TV | decisions/2026-10-30-tv-shows-only-what-needs-doing.md; ADDENDUM §13 |
+| O14 | 29 Oct | A need staff have handled in OnSinch leaves the needs list; it never clears on another job's work | same |
+| O15 | 30 Oct | A card's name: the linked OnSinch order's title; else client and venue; else the original sender's email (never a Spartan Crew address, never a subject line) | same |
+| O16 | 30 Oct | A three-line tile (owner and Paz), the UI tight and orderly; a need does not depend on having a day | same |
 
 ## Rulings in v2 code
 

@@ -6,7 +6,7 @@
   below as findings and status.
 - Every step updates this file: its status line, its measurement, and what moved.
 
-**Last updated:** 28 October 2026, S-0264: **the owner's Part 2, the measurement loop, is the work now (§12).** P2.5 DONE: each staff action is recorded once with whether a card came first (21-27 Oct: 21 of 215 had a card naming the day; 67 followed a card that showed no day), moved starts and one-order-per-venue exceptions; each TV need's exit is recorded. P2.4 DONE (S-0263): every client email since 9 Oct gets a judged outcome per plan from the minute sync; on production's data, planned writes 26 matched, 23 wrong (9 the venue), 11 staff did nothing, 19 can't tell. P2.3 DONE (S-0262): each new rule version is a planner option, today's rules the default (799 replayed decisions byte-identical); intake stores each rule that touched an email planned the other way; the lead rule's settings are an admin's, logged, with "applies to". P2.2 DONE (S-0261): the judge matches staff's orders by day and venue; on the 32 shadow writes it finds 15 matched, 2 partial, 3 wrong, 3 staff did nothing, 9 can't tell. P2.1 DONE (S-0260): OnSinch's booking timeline is stored from 29 Jul on, read forward every minute, with the contact lists daily. The Part 1 audit is in §12.1; the owner's five rulings are O6-O12 (decisions/2026-10-28-measurement-loop-and-rulings.md); the loop's spec and build steps P2.1-P2.6 are §12.2-§12.6, and the rulings go into code one a day after a 5-7 day baseline (§12.7). S-0259: F46 measured, not built (2 of 395 replies carry a parent from another thread). R22 DONE (S-0258): plan.ts decide() is 187 lines of steps in order, every decision of 799 replayed emails byte-identical. The review's builder steps are done; what is left is the owner's (§0 Blocked). R21 DONE (S-0257): scripts/README.md says what each of 135 scripts can touch; R20 measured and deferred with a trigger. R19 DONE (S-0256): what a reason means is read only in reasons.ts. R17 planner part DONE (S-0255): dev-2 writes 21, 12 completed, 2 partial, 7 wrong (was 22, 11, 2, 9); the 7 left are owner rules or judging limits, listed under R17. R16 DONE (S-0254): F49 and F50, the review's two write-path gaps, closed; the review's other steps are R17-R22. R15 DONE (S-0253): the V1 review, https://claude.ai/artifact/A3WyEdpcXRcehHoJVb6BQe; its write-path gaps are F49-F54, to close before writes go back on. S-0252: the re-plan no longer counts every card as changed every minute (found by the live trace). R13 DONE (S-0251): the assisted-card design, docs/ASSISTED-MODE-DESIGN-2026-10-27.md; at most 90 of 155 dev handoffs are near-misses. R14 DONE, dormant (S-0250): the Gmail poll decides through v2 once the grant exists and INTAKE_PATH=routing. R12 held for the owner and Paz. R11 DONE (S-0249): the live trace is on; 5.7 counted, its outbound change waits on the owner. R10 DONE (S-0248): the email-to-board harness and its 20-email case study. R9 DONE (S-0247). R8 DONE but e (S-0244 to S-0246); e waits on the owner's yes to a paid measurement. R3's switch-over waits on CRON_SECRET. The baseline was 0f2dcef. App code changed since then in these
+**Last updated:** 30 October 2026: **§13, the TV shows only what still needs doing: meta plan for the owner's review (rulings O13-O16); nothing built yet.** S-0264: **the owner's Part 2, the measurement loop (§12).** P2.5 DONE: each staff action is recorded once with whether a card came first (21-27 Oct: 21 of 215 had a card naming the day; 67 followed a card that showed no day), moved starts and one-order-per-venue exceptions; each TV need's exit is recorded. P2.4 DONE (S-0263): every client email since 9 Oct gets a judged outcome per plan from the minute sync; on production's data, planned writes 26 matched, 23 wrong (9 the venue), 11 staff did nothing, 19 can't tell. P2.3 DONE (S-0262): each new rule version is a planner option, today's rules the default (799 replayed decisions byte-identical); intake stores each rule that touched an email planned the other way; the lead rule's settings are an admin's, logged, with "applies to". P2.2 DONE (S-0261): the judge matches staff's orders by day and venue; on the 32 shadow writes it finds 15 matched, 2 partial, 3 wrong, 3 staff did nothing, 9 can't tell. P2.1 DONE (S-0260): OnSinch's booking timeline is stored from 29 Jul on, read forward every minute, with the contact lists daily. The Part 1 audit is in §12.1; the owner's five rulings are O6-O12 (decisions/2026-10-28-measurement-loop-and-rulings.md); the loop's spec and build steps P2.1-P2.6 are §12.2-§12.6, and the rulings go into code one a day after a 5-7 day baseline (§12.7). S-0259: F46 measured, not built (2 of 395 replies carry a parent from another thread). R22 DONE (S-0258): plan.ts decide() is 187 lines of steps in order, every decision of 799 replayed emails byte-identical. The review's builder steps are done; what is left is the owner's (§0 Blocked). R21 DONE (S-0257): scripts/README.md says what each of 135 scripts can touch; R20 measured and deferred with a trigger. R19 DONE (S-0256): what a reason means is read only in reasons.ts. R17 planner part DONE (S-0255): dev-2 writes 21, 12 completed, 2 partial, 7 wrong (was 22, 11, 2, 9); the 7 left are owner rules or judging limits, listed under R17. R16 DONE (S-0254): F49 and F50, the review's two write-path gaps, closed; the review's other steps are R17-R22. R15 DONE (S-0253): the V1 review, https://claude.ai/artifact/A3WyEdpcXRcehHoJVb6BQe; its write-path gaps are F49-F54, to close before writes go back on. S-0252: the re-plan no longer counts every card as changed every minute (found by the live trace). R13 DONE (S-0251): the assisted-card design, docs/ASSISTED-MODE-DESIGN-2026-10-27.md; at most 90 of 155 dev handoffs are near-misses. R14 DONE, dormant (S-0250): the Gmail poll decides through v2 once the grant exists and INTAKE_PATH=routing. R12 held for the owner and Paz. R11 DONE (S-0249): the live trace is on; 5.7 counted, its outbound change waits on the owner. R10 DONE (S-0248): the email-to-board harness and its 20-email case study. R9 DONE (S-0247). R8 DONE but e (S-0244 to S-0246); e waits on the owner's yes to a paid measurement. R3's switch-over waits on CRON_SECRET. The baseline was 0f2dcef. App code changed since then in these
 commits only:
 
 | commit | ticket | what |
@@ -2058,3 +2058,75 @@ scored on their production plans only, since the world they were decided in cann
 ### 12.8 Open for the owner
 - **Is a PO a "change" under the two-week rule?** It moves no crew and no time. Proposed: no, a PO stays automatic.
   Until the owner rules, "changes" means times, crew, positions, shifts and cancellations.
+
+---
+
+## 13. The TV shows only what still needs doing (meta plan, 30 Oct, for the owner's review)
+
+**Rulings:** DECISIONS O13-O16 (decisions/2026-10-30-tv-shows-only-what-needs-doing.md).
+
+**Found on 29-30 Oct (read-only):**
+- All 6 open needs had been handled by staff. All 13 done cards were right.
+- 186 old Jobs Board cards, 181 of them for past days. Only 40 match their order.
+- 17 of 238 cards were named by the subject line. 11 of 44 "needs created" cards carried an R/J.
+- 18 of 109 dated needs: after the email, staff worked 2+ of the client's orders on the need's day. 17 of the 18 at
+  different venues; 8 included the thread's own order.
+- 28 of 29 undated needs had a linked order or a PO in the thread.
+
+### 13.1 Critique of the plan so far
+1. **"Staff acted on the client's orders that day" is too loose.** It would clear a need on another job in up to 18 of
+   109 cases. Replaced by the evidence ladder (13.2, change 1).
+2. **"An undated need clears on any new order for the client" is unsafe.** 11 of 29 undated needs saw staff touch
+   several orders. They are matched by their linked order or PO instead.
+3. **Four parts answer "is this need done?"** (classify, the checker's two steps, the re-plan). They disagree, and
+   timing decides which wins. One evaluator replaces them.
+4. **The checker reads OnSinch's history through a 600-row window, and only while the TV is open.** The stored history
+   (§12, complete every minute) replaces it.
+5. **"Client @ Venue" built by me** gives way to the owner's order: the order title first.
+6. **A need with no day was half a need.** It could not be matched or expire properly. Its job is now found by what
+   names it, and a day is one clue among several.
+
+### 13.2 Changes, and what each should give
+1. **One "is this need done?" evaluator,** run on every TV build from the stored OnSinch history. It counts staff's
+   work after the email only on the need's own job, found by the first rung that applies:
+   1. the thread's linked order, or an R, J or PO the thread names;
+   2. else the need's venue and day;
+   3. else its day, when the client has only one order that day.
+
+   The work must fit the ask: a create for a booking, a size or time change for a change, a cancel for a
+   cancellation. Two or more candidate jobs with nothing to tell them apart is never green: the card says "Possibly
+   done in R1, R2: check".
+
+   **Gives:** open needs staff already handled go from 6 of 6 to 0; wrong clears 0 on the 18 same-day cases.
+2. **A need's state comes from now, not from when the email came.** A linked order made after the email answers
+   "needs created". An order staff cancelled shows "Cancelled in OnSinch" and is done.
+
+   **Gives:** "Order Needs Created" beside an R/J goes from 11 to 0. Gmail labels follow the cards.
+3. **Passed jobs leave the list:** live and carried-over cards whose every day has passed.
+
+   **Gives:** 180 cards off today. Undated needs leave when done, or after the existing 14 quiet days.
+4. **Names by the owner's order:** order title, else client and venue, else the original sender's address, never a
+   Spartan address or subject.
+
+   **Gives:** subject-line names go from 17 to 0. Carried-over cards take their name from the order, not the old
+   ticket.
+5. **Three-line tile:**
+   - Line 1: the name, label, R, J and day.
+   - Line 2: the full ask, every shift with times and crew.
+   - Line 3: the check, PO, sender and age, or what staff did.
+
+   Fixed phrases from structured fields only. A layout pass keeps spacing, columns and type tight.
+
+   **Gives:** a card says what to do without opening the email.
+6. **The TV says when its OnSinch history is behind,** so a stale screen is never mistaken for a clean one.
+
+### 13.3 How it ships and is checked
+- **Order:**
+  - 1 and 2 together (the evaluator);
+  - then 3 and 4;
+  - then 5 and 6.
+  - Each goes through the gate.
+- **Before 1 and 2 go live,** the new evaluator runs on every need since 9 Oct beside staff's real actions. Any wrong
+  clear blocks it.
+- **After each deploy,** every card on the live TV is checked again, as on 29 Oct, and the result is reported.
+- **Parked:** the loop's daily report screen (P2.6, `.tmp-v2/p26-draft/`).
