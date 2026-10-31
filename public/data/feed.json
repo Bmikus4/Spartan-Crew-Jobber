@@ -5637,5 +5637,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0273",
+  "ts": "2026-10-31T04:47:22+00:00",
+  "kind": "measurement",
+  "headline": "TV build steps 0-6 live: 40 cards, 0 passed, 0 subject names, 15 open needs all in plain sentences, history under a minute behind (docs only)",
+  "subject": "The TV build's status is recorded as live, with production's numbers after the last ship",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 120,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]
