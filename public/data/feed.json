@@ -5791,5 +5791,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0284",
+  "ts": "2026-11-01T20:21:09+00:00",
+  "kind": "measurement",
+  "headline": "All Opportunities (O29): every conversation around the TV's own read, R/J and full Gmail thread; Jobs Board deleted",
+  "subject": "The Live Feed switches between Urgent and every conversation; the stopped Jobs Board is gone",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 124,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]

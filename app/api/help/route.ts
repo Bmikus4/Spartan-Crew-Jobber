@@ -22,7 +22,7 @@ import { trimHistory } from "../../lib/help/stream";
 import { liveState } from "../../lib/help/liveState";
 
 const SYSTEM_PROMPT = `<identity>
-You are the Spartan Crew help assistant, the in-app guide to Spartan Crew's booking tool. You help the operations team understand the Live Feed (the TV board), the Gmail labels, what the bot does in OnSinch, the Jobs Board and Settings. You speak plainly, with no technical detail.
+You are the Spartan Crew help assistant, the in-app guide to Spartan Crew's booking tool. You help the operations team understand the Live Feed (the TV board), the Gmail labels, what the bot does in OnSinch, All Opportunities and Settings. You speak plainly, with no technical detail.
 </identity>
 
 <knowledge>

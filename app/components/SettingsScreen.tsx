@@ -16,7 +16,7 @@ import InstallButton from "./InstallButton";
 
 type ReplyDelivery = "draft" | "send";
 type ReplyScope = "all" | "enquiries";
-interface Settings { replies_enabled: boolean; test_data_autoclear?: boolean; create_lead_days?: number; create_lead_enabled?: boolean; create_lead_applies_to?: "creates" | "changes" | "both"; jobs_board_enabled?: boolean; analytics_tab_enabled?: boolean; intake_paused?: boolean; bot_writes_enabled?: boolean; reply_delivery: ReplyDelivery; reply_scope: ReplyScope; default_rate_card: number }
+interface Settings { replies_enabled: boolean; test_data_autoclear?: boolean; create_lead_days?: number; create_lead_enabled?: boolean; create_lead_applies_to?: "creates" | "changes" | "both"; analytics_tab_enabled?: boolean; intake_paused?: boolean; bot_writes_enabled?: boolean; reply_delivery: ReplyDelivery; reply_scope: ReplyScope; default_rate_card: number }
 
 const SETTINGS_FALLBACK: Settings = { replies_enabled: false, reply_delivery: "draft", reply_scope: "all", default_rate_card: 315 };
 
@@ -242,16 +242,10 @@ export default function SettingsScreen({ signedInAs }: { signedInAs?: string }) 
 
         <Panel
           title="Screens"
-          blurb={<>The Live Feed is the ops list: it carries every job from the old Jobs Board as completed. The board can come back to the menu here. Analytics opens from its folder tab, which is always at the top of this screen and on the TV board when switched on.</>}
+          blurb={<>The Live Feed is the ops list: Urgent is what the TV shows, and All Opportunities is every conversation. Analytics opens from its folder tab, which is always at the top of this screen and on the TV board when switched on.</>}
         >
           <div style={{ display: "flex", flexDirection: "column", gap: 13 }}>
             <div>
-              <h3 style={{ fontSize: 13, fontWeight: 700, color: INK, margin: 0 }}>Jobs Board in the menu</h3>
-              <p style={{ fontSize: 12.5, color: MUT, margin: "5px 0 0", lineHeight: 1.55 }}>Off by default.</p>
-            </div>
-            <Segmented label="Jobs Board in the menu" value={!!s.jobs_board_enabled} onChange={(v) => save({ ...s, jobs_board_enabled: v })}
-              options={[{ id: false, label: "Off" }, { id: true, label: "On" }]} />
-            <div style={{ borderTop: `1px solid ${BORDER}`, paddingTop: 14 }}>
               <h3 style={{ fontSize: 13, fontWeight: 700, color: INK, margin: 0 }}>Analytics tab on the TV board</h3>
               <p style={{ fontSize: 12.5, color: MUT, margin: "5px 0 0", lineHeight: 1.55 }}>Off by default.</p>
             </div>

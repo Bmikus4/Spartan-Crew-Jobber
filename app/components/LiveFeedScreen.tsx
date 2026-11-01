@@ -22,6 +22,7 @@ import { BrandMark, BrandWordmark } from "./BrandLogo";
 import FolderTab from "./FolderTab";
 import AnalyticsPopup from "./AnalyticsPopup";
 import HistoryPicker, { momentLabel, type PastList } from "./FeedHistory";
+import OpportunitiesScreen from "./OpportunitiesScreen";
 
 interface FeedResponse {
   ok: boolean;
@@ -286,7 +287,7 @@ const clamp = (lines: number): React.CSSProperties => ({ display: "-webkit-box",
  *   3. the one thing to check, the PO, who wrote and how long ago; on a done tile, what was done.
  * Fixed columns keep every number and every Confirm on one vertical down the screen.
  */
-const JobTile = memo(function JobTile({ card, now, s, phase, onTick, readOnly = false }: { card: FeedCard; now: number; s: number; phase: Phase; onTick: (c: FeedCard, it: FeedItem, checked: boolean) => void; readOnly?: boolean }) {
+const JobTile = memo(function JobTile({ card, now, s, phase, onTick, readOnly = false, onOpen }: { card: FeedCard; now: number; s: number; phase: Phase; onTick: (c: FeedCard, it: FeedItem, checked: boolean) => void; readOnly?: boolean; onOpen?: (thread: string) => void }) {
   const it = orderItem(card);
   const lead = it ?? card.items[0];
   const done = card.green;
@@ -315,6 +316,15 @@ const JobTile = memo(function JobTile({ card, now, s, phase, onTick, readOnly = 
           <Badge s={s} text={label.text} ok={label.ok} />
           {hasReply(card) && it && <Badge s={s} text="Needs Reply" ok={false} />}
           {card.follow_up && <Badge s={s} text="Needs Follow Up" ok={false} />}
+          {/* Opens this job's conversation in All Opportunities. Not on the office TV: nobody clicks a wall. */}
+          {onOpen && (
+            <button onClick={() => onOpen(card.thread_id)} aria-label="Open in All Opportunities" title="Open in All Opportunities"
+              style={{ width: 34 * s, height: 34 * s, flexShrink: 0, display: "grid", placeItems: "center", padding: 0, border: "1px solid var(--border)", borderRadius: 8 * s, background: "transparent", color: "var(--text-secondary)", cursor: "pointer" }}>
+              <svg width={20 * s} height={20 * s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                <path d="M14 3h7v7" /><path d="M10 14L21 3" /><path d="M21 14v5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5" />
+              </svg>
+            </button>
+          )}
         </div>
         {card.ask && <div style={{ fontSize: 20 * s, fontWeight: 500, lineHeight: 1.3, color: "var(--text-primary)", ...clamp(2) }}>{card.ask}</div>}
         <div style={{ fontSize: 17 * s, fontWeight: 500, color: "var(--text-muted)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
@@ -369,6 +379,11 @@ export default function LiveFeedScreen({ isActive, tv = false }: { isActive: boo
   /** The list as it stood at a moment picked from History: shown read-only until Back to live. */
   const [historyOpen, setHistoryOpen] = useState(false);
   const [past, setPast] = useState<PastList | null>(null);
+  /** Urgent (the TV's list, the default) or All Opportunities; the office TV is always Urgent. */
+  const [view, setView] = useState<"urgent" | "all">("urgent");
+  const [focus, setFocus] = useState<string | null>(null);
+  const openInAll = useCallback((thread: string) => { setPast(null); setFocus(thread); setView("all"); }, []);
+  const focused = useCallback(() => setFocus(null), []);
   // The office screen never stays in the past: left in History, it is back to live after five minutes.
   useEffect(() => {
     if (!past) return;
@@ -600,6 +615,16 @@ export default function LiveFeedScreen({ isActive, tv = false }: { isActive: boo
           <BrandMark height={38 * s} />
         </div>
 
+        {!tv && (
+          <div className="seg" role="tablist" aria-label="Urgent or All Opportunities" style={{ flexShrink: 0 }}>
+            {([["urgent", "Urgent"], ["all", "All Opportunities"]] as const).map(([id, label]) => (
+              <button key={id} className="seg__btn" role="tab" aria-selected={view === id} aria-pressed={view === id} onClick={() => { setPast(null); setView(id); }} style={{ padding: "8px 16px", fontSize: 13.5, fontWeight: 700 }}>
+                {label}
+              </button>
+            ))}
+          </div>
+        )}
+
         <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 32 * s, flexWrap: "wrap" }}>
           {kpis.map((k) => (
             <div key={k.label} style={{ display: "flex", flexDirection: "column", alignItems: "flex-end" }}>
@@ -635,6 +660,9 @@ export default function LiveFeedScreen({ isActive, tv = false }: { isActive: boo
         </div>
       )}
 
+      {view === "all" && !tv ? (
+        <div style={{ flex: 1, minHeight: 0 }}><OpportunitiesScreen isActive={isActive} focus={focus} onFocused={focused} /></div>
+      ) : (
       <div style={{ position: "relative", flex: 1, minHeight: 0, display: "flex" }}>
         <div ref={listRef} className="feed-list" onScroll={() => { lastScrollAt.current = Date.now(); }} style={{ flex: 1, minHeight: 0, overflowY: "auto", display: "flex", flexDirection: "column", gap: 12 * s, paddingBottom: 8 * s }}>
           {data == null ? (
@@ -650,12 +678,12 @@ export default function LiveFeedScreen({ isActive, tv = false }: { isActive: boo
                 <Fragment key={card.thread_id}>
                   {/* Sunk, not hidden (Ben, 2026-10-05): the label says why these sit lower. */}
                   {card.quiet && !openRows[i - 1]?.quiet && <Section s={s} label={`Nothing New For ${QUIET_MS / 86_400_000}+ Days`} n={openRows.filter((x) => x.quiet).length} />}
-                  <JobTile card={card} now={tileNow} s={s} phase={phaseOf(card)} onTick={past ? noTick : tick} readOnly={!!past} />
+                  <JobTile card={card} now={tileNow} s={s} phase={phaseOf(card)} onTick={past ? noTick : tick} readOnly={!!past} onOpen={tv ? undefined : openInAll} />
                 </Fragment>
               ))}
               <Section s={s} label="Done" n={doneRows.length} color={GREEN} />
               {/* Done tiles redraw once a minute, not every second: with the jobs board carried over there are hundreds. */}
-              {doneRows.map((card) => <JobTile key={card.thread_id} card={card} now={Math.floor(tileNow / 60_000) * 60_000} s={s} phase="steady" onTick={past ? noTick : tick} readOnly={!!past} />)}
+              {doneRows.map((card) => <JobTile key={card.thread_id} card={card} now={Math.floor(tileNow / 60_000) * 60_000} s={s} phase="steady" onTick={past ? noTick : tick} readOnly={!!past} onOpen={tv ? undefined : openInAll} />)}
               {c && c.older > 0 && (
                 <div style={{ padding: `${10 * s}px ${4 * s}px`, fontSize: 15 * s, color: "var(--text-muted)", flexShrink: 0 }}>
                   {c.older} older undated {c.older === 1 ? "enquiry" : "enquiries"} with no word from the client for two weeks, not shown.
@@ -672,6 +700,7 @@ export default function LiveFeedScreen({ isActive, tv = false }: { isActive: boo
           </div>
         )}
       </div>
+      )}
 
       {analyticsOpen && <AnalyticsPopup onClose={() => setAnalyticsOpen(false)} />}
       {historyOpen && <HistoryPicker s={s} onClose={() => setHistoryOpen(false)} onPick={(l) => { setPast(l); setHistoryOpen(false); listRef.current?.scrollTo({ top: 0 }); }} />}

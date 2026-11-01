@@ -61,14 +61,15 @@ ok(missing.length === 0, "none is missing from the shipped UI", missing.join(" |
 console.log("\n[2] every rail item is named in bold");
 const sidebar = readFileSync("app/components/Sidebar.tsx", "utf8");
 const rail = [...sidebar.matchAll(/\{ id: "[a-z]+", label: "([^"]+)"/g)].map((m) => m[1]);
-ok(rail.length >= 3, `${rail.length} rail items read from Sidebar.tsx`, rail.join(", "));
+ok(rail.length >= 2, `${rail.length} rail items read from Sidebar.tsx`, rail.join(", "));
 const named = new Set(bolds(HELP_KNOWLEDGE).map((b) => b.toLowerCase()));
 const unnamed = rail.filter((l) => !named.has(l.toLowerCase()));
 ok(unnamed.length === 0, "the guide names each of them", unnamed.join(", "));
 
 console.log("\n[3] retired names stay out of the guide, the greeting and the prompt");
-// "Built" was renamed to "Created" on 2026-10-15; the Everything tab went on 2026-10-21.
-const RETIRED = ["Order Built", "Order Needs Built", "Everything tab", "Hud Assistant", "Kairo"];
+// "Built" was renamed to "Created" on 2026-10-15; the Everything tab went on 2026-10-21; the Jobs Board was replaced by
+// All Opportunities on 2026-11-01.
+const RETIRED = ["Order Built", "Order Needs Built", "Everything tab", "Hud Assistant", "Kairo", "Jobs Board"];
 const text = `${HELP_KNOWLEDGE}\n${HELP_GREETING}\n${PROMPT}`.toLowerCase();
 const back = RETIRED.filter((r) => text.includes(r.toLowerCase()));
 ok(back.length === 0, "none is back", back.join(", "));

@@ -123,7 +123,7 @@ async function held() {
  * Every thread linked to exactly one live order. An order OnSinch has deleted is no thread's order, so the card
  * shows no R or J for it rather than one OnSinch may give to another client's order (DECISIONS D6).
  */
-async function liveLinks(): Promise<Array<LiveLink & { thread_id: string }>> {
+export async function liveLinks(): Promise<Array<LiveLink & { thread_id: string }>> {
   const [t] = (await db()`SELECT to_regclass('public.job_links') AS t`) as { t: string | null }[];
   if (!t?.t) return [];
   const rows = (await db()`SELECT l.thread_id, min(l.order_id) AS order_id, min(l.r_number) AS r_number, min(l.job_id) AS job_id, min(l.proof) AS proof

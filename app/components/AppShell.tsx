@@ -7,7 +7,6 @@
 
 import { useEffect, useState } from "react";
 import Sidebar from "./Sidebar";
-import JobsScreen from "./JobsScreen";
 import LiveFeedScreen from "./LiveFeedScreen";
 import SettingsScreen from "./SettingsScreen";
 import LoginScreen from "./LoginScreen";
@@ -15,27 +14,17 @@ import OnboardingFlow from "./onboarding/OnboardingFlow";
 import HelpWidget from "./HelpWidget";
 import TipHost from "./ui/TipHost";
 
-// TWO SCREENS (Ben, 2026-10-11): the Live Feed, which is the ops list, and Settings. The Jobs
-// Board returns only when Settings switches it on; Analytics is a popup from a folder tab.
-type Tool = "jobs" | "live" | "settings";
+// TWO SCREENS (Ben, 2026-10-11): the Live Feed, which is the ops list, and Settings. Every conversation is the Live
+// Feed's All Opportunities (the owner, 1 Nov), which replaced the Jobs Board; Analytics is a popup from a folder tab.
+type Tool = "live" | "settings";
 
-const TITLES: Record<Tool, string> = { jobs: "Jobs Board", live: "Live Feed", settings: "Settings" };
+const TITLES: Record<Tool, string> = { live: "Live Feed", settings: "Settings" };
 
 interface Auth { loading: boolean; authenticated: boolean; authRequired: boolean; name?: string; email?: string }
 
 export default function AppShell() {
   const [tool, setTool] = useState<Tool>("live");
-  const [jobsBoard, setJobsBoard] = useState(false);
-  useEffect(() => {
-    const read = async () => {
-      try { const r = await fetch("/api/settings", { cache: "no-store" }); if (r.ok) setJobsBoard(!!(await r.json()).jobs_board_enabled); } catch { /* keep what it was */ }
-    };
-    void read();
-    window.addEventListener("spartan:settings", read);
-    return () => window.removeEventListener("spartan:settings", read);
-  }, []);
-  // Switching the board off while it is open lands on the Live Feed, not on a blank window.
-  const shown: Tool = tool === "jobs" && !jobsBoard ? "live" : tool;
+  const shown: Tool = tool;
   const [auth, setAuth] = useState<Auth>({ loading: true, authenticated: false, authRequired: false });
   // ?tv=1 is the office TV: the live feed alone, no rail and no title bar. Read in an
   // effect, not during render, so the server's first paint and the client's agree.
@@ -89,7 +78,7 @@ export default function AppShell() {
       {/* The rail is flush and unframed; the content window is the only framed thing
           on screen. It used to be a second floating card with its own border, radius
           and inset highlight, competing with the panel that holds the work. */}
-      <Sidebar activeTool={shown} jobsBoard={jobsBoard} onSelectTool={(id) => setTool(id as Tool)} onSettings={() => setTool("settings")} />
+      <Sidebar activeTool={shown} onSelectTool={(id) => setTool(id as Tool)} onSettings={() => setTool("settings")} />
 
       <main style={{ flex: 1, minWidth: 0, height: "calc(100% - var(--shell-double-pad))", margin: "var(--shell-pad) var(--shell-pad) var(--shell-pad) 0", display: "flex", flexDirection: "column" }} className="frosted-glass">
         {/* THE window's one title bar. It used to hold a plain 13px title while each
@@ -108,7 +97,6 @@ export default function AppShell() {
               there — a number you cannot act on is only half a dashboard. */}
           {shown === "settings"
             ? <SettingsScreen signedInAs={auth.authenticated ? auth.email : undefined} />
-            : shown === "jobs" ? <JobsScreen isActive />
             : <LiveFeedScreen isActive />}
         </div>
       </main>

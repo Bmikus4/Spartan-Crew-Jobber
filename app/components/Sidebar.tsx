@@ -32,8 +32,6 @@ interface NavItemConfig {
 
 interface SidebarProps {
   activeTool: string;
-  /** The Jobs Board row shows only when Settings turns it on. */
-  jobsBoard?: boolean;
   onSelectTool: (toolId: string) => void;
   onSettings: () => void;
 }
@@ -65,22 +63,12 @@ function IconSettings() {
     </svg>
   );
 }
-function IconJobs() {
-  return (
-    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="3" y="7" width="18" height="13" rx="2" />
-      <path d="M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-      <line x1="3" y1="12" x2="21" y2="12" />
-    </svg>
-  );
-}
 
 // The DEFAULT order; each reader can drag their own (app/lib/navOrder.ts). The TV feed
 // leads (Ben, 2026-10-04). Settings is an ordinary row at the end of the list, not a
 // pinned footer bay with its own divider — the same call the quote tool made (Ben, 2026-08-09).
 const NAV_ITEMS: NavItemConfig[] = [
   { id: "live", label: "Live Feed", icon: <IconLive /> },
-  { id: "jobs", label: "Jobs Board", icon: <IconJobs /> },
   { id: "settings", label: "Settings", icon: <IconSettings /> },
 ];
 const NAV_BEVEL_SHADOW = "inset 0 1px 0 rgba(255,255,255,0.08), 0 1px 2px rgba(0,0,0,0.25)";
@@ -140,7 +128,7 @@ function MobileBottomBar({ activeTool, onSelectTool, onSettings, items }: Sideba
   );
 }
 
-export default function Sidebar({ activeTool, jobsBoard = false, onSelectTool, onSettings }: SidebarProps) {
+export default function Sidebar({ activeTool, onSelectTool, onSettings }: SidebarProps) {
   const [expanded, setExpanded] = useState(false);
   const [hoveredItem, setHoveredItem] = useState<string | null>(null);
   const [isMobile, setIsMobile] = useState(false);
@@ -152,7 +140,7 @@ export default function Sidebar({ activeTool, jobsBoard = false, onSelectTool, o
   const [armed, setArmed] = useState<string | null>(null);
   const [dragId, setDragId] = useState<string | null>(null);
   const [over, setOver] = useState<string | null>(null);
-  const navItems = applyOrder(NAV_ITEMS.filter((i) => i.id !== "jobs" || jobsBoard), order);
+  const navItems = applyOrder(NAV_ITEMS, order);
 
   function dropOn(targetId: string) {
     if (!dragId) return;

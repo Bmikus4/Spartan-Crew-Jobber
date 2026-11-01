@@ -43,7 +43,6 @@ export function coerceSettings(body: unknown): Partial<Settings> {
   if (b.create_lead_applies_to === "creates" || b.create_lead_applies_to === "changes" || b.create_lead_applies_to === "both") next.create_lead_applies_to = b.create_lead_applies_to;
   if (typeof b.create_lead_days === "number" && Number.isInteger(b.create_lead_days) && b.create_lead_days >= 0 && b.create_lead_days <= 365)
     next.create_lead_days = b.create_lead_days;
-  if (typeof b.jobs_board_enabled === "boolean") next.jobs_board_enabled = b.jobs_board_enabled;
   if (typeof b.analytics_tab_enabled === "boolean") next.analytics_tab_enabled = b.analytics_tab_enabled;
   if (typeof b.intake_paused === "boolean") next.intake_paused = b.intake_paused;
   if (typeof b.bot_writes_enabled === "boolean") next.bot_writes_enabled = b.bot_writes_enabled;

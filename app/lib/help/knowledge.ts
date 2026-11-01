@@ -6,7 +6,7 @@
 // THE CODE IS THE SOURCE. This was written on 2026-10-21 from the screens as they stood at
 // 884fc3a. House of Hud's copy of this assistant answered 18 of 40 questions wrong after its guide
 // went seven weeks without an edit while the screens changed under it, so test/helpGuide.ts fails
-// when a **bold** phrase here is no longer a label the TV, Settings, the Jobs Board or the Gmail
+// when a **bold** phrase here is no longer a label the TV, Settings, All Opportunities or the Gmail
 // labels show, when a rail item goes unmentioned, or when a retired name comes back. Bold is for
 // labels only: a word bolded for emphasis fails that test.
 
@@ -20,13 +20,14 @@ The tool reads every email that reaches the bookings inbox and works out what th
 
 ## 2 · Signing in and getting around
 - Sign in with **Continue with Google**, using your Spartan Crew work account.
-- The menu (the rail) holds **Live Feed** (the board), **Jobs Board** (only when it is switched on in Settings) and **Settings**.
+- The menu (the rail) holds **Live Feed** (the board) and **Settings**.
+- At the top of the **Live Feed**, a switch shows **Urgent** (the jobs that need a person, the TV's list; the default) or **All Opportunities** (every conversation in the bookings inbox).
 - The office TV shows the **Live Feed** on its own, without the menu.
 
 ## 3 · The Live Feed (the TV board)
 One tile per job that needs a person. Each tile shows the client, a label, the job's R number and J number from OnSinch (R is the order, J is the job), and the day it starts: Today, Tomorrow or the date, with "+2 Days" when it runs longer. The line under the client says what is needed, for example "New booking 08:00-16:00, 4 crew", "Add 2 crew", "Times to 09:00-17:00", "Move Mon to Tue", "Cancel Fri 24 Oct" or "Quote request", or why the bot left it for a person.
 - The labels: **Order Needs Created** (the client asked for crew and the order still has to be made) and **Order Needs Updated** (a change the client asked for still has to be made in OnSinch), in orange. When the work is done the same tile reads **Order Created** or **Order Updated** in green. **Needs Reply** means the client asked something that needs an email answer.
-- Every job needing a person is listed. Its R and J are always its own order's, checked against OnSinch every minute by following the J (R numbers are reused after a delete, J numbers are not). A tile with no R or J is one whose order the system has not found yet, or a new enquiry nobody has booked. If an order is deleted, its tile says the order is no longer in OnSinch, without its old R. Tiles carried over from the old Jobs Board show only when their order still exists.
+- Every job needing a person is listed. Its R and J are always its own order's, checked against OnSinch every minute by following the J (R numbers are reused after a delete, J numbers are not). A tile with no R or J is one whose order the system has not found yet, or a new enquiry nobody has booked. If an order is deleted, its tile says the order is no longer in OnSinch, without its old R. Tiles carried over from the older board show only when their order still exists.
 - **Confirm** is the button to press once you have dealt with a job: the tile turns green, waits a moment, then moves to **Done**, and **Undo** appears for a few seconds in case it was the wrong one. A tile that turned green on its own (the bot made the change, or staff did it in OnSinch) shows **Done** and needs nothing. Its line then says what happened: **Done in OnSinch** with what staff did and on which order, or **Answered by a later email**. When staff worked on more than one order that could be the job, the tile stays open and says **Possibly done** in those orders, for a person to check; when only one of them is at the venue the email named, that one is taken as the job. A tile that is done stays under **Done** for 24 hours after the work, then leaves the board.
 - A job also leaves the board without turning green when its email thread shows it was settled and OnSinch shows it stands that way: the client accepted Spartan's quote or terms (a minimum call, a quote with other times than first asked), Spartan confirmed a cancellation it made, or the client took their own request back ("please ignore my last email") before anything was done. Nothing is left to do on those. If one was settled in a way the emails do not show, such as by phone, **Confirm** clears it.
 - A job whose days have all passed leaves the board.
@@ -49,14 +50,19 @@ When the bot is allowed to write (the live state below says whether it is now):
 - It never books something again from the history quoted in an email, and when staff built or changed a shift after the client's email, staff's version stands.
 - Every minute it checks each open card against OnSinch as it is now, so a job staff have since booked or changed by hand clears itself.
 
-## 6 · The Jobs Board
-The older board, off unless Settings, **Jobs Board in the menu**, is on. It lists the jobs the engine has handled, with **Search jobs** and **Filter by lane**. Each job says whether it is a **New job** or an **Update**, the **OnSinch order number** and **OnSinch job number**, **What the engine decided**, and its **Details**.
+## 6 · All Opportunities
+Every conversation in the bookings inbox since 9 October, one row per Gmail thread, newest first, with the jobs on the TV at the top in the TV's order. Every urgent job is in it: the list is built from the same read as the TV, so a job on the TV is never missing here.
+- Each row shows the client, the subject (or, for a job on the TV, what needs doing), its tags and, in columns, the R and J numbers of the order it is linked to in OnSinch, and when the last email came.
+- The tags: **New job**, **Update** or **Quote**; then where it stands: **On the TV** (a person still has to do something), **Done**, **Settled** (agreed in the emails and held in OnSinch), **Needs Reply**, **No action** (nothing was asked for), **Closed** (off the board, its days passed or dealt with earlier) or **Not read** (stored but never read by the system); then the J and R numbers.
+- The lanes above the list filter by those, plus **With an order**. The search box finds a client, a subject, or an R or J number.
+- Click a row to open the whole conversation beside the list, as Gmail shows it: the newest email open, older ones folded to a line (click to open them, or **Expand all**), and quoted history behind the **•••** button. Under each client email it says what the system decided about it. The R and J at the top copy when clicked.
+- On an **Urgent** tile, the square button with an arrow, **Open in All Opportunities**, opens that job's conversation here.
 
 ## 7 · Settings
 Changes here apply to the whole team.
 - **Bot orders and updates**: the master switch for the bot creating and updating orders in OnSinch; off by default. Off, every email is still read and decided, and anything the bot would have written appears on the board as a card to do by hand. (A second switch on the server must also be on before the bot writes.)
 - **AI email drafts**: one switch for every email the system writes into a Gmail thread, replies and chases alike; off by default. **Reply delivery**: **Draft** (left in Gmail for a person to send; the default) or **Send**. **Which emails get a reply**: **All emails** or **New enquiries only**.
-- **Screens**: **Jobs Board in the menu**, **Analytics tab on the TV board**.
+- **Screens**: **Analytics tab on the TV board**.
 - **Email intake paused**: the system has been switched off on purpose; the board shows **Intake Paused** instead of an error.
 - **New orders**: **Only create orders this far ahead**, with **Days ahead**.
 - **Test data**: **Clear test data automatically** removes the practice orders made on the test company.

@@ -475,11 +475,6 @@ export interface ConversationState {
 
 /** Client-tunable settings (surfaced in the Vercel settings menu). */
 export interface Settings {
-  /**
-   * The old Jobs Board in the rail (Ben, 2026-10-11): OFF by default. The TV is the ops list
-   * and carries the board's jobs as completed (feed/ported.ts); this brings the board back.
-   */
-  jobs_board_enabled?: boolean;
   /** The Analytics folder tab on the TV board (Ben, 2026-10-11). Settings always has it. */
   analytics_tab_enabled?: boolean;
   /**
@@ -587,7 +582,6 @@ export const DEFAULT_SETTINGS: Settings = {
   create_lead_days: 14,
   create_lead_enabled: true,
   create_lead_applies_to: "creates",
-  jobs_board_enabled: false,
   analytics_tab_enabled: false,
   intake_paused: false,
   bot_writes_enabled: false,
