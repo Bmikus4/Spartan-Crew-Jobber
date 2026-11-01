@@ -29,6 +29,8 @@ export const store = {
   nextOrder: 990000, nextNumber: 99000, nextJob: 990000, nextTeam: 990000, nextSlot: 9900000, nextAudit: 99000000,
   /** The lowest id a simulated audit row takes: a generated world has no real rows to number after, and the store reads from 867675. */
   auditFloor: 0,
+  /** Windows of simulated time in which every read answers 500, as OnSinch does when it fails (harness/gen O). */
+  down: [] as Array<{ from: number; to: number }>,
 };
 
 export type World = { orders: any[]; companies: any[]; places: any[]; professions: any[]; timeline: any[] };
@@ -95,6 +97,7 @@ export async function onsinch(method: string, url: string, body?: unknown): Prom
   const path = u.pathname.replace(/^.*\/api\/v1/, "").replace(/\/$/, "");
   calls.set(`${method} ${path}`, (calls.get(`${method} ${path}`) ?? 0) + 1);
   if (path === "/users/profile") return { status: 200, data: { data: { id: 2257, name: "Samurai AI" } } };
+  if (method === "GET" && store.down.some((w) => clock.now() >= w.from && clock.now() < w.to)) return { status: 500, data: null };
   if (method === "GET") return list(path, u.searchParams);
   if (method === "DELETE" && path === "/orders") { for (const id of (body as number[]) ?? []) deleteOrder(Number(id)); return { status: 204, data: null }; }
   if (method === "DELETE" && path === "/companies") return { status: 204, data: null };

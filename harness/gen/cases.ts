@@ -16,11 +16,14 @@ const H = 3600e3, MIN = 60e3, DAY = 864e5;
 export type Email = { at: number; subject: string; body: string; from: string; oracle: Extraction };
 export type StaffStep = { at: number; note: string; act: (orders: any[]) => void };
 export type Look = { at: number; label: string; state: "open" | "done" | "possibly" | "absent" | "reply"; kind?: "needs-created" | "needs-updated"; name?: string; days?: string[] };
-export type Expected = { decision: "write" | "handoff" | "none"; reason?: RegExp; calls?: Call[]; change?: "times" | "crew" | "cancel" | "add" | "po" };
+/** `email`: which of the case's emails is judged (default the first); `order`: which of its orders a change must touch. */
+export type Expected = { decision: "write" | "handoff" | "none"; reason?: RegExp; calls?: Call[]; change?: "times" | "crew" | "cancel" | "add" | "po"; email?: number; order?: number };
 export type GenCase = {
   id: string; category: string; variant: string; client: Client; sender: string; today: string; t0: number;
   orders: Array<{ calls: Call[]; po?: string | null; by: number; title?: string; number?: string }>;
   emails: Email[]; staff: StaffStep[]; looks: Look[]; expect: Expected;
+  /** Windows (ms from t0) in which OnSinch answers every read with a 500. */
+  faults?: Array<{ from: number; to: number }>;
 };
 
 type Ctx = { r: Rng; n: number; client: Client; contact: Client["contacts"][number]; t0: number; today: string };
@@ -113,7 +116,9 @@ function change(ctx: Ctx, kind: "times" | "crew-add" | "crew-total" | "move" | "
   let text = "", rqs: RawRequest[] = [], after: (o: any) => void, moved: string | null = null;
   const by = pick(r, staff.STAFF);
   if (kind === "times") {
-    const t = drawTimes(r);
+    let t = drawTimes(r);
+    // New times equal to the booked ones are no change at all ("already as asked").
+    while (t.start === c.start && t.end === c.end) t = drawTimes(r);
     const rg = rangeWords(t.start, t.end, r);
     text = pick(r, [`Can we change ${which} to ${rg.text} please?`, `Small change for ${which}: the times are now ${rg.text}.`]);
     rqs = [req({ action: "change_times", date: g(c.date, w.day), start: g(t.start, rg.a), end: g(t.end, rg.b), target })];
@@ -162,9 +167,208 @@ function change(ctx: Ctx, kind: "times" | "crew-add" | "crew-total" | "move" | "
       { at: 2 * MIN, label: "after the email", state: "open", kind: "needs-updated", name: ctx.client.name, days },
       { at: 2 * H + 2 * MIN, label: "after staff", state: "done" },
     ],
-    expect: refused ? { decision: "handoff", reason: /no order is named/ }
+    // Refused by the finder ("no order is named") or, when the reader named the order, by the pick check (interpret.ts).
+    expect: refused ? { decision: "handoff", reason: /no order is named|nothing more does not single out/ }
       : { decision: "write", change: kind.startsWith("cancel") ? "cancel" : kind.startsWith("crew") ? "crew" : "times" },
   };
+}
+
+// ---- references, threads, questions, bespoke jobs, adversarial wording, OnSinch faults ---------------------------
+const ONE = { trades: false, venues: 1, days: 1, callsPerDay: 1 } as const;
+/** Two orders of the client's on different days at different venues; the email is about the second. */
+function pair(ctx: Ctx): [Call, Call] {
+  const a = drawJob(ctx.r, ctx.today, PLACES, ONE).calls[0];
+  let b = drawJob(ctx.r, ctx.today, PLACES, ONE).calls[0];
+  if (b.date === a.date) b = { ...b, date: addDays(b.date, 2) };
+  if (b.place.id === a.place.id) b = { ...b, place: PLACES.find((p) => p.id !== a.place.id)! };
+  return [a, b];
+}
+/** Every call moved later until the first is more than two weeks out, so the planner's write is what is judged. */
+const far = (ctx: Ctx, job: Job): Job => {
+  const first = job.calls.map((c) => c.date).sort()[0];
+  const gap = Math.round((Date.parse(`${first}T12:00:00Z`) - Date.parse(`${ctx.today}T12:00:00Z`)) / DAY);
+  return gap > 14 ? job : { ...job, calls: job.calls.map((c) => ({ ...c, date: addDays(c.date, 15 - gap + int(ctx.r, 0, 20)) })) };
+};
+
+/** G: which order a reference names, among two of the client's. */
+function reference(ctx: Ctx, kind: "po on two orders" | "R quoted from an old message" | "R OnSinch does not hold"): Omit<GenCase, "id" | "category"> {
+  const { r } = ctx;
+  const [a, b] = pair(ctx);
+  const w = callWords(b, r), t = drawTimes(r), rg = rangeWords(t.start, t.end, r);
+  const numA = String(71000 + ctx.n), numB = String(72000 + ctx.n);
+  const po = kind === "po on two orders" ? `${pick(r, ["PO", "SC", "4500"])}${int(r, 10000, 99999)}` : null;
+  const by = pick(r, staff.STAFF);
+  const rq = req({ action: "change_times", date: g(b.date, w.day), start: g(t.start, rg.a), end: g(t.end, rg.b), target: { quote: w.day, date: g(b.date, w.day), start: null } });
+  let text = "", tail = "", oPo: Extraction["po"] = null, expect: Expected;
+  if (kind === "po on two orders") {
+    // One PO on both orders (O18): the day picks the one holding it.
+    const q = `PO ${po}`;
+    text = `For ${q}, can we change ${w.day} to ${rg.text} please?`;
+    oPo = g(po!, q);
+    expect = { decision: "write", change: "times", order: 1 };
+  } else if (kind === "R quoted from an old message") {
+    // An R in the quoted history is the old order's, not this email's.
+    text = `Can we change ${w.day} at ${b.place.name} to ${rg.text} please?`;
+    tail = `\n\nOn ${dayWords(addDays(ctx.today, -20), r)}, Bookings Spartan Crew <bookings@spartancrew.co.uk> wrote:\n> Hi, R${numA} is booked in for you.\n> Thanks, Dan`;
+    rq.venue = g(b.place.name, b.place.name);
+    expect = { decision: "write", change: "times", order: 1 };
+  } else {
+    // A number OnSinch does not hold is said, never passed over for a weaker find (plan.ts findOrder).
+    text = `Can we change R${90000 + ctx.n} on ${w.day} at ${b.place.name} to ${rg.text} please?`;
+    rq.venue = g(b.place.name, b.place.name);
+    expect = { decision: "handoff", reason: /not found/ };
+  }
+  return {
+    variant: kind, client: ctx.client, sender: ctx.contact.email, today: ctx.today, t0: ctx.t0,
+    orders: [{ calls: [a], by, po, number: numA }, { calls: [b], by, po, number: numB }],
+    emails: [{ at: 0, subject: pick(r, ["Change to booking", "Booking change", "Times"]), body: letter(ctx, text) + tail, from: ctx.contact.email, oracle: ex("change", [rq], oPo) }],
+    staff: [{ at: 2 * H, note: "staff change the times on the order meant", act: (os) => staff.setTimes(os[1], 0, b.date, t.start, t.end, by) }],
+    looks: [
+      { at: 2 * MIN, label: "after the email", state: "open", kind: "needs-updated", name: ctx.client.name, days: [b.date] },
+      { at: 2 * H + 2 * MIN, label: "after staff", state: "done" },
+    ],
+    expect,
+  };
+}
+
+/** H: a thread's later email: a correction, a thanks, the missing detail. */
+function thread(ctx: Ctx, kind: "correction" | "confirmation" | "missing crew sent later"): Omit<GenCase, "id" | "category"> {
+  const { r } = ctx;
+  const by = pick(r, staff.STAFF);
+  if (kind === "missing crew sent later") {
+    const job = drawJob(r, ctx.today, PLACES, ONE), c = job.calls[0], w = callWords(c, r);
+    const first = `Could we get some crew on ${w.day}, ${w.rg.text} at ${c.place.name}?`;
+    const rq1 = req({ action: "new_shift", date: g(c.date, w.day), start: g(c.start, w.rg.a), end: g(c.end, w.rg.b), venue: g(c.place.name, c.place.name) });
+    const second = `Sorry, forgot to say: ${w.who} please.`;
+    const rq2 = { ...rq1, crew: g(c.crew, w.who) };
+    return {
+      variant: kind, client: ctx.client, sender: ctx.contact.email, today: ctx.today, t0: ctx.t0, orders: [],
+      emails: [
+        { at: 0, subject: "Crew", body: letter(ctx, first), from: ctx.contact.email, oracle: ex("booking", [rq1]) },
+        { at: 3 * H, subject: "Re: Crew", body: letter(ctx, second), from: ctx.contact.email, oracle: ex("booking", [rq2]) },
+      ],
+      staff: [{ at: 6 * H, note: "staff make the order", act: (os) => { os.push(staff.createOrder(ctx.client, job.calls, by)); } }],
+      looks: [
+        { at: 2 * MIN, label: "after the first email", state: "reply" },
+        { at: 3 * H + 2 * MIN, label: "after the crew count", state: "open", kind: "needs-created", name: ctx.client.name, days: [c.date] },
+        { at: 6 * H + 2 * MIN, label: "after staff", state: "done" },
+      ],
+      expect: lead14(ctx, job.calls) ? { decision: "handoff", reason: /within \d+ days of the email/, email: 1 } : { decision: "write", calls: job.calls, email: 1 },
+    };
+  }
+  const job = drawJob(r, ctx.today, PLACES, ONE), c = job.calls[0], w = callWords(c, r);
+  if (kind === "confirmation") {
+    const text = pick(r, [`Thanks, that's all confirmed for ${w.day} at ${c.place.name}.`, `Perfect, thanks for confirming ${w.day}.`, "Great, thank you!"]);
+    return {
+      variant: kind, client: ctx.client, sender: ctx.contact.email, today: ctx.today, t0: ctx.t0,
+      orders: [{ calls: job.calls, by, number: String(73000 + ctx.n) }],
+      emails: [{ at: 0, subject: `Re: Booking ${c.place.name}`, body: letter(ctx, text), from: ctx.contact.email, oracle: ex("info_only", []) }],
+      staff: [], looks: [{ at: 2 * MIN, label: "after the thanks", state: "absent" }],
+      expect: { decision: "none" },
+    };
+  }
+  const t1 = drawTimes(r), rg1 = rangeWords(t1.start, t1.end, r);
+  let t2 = drawTimes(r);
+  if (t2.start === t1.start) t2 = { start: t1.start === "09:00" ? "10:00" : "09:00", end: t1.end };
+  const rg2 = rangeWords(t2.start, t2.end, r);
+  const target = { quote: w.day, date: g(c.date, w.day), start: null };
+  return {
+    variant: kind, client: ctx.client, sender: ctx.contact.email, today: ctx.today, t0: ctx.t0,
+    orders: [{ calls: job.calls, by, number: String(73000 + ctx.n) }],
+    emails: [
+      { at: 0, subject: "Change to booking", body: letter(ctx, `Can we change ${w.day} at ${c.place.name} to ${rg1.text} please?`), from: ctx.contact.email,
+        oracle: ex("change", [req({ action: "change_times", date: g(c.date, w.day), start: g(t1.start, rg1.a), end: g(t1.end, rg1.b), venue: g(c.place.name, c.place.name), target })]) },
+      { at: DAY, subject: "Re: Change to booking", body: letter(ctx, `Sorry, my mistake: can ${w.day} be ${rg2.text} instead?`), from: ctx.contact.email,
+        oracle: ex("change", [req({ action: "change_times", date: g(c.date, w.day), start: g(t2.start, rg2.a), end: g(t2.end, rg2.b), target })]) },
+    ],
+    staff: [
+      { at: 2 * H, note: "staff make the first change", act: (os) => staff.setTimes(os[0], 0, c.date, t1.start, t1.end, by) },
+      { at: DAY + 2 * H, note: "staff make the correction", act: (os) => staff.setTimes(os[0], 0, c.date, t2.start, t2.end, by) },
+    ],
+    looks: [
+      { at: 2 * H + 2 * MIN, label: "after the first change", state: "done" },
+      { at: DAY + 2 * MIN, label: "after the correction", state: "open", kind: "needs-updated", name: ctx.client.name, days: [c.date] },
+      { at: DAY + 2 * H + 2 * MIN, label: "after staff correct it", state: "done" },
+    ],
+    expect: { decision: "write", change: "times", order: 0, email: 1 },
+  };
+}
+
+/**
+ * I: a price or a question. A quote naming its shifts is booked as an order, as ops book it (plan.ts: of the quote
+ * requests 9-13 Oct that named their shifts, ops raised an order for every one), its card saying to price it; one
+ * naming none (a rate card) is a reply the client is owed.
+ */
+function question(ctx: Ctx, kind: "quote for a job" | "rates"): Omit<GenCase, "id" | "category"> {
+  const { r } = ctx;
+  const job = drawJob(r, ctx.today, PLACES, ONE), c = job.calls[0], w = callWords(c, r);
+  const near = lead14(ctx, job.calls);
+  const text = kind === "rates" ? pick(r, ["What are your rates for crew at weekends, and is there a minimum call?", "Could you send over your current rate card please?"])
+    : pick(r, [`Could you send me a quote for ${w.who} on ${w.day}, ${w.rg.text} at ${c.place.name}?`, `How much would ${w.who} be for ${w.day}, ${w.rg.text} at ${c.place.name}?`]);
+  return {
+    variant: kind, client: ctx.client, sender: ctx.contact.email, today: ctx.today, t0: ctx.t0, orders: [],
+    emails: [{ at: 0, subject: pick(r, ["Quote", "Pricing", "Rates"]), body: letter(ctx, text), from: ctx.contact.email, oracle: ex("quote_request", kind === "rates" ? [] : [reqOf(c, w)]) }],
+    staff: [], looks: [kind === "rates" ? { at: 2 * MIN, label: "after the email", state: "reply" } : { at: 2 * MIN, label: "after the email", state: "open", kind: "needs-created", name: ctx.client.name, days: [c.date] }],
+    expect: kind === "rates" ? { decision: "handoff", reason: /quote/ } : near ? { decision: "handoff", reason: /within \d+ days of the email/ } : { decision: "write", calls: job.calls },
+  };
+}
+
+/** L: rare jobs inside the rules, more than two weeks out so the write itself is judged. */
+function bespoke(ctx: Ctx, kind: "6 days at 2 venues with trades" | "a 4am call" | "11-20 crew on one call" | "overnight call"): Omit<GenCase, "id" | "category"> {
+  const { r } = ctx;
+  let job: Job;
+  if (kind === "6 days at 2 venues with trades") {
+    job = drawJob(r, ctx.today, PLACES, { days: 6, venues: 2, trades: false, callsPerDay: 1 });
+    const t = TRADES[int(r, 1, TRADES.length - 1)][0];
+    job.calls = job.calls.map((c, k) => (k % 3 === 2 ? { ...c, trade: t, crew: int(r, 1, 3) } : c));
+  } else {
+    job = drawJob(r, ctx.today, PLACES, ONE);
+    const c = job.calls[0];
+    job.calls[0] = kind === "a 4am call" ? { ...c, start: "04:00", end: "08:00" } : kind === "overnight call" ? { ...c, start: "22:00", end: "06:00" } : { ...c, crew: int(r, 11, 20) };
+  }
+  return booking(ctx, far(ctx, job), { variant: kind });
+}
+
+/** N: the booking wrapped in what real mail wraps it in. */
+function adversarial(ctx: Ctx, kind: "forwarded" | "signature full of numbers" | "PO inside a link" | "out of office" | "quoted history"): Omit<GenCase, "id" | "category"> {
+  const { r } = ctx;
+  if (kind === "out of office") {
+    const back = dayWords(addDays(ctx.today, int(r, 2, 9)), r);
+    return {
+      variant: kind, client: ctx.client, sender: ctx.contact.email, today: ctx.today, t0: ctx.t0, orders: [],
+      emails: [{ at: 0, subject: "Automatic reply: Crew booking", from: ctx.contact.email, oracle: ex("info_only", []),
+        body: `Thank you for your email. I am out of the office until ${back} with limited access to email. For anything urgent please call the office on 020 7946 0${int(r, 100, 999)}.` }],
+      staff: [], looks: [{ at: 2 * MIN, label: "after the auto-reply", state: "absent" }],
+      expect: { decision: "none" },
+    };
+  }
+  const job = far(ctx, drawJob(r, ctx.today, PLACES, ONE));
+  if (kind === "PO inside a link") job.po = `PO${int(r, 10000, 99999)}`;
+  const base = booking(ctx, job, { variant: kind, noise: kind === "quoted history" });
+  const e = base.emails[0];
+  if (kind === "forwarded") {
+    const fwd = pick(r, ctx.client.contacts.filter((x) => x.email !== ctx.contact.email).concat(ctx.client.contacts));
+    e.body = `Hi,\n\nPlease see below, can you book this in?\n\nThanks\n${ctx.contact.name}\n\n---------- Forwarded message ---------\nFrom: ${fwd.name} ${fwd.surname} <${fwd.email}>\nSubject: ${e.subject}\n\n${e.body}`;
+  }
+  if (kind === "signature full of numbers") e.body += `\nUnit ${int(r, 2, 40)}, ${int(r, 10, 99)}-${int(r, 100, 199)} Mill Lane, London E3 2AB\nT: 020 7946 0${int(r, 100, 999)} | M: 07700 900${int(r, 100, 999)}\nRegistered in England and Wales No. 0${int(r, 1000000, 9999999)}`;
+  if (kind === "PO inside a link" && e.oracle.po) {
+    e.body = e.body.replace(e.oracle.po.quote, `PO here: https://portal.${ctx.client.domain}/po/view?ref=${job.po}`);
+    e.oracle = { ...e.oracle, po: g(job.po!, job.po!) };
+  }
+  return base;
+}
+
+/** O: OnSinch answers 500 to every read for a while; nothing may be written on what was not read. */
+function fault(ctx: Ctx, kind: "OnSinch down when the email comes" | "OnSinch down when staff act"): Omit<GenCase, "id" | "category"> {
+  const base = change(ctx, "times", "venue");
+  base.variant = kind;
+  const at = kind === "OnSinch down when the email comes" ? -MIN : 2 * H - MIN;
+  base.faults = [{ from: at, to: at + 20 * MIN }];
+  // A plan that could not read OnSinch is a card, never a guess (a failed read or plan becomes a card).
+  if (kind === "OnSinch down when the email comes") base.expect = { decision: "handoff", reason: /could not plan/ };
+  // Read once OnSinch answers again: the TV's later looks move past the fault.
+  base.looks = base.looks.map((l) => ({ ...l, at: l.at + 25 * MIN }));
+  return base;
 }
 
 // ---- the categories --------------------------------------------------------------------------------------------
@@ -227,6 +431,12 @@ export const CATEGORIES: Record<string, { title: string; make: Maker }> = {
     base.looks = kind === "past day" ? [{ at: 2 * MIN, label: "after the email", state: "absent" }] : [{ at: 2 * MIN, label: "after the email", state: "open" }];
     return base;
   } },
+  G: { title: "References", make: (ctx) => reference(ctx, pick(ctx.r, ["po on two orders", "R quoted from an old message", "R OnSinch does not hold"] as const)) },
+  H: { title: "Thread dynamics", make: (ctx) => thread(ctx, pick(ctx.r, ["correction", "confirmation", "missing crew sent later"] as const)) },
+  I: { title: "Quotes and questions", make: (ctx) => question(ctx, pick(ctx.r, ["quote for a job", "quote for a job", "rates"] as const)) },
+  L: { title: "Bespoke but buildable", make: (ctx) => bespoke(ctx, pick(ctx.r, ["6 days at 2 venues with trades", "a 4am call", "11-20 crew on one call", "overnight call"] as const)) },
+  N: { title: "Adversarial language", make: (ctx) => adversarial(ctx, pick(ctx.r, ["forwarded", "signature full of numbers", "PO inside a link", "out of office", "quoted history"] as const)) },
+  O: { title: "OnSinch faults", make: (ctx) => fault(ctx, pick(ctx.r, ["OnSinch down when the email comes", "OnSinch down when staff act"] as const)) },
 };
 
 /**

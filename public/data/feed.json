@@ -5693,5 +5693,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0277",
+  "ts": "2026-11-01T04:04:37+00:00",
+  "kind": "measurement",
+  "headline": "Claude-read 100: 91 -> 100/100 after two planner fixes (rival on another day; PO names the booking); 15 categories 179/180, 0 wrong writes",
+  "subject": "A clear change or cancel is no longer refused as the day alone when it gives the PO or spans days",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 121,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]

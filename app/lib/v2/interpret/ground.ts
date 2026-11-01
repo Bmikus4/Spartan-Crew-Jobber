@@ -150,6 +150,10 @@ const MONTHS = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "
  * past day, e.g. a late-arriving confirmation); a month written is that month of the sent year.
  * A weekday that contradicts the date is null: one of the two is wrong and neither is chosen.
  */
+/** A PO's whole tokens: 6+ characters with a digit, staff's markers (*, ^) off; a link, an address or a path is no token. */
+export const poTokens = (s: string) => s.split(/[\s,;|]+|\s\/\s/).map((x) => x.replace(/^[*^#("'[<]+|[)"'\].,:;>!?]+$/g, "").toLowerCase())
+  .filter((x) => x.length >= 6 && /\d/.test(x) && !/[@\\]|:\/\/|^www\.|\//.test(x));
+
 /** The day an email was sent, in London: 23:30 UTC in summer is already tomorrow there. */
 export function londonDay(sentIso: string): string {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/London" }).format(new Date(sentIso));

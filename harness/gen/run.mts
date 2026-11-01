@@ -25,7 +25,7 @@ const require = createRequire(import.meta.url);
 const { pg, os, net } = require("../sim/boot.ts").bootSim();
 
 const arg = (k: string, d: string) => { const i = process.argv.indexOf(`--${k}`); return i > 0 ? process.argv[i + 1] : d; };
-const cats = arg("cats", "A,B,C,D,E,F,J,K,M").split(",");
+const cats = arg("cats", "A,B,C,D,E,F,G,H,I,J,K,L,M,N,O").split(",");
 const n = Number(arg("n", "5"));
 const seed = Number(arg("seed", "31102026"));
 // oracle: the case's own reading. mutant: the same with every date a day late, which grounding must refuse (no write).
@@ -120,6 +120,7 @@ for (const c of cases) {
   for (const o of c.orders) orders.push(staff.createOrder(c.client, o.calls, o.by, o.po ?? null, o.number));
   pg.clock.set(c.t0 - 5 * 60e3);
   await tick();
+  os.store.down = (c.faults ?? []).map((f: any) => ({ from: c.t0 + f.from, to: c.t0 + f.to }));
   type Ev = { at: number; kind: "email" | "staff" | "look"; x: any };
   const evs: Ev[] = [...c.emails.map((x: any) => ({ at: x.at, kind: "email" as const, x })), ...c.staff.map((x: any) => ({ at: x.at, kind: "staff" as const, x })), ...c.looks.map((x: any) => ({ at: x.at, kind: "look" as const, x }))]
     .sort((a, b) => a.at - b.at || (a.kind === "look" ? 1 : 0) - (b.kind === "look" ? 1 : 0));
@@ -147,8 +148,9 @@ for (const c of cases) {
   }
   const decisions = await sql`SELECT message_id, kind, decision, interpretation->'grounded' AS grounded FROM v2_decisions WHERE thread_id = ${thread} ORDER BY sent_at`;
   const stored = await sql`SELECT count(*)::int AS n FROM thread_messages WHERE thread_id = ${thread}`;
-  results.push(score(c, { decisions, stored: stored[0].n, seen }));
-  if (process.env.GEN_DEBUG === c.id) writeFileSync(`.tmp-data/gen-debug-${c.id}.json`, JSON.stringify({ decisions: await sql`SELECT kind, decision, interpretation FROM v2_decisions WHERE thread_id = ${thread}`, orders: orders.map((o) => ({ id: o.id, company_id: o.company_id, status: o.status, slots: o.Job[0].SlotTeam.flatMap((t: any) => t.Slot.map((s: any) => [s.beginning, s.size, s.SlotLocation])) })), emails: c.emails, seen, marks: await sql`SELECT item_key, mark, evidence FROM feed_marks WHERE thread_id = ${thread}`, timeline: await sql`SELECT id, action, creator, created, model, model_id, order_id, part FROM onsinch_timeline WHERE created > ${new Date(c.t0 - 3 * 864e5).toISOString()}::timestamptz ORDER BY id`, contacts: await sql`SELECT email, company_id FROM onsinch_contacts WHERE email = ${c.sender}`, stored: await sql`SELECT order_id, company_id, number, read_at, deleted_at FROM onsinch_orders WHERE company_id = ${c.client.id}` }, null, 1));
+  results.push(score(c, { decisions, stored: stored[0].n, seen, orders: orders.map((o) => Number(o.id)) }));
+  os.store.down = [];
+  if (process.env.GEN_DEBUG === c.id) writeFileSync(`.tmp-data/gen-debug-${c.id}.json`, JSON.stringify({ decisions: await sql`SELECT kind, decision, replan, replanned_at, interpretation FROM v2_decisions WHERE thread_id = ${thread}`, orders: orders.map((o) => ({ id: o.id, company_id: o.company_id, status: o.status, slots: o.Job[0].SlotTeam.flatMap((t: any) => t.Slot.map((s: any) => [s.beginning, s.size, s.SlotLocation])) })), emails: c.emails, seen, marks: await sql`SELECT item_key, mark, evidence FROM feed_marks WHERE thread_id = ${thread}`, timeline: await sql`SELECT id, action, creator, created, model, model_id, order_id, part FROM onsinch_timeline WHERE created > ${new Date(c.t0 - 3 * 864e5).toISOString()}::timestamptz ORDER BY id`, contacts: await sql`SELECT email, company_id FROM onsinch_contacts WHERE email = ${c.sender}`, stored: await sql`SELECT order_id, company_id, number, read_at, deleted_at FROM onsinch_orders WHERE company_id = ${c.client.id}` }, null, 1));
   if (results.length % 10 === 0) console.log(`${results.length}/${cases.length} cases, ${Math.round((performance.now() - t0) / 1000)}s`);
 }
 

@@ -8,7 +8,7 @@ import { wilson } from "../core/stats";
 
 export type Obs = { node: string; ok: 0 | 1; detail?: string };
 export type Scored = { id: string; category: string; variant: string; obs: Obs[]; stage: string | null };
-type Outcome = { decisions: any[]; stored: number; seen: any[] };
+type Outcome = { decisions: any[]; stored: number; seen: any[]; orders?: number[] };
 
 const STAGES = ["stored", "decision", "plan", "tv"];
 const stageOf = (node: string) => (node.startsWith("inv.") ? null : STAGES.find((s) => node === s || node.startsWith(`${s}.`)) ?? node);
@@ -16,7 +16,7 @@ const stageOf = (node: string) => (node.startsWith("inv.") ? null : STAGES.find(
 export function score(c: GenCase, out: Outcome): Scored {
   const obs: Obs[] = [];
   const o = (node: string, ok: boolean, detail?: string) => obs.push({ node, ok: ok ? 1 : 0, ...(ok || !detail ? {} : { detail }) });
-  const d = out.decisions[0] ?? null;
+  const d = out.decisions[c.expect.email ?? 0] ?? null;
   const said = d ? (d.decision.kind === "write" ? `write: ${d.decision.why.join("; ")}` : d.decision.kind === "handoff" ? `handoff: ${d.decision.reasons.join("; ")}` : `none: ${d.decision.reason}`) : "no decision";
   o("stored", out.stored >= c.emails.length && out.seen.filter((x) => x.kind === "email").every((x) => x.ok), `stored ${out.stored} of ${c.emails.length}`);
   o("decision", !!d && d.kind === c.expect.decision, `expected ${c.expect.decision}; got ${said}`);
@@ -42,6 +42,12 @@ export function score(c: GenCase, out: Outcome): Scored {
     const fits = { times: ["set_position_times"], crew: ["set_position_size", "add_position", "cancel_position"], cancel: ["cancel_position"], add: ["add_shift", "add_position"], po: ["set_po"] }[c.expect.change];
     const ok = ops.length > 0 && ops.every((x) => fits.includes(x.kind));
     o("plan.change", ok, `a ${c.expect.change} wrote ${ops.map((x) => x.kind).join(", ")}`);
+    wrong ||= !ok;
+  }
+  if (c.expect.order != null && d?.decision.kind === "write" && out.orders) {
+    const want = out.orders[c.expect.order];
+    const ok = ops.length > 0 && ops.every((x) => Number(x.order_id) === want);
+    o("plan.order", ok, `the change went to ${[...new Set(ops.map((x) => x.order_id))].join(", ")}, not ${want}`);
     wrong ||= !ok;
   }
   // A write where the business answer is a person's: an out-of-rule control written is the worst failure.

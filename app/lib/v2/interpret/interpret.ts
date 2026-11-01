@@ -4,7 +4,7 @@
 // is dropped and named in `problems`. A request with problems produces no write.
 // ============================================================================
 import type { Extraction, Grounded, RawRequest } from "./extract";
-import { addMinutes, amountIn, countsIn, datesIn, durationsIn, londonDay, norm, oneIn, parseCount, parseDate, parseDuration, parseNewDate, parseTime, poAfterLabel, quoteIn, subjectDate, timesIn } from "./ground";
+import { addMinutes, amountIn, countsIn, datesIn, durationsIn, londonDay, norm, oneIn, parseCount, parseDate, parseDuration, parseNewDate, parseTime, poAfterLabel, poTokens, quoteIn, subjectDate, timesIn } from "./ground";
 import { quotable, type Booking, type BookingShift, type ReadContext } from "./context";
 import { rNumbersIn } from "../../onsinch/resolve";
 
@@ -26,7 +26,9 @@ function pickOnDay(b: Booking, sh: BookingShift | undefined, all: Booking[], w: 
   const scored = (sh ? [sh] : b.shifts).map((s) => ({ s, n: factsFor(s, w) })).filter((x): x is { s: BookingShift; n: number } => x.n !== null);
   if (!scored.length) return "drop";
   const best = scored.reduce((a, x) => (x.n > a.n ? x : a));
-  const rival = all.some((o) => o.shifts.some((s) => (sh ? s.shift_id !== sh.shift_id : o.order_id !== b.order_id) && (factsFor(s, w) ?? -1) >= best.n));
+  // A rival is another shift ON THE PICK'S DAY. Any day the email named counted until 31 Oct, so cancelling the 1st and the 2nd
+  // at one venue made each day's shift the other's rival and a whole-booking cancel was refused (harness/gen, 3 of 11).
+  const rival = all.some((o) => o.shifts.some((s) => (sh ? s.shift_id !== sh.shift_id : o.order_id !== b.order_id) && s.date === best.s.date && (factsFor(s, w) ?? -1) >= best.n));
   if (best.n >= 1 && !rival) return "ok";
   const day = best.s.date;
   return { day, rivals: all.flatMap((o) => o.shifts.filter((s) => s.date === day).map((s) => `${o.order} ${s.start}-${s.end}${s.venue ? ` at ${s.venue}` : ""}`)) };
@@ -253,7 +255,11 @@ export function ground(x: Extraction, newest: string, sentIso: string, ctx: Grou
       const venueIn = (v: string) => !!v && bare(mine).includes(bare(v).slice(0, 12));
       // "R11100" as clients write it: a word boundary between the R and the digits never matched it,
       // so a pick of the very order the email names was refused as borne out by nothing.
-      const byRef = (k: Booking) => ctx.linkedOrderId === k.order_id || rNumbersIn(mine).includes(k.order.slice(1)) || new RegExp(String.raw`\b${k.order.slice(1)}\b`).test(mine);
+      // The booking's PO in the client's words names it as an R does (DECISIONS O17): on 31 Oct a change "for PO SC47671" with
+      // the reader's right pick was refused as the day alone (harness/gen, 3 of 11 changes and cancels by PO).
+      const said = new Set(poTokens(mine));
+      const byRef = (k: Booking) => ctx.linkedOrderId === k.order_id || rNumbersIn(mine).includes(k.order.slice(1)) || new RegExp(String.raw`\b${k.order.slice(1)}\b`).test(mine)
+        || (!!k.po && poTokens(k.po).some((t) => said.has(t)));
       const pickWords: PickWords = { days: new Set([...datesIn(mine, sentIso), ...(day ? [day] : [])]), starts: timesIn(mine), crew, venueIn };
       if (sid && !sh) notes.push(`${tag}: shift ${sid} is not on ${b.order}; the pick is dropped`);
       else if (sh && day && day !== sh.date && !(date && target?.date)) notes.push(`${tag}: ${b.order} shift ${sh.shift_id} is on ${sh.date}, the email says ${day}; the pick is dropped`);

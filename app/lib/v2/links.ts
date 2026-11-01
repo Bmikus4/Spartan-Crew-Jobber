@@ -21,7 +21,7 @@ import type { NeonQueryFunction } from "@neondatabase/serverless";
 import { httpTransport } from "../onsinch/onsinch";
 import { readRows } from "./read";
 import { ensureSchema } from "../migrations";
-import { latestText } from "./interpret/ground";
+import { latestText, poTokens } from "./interpret/ground";
 import { rNumbersIn } from "../onsinch/resolve";
 
 type Sql = NeonQueryFunction<false, false>;
@@ -143,9 +143,6 @@ export type GradeMessage = { at: number; ours: boolean; subject: string | null; 
 export type GradeOrder = { order_id: number; number: string | null; company_id: number | null; po: string | null; jobs: number[]; made: number | null; deleted: boolean };
 export type Graded = { order_id: number; proof: string };
 
-/** A PO's whole tokens: 6+ characters with a digit, staff's markers (*, ^) off; a link, an address or a path is no token. */
-const poTokens = (s: string) => s.split(/[\s,;|]+|\s\/\s/).map((x) => x.replace(/^[*^#("'[<]+|[)"'\].,:;>!?]+$/g, "").toLowerCase())
-  .filter((x) => x.length >= 6 && /\d/.test(x) && !/[@\\]|:\/\/|^www\.|\//.test(x));
 
 /**
  * THE ORDERS A THREAD NAMES ABSOLUTELY (DECISIONS O17, O18), each with its proof:
