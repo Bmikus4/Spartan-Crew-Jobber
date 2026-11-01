@@ -5721,5 +5721,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0279",
+  "ts": "2026-11-01T15:21:16+00:00",
+  "kind": "measurement",
+  "headline": "Language layer: measured forms and mail noise; Sonnet 99/100 on rich mail, 0 wrong writes; R check before a pick",
+  "subject": "A reader's pick of a booking no longer bypasses the check of an R the email names",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 123,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]

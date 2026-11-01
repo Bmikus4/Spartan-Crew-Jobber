@@ -14,7 +14,7 @@
 //   boundary   harness/sim: PGlite, the fake OnSinch, the simulated clock; every fetch intercepted.
 //   output     .tmp-data/gen/<run>/results.json and report.md (harness/gen/score.ts)
 //
-//   npx tsx harness/gen/run.mts --cats A,E,K --n 5 [--seed 31102026] [--reader mutant|record|answers --dir d] [--limit 100] [--out dir]
+//   npx tsx harness/gen/run.mts --cats A,E,K --n 5 [--seed 31102026] [--reader mutant|record|answers --dir d] [--limit 100] [--out dir] [--lang plain]
 //   (never with --env-file)
 //   GEN_DEBUG=<case id> writes that case's decisions, orders, looks and stored history to .tmp-data/gen-debug-<id>.json
 // ============================================================================
@@ -30,7 +30,9 @@ const n = Number(arg("n", "5"));
 const seed = Number(arg("seed", "31102026"));
 // oracle: the case's own reading. mutant: the same with every date a day late, which grounding must refuse (no write).
 const reader = arg("reader", "oracle");
-const runId = `${new Date().toISOString().slice(0, 16).replace(/[:T]/g, "")}-${cats.join("")}-${n}-${reader}`;
+// rich (default): the language layer's forms and mail around them (language.ts); plain: the templates alone, the same jobs.
+const langMode = arg("lang", "rich");
+const runId = `${new Date().toISOString().slice(0, 16).replace(/[:T]/g, "")}-${cats.join("")}-${n}-${reader}-${langMode}`;
 
 const { generate } = require("./cases.ts");
 const { PLACES, PROFESSIONS, companyRow } = require("./world.ts");
@@ -46,7 +48,7 @@ const sql = pg.neonShim();
 const limit = Number(arg("limit", "0"));
 // A limit keeps the first cases of each category, so the set stays in time order (the clock only moves forward).
 const quota = (k: number) => Math.floor(limit / cats.length) + (k < limit % cats.length ? 1 : 0);
-const cases = (generate(cats, n, seed) as any[]).filter((c) => !limit || Number(c.id.slice(1)) <= quota(cats.indexOf(c.category)));
+const cases = (generate(cats, n, seed, undefined, langMode !== "plain") as any[]).filter((c) => !limit || Number(c.id.slice(1)) <= quota(cats.indexOf(c.category)));
 const io = arg("dir", ".tmp-data/gen/reader");
 const qid = new Map<string, string>();
 if (reader === "record") { mkdirSync(`${io}/requests`, { recursive: true }); mkdirSync(`${io}/answers`, { recursive: true }); }

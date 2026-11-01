@@ -10,6 +10,7 @@ import { dayWords, rangeWords, crewWords, GREET, signoff, quotedHistory, g, req,
 import { addDays, drawJob, drawTimes, int, pick, rng, weighted, TRADES, type Call, type Job, type Rng } from "./grammar";
 import { PLACES, makeClient, type Client } from "./world";
 import * as staff from "./staff";
+import * as lang from "./language";
 
 const H = 3600e3, MIN = 60e3, DAY = 864e5;
 
@@ -31,31 +32,55 @@ type Ctx = { r: Rng; n: number; client: Client; contact: Client["contacts"][numb
 // ---- words -------------------------------------------------------------------------------------------------
 /** The sent year of the case being made (generate sets it). A day in another year is written with its year: no year
  * written is the sent year (O22, 31 Oct), so a client meaning next year must say so. */
-let sentYear = 0;
+let sentYear = 0, sentDay = "";
 const MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+// Each word helper draws its plain template from the case's stream first, rich words or not, so the job drawn after
+// it is the same in both (language.ts).
 function dayOf(day: string, r: Rng): string {
-  if (Number(day.slice(0, 4)) === sentYear) return dayWords(day, r);
-  const [y, m, d] = day.split("-").map(Number);
-  return pick(r, [`${d} ${MON[m - 1]} ${y}`, `${String(d).padStart(2, "0")}/${String(m).padStart(2, "0")}/${y}`, `${MON[m - 1]} ${d} ${y}`]);
+  let plain: string;
+  if (Number(day.slice(0, 4)) === sentYear) plain = dayWords(day, r);
+  else {
+    const [y, m, d] = day.split("-").map(Number);
+    plain = pick(r, [`${d} ${MON[m - 1]} ${y}`, `${String(d).padStart(2, "0")}/${String(m).padStart(2, "0")}/${y}`, `${MON[m - 1]} ${d} ${y}`]);
+  }
+  return lang.isRich() ? lang.sayDay(day, sentDay) : plain;
 }
+const rgOf = (start: string, end: string, r: Rng): lang.Times => {
+  const plain = rangeWords(start, end, r);
+  return lang.isRich() ? lang.sayTimes(start, end) : { ...plain, dur: null };
+};
+/** A call's times as the reader quotes them: a start and an end, or a start and a length. */
+const timeFields = (start: string, end: string, t: lang.Times) =>
+  ({ start: g(start, t.a), end: t.b ? g(end, t.b) : null, duration_minutes: t.dur ? g(t.dur.mins, t.dur.q) : null });
 const callWords = (c: Call, r: Rng) => {
-  const day = dayOf(c.date, r), rg = rangeWords(c.start, c.end, r);
-  const who = c.trade.profession ? `${c.crew} ${pick(r, c.trade.words)}` : crewWords(c.crew, r);
-  return { day, rg, who };
+  const day = dayOf(c.date, r), rg = rgOf(c.start, c.end, r);
+  const plainWho = c.trade.profession ? `${c.crew} ${pick(r, c.trade.words)}` : crewWords(c.crew, r);
+  const who = lang.isRich() && !c.trade.profession ? lang.sayCrew(c.crew) : plainWho;
+  const at = lang.isRich() ? lang.sayVenue(c.place) : c.place.name;
+  return { day, rg, who, at };
 };
 const reqOf = (c: Call, w: ReturnType<typeof callWords>, action: RawRequest["action"] = "new_shift"): RawRequest =>
-  req({ action, date: g(c.date, w.day), start: g(c.start, w.rg.a), end: g(c.end, w.rg.b), crew: g(c.crew, w.who), venue: g(c.place.name, c.place.name),
+  req({ action, date: g(c.date, w.day), ...timeFields(c.start, c.end, w.rg), crew: g(c.crew, w.who), venue: g(c.place.name, w.at),
     ...(c.trade.profession ? { trade: g(w.who.replace(/^\d+\s*/, ""), w.who.replace(/^\d+\s*/, "")) } : {}) });
 function letter(ctx: Ctx, text: string, noise = false): string {
-  return `${pick(ctx.r, GREET)}\n\n${text}\n\n${signoff(`${ctx.contact.name} ${ctx.contact.surname}`, ctx.client.name, ctx.r)}${noise ? quotedHistory(ctx.r) : ""}`;
+  const plain = `${pick(ctx.r, GREET)}\n\n${text}\n\n${signoff(`${ctx.contact.name} ${ctx.contact.surname}`, ctx.client.name, ctx.r)}${noise ? quotedHistory(ctx.r) : ""}`;
+  return lang.isRich() ? lang.letter({ first: ctx.contact.name, last: ctx.contact.surname, company: ctx.client.name, domain: ctx.client.domain }, text, noise) : plain;
 }
 const lines = (calls: Call[], r: Rng) => {
   const ws = calls.map((c) => callWords(c, r));
   const byPlace = new Set(calls.map((c) => c.place.id)).size > 1;
-  const text = calls.length === 1
-    ? pick(r, [`Could we please book ${ws[0].who} for ${ws[0].day}, ${ws[0].rg.text} at ${calls[0].place.name}?`, `We need ${ws[0].who} at ${calls[0].place.name} on ${ws[0].day}, ${ws[0].rg.text}.`,
-      `Please can I request ${ws[0].who} on ${ws[0].day} at ${calls[0].place.name}. Times are ${ws[0].rg.text}.`])
-    : `Could we book the following${byPlace ? "" : ` at ${calls[0].place.name}`} please:\n\n${calls.map((c, k) => `${ws[k].day}: ${ws[k].rg.text}, ${ws[k].who}${byPlace ? ` at ${c.place.name}` : ""}`).join("\n")}`;
+  let text = calls.length === 1
+    ? pick(r, [`Could we please book ${ws[0].who} for ${ws[0].day}, ${ws[0].rg.text} at ${ws[0].at}?`, `We need ${ws[0].who} at ${ws[0].at} on ${ws[0].day}, ${ws[0].rg.text}.`,
+      `Please can I request ${ws[0].who} on ${ws[0].day} at ${ws[0].at}. Times are ${ws[0].rg.text}.`])
+    : `Could we book the following${byPlace ? "" : ` at ${ws[0].at}`} please:\n\n${calls.map((c, k) => `${ws[k].day}: ${ws[k].rg.text}, ${ws[k].who}${byPlace ? ` at ${ws[k].at}` : ""}`).join("\n")}`;
+  if (lang.isRich()) {
+    if (calls.length === 1 && lang.useForm()) {
+      text = `${lang.pickL(["Could we book the following please:", "Booking request:", "Please can we book:", "Details below:"])}\n\n${lang.formOf([["Date", ws[0].day], [ws[0].rg.dur ? "Time" : "Times", ws[0].rg.text], ["Crew", ws[0].who], ["Venue", ws[0].at]])}`;
+    } else if (calls.length === 1) {
+      const w = ws[0];
+      text = lang.pickL([text, `${w.day} at ${w.at}: ${w.who}, ${w.rg.text} please.`, `Can we get ${w.who} at ${w.at}, ${w.day}, ${w.rg.text}?`, `Looking for ${w.who} on ${w.day} (${w.rg.text}) at ${w.at}.`]);
+    }
+  }
   return { text, reqs: calls.map((c, k) => reqOf(c, ws[k])) };
 };
 const poLine = (po: string, r: Rng) => { const q = pick(r, [`PO: ${po}`, `PO number: ${po}`, `Our PO is ${po}`]); return { q, line: `\n\n${q}` }; };
@@ -109,8 +134,8 @@ function change(ctx: Ctx, kind: "times" | "crew-add" | "crew-total" | "move" | "
   const po = anchor === "po" ? `${pick(r, ["PO", "SC", "P", "4500"])}${int(r, 10000, 99999)}` : null;
   const poQ = po ? pick(r, [`PO ${po}`, `our PO ${po}`, `PO: ${po}`]) : "";
   // The booking as the email names it, and what a perfect reader takes from those words.
-  const which = { R: `R${number} on ${w.day}`, po: `${w.day} (${poQ})`, venue: `${w.day} at ${c.place.name}`, start: `the ${w.rg.a} start on ${w.day}`, day: w.day }[anchor];
-  const named = (x: RawRequest): RawRequest => ({ ...x, ...(anchor === "venue" ? { venue: g(c.place.name, c.place.name) } : {}),
+  const which = { R: `R${number} on ${w.day}`, po: `${w.day} (${poQ})`, venue: `${w.day} at ${w.at}`, start: `the ${w.rg.a} start on ${w.day}`, day: w.day }[anchor];
+  const named = (x: RawRequest): RawRequest => ({ ...x, ...(anchor === "venue" ? { venue: g(c.place.name, w.at) } : {}),
     ...(anchor === "start" && kind !== "cancel-all" && x.target ? { target: { ...x.target, start: g(c.start, w.rg.a) } } : {}) });
   const target = { quote: w.day, date: g(c.date, w.day), start: null };
   let text = "", rqs: RawRequest[] = [], after: (o: any) => void, moved: string | null = null;
@@ -119,9 +144,9 @@ function change(ctx: Ctx, kind: "times" | "crew-add" | "crew-total" | "move" | "
     let t = drawTimes(r);
     // New times equal to the booked ones are no change at all ("already as asked").
     while (t.start === c.start && t.end === c.end) t = drawTimes(r);
-    const rg = rangeWords(t.start, t.end, r);
+    const rg = rgOf(t.start, t.end, r);
     text = pick(r, [`Can we change ${which} to ${rg.text} please?`, `Small change for ${which}: the times are now ${rg.text}.`]);
-    rqs = [req({ action: "change_times", date: g(c.date, w.day), start: g(t.start, rg.a), end: g(t.end, rg.b), target })];
+    rqs = [req({ action: "change_times", date: g(c.date, w.day), ...timeFields(t.start, t.end, rg), target })];
     after = (o) => staff.setTimes(o, 0, c.date, t.start, t.end, by);
   } else if (kind === "crew-add") {
     const add = int(r, 1, 3), total = c.crew + add;
@@ -147,7 +172,7 @@ function change(ctx: Ctx, kind: "times" | "crew-add" | "crew-total" | "move" | "
     after = (o) => staff.cancelCall(o, 0, by);
   } else {
     const ws = job.calls.map((x) => dayOf(x.date, r));
-    const ref = { R: ` R${number}`, po: ` (${poQ})`, venue: ` at ${c.place.name}`, start: "", day: "" }[anchor];
+    const ref = { R: ` R${number}`, po: ` (${poQ})`, venue: ` at ${w.at}`, start: "", day: "" }[anchor];
     text = `We have to cancel the whole booking${ref} (${ws.join(", ")}), sorry.`;
     rqs = job.calls.map((x, k) => req({ action: "cancel_shift", date: g(x.date, ws[k]), target: { quote: ws[k], date: g(x.date, ws[k]), start: null } }));
     after = (o) => staff.cancelOrder(o, by);
@@ -194,11 +219,11 @@ const far = (ctx: Ctx, job: Job): Job => {
 function reference(ctx: Ctx, kind: "po on two orders" | "R quoted from an old message" | "R OnSinch does not hold"): Omit<GenCase, "id" | "category"> {
   const { r } = ctx;
   const [a, b] = pair(ctx);
-  const w = callWords(b, r), t = drawTimes(r), rg = rangeWords(t.start, t.end, r);
+  const w = callWords(b, r), t = drawTimes(r), rg = rgOf(t.start, t.end, r);
   const numA = String(71000 + ctx.n), numB = String(72000 + ctx.n);
   const po = kind === "po on two orders" ? `${pick(r, ["PO", "SC", "4500"])}${int(r, 10000, 99999)}` : null;
   const by = pick(r, staff.STAFF);
-  const rq = req({ action: "change_times", date: g(b.date, w.day), start: g(t.start, rg.a), end: g(t.end, rg.b), target: { quote: w.day, date: g(b.date, w.day), start: null } });
+  const rq = req({ action: "change_times", date: g(b.date, w.day), ...timeFields(t.start, t.end, rg), target: { quote: w.day, date: g(b.date, w.day), start: null } });
   let text = "", tail = "", oPo: Extraction["po"] = null, expect: Expected;
   if (kind === "po on two orders") {
     // One PO on both orders (O18): the day picks the one holding it.
@@ -208,14 +233,14 @@ function reference(ctx: Ctx, kind: "po on two orders" | "R quoted from an old me
     expect = { decision: "write", change: "times", order: 1 };
   } else if (kind === "R quoted from an old message") {
     // An R in the quoted history is the old order's, not this email's.
-    text = `Can we change ${w.day} at ${b.place.name} to ${rg.text} please?`;
+    text = `Can we change ${w.day} at ${w.at} to ${rg.text} please?`;
     tail = `\n\nOn ${dayWords(addDays(ctx.today, -20), r)}, Bookings Spartan Crew <bookings@spartancrew.co.uk> wrote:\n> Hi, R${numA} is booked in for you.\n> Thanks, Dan`;
-    rq.venue = g(b.place.name, b.place.name);
+    rq.venue = g(b.place.name, w.at);
     expect = { decision: "write", change: "times", order: 1 };
   } else {
     // A number OnSinch does not hold is said, never passed over for a weaker find (plan.ts findOrder).
-    text = `Can we change R${90000 + ctx.n} on ${w.day} at ${b.place.name} to ${rg.text} please?`;
-    rq.venue = g(b.place.name, b.place.name);
+    text = `Can we change R${90000 + ctx.n} on ${w.day} at ${w.at} to ${rg.text} please?`;
+    rq.venue = g(b.place.name, w.at);
     expect = { decision: "handoff", reason: /not found/ };
   }
   return {
@@ -237,8 +262,8 @@ function thread(ctx: Ctx, kind: "correction" | "confirmation" | "missing crew se
   const by = pick(r, staff.STAFF);
   if (kind === "missing crew sent later") {
     const job = drawJob(r, ctx.today, PLACES, ONE), c = job.calls[0], w = callWords(c, r);
-    const first = `Could we get some crew on ${w.day}, ${w.rg.text} at ${c.place.name}?`;
-    const rq1 = req({ action: "new_shift", date: g(c.date, w.day), start: g(c.start, w.rg.a), end: g(c.end, w.rg.b), venue: g(c.place.name, c.place.name) });
+    const first = `Could we get some crew on ${w.day}, ${w.rg.text} at ${w.at}?`;
+    const rq1 = req({ action: "new_shift", date: g(c.date, w.day), ...timeFields(c.start, c.end, w.rg), venue: g(c.place.name, w.at) });
     const second = `Sorry, forgot to say: ${w.who} please.`;
     const rq2 = { ...rq1, crew: g(c.crew, w.who) };
     return {
@@ -258,7 +283,7 @@ function thread(ctx: Ctx, kind: "correction" | "confirmation" | "missing crew se
   }
   const job = drawJob(r, ctx.today, PLACES, ONE), c = job.calls[0], w = callWords(c, r);
   if (kind === "confirmation") {
-    const text = pick(r, [`Thanks, that's all confirmed for ${w.day} at ${c.place.name}.`, `Perfect, thanks for confirming ${w.day}.`, "Great, thank you!"]);
+    const text = pick(r, [`Thanks, that's all confirmed for ${w.day} at ${w.at}.`, `Perfect, thanks for confirming ${w.day}.`, "Great, thank you!"]);
     return {
       variant: kind, client: ctx.client, sender: ctx.contact.email, today: ctx.today, t0: ctx.t0,
       orders: [{ calls: job.calls, by, number: String(73000 + ctx.n) }],
@@ -267,19 +292,19 @@ function thread(ctx: Ctx, kind: "correction" | "confirmation" | "missing crew se
       expect: { decision: "none" },
     };
   }
-  const t1 = drawTimes(r), rg1 = rangeWords(t1.start, t1.end, r);
+  const t1 = drawTimes(r), rg1 = rgOf(t1.start, t1.end, r);
   let t2 = drawTimes(r);
   if (t2.start === t1.start) t2 = { start: t1.start === "09:00" ? "10:00" : "09:00", end: t1.end };
-  const rg2 = rangeWords(t2.start, t2.end, r);
+  const rg2 = rgOf(t2.start, t2.end, r);
   const target = { quote: w.day, date: g(c.date, w.day), start: null };
   return {
     variant: kind, client: ctx.client, sender: ctx.contact.email, today: ctx.today, t0: ctx.t0,
     orders: [{ calls: job.calls, by, number: String(73000 + ctx.n) }],
     emails: [
-      { at: 0, subject: "Change to booking", body: letter(ctx, `Can we change ${w.day} at ${c.place.name} to ${rg1.text} please?`), from: ctx.contact.email,
-        oracle: ex("change", [req({ action: "change_times", date: g(c.date, w.day), start: g(t1.start, rg1.a), end: g(t1.end, rg1.b), venue: g(c.place.name, c.place.name), target })]) },
+      { at: 0, subject: "Change to booking", body: letter(ctx, `Can we change ${w.day} at ${w.at} to ${rg1.text} please?`), from: ctx.contact.email,
+        oracle: ex("change", [req({ action: "change_times", date: g(c.date, w.day), ...timeFields(t1.start, t1.end, rg1), venue: g(c.place.name, w.at), target })]) },
       { at: DAY, subject: "Re: Change to booking", body: letter(ctx, `Sorry, my mistake: can ${w.day} be ${rg2.text} instead?`), from: ctx.contact.email,
-        oracle: ex("change", [req({ action: "change_times", date: g(c.date, w.day), start: g(t2.start, rg2.a), end: g(t2.end, rg2.b), target })]) },
+        oracle: ex("change", [req({ action: "change_times", date: g(c.date, w.day), ...timeFields(t2.start, t2.end, rg2), target })]) },
     ],
     staff: [
       { at: 2 * H, note: "staff make the first change", act: (os) => staff.setTimes(os[0], 0, c.date, t1.start, t1.end, by) },
@@ -304,7 +329,7 @@ function question(ctx: Ctx, kind: "quote for a job" | "rates"): Omit<GenCase, "i
   const job = drawJob(r, ctx.today, PLACES, ONE), c = job.calls[0], w = callWords(c, r);
   const near = lead14(ctx, job.calls);
   const text = kind === "rates" ? pick(r, ["What are your rates for crew at weekends, and is there a minimum call?", "Could you send over your current rate card please?"])
-    : pick(r, [`Could you send me a quote for ${w.who} on ${w.day}, ${w.rg.text} at ${c.place.name}?`, `How much would ${w.who} be for ${w.day}, ${w.rg.text} at ${c.place.name}?`]);
+    : pick(r, [`Could you send me a quote for ${w.who} on ${w.day}, ${w.rg.text} at ${w.at}?`, `How much would ${w.who} be for ${w.day}, ${w.rg.text} at ${w.at}?`]);
   return {
     variant: kind, client: ctx.client, sender: ctx.contact.email, today: ctx.today, t0: ctx.t0, orders: [],
     emails: [{ at: 0, subject: pick(r, ["Quote", "Pricing", "Rates"]), body: letter(ctx, text), from: ctx.contact.email, oracle: ex("quote_request", kind === "rates" ? [] : [reqOf(c, w)]) }],
@@ -389,10 +414,10 @@ export const CATEGORIES: Record<string, { title: string; make: Maker }> = {
     const job = drawJob(ctx.r, ctx.today, PLACES, { days: 1, callsPerDay: 1, venues: 1, trades: false });
     const c = job.calls[0], w = callWords(c, ctx.r);
     const miss = pick(ctx.r, ["crew", "times", "venue", "day"] as const);
-    const parts = { crew: miss === "crew" ? "some crew" : w.who, when: miss === "times" ? "" : `, ${w.rg.text}`, at: miss === "venue" ? "" : ` at ${c.place.name}`, day: miss === "day" ? "soon" : `on ${w.day}` };
+    const parts = { crew: miss === "crew" ? "some crew" : w.who, when: miss === "times" ? "" : `, ${w.rg.text}`, at: miss === "venue" ? "" : ` at ${w.at}`, day: miss === "day" ? "soon" : `on ${w.day}` };
     const text = `Could we get ${parts.crew} ${parts.day}${parts.when}${parts.at}?`;
-    const rq = req({ action: "new_shift", ...(miss === "day" ? {} : { date: g(c.date, w.day) }), ...(miss === "times" ? {} : { start: g(c.start, w.rg.a), end: g(c.end, w.rg.b) }),
-      ...(miss === "crew" ? {} : { crew: g(c.crew, w.who) }), ...(miss === "venue" ? {} : { venue: g(c.place.name, c.place.name) }) });
+    const rq = req({ action: "new_shift", ...(miss === "day" ? {} : { date: g(c.date, w.day) }), ...(miss === "times" ? {} : timeFields(c.start, c.end, w.rg)),
+      ...(miss === "crew" ? {} : { crew: g(c.crew, w.who) }), ...(miss === "venue" ? {} : { venue: g(c.place.name, w.at) }) });
     // No crew or no day: the client is asked (a reply card, off the TV). No venue: asked too, unless the two-week
     // rule hands the booking to staff first (a missing crew count is asked either way). No times: assumed, 08:00 for
     // 4 hours with no history (DECISIONS V15), and booked as any other.
@@ -445,7 +470,7 @@ export const CATEGORIES: Record<string, { title: string; make: Maker }> = {
  * app keeps OnSinch's answers in memory for minutes by the clock (replan.ts cached), and a clock that went back
  * served one case's client list to the next ("no single client company", 223 of 270 on 31 Oct).
  */
-export function generate(categories: string[], n: number, seed = 31_10_2026, from = Date.parse("2026-11-02T09:30:00Z")): GenCase[] {
+export function generate(categories: string[], n: number, seed = 31_10_2026, from = Date.parse("2026-11-02T09:30:00Z"), rich = true): GenCase[] {
   const out: GenCase[] = [];
   let k = 0, cursor = from;
   for (const cat of categories) for (let i = 0; i < n; i++, k++) {
@@ -453,7 +478,8 @@ export function generate(categories: string[], n: number, seed = 31_10_2026, fro
     const client = makeClient(r, k);
     const t0 = cursor + int(r, 0, 8) * H;
     const today = new Date(t0).toISOString().slice(0, 10);
-    sentYear = Number(today.slice(0, 4));
+    sentYear = Number(today.slice(0, 4)); sentDay = today;
+    lang.setLanguage(seed * 100 + k, rich);
     const made = CATEGORIES[cat].make({ r, n: k, client, contact: pick(r, client.contacts), t0, today });
     out.push({ id: `${cat}${String(i + 1).padStart(3, "0")}`, category: cat, ...made });
     const end = t0 + Math.max(...made.looks.map((l) => l.at), ...made.staff.map((x) => x.at));

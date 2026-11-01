@@ -131,6 +131,16 @@ const NOW = Date.parse("2026-10-20T09:00:00Z");
     ok(await linkFound(fake([{ order_id: 6, state: "relinked" }]), { thread_id: "t", order_id: 6, source: "finder" }) === "same" && !writes.length, "the same order is no change");
   }
 
+  console.log("An R the email names is checked before the reader's pick (harness/gen G004, 1 Nov)");
+  {
+    // The reader picked R20001 by its day and venue; the email names R90075, which OnSinch does not hold.
+    const i: Interpretation = { intent: "change", requests: [r({ action: "change_times", order_id: 20001, shift_id: 5, date: "2026-10-28", start: "10:00", end: "12:00", target: { quote: "28th at Olympia", date: "2026-10-28" } })], problems: [] };
+    const said = await plan(msg("pm@twojobs.co.uk", "Change to booking", "Can we change R90075 on the 28th at Olympia to 10:00-12:00 please?", "2026-10-20T10:00:00Z"), i, world, null, { now: NOW });
+    ok(said.kind === "handoff" && /R90075 not found/.test(JSON.stringify(said.reasons)), "an R OnSinch does not hold is said, never passed over for the reader's pick", JSON.stringify(said));
+    const own = await plan(msg("pm@twojobs.co.uk", "Change to booking", "Can we change R20001 on the 28th at Olympia to 10:00-12:00 please?", "2026-10-20T10:00:00Z"), i, world, null, { now: NOW });
+    ok(own.kind === "write", "the same pick stands when the email names its own R", JSON.stringify(own).slice(0, 300));
+  }
+
   console.log("One source for a thread's order");
   {
     const src = readFileSync("app/lib/v2/threadOrder.ts", "utf8").replace(/\/\/.*$/gm, "");

@@ -235,6 +235,17 @@ async function findOrder(msg: Message, companyId: number, world: World, threadOr
   return "no order is named";
 }
 
+/**
+ * The reader's pick of a booking, kept only when the email names no R number or names that booking's. An R the email
+ * writes is checked by findOrder first and said when OnSinch does not hold it; a pick went around that check, so
+ * "change R90075 on the 5th at Olympus Hall" was written to the client's R72075 there (harness/gen G004, 1 Nov).
+ */
+const pickHolds = (msg: Message, o: any | null | undefined): any | null => {
+  if (!o) return null;
+  const said = rNumbersIn(`${msg.subject}\n${msg.text}`);
+  return !said.length || said.includes(String(o.number)) ? o : null;
+};
+
 /** What the evidence finder reads: the thread, every company it could be, their orders, the facts. */
 type Evidence = { ids: number[]; pool: any[]; tin: ThreadIn; sw: StateWorld; sentAt: number; facts: Facts };
 /** The order a card names: the resolver's one, or the lead of several (never written to: findOrder refuses several). */
@@ -724,7 +735,8 @@ async function decide(msg: Message, i: Interpretation, world: World, threadOrder
   // One email's new shifts are one job: when the reader put one of them on a booking, the rest
   // of that email's new shifts go there too (Harbour Scenic 10-12, all added to R11508 by ops).
   if (pins.length > 1) return handoff(`new shifts for ${pins.length} existing bookings in one email`);
-  const named = news.length ? (pins.length ? clientOrders.find((o) => Number(o.id) === pins[0]) ?? "the picked booking is not readable" : await findOrder(msg, companyId, world, threadOrderId, ev, true)) : null;
+  const pin = pins.length ? clientOrders.find((o) => Number(o.id) === pins[0]) : undefined;
+  const named = news.length ? (pins.length && !pin ? "the picked booking is not readable" : pickHolds(msg, pin) ?? await findOrder(msg, companyId, world, threadOrderId, ev, true)) : null;
   if (named && typeof named !== "string") {
     const done = await addToNamed(d, change, named, news);
     if (done) return done;
@@ -748,7 +760,7 @@ async function decide(msg: Message, i: Interpretation, world: World, threadOrder
 function planChange(d: Draft): Change {
   const { msg, world, threadOrderId, ev, companyId, clientOrders, live, ops, why, asked, retimed, venueOf, professionOf, hoursOf, src } = d;
   return async (n: number, r: Request): Promise<string | null> => {
-    const picked = r.order_id ? clientOrders.find((o) => Number(o.id) === r.order_id) : null;
+    const picked = pickHolds(msg, r.order_id ? clientOrders.find((o) => Number(o.id) === r.order_id) : null);
     const order = picked ?? (await findOrder(msg, companyId, world, threadOrderId, ev));
     if (typeof order === "string") return (order);
     const pickedShift = r.shift_id ? teams(order).find((t) => t.id === r.shift_id) : undefined;
@@ -1090,7 +1102,7 @@ async function setPo(d: Draft): Promise<Decision | null> {
   // The order a PO is for: the email's R number or the thread's order, never a day's only
   // booking (findOrder). A PO is cosmetic (Ben: 1 in 50), so one with no order named is left [DECISIONS V33]
   // off with the reason, not a card.
-  const order = (i.order_id ? clientOrders.find((o) => Number(o.id) === i.order_id) : null) ?? (await findOrder(msg, companyId, world, threadOrderId, ev));
+  const order = pickHolds(msg, i.order_id ? clientOrders.find((o) => Number(o.id) === i.order_id) : null) ?? (await findOrder(msg, companyId, world, threadOrderId, ev));
   if (typeof order === "string") return { kind: "none", reason: `PO ${i.po} left off: ${order}` };
   // A PO already on the order is never replaced by the system: the client correcting one is
   // rare, and a reference misread as a PO would overwrite the real one.
