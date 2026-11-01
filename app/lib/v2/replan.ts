@@ -78,13 +78,13 @@ export function sameAnswer(a: unknown, b: unknown): boolean {
 
 export type ReplanReport = { cards: number; planned: number; changed: number; linked: number; notes: string[] };
 
-export async function replanOpen(sql: Sql, opts: { limit?: number; budgetMs?: number; world?: World; dry?: boolean; now?: number; out?: Array<{ thread_id: string; message_id: string; was: string; now: string; link: string | null }> } = {}): Promise<ReplanReport> {
+export async function replanOpen(sql: Sql, opts: { limit?: number; budgetMs?: number; world?: World; dry?: boolean; now?: number; out?: Array<{ thread_id: string; message_id: string; was: string; now: string; link: string | null; days?: { was: string[]; now: string[] } }> } = {}): Promise<ReplanReport> {
   if (!opts.dry) await ensure(sql);
   const now = opts.now ?? Date.now();
   const today = utcToLondon(new Date(now).toISOString()).date;
   const deadline = Date.now() + (opts.budgetMs ?? 90_000);
   const rows = (await sql`
-    SELECT d.thread_id, d.message_id, d.sent_at, d.kind, d.interpretation, d.interpretation->'grounded' AS grounded, d.decision, d.executed,
+    SELECT d.thread_id, d.message_id, d.sent_at, d.kind, d.interpretation, CASE WHEN jsonb_path_exists(d.replan->'grounded', '$.requests[*] ? (@.date != null || @.target.date != null)') THEN d.replan->'grounded' ELSE d.interpretation->'grounded' END AS grounded, d.decision, d.executed,
            d.company_id, d.company, d.from_address, to_jsonb(d)->'replan' AS replan, to_jsonb(d)->>'replanned_at' AS replanned_at, m.subject
     FROM v2_decisions d LEFT JOIN thread_messages m ON m.message_id = d.message_id
     WHERE d.kind IN ('write', 'handoff') AND coalesce(d.code_version, '') <> 'local' AND d.created_at >= ${V2_FROM}`) as any[];
@@ -127,15 +127,23 @@ export async function replanOpen(sql: Sql, opts: { limit?: number; budgetMs?: nu
         trace,
       });
       rep.planned++;
-      const d = (got as Recorded | null)?.decision;
-      if (!d) continue;
+      const plan = (got as Recorded | null)?.decision;
+      if (!plan) continue;
+      // The reading as this code grounds it is kept with the answer, and the TV reads its days from it when it names
+      // any (live.ts): the stored reading is the code's of the day the email came. A "Tue 28 Sep" written on 12 Oct was
+      // stored as 2027 before O22 (no year written is the sent year) while the plan said 2026, so a passed job stayed
+      // listed for 20 days. A fresh reading with no day leaves the stored one: a card with no day is never off the TV,
+      // and on 1 Nov 2 of 129 cards would have lost theirs to a value today's checks refuse.
+      const grounded = (got as Recorded | null)?.interpretation?.grounded;
+      const d = (grounded ? { ...plan, grounded } : plan) as typeof plan;
       const changed = !sameAnswer(row.replan ?? row.decision, d);
       const was = row.decision.kind === "handoff" ? `handoff: ${(row.decision.reasons ?? [])[0] ?? ""}` : row.decision.kind;
       const said = d.kind === "handoff" ? `handoff${d.order_id ? ` (order ${d.order_id})` : ""}: ${d.reasons[0] ?? ""}` : d.kind === "none" ? `none: ${d.reason}` : `write: ${d.why[0] ?? ""}`;
       // A write from the past is a person's: only the order it is about is kept, as a link.
       const target = d.kind === "write" ? [...new Set(d.ops.map((o) => ("order_id" in o.op ? Number(o.op.order_id) : 0)).filter(Boolean))] : [];
       const link = links[0] ?? (target.length === 1 ? { order_id: target[0], source: "planner" } : null);
-      opts.out?.push({ thread_id: row.thread_id, message_id: row.message_id, was, now: said, link: link ? String(link.order_id) : null });
+      const daysIn = (g: any) => ((g?.requests ?? []) as any[]).flatMap((r) => [r.date, r.target?.date]).filter((x): x is string => !!x).sort();
+      opts.out?.push({ thread_id: row.thread_id, message_id: row.message_id, was, now: said, link: link ? String(link.order_id) : null, days: { was: daysIn(row.interpretation?.grounded), now: daysIn(grounded) } });
       if (opts.dry) continue;
       if (changed || !row.replanned_at) {
         await sql`UPDATE v2_decisions SET replan = ${JSON.stringify(d)}::jsonb, replanned_at = now() WHERE message_id = ${row.message_id}`;

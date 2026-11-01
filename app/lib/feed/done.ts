@@ -21,8 +21,12 @@ import { utcToLondon } from "../v2/bot/ops";
 export const BOT = 2257;
 
 export type Ask = "book" | "change" | "cancel" | "any";
-/** `fresh`: the need is a new booking (needs-created), not a change to an order the client already has. */
-export type Need = { at: number; asks: Ask[]; fresh: boolean; days: string[]; places: number[]; venues: string[]; company_id: number | null };
+/**
+ * `fresh`: the need is a new booking (needs-created), not a change to an order the client already has. `readPlaces`: the
+ * places the reading matched to the client's venues, a tie-break between candidate orders and never a filter: one
+ * reading's place was the unused duplicate 7083 where staff booked the client's own 205 (1 Nov).
+ */
+export type Need = { at: number; asks: Ask[]; fresh: boolean; days: string[]; places: number[]; venues: string[]; company_id: number | null; readPlaces?: number[] };
 /** A thread's link to an order; `ref` is what named it, so one PO held by two orders is told from two POs. */
 export type Link = { order_id: number; absolute: boolean; ref: string };
 export type Order = { order_id: number; number: string | null; company_id: number | null; body: any; deleted: boolean };
@@ -125,8 +129,14 @@ export function isDone(need: Need, links: Link[], orders: Map<number, Order>, ro
   const { rung, groups } = candidates(need, links, orders, rows, places);
   const open: Verdict = { state: "open", orders: [], rung, text: "", at: null, creator: null };
   if (!groups.length) return open;
-  const found = groups.map((g) => g.map((o) => ({ o, d: doneOn(o, rows, need, places) })).filter((x) => x.d));
-  if (groups.some((g, i) => g.length > 1 && found[i].length)) {
+  let found = groups.map((g) => g.map((o) => ({ o, d: doneOn(o, rows, need, places) })).filter((x) => x.d));
+  // Several of the client's orders that day, the work on more than one: the one at the place the reading matched is the
+  // need's job, as the need's own venue would pick it (rung 3). For 12 days a need was "possibly R11773 or R11785" while
+  // R11773 alone was at its place (1 Nov).
+  const at = (o: Order) => shiftsOf(o.body).some((s) => need.days.includes(s.day) && s.place != null && !!need.readPlaces?.includes(s.place));
+  const broken = groups.map((g, i) => g.length > 1 && found[i].filter((x) => at(x.o)).length === 1);
+  found = found.map((f, i) => (broken[i] ? f.filter((x) => at(x.o)) : f));
+  if (groups.some((g, i) => g.length > 1 && found[i].length && !broken[i])) {
     const hit = found.flat();
     return { ...open, state: "possibly", orders: hit.map((x) => x.o.order_id), text: `Possibly done in ${hit.map((x) => label(x.o)).join(" or ")}: check` };
   }

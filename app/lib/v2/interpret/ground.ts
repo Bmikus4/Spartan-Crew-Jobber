@@ -10,20 +10,40 @@
 // anything else, rather than guessing.
 // ============================================================================
 
-/** The newest part of an email: quoted history and forwarded headers below it are dropped. */
+/**
+ * Words above a forward that hand it over as the request: "Please see below, can you book this in?". Without them
+ * a forward is history like any quoted email ("FYI", or nothing at all), and never new work (DECISIONS V25).
+ */
+const HANDS_OVER = /\b(see|as|per)\s+(the\s+)?(below|trail below|email below|forwarded)\b|\bbelow\b[^.?!]*\b(book|confirm|arrange|sort)\b|\b(book|confirm|arrange|sort)\b[^.?!]*\bbelow\b|\bbook (this|these|it|them) in\b/i;
+const FORWARD = /^(-{2,}\s*Forwarded message\s*-*|Begin forwarded message:?)$/i;
+
+/**
+ * The newest part of an email: quoted history and forwarded headers below it are dropped. A forward the client's own
+ * words hand over is theirs too: its first message, without its headers or its own history, follows them. Until
+ * 1 Nov it was cut, so "Please see below, can you book this in?" reached the reader with no booking in it and was
+ * answered as unclear (harness/gen N003). Idempotent: a second pass over the result returns it unchanged.
+ */
 export function latestText(body: string): string {
   const lines = body.replace(/\r/g, "").split("\n");
   const out: string[] = [];
-  for (const line of lines) {
+  let forward = -1;
+  for (const [k, line] of lines.entries()) {
     const t = line.trim();
     if (/^>/.test(t)) break;
     if (/^On .{4,120}wrote:?$/i.test(t)) break;
+    if (FORWARD.test(t)) { forward = k; break; }
     if (/^-{2,}\s*(Original|Forwarded) Message/i.test(t)) break;
     if (/^From:\s.+/i.test(t) && out.some((l) => l.trim())) break;
     if (/^_{8,}$/.test(t)) break;
     out.push(line);
   }
-  return out.join("\n").trim();
+  const own = out.join("\n").trim();
+  if (forward < 0 || !HANDS_OVER.test(own)) return own;
+  const rest = lines.slice(forward + 1);
+  let k = 0;
+  while (k < rest.length && (!rest[k].trim() || /^(From|Sent|Date|To|Cc|Subject):/i.test(rest[k].trim()))) k++;
+  const forwarded = latestText(rest.slice(k).join("\n"));
+  return forwarded ? `${own}\n\n${forwarded}` : own;
 }
 
 export const norm = (s: string) => s.toLowerCase().replace(/[‘’]/g, "'").replace(/[–—]/g, "-").replace(/\s+/g, " ").trim();

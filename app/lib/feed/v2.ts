@@ -191,6 +191,7 @@ export function v2Source(row: V2Row, now: number): FeedSource {
       asks: [...new Set([...(g?.requests ?? []).map((r) => ASK[r.action] ?? "any"), ...(g?.requests.length ? [] : c.ops.map((o) => OP_ASK[o.kind]))])],
       fresh,
       days, places, venues: [...new Set(shifts.map((s) => s.venue).filter((v): v is string => !!v))],
+      readPlaces: [...new Set((g?.requests ?? []).map((r) => r.place_id).filter((p): p is number => !!p))],
     },
     ask: note.ask,
     check: note.check,

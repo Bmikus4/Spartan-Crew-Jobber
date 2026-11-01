@@ -14,7 +14,7 @@
 import { sql, fault } from "./fixtures/pg";
 import { ensureSchema } from "../app/lib/migrations";
 import { isDone, BOT, type Need, type Order, type Row } from "../app/lib/feed/done";
-import { gradeThread, type GradeOrder } from "../app/lib/v2/links";
+import { gradeThread, linkAbsolute, type GradeOrder } from "../app/lib/v2/links";
 import { markNeeds } from "../app/lib/v2/loop/cards";
 import { serveFeed } from "../app/lib/feed/serve";
 import { liveFeedDeps } from "../app/lib/feed/live";
@@ -57,6 +57,14 @@ const map = (...os: Order[]) => new Map(os.map((o) => [o.order_id, o]));
     ok(refs.state === "done" && JSON.stringify(refs.orders) === "[1]", "two references, one an older job: the one holding the day is the need's", refs);
     const po2 = isDone(need({ days: [] }), [{ order_id: 1, absolute: true, ref: "PO 123456" }, { order_id: 2, absolute: true, ref: "PO 123456" }], both, rows);
     ok(po2.state === "possibly", "one PO on two orders and no day: possibly", po2);
+    // 1 Nov: "possibly R11773 or R11785" for 12 days while the reading had matched R11773's place.
+    const tie = isDone(need({ readPlaces: [60] }), [], map(a, order(2, ["2026-11-04"], { place: 60 })), rows);
+    ok(tie.state === "done" && tie.orders[0] === 2, "two jobs that day, both worked: the one at the place the reading matched", tie);
+    const notThere = isDone(need({ readPlaces: [61] }), [], both, rows);
+    ok(notThere.state === "possibly", "neither at the reading's place: still possibly", notThere);
+    // The reading's place is a tie-break, never a filter: one was the unused duplicate 7083 where staff booked 205.
+    const guess = isDone(need({ readPlaces: [61] }), [{ order_id: 2, absolute: false, ref: "" }], both, [crew(2, 2000)]);
+    ok(guess.state === "done" && guess.orders[0] === 2, "a guessed link's job is not dropped for being away from the reading's place", guess);
   }
 
   console.log("\n[2] the work must fit the ask, after the email, by a person, on a live order");
@@ -144,6 +152,32 @@ const map = (...os: Order[]) => new Map(os.map((o) => [o.order_id, o]));
     await seed(20);
     const many = await count();
     ok(one === many && one > 0, `one TV build makes the same number of queries for 1 card and 21 (${one}, ${many})`, { one, many });
+  }
+
+  console.log("\n[6] an order OnSinch no longer returns, and the re-plan's reading (1 Nov)");
+  {
+    // The bot's test order 16797 had no body; read as live, its unknown company was "another company" and the conflict
+    // held a need open 102 h after staff did the work.
+    await sql`INSERT INTO onsinch_orders (order_id, number, company_id, body, read_at) VALUES (16797, NULL, NULL, NULL, now())`;
+    await sql`INSERT INTO thread_messages (message_id, thread_id, from_address, date_iso, subject, body, is_from_spartan) VALUES ('g1', 'tg', 'ops@north.example', '2026-10-28T09:00:00Z', 'crew', 'add 2 please', false)`;
+    await sql`INSERT INTO v2_decisions (message_id, thread_id, from_address, sent_at, kind, decision, executed, code_version, created_at)
+      VALUES ('g1', 'tg', 'ops@north.example', '2026-10-28T09:00:00Z', 'write', ${JSON.stringify({ kind: "write", ops: [], why: [] })}::jsonb, ${JSON.stringify([{ status: "verified", detail: { order_id: 16797 } }])}::jsonb, 'abc', '2026-10-28T09:00:00Z')`;
+    const la = await linkAbsolute(sql as any, { dry: true });
+    ok(!la.conflicts.tg, "the bot's order OnSinch no longer returns is gone: no conflict with the sender's company", la.conflicts);
+
+    // A "Tue 28 Sep" of 12 Oct stored as 2027 before O22; the re-plan reads it as 2026, a passed day, so the card leaves.
+    const handoff = { kind: "handoff", reasons: ["a request is for 2026-09-28, before the email was sent"], ops: [] };
+    const read = (date: string | null) => ({ intent: "change", requests: [{ action: "change_times", date, start: "10:00", end: "14:00", problems: [] }] });
+    for (const [id, replanDate] of [["old", "2026-09-28"], ["keep", null]] as const) {
+      await sql`INSERT INTO v2_decisions (message_id, thread_id, from_address, sent_at, kind, decision, interpretation, replan, code_version, created_at)
+        VALUES (${id}, ${`t-${id}`}, 'ops@north.example', '2026-10-27T09:00:00Z', 'handoff', ${JSON.stringify(handoff)}::jsonb, ${JSON.stringify({ grounded: read("2027-09-28") })}::jsonb,
+          ${JSON.stringify({ ...handoff, grounded: read(replanDate) })}::jsonb, 'abc', '2026-10-27T09:00:00Z')`;
+      await sql`INSERT INTO thread_messages (message_id, thread_id, from_address, date_iso, subject, is_from_spartan) VALUES (${id}, ${`t-${id}`}, 'ops@north.example', '2026-10-27T09:00:00Z', 'crew', false)`;
+    }
+    const tv = await serveFeed({ ...liveFeedDeps(), jobs: undefined, remember: undefined }, Date.parse("2026-10-28T12:00:00Z"));
+    const listed = (((tv.body as any).items ?? []) as any[]).map((c) => c.thread_id);
+    ok(!listed.includes("t-old"), "the re-plan's reading names the day: a passed day, off the TV", listed);
+    ok(listed.includes("t-keep"), "a re-plan reading with no day leaves the stored day (a card with no day would never leave)", listed);
   }
 
   console.log(fails ? `\n${fails} FAILED` : "\nALL PASS");

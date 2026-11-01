@@ -80,6 +80,16 @@ ok(quoteIn(latest, "15:30PM  on the 30th"), "a quote matches across case and spa
 ok(!quoteIn(latest, "6 x crew"), "a quote from the history does not count as the client's new words");
 ok(!quoteIn(latest, ""), "an empty quote grounds nothing");
 ok(latestText("Hi\n-----Original Message-----\nFrom: x\nold").trim() === "Hi", "a forwarded original is dropped");
+{
+  // A forward the client's words hand over is theirs (harness/gen N003, 1 Nov); one they do not is history (V25).
+  const fwd = (own: string) => `Hi,\n\n${own}\n\nThanks\nRaj\n\n---------- Forwarded message ---------\nFrom: Amy Reid <amy@x.co.uk>\nDate: Mon, 2 Nov 2026\nSubject: Crew\nTo: Raj <raj@x.co.uk>\n\nHi,\n\nWe need 4 x crew on Monday 16th November, 08:00-12:00 at Olympus Hall.\n\nAmy\n\nOn Fri, 30 Oct 2026 at 10:00, Bookings wrote:\n> R70001 is booked`;
+  const handed = latestText(fwd("Please see below, can you book this in?"));
+  ok(/Please see below/.test(handed) && /4 x crew on Monday 16th November, 08:00-12:00/.test(handed), "a forward handed over (\"see below, can you book this in?\") is the client's newest words");
+  ok(!/From: Amy|Subject: Crew|R70001/.test(handed), "without its headers or its own quoted history");
+  ok(latestText(handed) === handed, "and a second pass leaves it as it is");
+  ok(!/4 x crew/.test(latestText(fwd("FYI, for your records."))), "a forward the client does not hand over stays history");
+  ok(!/4 x crew/.test(latestText(fwd("Please see below.").replace("---------- Forwarded message ---------", "-----Original Message-----"))), "a reply's quoted original stays history, whatever is written above it");
+}
 
 console.log("relative days (Fairholme 10-09: \"2 crew for tomorrow at 4:30pm\")");
 eq(parseDate("tomorrow", "2026-10-09T09:22:39Z"), "2026-10-10", "tomorrow, from the day it was sent");

@@ -194,7 +194,10 @@ export async function linkAbsolute(sql: Sql, opts: { dry?: boolean } = {}): Prom
     (SELECT max(deleted_at) FROM onsinch_orders)::text AS d, (SELECT count(*) FROM v2_decisions)::int AS n`) as unknown[]);
   const last = ((await sql`SELECT value FROM v2_loop_meta WHERE key = 'links_graded'`) as Array<{ value: string }>)[0]?.value;
   if (!opts.dry && last === stamp) return { graded: 0, added: [], replaced: [], conflicts: {} };
-  const orders = ((await sql`SELECT o.order_id, o.number, o.company_id, o.body->>'intern_name' AS po, o.body->'Job' AS jobs, o.deleted_at IS NOT NULL AS deleted,
+  // An order OnSinch no longer returns has no body: it is gone, as cards.ts counts it. Read as live, its unknown company
+  // was "another company" and the conflict kept 6 threads open, one 102 h after staff did the work (1 Nov: the bot's
+  // deleted test order 16797 beside staff's R11736).
+  const orders = ((await sql`SELECT o.order_id, o.number, o.company_id, o.body->>'intern_name' AS po, o.body->'Job' AS jobs, (o.deleted_at IS NOT NULL OR o.body IS NULL OR o.body = 'null'::jsonb) AS deleted,
       (SELECT min(t.created) FROM onsinch_timeline t WHERE t.order_id = o.order_id AND t.action IN ('order_create', 'order_create_by_copy', 'order_created_via_api')) AS made
     FROM onsinch_orders o`) as any[]).map((o): GradeOrder => ({ order_id: Number(o.order_id), number: o.number == null ? null : String(o.number), company_id: o.company_id == null ? null : Number(o.company_id),
       po: o.po ?? null, jobs: ([].concat(o.jobs ?? []) as any[]).map((j) => Number(j?.id)).filter(Boolean), made: o.made ? new Date(o.made).getTime() : null, deleted: !!o.deleted }));

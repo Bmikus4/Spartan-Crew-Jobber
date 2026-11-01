@@ -5735,5 +5735,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0280",
+  "ts": "2026-11-01T15:45:15+00:00",
+  "kind": "measurement",
+  "headline": "TV: 4-5 day needs explained; deleted bot orders no longer block done, reading's place breaks ties, re-plan reading sets days; forwarded bookings read",
+  "subject": "Needs staff did no longer stay open behind deleted bot orders or a two-order tie",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 123,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]

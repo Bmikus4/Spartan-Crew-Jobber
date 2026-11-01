@@ -63,7 +63,7 @@ async function v2(): Promise<V2Row[]> {
   if (!t?.t) return [];
   await ensureSchema(db());
   const rows = (await db()`
-    SELECT d.thread_id, d.message_id, d.sent_at, d.kind, d.interpretation->'grounded' AS grounded, d.decision, d.executed,
+    SELECT d.thread_id, d.message_id, d.sent_at, d.kind, CASE WHEN jsonb_path_exists(d.replan->'grounded', '$.requests[*] ? (@.date != null || @.target.date != null)') THEN d.replan->'grounded' ELSE d.interpretation->'grounded' END AS grounded, d.decision, d.executed,
            d.company_id, d.from_address, to_jsonb(d)->'replan' AS replan
     FROM v2_decisions d
     WHERE d.kind IN ('write', 'handoff') AND coalesce(d.code_version, '') <> 'local' AND d.created_at >= ${V2_FROM}`) as any[];
