@@ -5749,5 +5749,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0281",
+  "ts": "2026-11-01T19:23:53+00:00",
+  "kind": "measurement",
+  "headline": "Agreed (O27): client's yes to Spartan's quote or terms, verified in OnSinch; 3 of 243 live needs agreed, the 3 read by hand",
+  "subject": "A need the client settled with Spartan, and OnSinch holds, is agreed and leaves the TV",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 123,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]

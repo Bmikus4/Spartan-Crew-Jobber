@@ -180,6 +180,45 @@ const map = (...os: Order[]) => new Map(os.map((o) => [o.order_id, o]));
     ok(listed.includes("t-keep"), "a re-plan reading with no day leaves the stored day (a card with no day would never leave)", listed);
   }
 
+  console.log("\n[7] agreed: the client accepted Spartan's quote or terms, and OnSinch holds them (the owner, 1 Nov)");
+  {
+    const MIN = 60_000;
+    const a = order(1, ["2026-11-04"]);
+    const L = [{ order_id: 1, absolute: true, ref: "R11001" }];
+    const msg = (min: number, ours: boolean, text: string, asks = false) => ({ at: AT + min * MIN, ours, text, asks });
+    const ask = msg(0, false, "Please may I request for the call time to be 2-hours only instead of 3", true);
+    const terms = msg(6, true, "Hi, Due to the location, the call time is subject to a 3-hour minimum.\n*Please note, all quotes sent from this account are valid for 14 days");
+    const yes = msg(24, false, "No worries, please can I confirm this. See PO attached.");
+    const v = isDone(need(), L, map(a), [], undefined, [ask, terms, yes]);
+    ok(v.state === "agreed" && /terms/.test(v.text) && v.at === new Date(AT + 24 * MIN).toISOString(), "a change refused for a minimum, and the client's yes: agreed, as of the yes", v);
+    const quote = msg(-60 * 24 * 40, true, "No problem at all, please see quote attached.");
+    const own = isDone(need({ asks: ["change"] }), L, map(a), [], undefined, [quote, msg(-60 * 24 * 40 + 20, true, "There's no rush at all as the event is in November."), msg(0, false, "May I confirm this quote with you.")]);
+    ok(own.state === "agreed" && /quote/.test(own.text), "the need's own email confirms an earlier quote, a note after the quote changing nothing: agreed", own);
+    ok(isDone(need(), L, map(a), [], undefined, [ask, msg(6, true, "Yes, we can do that, all updated."), yes]).state === "open", "Spartan saying it will do it is no offer: the work is still owed");
+    ok(isDone(need(), L, map(a), [crew(1, 1000, new Date(AT + 30 * MIN).toISOString())], undefined, [ask, terms, yes]).state !== "agreed", "a shift changed after the offer: the offer is not what OnSinch holds");
+    ok(isDone(need(), L, map(a), [], undefined, [ask, terms, msg(24, false, "Please can I confirm this and change the timing to 10-2", true)]).state === "open", "a yes that asks for something too: open");
+    ok(isDone(need(), L, map(a), [], undefined, [ask, terms, msg(10, false, "Can we also add a driver?", true), yes]).state === "open", "the client asked for more after the offer: open");
+    ok(isDone(need(), L, map(order(1, ["2026-11-04"], {}), ...[]), [], undefined, [ask, terms]).state === "open", "terms and no yes: open");
+    const prov = order(1, ["2026-11-04"]); prov.body.provisional = true;
+    ok(isDone(need(), L, map(prov), [], undefined, [ask, terms, yes]).state === "open", "a provisional order is not a booking: open");
+    ok(isDone(need({ days: ["2026-11-04", "2026-11-05"] }), L, map(a), [], undefined, [ask, terms, yes]).state === "open", "the order lacks a day of the need: open");
+    ok(isDone(need({ asks: ["cancel"] }), L, map(a), [], undefined, [ask, terms, yes]).state === "open", "a cancellation is never settled by a yes to terms");
+
+    const cx = need({ asks: ["cancel"], days: ["2026-11-06"], company_id: null, companies: [7, 8] });
+    const done = msg(47, true, "Hi, Thank you for getting back to me. We have cancelled the order.");
+    const none = isDone(cx, [], map(order(5, ["2026-10-28"], { company_id: 8 })), [], undefined, [msg(0, false, "the client cancelled the event", true), done]);
+    ok(none.state === "agreed" && /cancellation/.test(none.text), "Spartan says it cancelled and no company of the sender holds the day: agreed", none);
+    ok(isDone(cx, [], map(order(5, ["2026-11-06"], { company_id: 8 })), [], undefined, [done]).state === "open", "one of the sender's companies still holds the day: open");
+    ok(isDone({ ...cx, companies: [] }, [], new Map(), [], undefined, [done]).state === "open", "a sender on no contact list: nothing to check the cancellation against, open");
+
+    // The TV shows no agreed need at all, green or not.
+    const before = await serveFeed({ ...liveFeedDeps(), jobs: undefined, remember: undefined }, Date.parse("2026-10-28T12:00:00Z"));
+    const card = (((before.body as any).items ?? []) as any[]).find((c) => c.thread_id === "t-keep");
+    await sql`INSERT INTO feed_marks (item_key, thread_id, mark, evidence) VALUES (${card.items[0].item_key}, 't-keep', 'agreed', ${JSON.stringify({ text: "Agreed" })}::jsonb)`;
+    const after = await serveFeed({ ...liveFeedDeps(), jobs: undefined, remember: undefined }, Date.parse("2026-10-28T12:00:00Z"));
+    ok(!(((after.body as any).items ?? []) as any[]).some((c) => c.thread_id === "t-keep"), "an agreed need is off the TV");
+  }
+
   console.log(fails ? `\n${fails} FAILED` : "\nALL PASS");
   process.exit(fails ? 1 : 0);
 })();

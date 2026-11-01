@@ -35,7 +35,7 @@ export type FeedLane = "reply" | "need" | "done";
  * stopped yielding it. Without them the card vanished mid-list, which on a full screen
  * reads as a job lost, not a job done.
  */
-export type MarkKind = "checked" | "staff-edit" | "order-found" | "stamps" | "matched" | "dismissed" | "open" | "resolved" | "done" | "possibly";
+export type MarkKind = "checked" | "staff-edit" | "order-found" | "stamps" | "matched" | "dismissed" | "open" | "resolved" | "done" | "possibly" | "agreed";
 /**
  * Done is a person's tick, staff's work found by the one evaluator (done.ts, marked by the minute sync's cards step),
  * or a later email answering the need. The old verifier's marks (staff-edit, order-found) are kept as history and
@@ -229,6 +229,8 @@ export function project(
   // A tick outranks automatic evidence for what the card SAYS, not for when it went green.
   const ticked = new Map(marks.filter((m) => m.mark === "checked").map((m) => [m.item_key, m]));
   const possibly = new Map(marks.filter((m) => m.mark === "possibly").map((m) => [m.item_key, String((m.evidence as { text?: unknown } | null)?.text ?? "")]));
+  // Agreed with the client and held in OnSinch (done.ts agreedOn): nothing was left to do, so the need is not shown at all.
+  const agreed = new Set(marks.filter((m) => m.mark === "agreed").map((m) => m.item_key));
   // A card's R and J are its thread's own (the link the planner keeps, v2.ts), never the
   // verifier's find for the screen: 11 of its 83 finds named another order than the evidence
   // finder (10-21), and the R/J-only list (serve.ts) would have listed those as known jobs.
@@ -309,7 +311,7 @@ export function project(
         const kind = was.item_key.split(":")[0] as FeedKind;
         it = { item_key: was.item_key, kind, status: STATUS_TEXT[kind], at: was.at, order_id: s.order_id };
       }
-      if (!it || it.at < from) continue;
+      if (!it || it.at < from || agreed.has(it.item_key)) continue;
       // A question, a quote or a missing detail is answered by writing back: once an email of
       // ours is on the thread after it, it is done (a draft is not an email: only sent mail is
       // in lastOutbound). Our email answers that and nothing else on the card.
