@@ -5679,5 +5679,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0276",
+  "ts": "2026-11-01T03:27:24+00:00",
+  "kind": "measurement",
+  "headline": "O19-O23 recorded; no year written = the sent year in grounding and the reader (was: rolled to next year, 4 of 270 refused); harness reader runs without OpenRouter",
+  "subject": "A date with no year is read in the year it was sent, never rolled to the next",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 121,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]

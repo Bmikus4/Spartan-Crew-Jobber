@@ -59,7 +59,13 @@ eq(parseDate("10/10/2026", "2026-10-01T09:00:00Z"), "2026-10-10", "10/10/2026");
 eq(parseDate("the 30th", "2026-09-25T09:00:00Z"), "2026-09-30", "the 30th, same month");
 eq(parseDate("the 2nd", "2026-09-25T09:00:00Z"), "2026-10-02", "the 2nd, rolls to next month");
 eq(parseDate("Friday 9th", "2026-10-07T09:00:00Z"), "2026-10-09", "Friday 9th");
-eq(parseDate("5th January", "2026-12-20T09:00:00Z"), "2027-01-05", "January written in December: next year");
+// No year written is the sent year, always (Ben, 31 Oct): a past day is the planner's to refuse, not a year to guess.
+eq(parseDate("5th January", "2026-12-20T09:00:00Z"), "2026-01-05", "January written in December, no year: the sent year");
+eq(parseDate("5th January 2027", "2026-12-20T09:00:00Z"), "2027-01-05", "a year written is that year");
+eq(parseDate("the 2nd", "2026-12-28T09:00:00Z"), null, "a bare day past December's end is no day of the sent year");
+eq(parseDate("Wednesday the 15th", "2031-08-20T09:00:00Z"), "2031-10-15", "a weekday with a bare day: the first month of the sent year it falls on, two months on");
+eq(parseDate("Monday 16th November", "2026-10-20T09:00:00Z"), "2026-11-16", "weekday, day and month agree");
+eq(parseDate("Tuesday 16th November", "2026-10-20T09:00:00Z"), null, "a weekday that contradicts the date is no date, not a year later");
 eq(parseDate("31st September", "2026-09-01T09:00:00Z"), null, "31st September does not exist");
 eq(parseDate("next week", "2026-09-01T09:00:00Z"), null, "next week is not a date");
 eq(parseDate("the one on November 4th at BAFTA", "2026-09-17T15:39:00Z"), "2026-11-04", "November 4th (month first; read as 4 October before the fix)");

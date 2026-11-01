@@ -7,15 +7,19 @@
 //              the minute sync (/api/bot/sync) and the labels route after every event; the TV (serveFeed) at
 //              each look. Settings as production's on 31 Oct: writes off, drafts only, the two-week rule on.
 //   reader     --reader oracle (default, $0): the perfect reading written with the case; mutant: the same with every
-//              date a day late. The model runs wait on the owner's choice of OpenRouter key (ADDENDUM §14.10).
+//              date a day late; record: the perfect reading, with each email's reader input as production sends it
+//              (system and user message) saved to <dir>/requests/qNNN.txt for an outside reader, the case of each in
+//              <dir>/map.json; answers: <dir>/answers/qNNN.json as the reading (a Claude session, no OpenRouter).
+//              --dir names that folder; --limit spreads that many cases evenly over the categories. The model runs wait on the owner's choice of OpenRouter key (ADDENDUM §14.10).
 //   boundary   harness/sim: PGlite, the fake OnSinch, the simulated clock; every fetch intercepted.
 //   output     .tmp-data/gen/<run>/results.json and report.md (harness/gen/score.ts)
 //
-//   npx tsx harness/gen/run.mts --cats A,E,K --n 5 [--seed 31102026] [--reader mutant] [--out dir]   (never with --env-file)
+//   npx tsx harness/gen/run.mts --cats A,E,K --n 5 [--seed 31102026] [--reader mutant|record|answers --dir d] [--limit 100] [--out dir]
+//   (never with --env-file)
 //   GEN_DEBUG=<case id> writes that case's decisions, orders, looks and stored history to .tmp-data/gen-debug-<id>.json
 // ============================================================================
 import { createRequire } from "node:module";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 
 const require = createRequire(import.meta.url);
 const { pg, os, net } = require("../sim/boot.ts").bootSim();
@@ -39,7 +43,14 @@ const { serveFeed } = require("../../app/lib/feed/serve.ts");
 const { liveFeedDeps } = require("../../app/lib/feed/live.ts");
 const sql = pg.neonShim();
 
-const cases = generate(cats, n, seed);
+const limit = Number(arg("limit", "0"));
+// A limit keeps the first cases of each category, so the set stays in time order (the clock only moves forward).
+const quota = (k: number) => Math.floor(limit / cats.length) + (k < limit % cats.length ? 1 : 0);
+const cases = (generate(cats, n, seed) as any[]).filter((c) => !limit || Number(c.id.slice(1)) <= quota(cats.indexOf(c.category)));
+const io = arg("dir", ".tmp-data/gen/reader");
+const qid = new Map<string, string>();
+if (reader === "record") { mkdirSync(`${io}/requests`, { recursive: true }); mkdirSync(`${io}/answers`, { recursive: true }); }
+const recorded = reader === "answers" ? new Map(Object.entries(JSON.parse(readFileSync(`${io}/map.json`, "utf8")) as Record<string, string>).map(([q, id]) => [id, q])) : null;
 os.store.auditFloor = TIMELINE_FROM_ID;
 
 // The perfect reader: each email's reading as the case wrote it.
@@ -47,7 +58,22 @@ const oracle = new Map<string, any>();
 const late = (x: any): any => Array.isArray(x) ? x.map(late) : x && typeof x === "object"
   ? Object.fromEntries(Object.entries(x).map(([k, v]: [string, any]) => [k, k === "date" && v && typeof v.value === "string" ? { ...v, value: new Date(Date.parse(`${v.value}T12:00:00Z`) + 864e5).toISOString().slice(0, 10) } : late(v)]))
   : x;
-net.answerModel(async (id: string | null) => (id && oracle.has(id) ? { extraction: reader === "mutant" ? late(oracle.get(id)) : oracle.get(id), model: reader } : null));
+net.answerModel(async (id: string | null, request: any) => {
+  if (!id || !oracle.has(id)) return null;
+  if (reader === "answers") {
+    const q = recorded!.get(id), f = `${io}/answers/${q}.json`;
+    if (!q || !existsSync(f)) return null;
+    try { return { extraction: JSON.parse(readFileSync(f, "utf8").replace(/^```(?:json)?\s*|\s*```\s*$/g, "")), model: "claude session" }; } catch { return null; }
+  }
+  if (reader === "record") {
+    const q = `q${String(qid.size + 1).padStart(3, "0")}`;
+    qid.set(q, id);
+    const msgs = (request?.messages ?? []) as Array<{ role: string; content: string }>;
+    if (qid.size === 1) writeFileSync(`${io}/system.txt`, msgs.find((m) => m.role === "system")?.content ?? "");
+    writeFileSync(`${io}/requests/${q}.txt`, msgs.find((m) => m.role === "user")?.content ?? "");
+  }
+  return { extraction: reader === "mutant" ? late(oracle.get(id)) : oracle.get(id), model: reader };
+});
 
 pg.clock.set(cases[0].t0 - 3600e3);
 await pg.syncSqlClock();
@@ -128,6 +154,7 @@ for (const c of cases) {
 
 const dir = arg("out", `.tmp-data/gen/${runId}`);
 mkdirSync(dir, { recursive: true });
+if (reader === "record") writeFileSync(`${io}/map.json`, JSON.stringify(Object.fromEntries(qid), null, 1));
 writeFileSync(`${dir}/results.json`, JSON.stringify({ cats, n, seed, reader, syncErrors, network_refused: [...new Set(net.net.refused)], results }, null, 1));
 const md = report(results, { cats, n, seed, reader, seconds: Math.round((performance.now() - t0) / 1000), syncErrors: syncErrors.length });
 writeFileSync(`${dir}/report.md`, md);

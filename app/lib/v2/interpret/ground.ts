@@ -145,8 +145,9 @@ const MONTHS = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "
 /**
  * A client's date, resolved against the day the email was SENT (never "today"):
  * "17th September", "13th Oct", "Thursday 8th October 26", "14/10", "10/10/2026", "30th",
- * "Friday 9th". No year written: the first such day on or after the sent date (a date up to
- * 7 days before it is read as that recent past day, e.g. a late-arriving confirmation).
+ * "Friday 9th". No year written: the sent year, always. A bare day ("the 30th") is the first
+ * such day on or after the sent date this month or next (up to 7 days before it is that recent
+ * past day, e.g. a late-arriving confirmation); a month written is that month of the sent year.
  * A weekday that contradicts the date is null: one of the two is wrong and neither is chosen.
  */
 /** The day an email was sent, in London: 23:30 UTC in summer is already tomorrow there. */
@@ -274,17 +275,17 @@ export function parseDate(raw: string, sentIso: string): string | null {
     }
   }
   if (d < 1 || d > 31 || (mo !== null && (mo < 0 || mo > 11))) return null;
-  const candidates: Date[] = [];
-  const y0 = sent.getUTCFullYear();
-  for (const yy of y !== null ? [y] : [y0, y0 + 1]) {
-    for (const mm of mo !== null ? [mo] : [sent.getUTCMonth(), sent.getUTCMonth() + 1]) {
-      const c = new Date(Date.UTC(yy, mm, d, 12));
-      if (c.getUTCDate() === d) candidates.push(c);
-    }
-  }
+  // NO YEAR WRITTEN IS THE SENT YEAR, always (Ben, 31 Oct). Until then a date before the sent day rolled to next
+  // year, and "Wednesday the 15th" two months on read as the same date a year later, which grounding refused (4 of
+  // 270 generated cases). A past day in the sent year is the planner's to refuse as past, not this code's to move.
+  const yy = y ?? sent.getUTCFullYear();
+  const sm = sent.getUTCMonth();
+  // A bare day ("the 16th") is this month or next; with its weekday, the first month of the year it falls on that day.
+  const months = mo !== null ? [mo] : weekday ? Array.from({ length: 12 - sm }, (_, k) => sm + k) : [sm, sm + 1].filter((m) => m <= 11);
+  const candidates = months.map((mm) => new Date(Date.UTC(yy, mm, d, 12))).filter((c) => c.getUTCDate() === d);
   const floor = sent.getTime() - 7 * 864e5;
   const dayName = (c: Date) => ["sun", "mon", "tue", "wed", "thu", "fri", "sat"][c.getUTCDay()];
-  const open = y !== null ? candidates.slice(0, 1) : candidates.filter((c) => c.getTime() >= floor).sort((a, b) => a.getTime() - b.getTime());
+  const open = mo !== null ? candidates : candidates.filter((c) => c.getTime() >= floor);
   // A weekday written with a bare day picks between the months it could be: "Monday the
   // 16th" sent on Friday 23 October is 16 November, not the 16 October a week before. With no
   // candidate on that weekday, the words contradict each other and there is no date.

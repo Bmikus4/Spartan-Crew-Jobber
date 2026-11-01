@@ -26,8 +26,17 @@ export type GenCase = {
 type Ctx = { r: Rng; n: number; client: Client; contact: Client["contacts"][number]; t0: number; today: string };
 
 // ---- words -------------------------------------------------------------------------------------------------
+/** The sent year of the case being made (generate sets it). A day in another year is written with its year: no year
+ * written is the sent year (O22, 31 Oct), so a client meaning next year must say so. */
+let sentYear = 0;
+const MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+function dayOf(day: string, r: Rng): string {
+  if (Number(day.slice(0, 4)) === sentYear) return dayWords(day, r);
+  const [y, m, d] = day.split("-").map(Number);
+  return pick(r, [`${d} ${MON[m - 1]} ${y}`, `${String(d).padStart(2, "0")}/${String(m).padStart(2, "0")}/${y}`, `${MON[m - 1]} ${d} ${y}`]);
+}
 const callWords = (c: Call, r: Rng) => {
-  const day = dayWords(c.date, r), rg = rangeWords(c.start, c.end, r);
+  const day = dayOf(c.date, r), rg = rangeWords(c.start, c.end, r);
   const who = c.trade.profession ? `${c.crew} ${pick(r, c.trade.words)}` : crewWords(c.crew, r);
   return { day, rg, who };
 };
@@ -122,7 +131,7 @@ function change(ctx: Ctx, kind: "times" | "crew-add" | "crew-total" | "move" | "
     rqs = [req({ action: "change_crew", date: g(c.date, w.day), crew: g(total, q), target })];
     after = (o) => staff.setCrew(o, 0, total - (total >= 4 ? 1 : 0), by);
   } else if (kind === "move") {
-    const to = addDays(c.date, int(r, 1, 3)), wd = dayWords(to, r);
+    const to = addDays(c.date, int(r, 1, 3)), wd = dayOf(to, r);
     moved = to;
     text = `We need to move ${which} to ${wd}, same times please.`;
     rqs = [req({ action: "change_times", date: g(to, wd), target })];
@@ -132,7 +141,7 @@ function change(ctx: Ctx, kind: "times" | "crew-add" | "crew-total" | "move" | "
     rqs = [req({ action: "cancel_shift", date: g(c.date, w.day), target })];
     after = (o) => staff.cancelCall(o, 0, by);
   } else {
-    const ws = job.calls.map((x) => dayWords(x.date, r));
+    const ws = job.calls.map((x) => dayOf(x.date, r));
     const ref = { R: ` R${number}`, po: ` (${poQ})`, venue: ` at ${c.place.name}`, start: "", day: "" }[anchor];
     text = `We have to cancel the whole booking${ref} (${ws.join(", ")}), sorry.`;
     rqs = job.calls.map((x, k) => req({ action: "cancel_shift", date: g(x.date, ws[k]), target: { quote: ws[k], date: g(x.date, ws[k]), start: null } }));
@@ -234,6 +243,7 @@ export function generate(categories: string[], n: number, seed = 31_10_2026, fro
     const client = makeClient(r, k);
     const t0 = cursor + int(r, 0, 8) * H;
     const today = new Date(t0).toISOString().slice(0, 10);
+    sentYear = Number(today.slice(0, 4));
     const made = CATEGORIES[cat].make({ r, n: k, client, contact: pick(r, client.contacts), t0, today });
     out.push({ id: `${cat}${String(i + 1).padStart(3, "0")}`, category: cat, ...made });
     const end = t0 + Math.max(...made.looks.map((l) => l.at), ...made.staff.map((x) => x.at));

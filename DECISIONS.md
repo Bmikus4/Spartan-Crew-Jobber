@@ -182,6 +182,11 @@ the owner's where the comment quotes them. Owner decisions still OPEN are in ADD
 | O16 | 30 Oct | A three-line tile (owner and Paz), the UI tight and orderly; a need does not depend on having a day | same |
 | O17 | 30 Oct | "absolutes overrule everything else, so any absolute links both ways, should override existing ones, be careful with this": a link is the same whichever side found it, and an absolute one overrules inferred ones | fleet/resume/Spartan-TV-Handoff-2026-10-30.md step 1 |
 | O18 | 30 Oct | "the system should be built to handle multiple orders": one email may name several orders, and one PO may be on several | same |
+| O19 | 31 Oct | No crew ceiling | decisions/2026-10-31-simulated-business-rulings.md; ADDENDUM §14 |
+| O20 | 31 Oct | "We shouldn't be creating or updating jobs ourselves live": production never writes to OnSinch; plans only | same |
+| O21 | 31 Oct | A missing venue is asked of the client (the two-week rule first), unless a match is "nearly beyond a reasonable doubt"; none reaches that yet (measured) | same |
+| O22 | 31 Oct | "With no year specified always assume current year": the sent date's year, even for a passed day | same; ground.ts parseDate, extract.ts prompt |
+| O23 | 31 Oct | Spartan's model calls use the Spartan Crew Pipeline key only (the one n8n uses) | same |
 
 ## Rulings in v2 code
 
