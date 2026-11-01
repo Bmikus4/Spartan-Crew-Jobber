@@ -1,17 +1,22 @@
 // ============================================================================
 // The simulator's network: every fetch the app makes ends here, and nothing leaves the machine.
 //   OnSinch          -> the fake (onsinch.ts)
-//   the model        -> the stored reading of the email being decided (no model is called)
+//   the model        -> the stored reading of the email being decided (no model is called), or what a
+//                       harness sets with answerModel (harness/gen: the perfect reading, or a recorded call)
 //   n8n webhooks     -> recorded, answered {ok:true}
 //   anything else    -> refused, and counted
 // The email being decided is read off the app's own SELECT on thread_messages (pg.ts).
 // ============================================================================
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { onsinch } from "./onsinch";
 import { current } from "./pg";
 
 const readings = new Map<string, any>();
-for (const r of JSON.parse(readFileSync(".tmp-data/sim/readings.json", "utf8"))) if (r.extraction) readings.set(String(r.message_id), r);
+if (existsSync(".tmp-data/sim/readings.json")) for (const r of JSON.parse(readFileSync(".tmp-data/sim/readings.json", "utf8"))) if (r.extraction) readings.set(String(r.message_id), r);
+type Answer = (messageId: string | null, request: any) => Promise<{ extraction: any; model?: string; usage?: Record<string, number> } | null>;
+let answer: Answer = async (id) => (id ? readings.get(id) ?? null : null);
+/** What the model says for the email being decided: the stored reading by default. */
+export function answerModel(a: Answer): void { answer = a; }
 
 export const net = { model: 0, modelMissing: [] as string[], webhooks: [] as Array<{ url: string; body: unknown }>, refused: [] as string[] };
 const json = (status: number, data: unknown) => new Response(data === null ? null : JSON.stringify(data), { status, headers: { "content-type": "application/json" } });
@@ -25,10 +30,10 @@ export function installFetch(): void {
     if (/onsinch\.com\/api\/v1/.test(url)) { const r = await onsinch(method, url, body); return json(r.status, r.data); }
     if (/openrouter\.ai|ai-gateway\.vercel\.sh/.test(url)) {
       net.model++;
-      const r = current.message_id ? readings.get(current.message_id) : null;
+      const r: any = await answer(current.message_id, body);
       if (!r) net.modelMissing.push(current.message_id ?? "?");
       const x = r?.extraction ?? { intent: "unclear", po: null, requests: [], note: "no stored reading for this email" };
-      return json(200, { model: r?.meta?.model ?? "recorded", choices: [{ message: { content: JSON.stringify(x) } }], usage: { prompt_tokens: 0, completion_tokens: 0, cost: 0 } });
+      return json(200, { model: r?.model ?? r?.meta?.model ?? "recorded", choices: [{ message: { content: JSON.stringify(x) } }], usage: r?.usage ?? { prompt_tokens: 0, completion_tokens: 0, cost: 0 } });
     }
     if (/n8n\.cloud\/webhook|\/webhook\//.test(url)) { net.webhooks.push({ url, body }); return json(200, { ok: true }); }
     net.refused.push(`${method} ${url.slice(0, 80)}`);

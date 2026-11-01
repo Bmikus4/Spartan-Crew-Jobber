@@ -516,5 +516,5 @@ export function generateFrom(templates: Template[], total: number, seed: number,
 }
 
 // Shared with the complex sets (generate-complex.ts).
-export { pick, int, mulberry32, dayWords, timeWords, rangeWords, crewWords, shiftTimes, g, req, ex, sender, order, slotsOf, mail, write, person, none, addDays, londonDay, jobDay };
+export { pick, int, mulberry32, dayWords, timeWords, rangeWords, crewWords, shiftTimes, g, req, ex, sender, order, slotsOf, mail, write, person, none, addDays, londonDay, jobDay, GREET, signoff, quotedHistory };
 export type { Ctx, Built, Rng };

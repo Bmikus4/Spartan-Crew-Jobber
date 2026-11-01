@@ -117,6 +117,10 @@ const NOW = Date.parse("2026-10-20T09:00:00Z");
     ok(found.item?.kind === "needs-updated" && found.order_id === 16624 && found.item.item_key === first.item?.item_key, "an order found since makes it an update on that order, under the same key", `${found.item?.item_key} vs ${first.item?.item_key}`);
     const past = v2Source({ ...row, replan: { kind: "handoff", reasons: ["2026-10-13 is already over: a person adjusts it"], order_id: 16614 } }, NOW);
     ok(past.days.includes("2026-10-13"), "a day the planner says is over is the card's day, so the card leaves with its job (Encore, 10-21)", JSON.stringify(past.days));
+    const move = v2Source({ ...row, grounded: { intent: "change", problems: [], requests: [{ action: "change_times", date: "2026-11-13", target: { date: "2026-11-12", quote: "12/11" }, problems: [] } as any] },
+      decision: { kind: "handoff", reasons: ["no shift on 2026-11-12"] } }, NOW);
+    ok(JSON.stringify(move.days) === JSON.stringify(["2026-11-12", "2026-11-13"]) && JSON.stringify(move.need?.days) === JSON.stringify(["2026-11-12", "2026-11-13"]),
+      "a move's need holds the day it leaves and the day it goes to, so the order staff moved still holds one of them (harness/gen, 31 Oct)", JSON.stringify(move.days));
   }
 
   console.log("A found order never displaces a live link (links.ts linkFound)");

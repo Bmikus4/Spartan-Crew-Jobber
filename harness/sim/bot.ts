@@ -9,7 +9,7 @@
 // ============================================================================
 import { createHash } from "node:crypto";
 import { shiftWindow, type Op, type PositionSpec } from "../../app/lib/v2/bot/ops";
-import { store, audit } from "./onsinch";
+import { store, audit, pathOf } from "./onsinch";
 import { clock } from "./pg";
 
 export type RunResult = { op_key: string; status: "verified" | "refused" | "seen" | "busy" | "blocked" | "mismatch" | "unknown"; reasons: string[]; detail?: Record<string, unknown> };
@@ -34,8 +34,8 @@ function apply(op: Op): RunResult["detail"] | string {
     const order: any = { id, number, company_id: Number(String(op.company_id).replace(/^new:.*/, "0")) || 0, creator: 2257, created: clock.iso(), status: 0, request_approval: 1, name: op.job_name, intern_name: op.po ?? "", specification: op.specification ?? "",
       Job: [{ id: ++store.nextJob, name: op.job_name, SlotTeam: op.shifts.map((s) => { const w = shiftWindow(s.date, s.start, s.end); const place = placeId(s.place_id); return { id: ++store.nextTeam, name: s.name, Slot: s.positions.map((p) => slot(p, w, place)) }; }) }] };
     store.orders.set(id, order);
-    audit("order_created_via_api", "Order", number, null);
-    for (const s of slotsOf(order).slice(1)) audit("common_create", "Slot", s.id, null);
+    audit("order_created_via_api", "Order", id, null, { data: { number, path: pathOf(id) } });
+    for (const t of order.Job[0].SlotTeam) for (const s of t.Slot.slice(t === order.Job[0].SlotTeam[0] ? 1 : 0)) audit("common_create", "Slot", s.id, null, { data: { path: pathOf(id, { team: t.id, slot: s.id }) } });
     return { order_id: id, number };
   }
   const o = store.orders.get(Number((op as any).order_id));
@@ -46,7 +46,7 @@ function apply(op: Op): RunResult["detail"] | string {
     const loc = slotsOf(o).find((s) => Number(s.slotlocation_id) === op.location_id)?.SlotLocation?.place_id ?? slotsOf(o)[0]?.SlotLocation?.place_id ?? null;
     const team = { id: ++store.nextTeam, name: op.name, Slot: op.positions.map((p) => slot(p, w, loc)) };
     o.Job[0].SlotTeam = [...([] as any[]).concat(o.Job[0].SlotTeam ?? []), team];
-    audit("common_create", "SlotTeam", team.id, null);
+    audit("common_create", "SlotTeam", team.id, null, { data: { path: pathOf(o.id, { team: team.id }) } });
     return { order_id: o.id, number: o.number };
   }
   if (op.kind === "add_position") {
@@ -54,7 +54,7 @@ function apply(op: Op): RunResult["detail"] | string {
     if (!team) return `shift ${op.shift_id} not on the order`;
     const s = slot(op.position, shiftWindow(op.date, op.start, op.end), team.Slot?.[0]?.SlotLocation?.place_id ?? null);
     team.Slot = [...([] as any[]).concat(team.Slot ?? []), s];
-    audit("common_create", "Slot", s.id, null);
+    audit("common_create", "Slot", s.id, null, { data: { path: pathOf(o.id, { team: team.id, slot: s.id }) } });
     return { order_id: o.id, number: o.number };
   }
   const s = slotsOf(o).find((x) => Number(x.id) === (op as any).slot_id);

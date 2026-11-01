@@ -144,7 +144,13 @@ export function v2Source(row: V2Row, now: number): FeedSource {
   // (project.ts): Encore's 13 Oct, planned again on 10-21, was listed with no day of its own.
   const over = d.kind === "handoff" ? d.reasons.map((x) => /^(\d{4}-\d{2}-\d{2}) is already over/.exec(x)?.[1]).filter((x): x is string => !!x) : [];
   const shifts: Array<{ date: string; start?: string; end?: string; place_id?: number; venue?: string; crew?: number }> = [
-    ...(g?.requests ?? []).map((r) => ({ date: r.target?.date ?? r.date ?? "", start: r.start, end: r.end, venue: r.venue, crew: r.crew })),
+    // A move is about the day it leaves and the day it goes to. With the leaving day alone, once staff moved the shift
+    // the order held no day of the need's and done.ts never found it: 5 of 30 generated moves stayed open after staff
+    // did exactly what was asked (harness/gen, 31 Oct). The new day's times and crew are the request's.
+    ...(g?.requests ?? []).flatMap((r) => [
+      ...(r.target?.date && r.date && r.date !== r.target.date ? [{ date: r.target.date }] : []),
+      { date: (r.target?.date && r.date && r.date !== r.target.date ? r.date : r.target?.date ?? r.date) ?? "", start: r.start, end: r.end, venue: r.venue, crew: r.crew },
+    ]),
     ...c.ops.flatMap(opDays),
     ...over.map((date) => ({ date })),
   ].filter((s) => /^\d{4}-\d{2}-\d{2}$/.test(s.date));

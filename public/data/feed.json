@@ -5665,5 +5665,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0275",
+  "ts": "2026-11-01T03:06:27+00:00",
+  "kind": "measurement",
+  "headline": "harness/gen: 270 generated cases, 265 end to end, 0 wrong writes; mutant 0 writes; moved-shift cards now clear (5 of 30 stayed open)",
+  "subject": "A moved shift's card clears once staff move it; generated jobs run end to end on the fake OnSinch",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 121,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]

@@ -1,5 +1,6 @@
 // ============================================================================
-// A fake OnSinch, seeded from the snapshot, that answers the queries the live path makes.
+// A fake OnSinch that answers the queries the live path makes, seeded from the production snapshot
+// (run.mts) or from a generated world (harness/gen).
 // ----------------------------------------------------------------------------
 // Real data, in time: an order exists from the moment it was created (staff's real orders
 // appear when staff really made them), a timeline row from the moment it was written. What
@@ -9,7 +10,9 @@
 //
 // Query semantics as measured on the real API: /orders newest first, /timelineAudits oldest
 // first, `field[op]=v` with eq/lt/gt/gte/lte/like (like takes SQL %), nested filters through
-// `__` (Job__id), {data, pagination:{page, pageCount, count, limit}}.
+// `__` (Job__id), {data, pagination:{page, pageCount, count, limit}}. Audit rows carry the data
+// OnSinch writes (a create's path from the order down, an Order row keyed by its number), and a
+// deleted order loses its create row and logs nothing (measured 30 Oct, ADDENDUM §13.5 step 0).
 // ============================================================================
 import { readFileSync } from "node:fs";
 import { clock } from "./pg";
@@ -24,16 +27,22 @@ export const store = {
   timeline: [] as any[],
   deleted: new Set<number>(),
   nextOrder: 990000, nextNumber: 99000, nextJob: 990000, nextTeam: 990000, nextSlot: 9900000, nextAudit: 99000000,
+  /** The lowest id a simulated audit row takes: a generated world has no real rows to number after, and the store reads from 867675. */
+  auditFloor: 0,
 };
 
+export type World = { orders: any[]; companies: any[]; places: any[]; professions: any[]; timeline: any[] };
+
 export function seed(): void {
-  for (const o of load("orders")) store.orders.set(Number(o.id), o);
-  store.companies = load("companies");
-  store.places = load("places");
-  store.professions = load("professions");
-  // Real ids x1000, so a simulated save can sit between two real rows as a whole number (the
-  // verifier keeps its cursor in a bigint column).
-  store.timeline = (load("timeline") as any[]).map((x) => ({ ...x, id: Number(x.id) * 1000 }));
+  // Real ids x1000, so a simulated save can sit between two real rows as a whole number.
+  seedWith({ orders: load("orders"), companies: load("companies"), places: load("places"), professions: load("professions"),
+    timeline: (load("timeline") as any[]).map((x) => ({ ...x, id: Number(x.id) * 1000 })) });
+}
+
+export function seedWith(w: World): void {
+  store.orders.clear(); store.deleted.clear();
+  for (const o of w.orders) store.orders.set(Number(o.id), o);
+  store.companies = w.companies; store.places = w.places; store.professions = w.professions; store.timeline = w.timeline;
 }
 
 const visible = (createdIso: string | undefined) => !createdIso || Date.parse(createdIso) <= clock.now();
@@ -87,7 +96,7 @@ export async function onsinch(method: string, url: string, body?: unknown): Prom
   calls.set(`${method} ${path}`, (calls.get(`${method} ${path}`) ?? 0) + 1);
   if (path === "/users/profile") return { status: 200, data: { data: { id: 2257, name: "Samurai AI" } } };
   if (method === "GET") return list(path, u.searchParams);
-  if (method === "DELETE" && path === "/orders") { for (const id of (body as number[]) ?? []) store.deleted.add(Number(id)); return { status: 204, data: null }; }
+  if (method === "DELETE" && path === "/orders") { for (const id of (body as number[]) ?? []) deleteOrder(Number(id)); return { status: 204, data: null }; }
   if (method === "DELETE" && path === "/companies") return { status: 204, data: null };
   return { status: 405, data: { message: `the simulator does not take ${method} ${path}: writes go through the simulated bot` } };
 }
@@ -98,8 +107,26 @@ export async function onsinch(method: string, url: string, body?: unknown): Prom
 // So a save takes the newest real id already written plus one (real ids are scaled by 1000 at
 // seed): after what came before, before what comes next.
 let lastBase = -1, frac = 0;
-export function audit(action: string, model: string, id: number | string, diff: Record<string, Record<string, { old: unknown; new: unknown }>> | null): void {
-  const base = store.timeline.reduce((m, x) => (!x.sim && Date.parse(x.created) <= clock.now() ? Math.max(m, Number(x.id)) : m), 0);
+export function audit(action: string, model: string, id: number | string, diff: Record<string, Record<string, { old: unknown; new: unknown }>> | null, opts: { creator?: number; data?: Record<string, unknown> } = {}): void {
+  const base = store.timeline.reduce((m, x) => (!x.sim && Date.parse(x.created) <= clock.now() ? Math.max(m, Number(x.id)) : m), store.auditFloor);
   frac = base === lastBase ? frac + 1 : 1; lastBase = base;
-  store.timeline.push({ id: base + frac, sim: true, action, creator: 2257, created: clock.iso(), data: JSON.stringify({ id: String(id), model, ...(diff ? { diffChanges: diff } : {}) }) });
+  store.timeline.push({ id: base + frac, sim: true, action, creator: opts.creator ?? 2257, created: clock.iso(),
+    data: JSON.stringify({ id: String(id), model, ...(diff ? { diffChanges: diff } : {}), ...(opts.data ? { data: opts.data } : {}) }) });
+}
+
+/** The path OnSinch writes on a create row: Order:<id>/Job:<id>/SlotTeam:<id>/Slot:<id>, as far as the part goes. */
+export function pathOf(orderId: number, part?: { team?: number; slot?: number }): string {
+  const o = store.orders.get(orderId);
+  const job = ([] as any[]).concat(o?.Job ?? [])[0]?.id;
+  return [`Order:${orderId}`, job ? `Job:${job}` : null, part?.team ? `SlotTeam:${part.team}` : null, part?.slot ? `Slot:${part.slot}` : null].filter(Boolean).join("/");
+}
+
+/** OnSinch's delete: the order goes, its create row goes with it, and no delete is logged. */
+export function deleteOrder(id: number): void {
+  store.deleted.add(id);
+  store.timeline = store.timeline.filter((x) => {
+    if (!/^order_create/.test(String(x.action))) return true;
+    const d = typeof x.data === "string" ? JSON.parse(x.data) : x.data;
+    return Number(d?.id) !== id && !String(d?.data?.path ?? "").startsWith(`Order:${id}`);
+  });
 }

@@ -20,7 +20,6 @@
 // ============================================================================
 import { createRequire } from "node:module";
 import { readFileSync, writeFileSync, unlinkSync } from "node:fs";
-import { resolve } from "node:path";
 
 // One run at a time: two share result.json and the output file, and their lines interleave
 // into a log that reads as one run (10-16: a stale run's bigint errors read as the new run's).
@@ -29,28 +28,8 @@ try { const pid = Number(readFileSync(LOCK, "utf8")); process.kill(pid, 0); cons
 writeFileSync(LOCK, String(process.pid));
 process.on("exit", () => { try { unlinkSync(LOCK); } catch { /* gone */ } });
 
-for (const k of ["DATABASE_URL", "POSTGRES_URL", "ONSINCH_API_KEY", "OPENROUTER_API_KEY", "N8N_API_KEY", "BOT_SECRET"]) {
-  if (process.env[k] && !/^sim/.test(process.env[k]!)) { console.error(`refusing to run: ${k} is set in this process (start without --env-file)`); process.exit(2); }
-}
-Object.assign(process.env, {
-  SPARTAN_WRITES: "live", DATABASE_URL: "sim://pglite", ONSINCH_BASE_URL: "https://spartancrew.onsinch.com/api/v1", ONSINCH_API_KEY: "sim",
-  OPENROUTER_API_KEY: "sim", N8N_WEBHOOK_SECRET: "sim-secret", BOT_SECRET: "sim", SPARTAN_INTERPRET_MODEL: "recorded",
-  // Not "local": the TV hides a workstation's decisions, and every simulated one would vanish.
-  VERCEL_GIT_COMMIT_SHA: "sim",
-});
-delete process.env.VERCEL; delete process.env.SPARTAN_ERROR_NOTIFY;
-
 const require = createRequire(import.meta.url);
-const pg = require("./pg.ts");
-const os = require("./onsinch.ts");
-const net = require("./net.ts");
-const bot = require("./bot.ts");
-pg.installDate();
-net.installFetch();
-// The two modules that would reach out: the database driver and the browser bot.
-const stub = (path: string, exports: unknown) => { require.cache[path] = { id: path, filename: path, loaded: true, exports, children: [], paths: [] } as any; };
-stub(require.resolve("@neondatabase/serverless"), { neon: pg.neonShim, neonConfig: {}, Pool: class {}, Client: class {} });
-stub(resolve("app/lib/v2/bot/run.ts"), bot);
+const { pg, os, net, bot } = require("./boot.ts").bootSim();
 
 const load = (n: string) => JSON.parse(readFileSync(`.tmp-data/sim/${n}.json`, "utf8"));
 const meta = load("meta");
