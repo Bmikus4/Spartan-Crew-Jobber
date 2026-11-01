@@ -562,6 +562,8 @@ export const MIGRATIONS: ReadonlyArray<readonly [id: string, statement: string]>
   ["106_alter_table_job_links", `ALTER TABLE job_links ADD COLUMN IF NOT EXISTS proof TEXT`],
   // lib/v2/loop/truth.ts refreshContacts: the contact's own name in OnSinch, for the TV tile's "from" (feed/live.ts).
   ["107_alter_table_onsinch_contacts", `ALTER TABLE onsinch_contacts ADD COLUMN IF NOT EXISTS name TEXT`],
+  // lib/feed/history.ts: the TV's list as it stood, so the team can look back (the owner, 1 Nov); 30 days kept.
+  ["108_create_table_feed_history", `CREATE TABLE IF NOT EXISTS feed_history (at TIMESTAMPTZ PRIMARY KEY, digest TEXT NOT NULL, body JSONB NOT NULL)`],
 ];
 
 /**

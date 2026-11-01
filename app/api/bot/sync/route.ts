@@ -9,6 +9,7 @@ import { pullTruth } from "../../../lib/v2/loop/truth";
 import { scoreOutcomes } from "../../../lib/v2/loop/outcomes";
 import { recordActions } from "../../../lib/v2/loop/actions";
 import { markNeeds, recordCardExits } from "../../../lib/v2/loop/cards";
+import { keepList } from "../../../lib/feed/history";
 import { v2Sources } from "../../../lib/feed/v2";
 import { serveFeed } from "../../../lib/feed/serve";
 import { liveFeedDeps } from "../../../lib/feed/live";
@@ -65,7 +66,7 @@ async function sync(request: Request, labels: boolean): Promise<Response> {
     // Each staff action once: covered by a card first or not, a moved start, a new order against one per venue.
     ["actions", () => recordActions(sql, t as never, { deadline: Date.now() + 60_000 })],
     // Is each need done (done.ts), written as the marks the TV reads; then how each need left the TV, from the TV as
-    // it is built, with nothing written back.
+    // it is built, with nothing written back but the list kept for the TV's history.
     ["cards", async () => {
       const deps = liveFeedDeps();
       const rows = await deps.v2!();
@@ -73,7 +74,8 @@ async function sync(request: Request, labels: boolean): Promise<Response> {
       const tv = await serveFeed({ ...deps, v2: async () => rows, remember: undefined, jobs: undefined }, Date.now());
       if (tv.status !== 200 || !tv.all) throw new Error(`the TV could not be read (${tv.status})`);
       const onCard = new Set(v2Sources(rows, Date.now()).flatMap((s) => [s, ...(s.also ?? [])]).map((s) => String(s.item?.item_key ?? "").split(":").pop()!));
-      return { ...marked, ...(await recordCardExits(sql, tv.all, onCard)) };
+      // The list as it stands now, kept for the TV's history (feed/history.ts).
+      return { ...marked, ...(await recordCardExits(sql, tv.all, onCard)), history: await keepList(sql, tv.body, Date.now()) };
     }],
     ["testData", () => getSettings()
       .then(async (s) => maybeSweep(sql, t, !!s.test_data_autoclear, { writes: await botWrites() }))

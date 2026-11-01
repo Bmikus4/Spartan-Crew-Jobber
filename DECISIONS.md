@@ -187,6 +187,9 @@ the owner's where the comment quotes them. Owner decisions still OPEN are in ADD
 | O21 | 31 Oct | A missing venue is asked of the client (the two-week rule first), unless a match is "nearly beyond a reasonable doubt"; none reaches that yet (measured) | same |
 | O22 | 31 Oct | "With no year specified always assume current year": the sent date's year, even for a passed day | same; ground.ts parseDate, extract.ts prompt |
 | O23 | 31 Oct | Spartan's model calls use the Spartan Crew Pipeline key only (the one n8n uses) | same |
+| O24 | 1 Nov | "Things that are done should auto clear after 24h": every done card, the jobs board's carried-over tiles too (supersedes V9's "never leave") | lib/feed/serve.ts; test/feedServe.ts |
+| O25 | 1 Nov | "A history button which lets the team view the list from different times in history" | lib/feed/history.ts, app/components/FeedHistory.tsx; test/feedHistory.ts |
+| O26 | 31 Oct | "I don't want to touch openrouter": model runs in the harness are read by a contained Claude session | ADDENDUM §14.11 |
 
 ## Rulings in v2 code
 

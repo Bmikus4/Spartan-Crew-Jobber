@@ -5707,5 +5707,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0278",
+  "ts": "2026-11-01T07:15:26+00:00",
+  "kind": "measurement",
+  "headline": "O24 done clears after 24h (board tiles 25-75 days old gone); O25 History: list kept every change (15 min, 30 days), shown read-only",
+  "subject": "Done cards leave the TV after 24 hours, and a History button shows the list as it stood",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 122,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]

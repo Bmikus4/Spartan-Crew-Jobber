@@ -1,7 +1,8 @@
 // ============================================================================
 // The live feed reads. It never changes how an order is processed.
 // ----------------------------------------------------------------------------
-// The office TV may write exactly one thing: its own records in feed_marks / feed_meta.
+// The office TV may write exactly one thing: its own records in feed_marks / feed_meta, and the lists it kept for
+// its History in feed_history (written by the minute sync, lib/feed/history.ts; O25, 1 Nov).
 // It must never write OnSinch (those writes are real), never Gmail, and never
 // conversation_state, and since 31 Oct it never reads OnSinch either: whether a need is
 // done is the minute sync's mark (loop/cards.ts). [1] reads every feed source for an
@@ -30,8 +31,8 @@ for (const f of files) ok(!/httpTransport|OnsinchClient|onsinch\/onsinch"/.test(
 console.log("\n[2] no feed source can write anything of the engine's");
 for (const f of files) {
   const src = code(f);
-  const sqlWrites = [...src.matchAll(/\b(?:INSERT\s+INTO|DELETE\s+FROM)\s+(\w+)|\bUPDATE\s+(\w+)\s+SET\b/gi)].map((m) => m[1] ?? m[2]).filter((t) => !/^(feed_marks|feed_meta)$/i.test(t));
-  ok(sqlWrites.length === 0, `${f}: SQL writes only feed_marks/feed_meta`, sqlWrites.join(","));
+  const sqlWrites = [...src.matchAll(/\b(?:INSERT\s+INTO|DELETE\s+FROM)\s+(\w+)|\bUPDATE\s+(\w+)\s+SET\b/gi)].map((m) => m[1] ?? m[2]).filter((t) => !/^(feed_marks|feed_meta|feed_history)$/i.test(t));
+  ok(sqlWrites.length === 0, `${f}: SQL writes only feed_marks/feed_meta/feed_history`, sqlWrites.join(","));
   ok(!/stateDb|NeonStateStore|\.put\(|gmailWrite|lib\/deps|executor\(|flag(Manual|Built|Updated)IfNeeded/.test(src), `${f}: no state store, Gmail writer or engine executor`);
   ok(!/["'](POST|PATCH|PUT|DELETE)["']\s*,\s*["']\//.test(src), `${f}: no OnSinch write verb`);
 }

@@ -21,6 +21,7 @@ import { deadline, londonDay, nextDay, QUIET_MS } from "../lib/feed/order";
 import { BrandMark, BrandWordmark } from "./BrandLogo";
 import FolderTab from "./FolderTab";
 import AnalyticsPopup from "./AnalyticsPopup";
+import HistoryPicker, { momentLabel, type PastList } from "./FeedHistory";
 
 interface FeedResponse {
   ok: boolean;
@@ -45,6 +46,7 @@ const URGENT_MS = 48 * 3_600_000;
 const HOLD_MS = 3_000;
 const RETURN_TO_TOP_MS = 20_000;
 const FADE_MS = 600;
+const HISTORY_VIEW_MS = 5 * 60_000;
 
 // Signal colours only, from the theme. Everything else is the tool's neutral tokens.
 const RED = "var(--danger)";
@@ -284,7 +286,7 @@ const clamp = (lines: number): React.CSSProperties => ({ display: "-webkit-box",
  *   3. the one thing to check, the PO, who wrote and how long ago; on a done tile, what was done.
  * Fixed columns keep every number and every Confirm on one vertical down the screen.
  */
-const JobTile = memo(function JobTile({ card, now, s, phase, onTick }: { card: FeedCard; now: number; s: number; phase: Phase; onTick: (c: FeedCard, it: FeedItem, checked: boolean) => void }) {
+const JobTile = memo(function JobTile({ card, now, s, phase, onTick, readOnly = false }: { card: FeedCard; now: number; s: number; phase: Phase; onTick: (c: FeedCard, it: FeedItem, checked: boolean) => void; readOnly?: boolean }) {
   const it = orderItem(card);
   const lead = it ?? card.items[0];
   const done = card.green;
@@ -330,7 +332,7 @@ const JobTile = memo(function JobTile({ card, now, s, phase, onTick }: { card: F
       <div style={cell(true)}><When card={card} it={it} lead={lead} now={now} s={s} /></div>
 
       <div style={{ display: "flex", justifyContent: "flex-end", paddingLeft: 24 * s }}>
-        {it && <Tick card={card} it={it} s={s} height={52} onTick={onTick} />}
+        {it && !readOnly && <Tick card={card} it={it} s={s} height={52} onTick={onTick} />}
       </div>
     </article>
   );
@@ -364,6 +366,15 @@ export default function LiveFeedScreen({ isActive, tv = false }: { isActive: boo
   /** The Analytics folder tab shows on the TV only when Settings turns it on (Ben, 2026-10-11). */
   const [analyticsTab, setAnalyticsTab] = useState(false);
   const [analyticsOpen, setAnalyticsOpen] = useState(false);
+  /** The list as it stood at a moment picked from History: shown read-only until Back to live. */
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [past, setPast] = useState<PastList | null>(null);
+  // The office screen never stays in the past: left in History, it is back to live after five minutes.
+  useEffect(() => {
+    if (!past) return;
+    const id = window.setTimeout(() => setPast(null), HISTORY_VIEW_MS);
+    return () => window.clearTimeout(id);
+  }, [past]);
   useEffect(() => {
     const read = async () => {
       try { const r = await fetch("/api/settings", { cache: "no-store" }); if (r.ok) setAnalyticsTab(!!(await r.json()).analytics_tab_enabled); } catch { /* keep what it was */ }
@@ -520,8 +531,11 @@ export default function LiveFeedScreen({ isActive, tv = false }: { isActive: boo
     }
   }, [load]);
 
-  // The server's order (orderCards, app/lib/feed/order.ts), where test/feedProjection.ts pins it.
-  const cards = data?.items ?? [];
+  // The server's order (orderCards, app/lib/feed/order.ts), where test/feedProjection.ts pins it. In History, the kept list
+  // as it was: its ages read from that moment, nothing to tick.
+  const cards = past ? past.items : data?.items ?? [];
+  const tileNow = past ? Date.parse(past.at) : now;
+  const noTick = useCallback(() => {}, []);
 
   // Open tiles, with any tile still settling held at the place it stood.
   const settlingRows = cards.filter((c) => settling.has(c.thread_id));
@@ -532,6 +546,7 @@ export default function LiveFeedScreen({ isActive, tv = false }: { isActive: boo
   const doneRows = cards.filter((c) => !isOpen(c) && !settling.has(c.thread_id));
   useEffect(() => { shown.current = [...openRows, ...doneRows].map((c) => c.thread_id); });
   const phaseOf = (c: FeedCard): Phase => {
+    if (past) return "steady";
     const st = settling.get(c.thread_id);
     if (!st) return "steady";
     return now - st.since >= HOLD_MS ? "fade" : "hold";
@@ -562,14 +577,15 @@ export default function LiveFeedScreen({ isActive, tv = false }: { isActive: boo
     : data.health.intake_paused ? "paused"
     : "ok";
   const warn = sync !== "ok" && sync !== "paused";
-  const urgentCount = cards.filter((x) => urgent(x, now)).length;
+  const urgentCount = cards.filter((x) => urgent(x, tileNow)).length;
   const openCount = cards.filter(isOpen).length;
   const pad = 28 * s;
 
   // No Needs Created, Needs Updated or To Check counts (Ben, 2026-10-11): each tile already carries its label.
   const kpis: Array<{ label: string; n: number; color: string; loud?: boolean }> = c ? [
     ...(data?.health.replies_enabled ? [{ label: "Needs Reply", n: c.needs_reply, color: "var(--text-primary)" }] : []),
-    { label: "Needs Follow Up", n: c.needs_follow_up ?? 0, color: AMBER },
+    // In History the counts are the kept list's, as it stood then.
+    { label: "Needs Follow Up", n: past ? cards.filter((x) => x.follow_up).length : c.needs_follow_up ?? 0, color: AMBER },
     // The one count that is about time running out, so it is set heavier than the rest (Ben, 2026-10-10).
     { label: "Within 48 Hours", n: urgentCount, color: AMBER, loud: true },
   ] : [];
@@ -593,6 +609,12 @@ export default function LiveFeedScreen({ isActive, tv = false }: { isActive: boo
           ))}
           <span style={{ width: 1, alignSelf: "stretch", background: "var(--border)" }} />
           <Sync s={s} state={sync} why={failKind === "error" ? "the feed returned an error" : emailStale ? "no new email for 90+ min" : sync === "error" || sync === "behind" ? (historyAge > 864e5 ? "OnSinch not read" : `OnSinch ${Math.round(historyAge / 60e3)} min behind`) : ""} />
+          <button onClick={() => { unlockAudio(); setHistoryOpen(true); }} aria-label="History" title="History"
+            style={{ width: 56 * s, height: 56 * s, border: "none", background: "transparent", color: past ? "var(--accent)" : "var(--text-secondary)", cursor: "pointer", display: "grid", placeItems: "center", padding: 0, flexShrink: 0, opacity: idle ? 0 : 1, transition: "opacity 200ms" }}>
+            <svg width={40 * s} height={40 * s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M3 12a9 9 0 1 0 3-6.7L3 8" /><path d="M3 3v5h5" /><path d="M12 7v5l3 3" />
+            </svg>
+          </button>
           <button onClick={() => void goFull()} aria-label={full ? "Exit fullscreen" : "Fullscreen"} title={full ? "Exit fullscreen" : "Fullscreen"}
             style={{ width: 56 * s, height: 56 * s, border: "none", background: "transparent", color: "var(--text-secondary)", cursor: "pointer", display: "grid", placeItems: "center", padding: 0, flexShrink: 0, opacity: idle ? 0 : 1, transition: "opacity 200ms" }}>
             <svg width={44 * s} height={44 * s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -605,6 +627,13 @@ export default function LiveFeedScreen({ isActive, tv = false }: { isActive: boo
       </header>
 
       {analyticsTab && <FolderTab label="Analytics" s={s} onOpen={() => { unlockAudio(); setAnalyticsOpen(true); }} />}
+
+      {past && (
+        <div role="status" style={{ display: "flex", alignItems: "center", gap: 16 * s, padding: `${12 * s}px ${18 * s}px`, borderRadius: 12 * s, border: `1px solid ${AMBER}`, background: tint(AMBER, 10), fontSize: 20 * s, fontWeight: 700, flexShrink: 0 }}>
+          History: the list as it stood on {momentLabel(past.at)}
+          <button onClick={() => setPast(null)} style={{ marginLeft: "auto", fontSize: 16 * s, fontWeight: 800, padding: `${8 * s}px ${16 * s}px`, borderRadius: 10 * s, border: "none", background: "var(--accent)", color: "var(--accent-contrast)", cursor: "pointer" }}>Back to live</button>
+        </div>
+      )}
 
       <div style={{ position: "relative", flex: 1, minHeight: 0, display: "flex" }}>
         <div ref={listRef} className="feed-list" onScroll={() => { lastScrollAt.current = Date.now(); }} style={{ flex: 1, minHeight: 0, overflowY: "auto", display: "flex", flexDirection: "column", gap: 12 * s, paddingBottom: 8 * s }}>
@@ -621,12 +650,12 @@ export default function LiveFeedScreen({ isActive, tv = false }: { isActive: boo
                 <Fragment key={card.thread_id}>
                   {/* Sunk, not hidden (Ben, 2026-10-05): the label says why these sit lower. */}
                   {card.quiet && !openRows[i - 1]?.quiet && <Section s={s} label={`Nothing New For ${QUIET_MS / 86_400_000}+ Days`} n={openRows.filter((x) => x.quiet).length} />}
-                  <JobTile card={card} now={now} s={s} phase={phaseOf(card)} onTick={tick} />
+                  <JobTile card={card} now={tileNow} s={s} phase={phaseOf(card)} onTick={past ? noTick : tick} readOnly={!!past} />
                 </Fragment>
               ))}
               <Section s={s} label="Done" n={doneRows.length} color={GREEN} />
               {/* Done tiles redraw once a minute, not every second: with the jobs board carried over there are hundreds. */}
-              {doneRows.map((card) => <JobTile key={card.thread_id} card={card} now={Math.floor(now / 60_000) * 60_000} s={s} phase="steady" onTick={tick} />)}
+              {doneRows.map((card) => <JobTile key={card.thread_id} card={card} now={Math.floor(tileNow / 60_000) * 60_000} s={s} phase="steady" onTick={past ? noTick : tick} readOnly={!!past} />)}
               {c && c.older > 0 && (
                 <div style={{ padding: `${10 * s}px ${4 * s}px`, fontSize: 15 * s, color: "var(--text-muted)", flexShrink: 0 }}>
                   {c.older} older undated {c.older === 1 ? "enquiry" : "enquiries"} with no word from the client for two weeks, not shown.
@@ -645,6 +674,7 @@ export default function LiveFeedScreen({ isActive, tv = false }: { isActive: boo
       </div>
 
       {analyticsOpen && <AnalyticsPopup onClose={() => setAnalyticsOpen(false)} />}
+      {historyOpen && <HistoryPicker s={s} onClose={() => setHistoryOpen(false)} onPick={(l) => { setPast(l); setHistoryOpen(false); listRef.current?.scrollTo({ top: 0 }); }} />}
 
       {undo && undo.until > now && (
         <div role="status" style={{ position: "absolute", left: "50%", bottom: 32 * s, transform: "translateX(-50%)", background: "var(--surface-2)", color: "var(--text-primary)", border: "1px solid var(--border-strong)", borderRadius: 12 * s, padding: `${12 * s}px ${16 * s}px ${12 * s}px ${20 * s}px`, fontSize: 18 * s, fontWeight: 600, display: "flex", gap: 16 * s, alignItems: "center" }}>

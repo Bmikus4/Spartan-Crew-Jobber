@@ -11,7 +11,7 @@
 // ============================================================================
 import type { Job } from "../jobsDb";
 import { portedCards } from "./ported";
-import { project, type FeedCard, type FeedMark, type FeedSource, type ReplyNeed } from "./project";
+import { DONE_DWELL_MS, project, type FeedCard, type FeedMark, type FeedSource, type ReplyNeed } from "./project";
 import { cardName, v2Sources, type OrderFacts, type V2Row } from "./v2";
 import { intakeHealth } from "../intakeHealth";
 
@@ -57,6 +57,9 @@ export interface FeedDeps {
  * 10-21: "delete the everything tab completely"); reading `items` instead would strip every
  * Created / Updated label within the minute.
  */
+/** When a card went green: its newest item's done time, else the card's own. */
+const doneAt = (c: FeedCard): number => Math.max(0, ...c.items.map((i) => i.green?.at ?? 0)) || c.at;
+
 export async function serveFeed(deps: FeedDeps, now: number): Promise<{ status: number; body: Record<string, unknown>; all?: FeedCard[] }> {
   let other: FeedSource[], inbound: Awaited<ReturnType<FeedDeps["inbound"]>>, marks: FeedMark[], replies: ReplyNeed[] | null, v2rows: V2Row[];
   try {
@@ -138,7 +141,9 @@ export async function serveFeed(deps: FeedDeps, now: number): Promise<{ status: 
       counts: { ...p.counts, needs_follow_up: shown.filter((c) => c.follow_up).length, done_by_system, held: heldCards.length },
       // A JOB WHOSE DAYS HAVE ALL PASSED NEVER APPEARS (DECISIONS O13), live, carried over or held: 181 of 186
       // carried-over cards were for past days on 29 Oct. A card with no day leaves when done or after 14 quiet days.
-      items: [...shown, ...heldCards, ...ported].filter((c) => !c.dates.length || c.dates[c.dates.length - 1] >= today),
+      // DONE CLEARS 24 HOURS AFTER IT WENT GREEN, every card alike (the owner, 1 Nov: "things that are done should auto clear
+      // after 24h"). The jobs board's carried-over tiles never left (V9, 10-11): five were 25 to 75 days old on 1 Nov.
+      items: [...shown, ...heldCards, ...ported].filter((c) => (!c.dates.length || c.dates[c.dates.length - 1] >= today) && !(c.green && now - doneAt(c) > DONE_DWELL_MS)),
     },
     all: [...p.cards, ...heldCards],
   };
