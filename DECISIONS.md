@@ -191,6 +191,7 @@ the owner's where the comment quotes them. Owner decisions still OPEN are in ADD
 | O25 | 1 Nov | "A history button which lets the team view the list from different times in history" | lib/feed/history.ts, app/components/FeedHistory.tsx; test/feedHistory.ts |
 | O26 | 31 Oct | "I don't want to touch openrouter": model runs in the harness are read by a contained Claude session | ADDENDUM §14.11 |
 | O27 | 1 Nov | "Add a potential decision to the system which is resolved": a need the client settled with Spartan (accepted its quote or terms, or a cancellation Spartan confirmed) and OnSinch holds unchanged is agreed, and is not shown on the TV | lib/feed/done.ts agreedOn, cancelAgreed; test/feedDone.ts [7] |
+| O28 | 1 Nov | "Build out the case where a client may take back their own request with no reply": words pointing at the earlier request, verified by OnSinch showing nothing done since; the need leaves the TV like an agreed one. A phone-only agreement is not assumed (open: the owner asked whether it is useful at all) | lib/feed/done.ts withdrawnOn; test/feedDone.ts [8]; harness/gen H "withdrawn" |
 
 ## Rulings in v2 code
 

@@ -5763,5 +5763,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0282",
+  "ts": "2026-11-01T19:42:44+00:00",
+  "kind": "measurement",
+  "headline": "Withdrawn (O28): client takes its own request back, OnSinch shows nothing done; 0 real cases since 9 Oct, generated 180/180",
+  "subject": "A request the client takes back before staff act no longer stays on the TV",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 123,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]

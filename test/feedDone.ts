@@ -219,6 +219,29 @@ const map = (...os: Order[]) => new Map(os.map((o) => [o.order_id, o]));
     ok(!(((after.body as any).items ?? []) as any[]).some((c) => c.thread_id === "t-keep"), "an agreed need is off the TV");
   }
 
+  console.log("\n[8] withdrawn: the client took its own request back, and OnSinch shows nothing done (the owner, 1 Nov)");
+  {
+    const MIN = 60_000;
+    const a = order(1, ["2026-11-04"]);
+    const L = [{ order_id: 1, absolute: true, ref: "R11001" }];
+    const msg = (min: number, text: string, asks = false, ours = false) => ({ at: AT + min * MIN, ours, text, asks });
+    const ask = msg(0, "Can we change the 4th to 10:00-14:00 please?", true);
+    const v = isDone(need(), L, map(a), [], undefined, [ask, msg(60, "Sorry, please ignore my last email, we'll keep it as it is.")]);
+    ok(v.state === "agreed" && /^Withdrawn/.test(v.text) && v.at === new Date(AT + 60 * MIN).toISOString(), "\"please ignore my last email\" with nothing done in OnSinch: withdrawn", v);
+    ok(isDone(need(), L, map(a), [], undefined, [ask, msg(60, "Actually scrap that, keep it as it was.")]).state === "agreed", "\"scrap that\" and \"keep it as it was\"");
+    ok(isDone(need(), L, map(a), [crew(1, 1000, new Date(AT + 30 * MIN).toISOString())], undefined, [ask, msg(60, "Please ignore my last email.")]).state !== "agreed", "staff already made the change: taking it back is a change of its own, never withdrawn");
+    // The words measured in real mail that are not withdrawals.
+    ok(isDone(need(), L, map(a), [], undefined, [ask, msg(60, "Please ignore this email, sent in error.")]).state === "open", "\"ignore this email\" is about the email it is in");
+    ok(isDone(need(), L, map(a), [], undefined, [ask, msg(60, "Ignore where it says 4hr call on the PO, it's meant to say 2.")]).state === "open", "\"ignore where it says\" about a document takes nothing back");
+    ok(isDone(need(), L, map(a), [], undefined, [ask, msg(60, "If you can't do 8am, keep the booking as it was.")]).state === "open", "a condition takes nothing back");
+    ok(isDone(need(), L, map(a), [], undefined, [ask, msg(30, "Also add a driver on the 4th.", true), msg(60, "Please ignore my last email.")]).state === "open", "a later request between: the words take back that one, not this need");
+    ok(isDone(need(), L, map(a), [], undefined, [msg(-60, "Please ignore my last email."), ask]).state === "open", "words before the need take nothing of it back");
+    const fresh = need({ asks: ["book"], fresh: true });
+    ok(isDone(fresh, [], new Map(), [], undefined, [ask, msg(60, "Please disregard my previous email.")]).state === "agreed", "a new booking taken back with nothing booked that day: withdrawn");
+    ok(isDone(fresh, [], map(order(2, ["2026-11-04"])), [row(2, "order_create", { model: "Order", id: "2" }, new Date(AT + 30 * MIN).toISOString())], undefined, [ask, msg(60, "Please disregard my previous email.")]).state !== "agreed", "a new booking staff had already made: not withdrawn");
+    ok(isDone({ ...fresh, company_id: null }, [], new Map(), [], undefined, [ask, msg(60, "Please disregard my previous email.")]).state === "open", "an unknown client's orders were never read: not withdrawn");
+  }
+
   console.log(fails ? `\n${fails} FAILED` : "\nALL PASS");
   process.exit(fails ? 1 : 0);
 })();

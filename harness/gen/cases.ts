@@ -257,7 +257,7 @@ function reference(ctx: Ctx, kind: "po on two orders" | "R quoted from an old me
 }
 
 /** H: a thread's later email: a correction, a thanks, the missing detail. */
-function thread(ctx: Ctx, kind: "correction" | "confirmation" | "missing crew sent later"): Omit<GenCase, "id" | "category"> {
+function thread(ctx: Ctx, kind: "correction" | "confirmation" | "missing crew sent later" | "withdrawn"): Omit<GenCase, "id" | "category"> {
   const { r } = ctx;
   const by = pick(r, staff.STAFF);
   if (kind === "missing crew sent later") {
@@ -290,6 +290,30 @@ function thread(ctx: Ctx, kind: "correction" | "confirmation" | "missing crew se
       emails: [{ at: 0, subject: `Re: Booking ${c.place.name}`, body: letter(ctx, text), from: ctx.contact.email, oracle: ex("info_only", []) }],
       staff: [], looks: [{ at: 2 * MIN, label: "after the thanks", state: "absent" }],
       expect: { decision: "none" },
+    };
+  }
+  if (kind === "withdrawn") {
+    // The client takes its own change back before staff act: nothing is owed, so the need leaves the TV (O27).
+    let t = drawTimes(r);
+    while (t.start === c.start && t.end === c.end) t = drawTimes(r);
+    const rg = rgOf(t.start, t.end, r);
+    const target = { quote: w.day, date: g(c.date, w.day), start: null };
+    const back = lang.isRich() ? lang.pickL(["Sorry, please ignore my last email, we'll keep it as it is.", "Actually scrap that, keep it as it was. Apologies!", "Please disregard my previous email, no change needed."])
+      : "Sorry, please ignore my last email, we'll keep it as it is.";
+    return {
+      variant: kind, client: ctx.client, sender: ctx.contact.email, today: ctx.today, t0: ctx.t0,
+      orders: [{ calls: job.calls, by, number: String(73000 + ctx.n) }],
+      emails: [
+        { at: 0, subject: "Change to booking", body: letter(ctx, `Can we change ${w.day} at ${w.at} to ${rg.text} please?`), from: ctx.contact.email,
+          oracle: ex("change", [req({ action: "change_times", date: g(c.date, w.day), ...timeFields(t.start, t.end, rg), venue: g(c.place.name, w.at), target })]) },
+        { at: H, subject: "Re: Change to booking", body: letter(ctx, back), from: ctx.contact.email, oracle: ex("info_only", []) },
+      ],
+      staff: [],
+      looks: [
+        { at: 2 * MIN, label: "after the change", state: "open", kind: "needs-updated", name: ctx.client.name, days: [c.date] },
+        { at: H + 2 * MIN, label: "after the client takes it back", state: "absent" },
+      ],
+      expect: { decision: "write", change: "times", order: 0 },
     };
   }
   const t1 = drawTimes(r), rg1 = rgOf(t1.start, t1.end, r);
@@ -457,7 +481,7 @@ export const CATEGORIES: Record<string, { title: string; make: Maker }> = {
     return base;
   } },
   G: { title: "References", make: (ctx) => reference(ctx, pick(ctx.r, ["po on two orders", "R quoted from an old message", "R OnSinch does not hold"] as const)) },
-  H: { title: "Thread dynamics", make: (ctx) => thread(ctx, pick(ctx.r, ["correction", "confirmation", "missing crew sent later"] as const)) },
+  H: { title: "Thread dynamics", make: (ctx) => thread(ctx, pick(ctx.r, ["correction", "confirmation", "missing crew sent later", "withdrawn"] as const)) },
   I: { title: "Quotes and questions", make: (ctx) => question(ctx, pick(ctx.r, ["quote for a job", "quote for a job", "rates"] as const)) },
   L: { title: "Bespoke but buildable", make: (ctx) => bespoke(ctx, pick(ctx.r, ["6 days at 2 venues with trades", "a 4am call", "11-20 crew on one call", "overnight call"] as const)) },
   N: { title: "Adversarial language", make: (ctx) => adversarial(ctx, pick(ctx.r, ["forwarded", "signature full of numbers", "PO inside a link", "out of office", "quoted history"] as const)) },

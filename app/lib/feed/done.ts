@@ -189,6 +189,40 @@ function cancelAgreed(need: Need, thread: ThreadMsg[], orders: Map<number, Order
   return live ? null : { text: `Agreed: Spartan confirmed the cancellation on ${new Date(said.at).toISOString().slice(0, 10)}, and OnSinch holds nothing for this client on ${need.days.join(", ")}`, at: new Date(said.at).toISOString() };
 }
 
+/**
+ * The client taking back its own request, in words that point at an earlier one ("please ignore my last email",
+ * "scrap that", "keep it as it was"). "Ignore this email" is about the email it is in, and a condition ("if not, keep
+ * the booking as is") takes nothing back: neither counts. In 1,179 client emails 9 Oct-1 Nov no request was taken back
+ * this way (5 matched looser words, none a withdrawal), so the words are narrow and OnSinch must bear it out.
+ */
+const WITHDRAW = /\b(?:(?:ignore|disregard)\s+(?:my|the|that)\s+(?:last|previous|earlier|above|first)\s+(?:e-?mail|message|request|one)|(?:ignore|disregard)\s+(?:that|my)\s+(?:request|change|amendment)|scrap (?:that|my (?:last|previous) (?:e-?mail|request))|(?:keep|leave) (?:it|everything|the booking|the times|the crew) as (?:it is|it was|originally (?:booked|planned)|before)|(?:cancel|withdraw) my (?:last |previous )?(?:request|change|amendment))\b/i;
+const sentenceOf = (text: string, at: number) => text.slice(Math.max(0, text.lastIndexOf(".", at) + 1, text.lastIndexOf("\n", at) + 1), at);
+
+/**
+ * A need the client withdrew with no reply from us: its words take back the client's latest request before them, which
+ * is this need's, and OnSinch shows nothing was done since: its one job's shifts on the need's days unchanged since the
+ * need, or for a new booking, nothing booked those days. Work already done is not undone by this: that is a change.
+ */
+function withdrawnOn(need: Need, thread: ThreadMsg[], jobs: Order[], rows: Row[]): { text: string; at: string } | null {
+  if (!need.days.length) return null;
+  const ms = [...thread].sort((a, b) => a.at - b.at);
+  const w = ms.find((m) => {
+    if (m.ours || m.at <= need.at) return false;
+    const x = WITHDRAW.exec(m.text);
+    return !!x && !/\b(?:if|unless|otherwise)\b/i.test(sentenceOf(m.text, x.index));
+  });
+  if (!w) return null;
+  // The words take back the client's latest request before them: another between makes this need not the one meant.
+  if (ms.some((m) => !m.ours && m.asks && m.at > need.at && m.at < w.at)) return null;
+  if (jobs.length > 1) return null;
+  if (jobs.length === 1) {
+    const since = { ...need, at: need.at };
+    const touched = rows.filter((r) => r.order_id === jobs[0].order_id).map((r) => workOf(r, jobs[0], since)).some((x) => !!x && x.fits.some((f) => f === "change" || f === "cancel" || f === "book"));
+    if (touched) return null;
+  } else if (!need.fresh) return null;
+  return { text: `Withdrawn: the client took this request back on ${new Date(w.at).toISOString().slice(0, 10)}, and OnSinch shows nothing was done`, at: new Date(w.at).toISOString() };
+}
+
 export function isDone(need: Need, links: Link[], orders: Map<number, Order>, rows: Row[], placeNamed: (name: string) => number[] = () => [], thread: ThreadMsg[] = []): Verdict {
   const v = doneVerdict(need, links, orders, rows, placeNamed);
   if (v.state === "done" || !thread.length) return v;
@@ -196,6 +230,9 @@ export function isDone(need: Need, links: Link[], orders: Map<number, Order>, ro
   if (cx) return { state: "agreed", orders: [], rung: v.rung || "agreed", text: cx.text, at: cx.at, creator: null };
   const places = [...need.places, ...need.venues.flatMap(placeNamed)];
   const jobs = [...new Set(candidates(need, links, orders, rows, places).groups.flat())];
+  // A new booking with no candidate job is withdrawn only when the client is known: an unknown client's orders were never read.
+  const wd = withdrawnOn(need, thread, jobs, rows);
+  if (wd && (jobs.length || need.company_id != null)) return { state: "agreed", orders: jobs.map((o) => o.order_id), rung: v.rung || "withdrawn", text: wd.text, at: wd.at, creator: null };
   const a = jobs.length === 1 ? agreedOn(need, thread, jobs[0], rows) : null;
   return a ? { state: "agreed", orders: [jobs[0].order_id], rung: v.rung || "agreed", text: a.text, at: a.at, creator: null } : v;
 }
