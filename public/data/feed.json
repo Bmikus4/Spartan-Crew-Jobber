@@ -5777,5 +5777,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0283",
+  "ts": "2026-11-01T20:00:19+00:00",
+  "kind": "measurement",
+  "headline": "Help guide: History, done clears after 24 h, agreed/withdrawn needs, venue tie-break",
+  "subject": "The help assistant knows about History, the 24-hour Done list and settled needs",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 123,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]
