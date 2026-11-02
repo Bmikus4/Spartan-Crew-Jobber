@@ -295,6 +295,50 @@ const map = (...os: Order[]) => new Map(os.map((o) => [o.order_id, o]));
       "the old job's link is passed over, and the order made after the email is found");
   }
 
+  console.log("\n[10] a booking on an order still provisional is not done until staff confirm it (the owner, 2 Nov)");
+  {
+    const MIN = 60_000;
+    const at = (min: number) => new Date(AT + min * MIN).toISOString();
+    const prov = (x: { quote?: boolean } = {}) => { const o = order(1, ["2026-11-04"]); o.body.provisional = !x.quote; o.body.quote = !!x.quote; return o; };
+    const L = [{ order_id: 1, absolute: true, ref: "R11001" }];
+    const book = need({ asks: ["book"] });
+    const made = row(1, "order_create", { model: "Order", id: "1" }, at(20));
+    const v = isDone(book, L, map(prov()), [made]);
+    ok(v.state === "possibly" && v.text === "R11001 is still provisional: confirm in OnSinch once the client says yes" && JSON.stringify(v.orders) === "[1]", "staff made the order but it is provisional: the card stays and says so", v);
+    ok(isDone(book, L, map(prov({ quote: true })), [made]).state === "possibly", "an order still in Price Quotes: the same");
+    const conf = isDone(book, L, map(prov()), [made, row(1, "order_confirm_provisional", { model: "Order", id: "1" }, at(90))]);
+    ok(conf.state === "done" && /confirmed the order/.test(conf.text) && conf.at === at(90), "staff confirm it: done, as of the confirm", conf);
+    const edit = (old: string, nu: string) => row(1, "common_change", { model: "Order", id: 1, diffChanges: { Order: { provisional: { old, new: nu } } } }, at(90));
+    ok(isDone(book, L, map(prov()), [made, edit("1", "0")]).state === "done", "staff untick provisional on the order: that confirms it too");
+    ok(isDone(book, L, map(prov()), [made, edit("0", "1")]).state === "possibly", "made provisional is no confirmation");
+    ok(isDone(book, L, map(order(1, ["2026-11-04"])), [made]).state === "done", "an order made confirmed is the booking, as before");
+    ok(isDone(need({ asks: ["book"], fresh: true }), [], map(prov()), []).state === "possibly", "a new booking a provisional order held before the email: not booked yet");
+    ok(isDone(need({ asks: ["change"] }), L, map(prov()), [crew(1, 1000)]).state === "done", "a change staff made on a provisional order is done: a change is not a booking");
+    ok(isDone(need({ asks: ["cancel"] }), L, map(prov()), [row(1, "order_cancel", { model: "Order", id: "11001" })]).state === "done", "a cancel of a provisional order is done");
+
+    const ask = { at: AT, ours: false, text: "Can we book 4 crew on the 4th please", asks: true };
+    const quote = { at: AT + 30 * MIN, ours: true, text: "Thanks for your email. Please see the quote attached for this order.", asks: false };
+    const wait = isDone(book, L, map(prov()), [made], undefined, [ask, quote]);
+    ok(wait.state === "agreed" && /^Quote sent/.test(wait.text), "a booking answered with a quote on a provisional order: off the TV, waiting on the client", wait);
+    const yes = { at: AT + 120 * MIN, ours: false, text: "Great, please go ahead with this booking, PO to follow.", asks: false };
+    const back = isDone(book, L, map(prov()), [made], undefined, [ask, quote, yes]);
+    ok(back.state === "possibly" && back.text === "The client said yes on 2026-10-28: confirm R11001 in OnSinch", "the client says yes: the card is back, saying so, until staff confirm", back);
+    const hold = { at: AT + 120 * MIN, ours: false, text: "Thanks for this, we are waiting on final sign off and will come back to you asap.", asks: false };
+    ok(/^Quote sent/.test(isDone(book, L, map(prov()), [made], undefined, [ask, quote, hold]).text), "a reply that is no yes keeps the quote waiting on the client");
+    ok(/^Quote sent/.test(isDone(need({ asks: ["book"], quote: true }), L, map(prov()), [made], undefined, [ask, quote, hold]).text), "and so for a quote request on a provisional order");
+    const plural = { ...quote, text: "Lovely to hear from you! Please see your quotes attached." };
+    ok(/^Quote sent/.test(isDone(book, L, map(prov()), [made], undefined, [ask, plural]).text), "\"your quotes attached\" hands a quote over");
+    ok(/^Quote sent/.test(isDone(need({ asks: ["book"], quote: true, days: ["2026-11-04", "2026-11-08"] }), L, map(prov()), [made], undefined, [ask, quote]).text), "the quote on the provisional order staff made waits, though a day asked moved off it");
+    ok(/^Quote sent/.test(isDone(need({ asks: ["book"], quote: true, days: [] }), L, map(prov()), [made], undefined, [ask, quote]).text), "an undated request (\"in February\") quoted on the provisional order waits too");
+    ok(isDone(book, L, map(prov()), [made], undefined, [ask, quote, { ...hold, text: "Lovely, the 4th it is then.", books: true }]).text.startsWith("The client said yes"), "the reader's booking after the quote is the yes, where no phrase reads it");
+    ok(/^Quote sent/.test(isDone(book, L, map(prov()), [made], undefined, [ask, quote, { ...hold, text: "Lovely, the 4th it is then." }]).text), "the same words not read as a booking: still waiting");
+    const before = isDone(book, L, map(prov()), [made], undefined, [ask]);
+    ok(before.state === "possibly" && before.text === "R11001 is still provisional: send the quote, or confirm it once the client says yes", "made but no quote sent yet: the quote is Spartan's to send", before);
+    ok(isDone(book, L, map(prov()), [made], undefined, [ask, quote, { ...hold, text: "PO attached, thanks." }]).text.startsWith("The client said yes"), "a PO after the quote is the yes");
+    ok(isDone(book, L, map(prov()), [made, row(1, "order_confirm_provisional", { model: "Order", id: "1" }, at(150))], undefined, [ask, quote, yes]).state === "done", "and staff confirming it clears it");
+    ok(isDone(book, L, map(order(1, ["2026-11-04"])), [], undefined, [ask, quote]).state === "open", "a booking on a confirmed order is not left waiting on a quote, as before");
+  }
+
   console.log(fails ? `\n${fails} FAILED` : "\nALL PASS");
   process.exit(fails ? 1 : 0);
 })();

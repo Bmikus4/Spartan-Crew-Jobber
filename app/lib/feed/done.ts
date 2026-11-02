@@ -13,9 +13,10 @@
 // A new booking the order already held on every day it names, before the email, is done too: on 29 Oct a client
 // confirmed shifts staff had booked a week before. Two or more candidate jobs with nothing absolute between them is never done: "Possibly done in R1 or R2".
 // The work must fit the ask, and a deleted order (truth.ts refreshOrders) never counts: a create then a delete
-// is no booking. A need not done may be agreed instead (the owner, 1 Nov: "a potential decision ... which is
-// resolved"): the client accepted Spartan's quote or terms and OnSinch holds them unchanged (agreedOn); an agreed
-// need leaves the TV. Pure: the caller passes the stored rows and the thread, nothing here reads a database,
+// is no booking. A booking on an order still provisional or in Price Quotes is not done until staff confirm it (the
+// owner, 2 Nov): the card stays as "possibly", saying so, and leaves the TV while Spartan's quote waits on the client.
+// A need not done may be agreed instead (the owner, 1 Nov: "a potential decision ... which is resolved"): the client
+// accepted Spartan's quote or terms and OnSinch holds them unchanged (agreedOn); an agreed need leaves the TV. Pure: the caller passes the stored rows and the thread, nothing here reads a database,
 // OnSinch or the clock.
 // ============================================================================
 import { utcToLondon } from "../v2/bot/ops";
@@ -36,9 +37,14 @@ export type Need = { at: number; asks: Ask[]; fresh: boolean; days: string[]; pl
 export type Link = { order_id: number; absolute: boolean; ref: string };
 export type Order = { order_id: number; number: string | null; company_id: number | null; body: any; deleted: boolean };
 export type Row = { id: number; action: string; creator: number | null; created: string; model: string | null; model_id: string | null; order_id: number | null; data: any };
-export type Verdict = { state: "done" | "possibly" | "open" | "agreed"; orders: number[]; rung: string; text: string; at: string | null; creator: number | null };
-/** A message on the need's thread: its newest words, whose, when, and whether a client's own words asked for work. */
-export type ThreadMsg = { at: number; ours: boolean; text: string; asks: boolean; changes?: boolean };
+/** `provisional`: staff's work was found, on an order still provisional or in Price Quotes (pending): not done yet. */
+export type Verdict = { state: "done" | "possibly" | "open" | "agreed"; orders: number[]; rung: string; text: string; at: string | null; creator: number | null; provisional?: boolean };
+/**
+ * A message on the need's thread: its newest words, whose, when, and whether a client's own words asked for work.
+ * `books`: the reader took the client's email as a booking, which after a quote is the client going ahead in words no
+ * phrase reads ("we would like to go ahead" read as booking 9 of the 14 times the phrases missed a yes, 2 Nov).
+ */
+export type ThreadMsg = { at: number; ours: boolean; text: string; asks: boolean; changes?: boolean; books?: boolean };
 
 type Shift = { slot: string; team: string; day: string; place: number | null; cancelled: boolean };
 
@@ -62,6 +68,14 @@ const MADE = new Set(["order_create", "order_create_by_copy", "order_created_via
 const madeAfter = (o: Order, rows: Row[], need: Need, within = Infinity) => rows.some((r) => r.order_id === o.order_id && MADE.has(r.action) && r.creator != null && Number(r.creator) !== BOT && T(r.created) > need.at && T(r.created) <= need.at + within);
 /** An undated booking's order is one staff made within this of the email: 96 hours, the window the same-day study used. */
 const UNDATED_WINDOW_MS = 96 * 3600e3;
+const confirmsByEdit = (r: Row) => { const p = r.data?.diffChanges?.Order?.provisional; return !!p && Number(p.old) === 1 && Number(p.new) === 0; };
+/**
+ * An order still provisional or in Price Quotes holds what Spartan offered, not a booking: staff make it when they
+ * quote and confirm it after the client's yes. Counting the made order as the booking hid the yes: of 132 clients'
+ * first yes after a quote (30 Jul-2 Nov, outcome analysis), 117 were followed by staff confirming or editing the
+ * order, and a card showed for the whole wait in 30; 15 waited over 4 h with nothing on the TV.
+ */
+const pending = (o: Order) => !!(o.body?.provisional || o.body?.quote);
 
 /** A row as staff's work: what it did, and which asks it answers. Null when it is not booking work. */
 function workOf(r: Row, o: Order, need: Need): { what: string; fits: Ask[] } | null {
@@ -75,6 +89,8 @@ function workOf(r: Row, o: Order, need: Need): { what: string; fits: Ask[] } | n
   // OnSinch marks staff's own order cancels "automated" (175 of 207 to 31 Oct, by 11 people): the creator is the test.
   if (r.action === "order_cancel") return { what: "cancelled the order", fits: ["cancel", "any"] };
   if (r.action === "order_confirm_provisional") return { what: "confirmed the order", fits: ["book", "any"] };
+  // Staff also confirm by editing the flag (64 times since 1 Sep, 6 people, beside 472 confirm rows).
+  if (r.action === "common_change" && confirmsByEdit(r)) return { what: "confirmed the order", fits: ["book", "any"] };
   if (r.action === "common_create" && (d.model === "SlotTeam" || d.model === "Slot") && onDay) return { what: d.model === "Slot" ? "added crew" : "added a shift", fits: ["book", "change", "any"] };
   if (r.action === "common_delete" && /^(Slot|SlotTeam|Job)$/.test(String(d.data?.model ?? "")) && onDay) return { what: "removed a shift", fits: ["cancel", "change", "any"] };
   if (r.action === "common_change") {
@@ -86,19 +102,25 @@ function workOf(r: Row, o: Order, need: Need): { what: string; fits: Ask[] } | n
   return null;
 }
 
-/** Every ask has staff work that fits it on this order after the email (with the latest such row), or a new booking was on it already. */
-function doneOn(o: Order, rows: Row[], need: Need, places: number[]): { what: string[]; last: Row | null } | null {
+/**
+ * Every ask has staff work that fits it on this order after the email (with the latest such row), or a new booking was
+ * on it already. `provisional`: the booking is on an order still provisional or in Price Quotes, which is not done until
+ * staff confirm it (pending).
+ */
+function doneOn(o: Order, rows: Row[], need: Need, places: number[]): { what: string[]; last: Row | null; provisional: boolean } | null {
   const mine = rows.filter((r) => r.order_id === o.order_id);
   const active = shiftsOf(o.body).filter((s) => !s.cancelled);
-  if (need.fresh && need.days.length && !madeAfter(o, rows, need) && need.days.every((d) => active.some((s) => s.day === d && atPlace(s, places)))) return { what: ["booked it before the email"], last: null };
   const undone = (r: Row) => r.action === "order_cancel" && mine.some((u) => u.action === "order_uncancel" && T(u.created) > T(r.created));
   const work = mine.filter((r) => !undone(r)).map((r) => ({ r, w: workOf(r, o, need) })).filter((x): x is { r: Row; w: NonNullable<ReturnType<typeof workOf>> } => !!x.w);
-  const cancelled = work.find((x) => x.r.action === "order_cancel");
-  if (cancelled) return { what: ["cancelled the order"], last: cancelled.r };
+  const confirmed = work.some((x) => x.w.what === "confirmed the order");
   const asks = need.asks.length ? need.asks : (["any"] as Ask[]);
+  const provisional = pending(o) && !confirmed && asks.includes("book");
+  if (need.fresh && need.days.length && !madeAfter(o, rows, need) && need.days.every((d) => active.some((s) => s.day === d && atPlace(s, places)))) return { what: ["booked it before the email"], last: null, provisional };
+  const cancelled = work.find((x) => x.r.action === "order_cancel");
+  if (cancelled) return { what: ["cancelled the order"], last: cancelled.r, provisional: false };
   if (!work.length || !asks.every((a) => work.some((x) => x.w.fits.includes(a)))) return null;
   const last = work.reduce((a, b) => (T(b.r.created) > T(a.r.created) ? b : a)).r;
-  return { what: [...new Set(work.map((x) => x.w.what))], last };
+  return { what: [...new Set(work.map((x) => x.w.what))], last, provisional };
 }
 
 /** The need's candidate jobs: groups that must each come to one order, from the first rung that yields any. */
@@ -140,7 +162,8 @@ function candidates(need: Need, links: Link[], orders: Map<number, Order>, rows:
 // set terms. A quote is the order as it stood: of 189 quotes on a thread linked to an order, staff had made or edited
 // its shifts before 188 of them (144 within the hour), so the order at the quote's moment is what the client was
 // offered. A quote promised ("we'll send over an updated quote on Monday") is none: the words must hand one over.
-const QUOTE = /\b(?:attached|please (?:find|see)|(?:see|find) (?:the )?attached|here(?:'s| is))\b[^.\n]{0,40}\b(?:quote|quotation|proforma)\b|\b(?:quote|quotation|proforma)\b[^.\n]{0,25}\battached\b/i;
+// "Please see your quotes attached" is one too (2 Nov: a quote request's card stayed 17 days in the provisional replay).
+const QUOTE = /\b(?:attached|please (?:find|see)|(?:see|find) (?:the )?attached|here(?:'s| is))\b[^.\n]{0,40}\b(?:quotes?|quotations?|proforma)\b|\b(?:quotes?|quotations?|proforma)\b[^.\n]{0,25}\battached\b/i;
 /**
  * The client's yes, beyond confirms(): a PO sent after the quote ("Revised PO attached"), which is how this business
  * confirms ("no products or services are reserved until the booking is confirmed with a Purchase Order", Spartan's own
@@ -153,6 +176,8 @@ const ACK = /\bthank(?:s| you)\s+(?:very much\s+|so much\s+)?for\s+(?:paying|the
 const TERMS = /\b(?:minimum|unfortunately|unable to|(?:can ?not|can't|cannot) (?:do|offer|provide|accommodate|book|supply)|not (?:able|possible)|fully booked|no availability|subject to)\b/i;
 /** Spartan's words without its footer, which mentions quotes on every email. */
 const spartanOwn = (text: string) => text.split(/\*?Please note, all quotes|We now provide Van services/i)[0];
+/** The client going ahead: its words confirm or send a PO, or Spartan thanks it for confirming, the PO or paying. */
+const saidYes = (m: ThreadMsg) => (m.ours ? ACK.test(spartanOwn(m.text)) : !!m.books || confirms(m.text) || PO_SENT.test(m.text));
 
 /**
  * A need the client settled with Spartan: the client's own words confirm (the need's email or a later one), the last
@@ -262,14 +287,29 @@ function withdrawnOn(need: Need, thread: ThreadMsg[], jobs: Order[], rows: Row[]
  * built from orders). On 1 Nov such a need sat on the TV 60 h saying "Not written: do it by hand", which done by hand
  * would have booked crew the client never confirmed.
  */
-function quoteSent(need: Need, thread: ThreadMsg[], jobs: Order[]): { text: string; at: string } | null {
-  if (!need.quote || !need.days.length) return null;
+/**
+ * `held`: staff's work for the need was found on an order still provisional (the done verdict), which is what Spartan
+ * quoted even when the client's days moved after it: 9 of the provisional replay's long cards were quotes on an order
+ * no longer holding every day first asked.
+ */
+function quoteSent(need: Need, thread: ThreadMsg[], jobs: Order[], held = false): { text: string; at: string } | null {
+  // An undated request ("in February") quoted on the order staff made waits too: that order is what was quoted.
+  if (!need.days.length && !held) return null;
   const q = thread.filter((m) => m.ours && m.at > need.at && QUOTE.test(spartanOwn(m.text))).sort((a, b) => a.at - b.at).pop();
   if (!q) return null;
-  // The client back since the quote, whatever it wrote, is no longer waiting on itself: staff read it. A PO "with the
-  // contacts onsite" was read as neither a yes nor an ask, and staff confirmed the order from it the next day (1 Nov).
-  if (thread.some((m) => !m.ours && m.at > q.at)) return null;
-  if (!jobs.some((o) => need.days.every((d) => shiftsOf(o.body).some((x) => !x.cancelled && x.day === d)))) return null;
+  const offered = jobs.filter((o) => need.days.every((d) => shiftsOf(o.body).some((x) => !x.cancelled && x.day === d)));
+  if (held || (need.asks.includes("book") && offered.some(pending))) {
+    // While the order is provisional the quote waits on the client's yes, for a booking as for a quote request: "please
+    // book" is answered "please let me know if this can be confirmed" (119 of 158 booking requests got a quote, 30 Jul-
+    // 2 Nov). Any other reply ("thanks, we'll come back to you once the client signs off") keeps it waiting: ended by any
+    // reply, four quote requests' cards stayed up 4 to 17 days in the provisional replay with nothing for staff to do.
+    if (thread.some((m) => m.at > q.at && saidYes(m))) return null;
+  } else {
+    // The client back since the quote, whatever it wrote, is no longer waiting on itself: staff read it. A PO "with the
+    // contacts onsite" was read as neither a yes nor an ask, and staff confirmed the order from it the next day (1 Nov).
+    // On a confirmed order, staff's work is what clears a booking.
+    if (!need.quote || thread.some((m) => !m.ours && m.at > q.at) || !offered.length) return null;
+  }
   return { text: `Quote sent on ${new Date(q.at).toISOString().slice(0, 10)}: waiting for the client to confirm`, at: new Date(q.at).toISOString() };
 }
 
@@ -292,8 +332,15 @@ export function isDone(need: Need, links: Link[], orders: Map<number, Order>, ro
   if (wd && (jobs.length || known)) return { state: "agreed", orders: jobs.map((o) => o.order_id), rung: v.rung || "withdrawn", text: wd.text, at: wd.at, creator: null };
   const a = settledOn.length === 1 ? agreedOn(need, thread, settledOn[0], rows) : null;
   if (a) return { state: "agreed", orders: [settledOn[0].order_id], rung: v.rung || "agreed", text: a.text, at: a.at, creator: null };
-  const qs = quoteSent(need, thread, settledOn);
-  return qs ? { state: "agreed", orders: settledOn.map((o) => o.order_id), rung: v.rung || "quote sent", text: qs.text, at: qs.at, creator: null } : v;
+  const qs = quoteSent(need, thread, settledOn, !!v.provisional);
+  if (qs) return { state: "agreed", orders: settledOn.map((o) => o.order_id), rung: v.rung || "quote sent", text: qs.text, at: qs.at, creator: null };
+  if (!v.provisional) return v;
+  // What is left on a provisional order: the client's yes since Spartan's latest quote is staff's to confirm; with none,
+  // the quote is still Spartan's to send (staff make the order to build it, and quote within the hour 144 of 188 times).
+  const q = thread.filter((m) => m.ours && QUOTE.test(spartanOwn(m.text))).sort((a, b) => a.at - b.at).pop();
+  const y = thread.filter((m) => m.at >= need.at && (!q || m.at > q.at) && saidYes(m)).sort((a, b) => a.at - b.at)[0];
+  const which = v.orders.map((id) => label(orders.get(id)!)).join(" and ");
+  return { ...v, text: y ? `The client said yes on ${new Date(y.at).toISOString().slice(0, 10)}: confirm ${which} in OnSinch` : `${which} ${v.orders.length > 1 ? "are" : "is"} still provisional: ${q ? "confirm it once the client says yes to the quote" : "send the quote, or confirm it once the client says yes"}` };
 }
 
 function doneVerdict(need: Need, links: Link[], orders: Map<number, Order>, rows: Row[], placeNamed: (name: string) => number[]): Verdict {
@@ -314,6 +361,9 @@ function doneVerdict(need: Need, links: Link[], orders: Map<number, Order>, rows
   }
   if (found.some((f) => !f.length)) return open;
   const done = found.map((f) => f[0]);
+  // Staff's work found, on an order still provisional: the card stays, and says what is left.
+  const held = done.filter((x) => x.d!.provisional);
+  if (held.length) return { ...open, state: "possibly", orders: held.map((x) => x.o.order_id), provisional: true, text: `${held.map((x) => label(x.o)).join(" and ")} ${held.length > 1 ? "are" : "is"} still provisional: confirm in OnSinch once the client says yes` };
   const last = done.map((x) => x.d!.last).filter((r): r is Row => !!r).sort((a, b) => T(b.created) - T(a.created))[0] ?? null;
   const text = done.map((x) => `${label(x.o)}, staff ${x.d!.what.join(", ")}`).join("; ");
   return { state: "done", orders: done.map((x) => x.o.order_id), rung, text, at: last ? new Date(T(last.created)).toISOString() : null, creator: last?.creator ?? null };

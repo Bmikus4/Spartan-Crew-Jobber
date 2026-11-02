@@ -65,9 +65,11 @@ export async function markNeeds(sql: Sql, t: Transport | null, rows: V2Row[], no
   const asked = new Set(rows.filter((r) => (r.grounded?.requests ?? []).some((q) => !q.history)).map((r) => r.message_id));
   // A change or cancel in the client's own words, as against a booking restated (a yes listing the shifts it confirms).
   const changed = new Set(rows.filter((r) => (r.grounded?.requests ?? []).some((q) => !q.history && q.action !== "new_shift")).map((r) => r.message_id));
+  // The reader's booking: after a quote, the client going ahead (done.ts saidYes).
+  const books = new Set(rows.filter((r) => r.grounded?.intent === "booking").map((r) => r.message_id));
   const threadOf = new Map<string, ThreadMsg[]>();
   for (const m of (await sql`SELECT thread_id, message_id, date_iso, is_from_spartan, body FROM thread_messages WHERE thread_id = ANY(${threads})`) as any[])
-    threadOf.set(m.thread_id, [...(threadOf.get(m.thread_id) ?? []), { at: Date.parse(m.date_iso), ours: !!m.is_from_spartan, text: latestText(String(m.body ?? "")), asks: !m.is_from_spartan && asked.has(m.message_id), changes: !m.is_from_spartan && changed.has(m.message_id) }]);
+    threadOf.set(m.thread_id, [...(threadOf.get(m.thread_id) ?? []), { at: Date.parse(m.date_iso), ours: !!m.is_from_spartan, text: latestText(String(m.body ?? "")), asks: !m.is_from_spartan && asked.has(m.message_id), changes: !m.is_from_spartan && changed.has(m.message_id), books: !m.is_from_spartan && books.has(m.message_id) }]);
   const from = new Date(Math.min(...needs.map((n) => n.need.at), ...[...threadOf.values()].flat().map((m) => m.at).filter((x) => x > 0))).toISOString();
   const history = ((await sql`SELECT id, action, creator, created, model, model_id, order_id, data FROM onsinch_timeline
     WHERE order_id = ANY(${[...orders.keys()]}) AND created > ${from}::timestamptz ORDER BY id`) as any[])

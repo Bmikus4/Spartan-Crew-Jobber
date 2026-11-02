@@ -5875,5 +5875,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0290",
+  "ts": "2026-11-02T23:52:41+00:00",
+  "kind": "measurement",
+  "headline": "Provisional is not done (O31): yes-after-quote cards 30 to 57 of 117; +4.9% card-hours, all ending in work",
+  "subject": "A booking on a provisional order stays on the TV until staff confirm it",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 125,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]
