@@ -5847,5 +5847,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0288",
+  "ts": "2026-11-02T13:22:40+00:00",
+  "kind": "measurement",
+  "headline": "1,145 threads hand-coded; first yes after a quote read as nothing 94/132",
+  "subject": "Outcome labels for all 1,145 mailbox threads, with each email type's measure",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 125,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]
