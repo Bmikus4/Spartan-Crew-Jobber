@@ -143,8 +143,56 @@ and OnSinch's booking history.
      the order? This settles whether the reader's "nothing" on a yes matters.
   2. The same for the 72 crew-name asks, against Q6.
   3. A supplier list from senders who quote or invoice Spartan, and its effect on the 8 false cards.
+## 6. The three replays (run 2 Nov, $0, read-only)
+
+**How they ran.** Each target email comes from the hand labels. At the email, and at every thread message and OnSinch
+row after it until the owed work was done, I asked whether any need on that thread was on the TV. "On the TV" means
+the need is open or possibly done under today's done.ts, with the thread, OnSinch history and order bodies rolled
+back to that moment, and with a day not yet passed. Scripts: `.tmp-v2/rp-replays.ts`, `rp-suppliers.ts` and
+`rp-suppliers2.ts`. Outputs: `.tmp-data/outcome/replays.json` and `suppliers.json`.
+
+**1. The client's first yes after a quote (132).**
+- In 117 cases staff then confirmed or edited the order within 72 hours, so work was owed. A card was on the TV:
+  - the whole time in 30 cases;
+  - part of the time in 5;
+  - never in 82.
+- In the other 15 nothing followed; for example, the order was already confirmed.
+- **The cause of the 82:**
+  - 56 times the thread's need was already "done" at the yes. The done verdict counts "staff made the order" as done
+    while the order is still provisional, and staff make the provisional order when they quote. S-0286 made a
+    provisional order staff's to confirm inside `agreedOn` only.
+  - 26 times the thread had no need at all: the request was read as nothing, or predates v2.
+- **What it cost:** staff confirm fast without a card (median 0.35 h). But 15 yeses waited over 4 hours with no card,
+  and 8 over 24 hours.
+- **Fix candidate (not built):** a need on a provisional order is not done until staff confirm it. Its risk: a
+  booking request answered with a quote (no quote flag, so no quote wait) would hold a card until the client answers.
+  It needs its own replay before it ships.
+
+**2. The client asking Spartan something (84; 72 earlier counted only where the ask was the email's main code).**
+- Spartan replied in 81 cases, at a median of 0.3 to 0.6 hours.
+- A card was on the TV until the reply in 12, part of the time in 5, never in 64.
+- Only 2 waited over 4 hours with no card, and 3 were never answered.
+- **So crew-name and status asks are answered fast without the TV.** The 112 unanswered threads of Q6 are mostly
+  other asks, still to be read.
+
+**3. A supplier list from mail (the 8 false supplier cards).**
+
+| Rule | Supplier cards hidden (of 8) | Real client cards hidden |
+|---|---|---|
+| sender handed Spartan a quote, invoice or statement | 5 | 76 (26 client senders write "please find attached ... quote", returning Spartan's own) |
+| that, and the sender on no OnSinch contact list | 1 | 2 |
+| sender on no contact list | 4 | 17 |
+| thread opened by Spartan | 8 | 32 |
+
+- All 8 false cards are in 2 threads, where Spartan asked two crew companies to cover its shifts.
+- 3 of the 9 supplier senders are on a client contact list, and 2 more senders are both a client and a supplier.
+- **No rule from mail or contacts is worth it.** A short hand-kept list of the companies Spartan subcontracts to
+  (about 9 senders in 3 months) would remove all 8 at no cost to client cards. That is the owner's call.
+
 - **For the owner:**
-  - Should SUB and SU threads (55, Spartan as the buyer) be off the TV entirely?
+  - Should SUB and SU threads (55, Spartan as the buyer) be off the TV entirely? If yes, from a hand-kept list
+    (replay 3).
+  - Should a provisional order count as not done until staff confirm it (replay 1)? It needs its own replay first.
   - Should AF tasks (accreditation, venue registration, documents to sign) be a TV item, given 13 of 32 have no
     visible reply?
   - Should an unchased quote be a TV item? (77 of 102 were never chased.)

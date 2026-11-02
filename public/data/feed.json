@@ -5861,5 +5861,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0289",
+  "ts": "2026-11-02T22:29:16+00:00",
+  "kind": "measurement",
+  "headline": "Replays: yes-after-quote card coverage 30/117; asks answered in 0.3-0.6 h; no supplier rule",
+  "subject": "A yes after a quote showed a card for the whole wait in only 30 of 117 cases",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 125,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]
