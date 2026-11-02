@@ -152,6 +152,13 @@ const map = (...os: Order[]) => new Map(os.map((o) => [o.order_id, o]));
     await seed(20);
     const many = await count();
     ok(one === many && one > 0, `one TV build makes the same number of queries for 1 card and 21 (${one}, ${many})`, { one, many });
+
+    const keyOf = async (thread: string) => ((await serveFeed({ ...liveFeedDeps(), jobs: undefined, remember: undefined }, NOW)).all ?? []).find((c) => c.thread_id === thread)!.items[0].item_key;
+    await sql`INSERT INTO feed_marks (item_key, thread_id, mark, evidence) VALUES (${await keyOf("t20-0")}, 't20-0', 'agreed', ${JSON.stringify({ text: "Quote sent on 2026-10-28: waiting for the client to confirm" })}::jsonb),
+      (${await keyOf("t20-1")}, 't20-1', 'agreed', ${JSON.stringify({ text: "Agreed: the client accepted Spartan's quote" })}::jsonb)`;
+    await markNeeds(sql as any, null, (await liveFeedDeps().v2!()) as any, NOW);
+    const kept = ((await sql`SELECT thread_id FROM feed_marks WHERE mark = 'agreed' AND thread_id IN ('t20-0', 't20-1')`) as any[]).map((m) => m.thread_id);
+    ok(JSON.stringify(kept) === '["t20-1"]', "a quote waiting on the client is read again each minute; an agreement is kept", kept);
   }
 
   console.log("\n[6] an order OnSinch no longer returns, and the re-plan's reading (1 Nov)");
@@ -200,7 +207,9 @@ const map = (...os: Order[]) => new Map(os.map((o) => [o.order_id, o]));
     ok(isDone(need(), L, map(a), [], undefined, [ask, terms, msg(10, false, "Can we also add a driver?", true), yes]).state === "open", "the client asked for more after the offer: open");
     ok(isDone(need(), L, map(order(1, ["2026-11-04"], {}), ...[]), [], undefined, [ask, terms]).state === "open", "terms and no yes: open");
     const prov = order(1, ["2026-11-04"]); prov.body.provisional = true;
-    ok(isDone(need(), L, map(prov), [], undefined, [ask, terms, yes]).state === "open", "a provisional order is not a booking: open");
+    ok(isDone(need(), L, map(prov), [], undefined, [ask, terms, yes]).state === "open", "a provisional order is staff's to confirm after the yes: open");
+    const inQuotes = order(1, ["2026-11-04"]); inQuotes.body.quote = true;
+    ok(isDone(need(), L, map(inQuotes), [], undefined, [ask, terms, yes]).state === "open", "an order still in Price Quotes is not raised yet: open");
     ok(isDone(need({ days: ["2026-11-04", "2026-11-05"] }), L, map(a), [], undefined, [ask, terms, yes]).state === "open", "the order lacks a day of the need: open");
     ok(isDone(need({ asks: ["cancel"] }), L, map(a), [], undefined, [ask, terms, yes]).state === "open", "a cancellation is never settled by a yes to terms");
 
@@ -240,6 +249,50 @@ const map = (...os: Order[]) => new Map(os.map((o) => [o.order_id, o]));
     ok(isDone(fresh, [], new Map(), [], undefined, [ask, msg(60, "Please disregard my previous email.")]).state === "agreed", "a new booking taken back with nothing booked that day: withdrawn");
     ok(isDone(fresh, [], map(order(2, ["2026-11-04"])), [row(2, "order_create", { model: "Order", id: "2" }, new Date(AT + 30 * MIN).toISOString())], undefined, [ask, msg(60, "Please disregard my previous email.")]).state !== "agreed", "a new booking staff had already made: not withdrawn");
     ok(isDone({ ...fresh, company_id: null }, [], new Map(), [], undefined, [ask, msg(60, "Please disregard my previous email.")]).state === "open", "an unknown client's orders were never read: not withdrawn");
+  }
+
+  console.log("\n[9] the 2-day cards of 1 Nov: what the thread settled, read narrowly");
+  {
+    const MIN = 60_000;
+    const a = order(1, ["2026-11-04"]);
+    const L = [{ order_id: 1, absolute: true, ref: "R11001" }];
+    const msg = (min: number, ours: boolean, text: string, asks = false, changes = false) => ({ at: AT + min * MIN, ours, text, asks, changes });
+    const ask = msg(0, false, "The 4th is now a 1900 start, hopefully this is ok?", true, true);
+    const edit = row(1, "common_change", { model: "Slot", id: 1000, diffChanges: { Slot: { beginning: { old: "2026-11-04 09:00:00", new: "2026-11-04 19:00:00" } } } }, new Date(AT + 30 * MIN).toISOString());
+    const quote = msg(60, true, "No problem at all, please see updated quote attached.");
+    ok(isDone(need(), L, map(a), [edit], undefined, [ask, quote, msg(70, false, "Revised PO attached. Crew just need to ring onsite contact.")]).state !== "open", "a PO sent after the updated quote is the client's yes");
+    ok(isDone(need(), L, map(a), [], undefined, [ask, quote, msg(70, false, "Revised PO attached.")]).state === "open", "a change answered with a quote, the order not changed before it: the quote does not hold the change");
+    const promised = msg(60, true, "Overtime is noted, and we'll send over an updated quote on Monday.");
+    const book = msg(0, false, "4 crew on the 4th please", true);
+    ok(isDone(need({ asks: ["book"] }), L, map(a), [], undefined, [book, promised, msg(70, false, "Please can I confirm this.")]).state === "open"
+      && isDone(need({ asks: ["book"] }), L, map(a), [], undefined, [book, quote, msg(70, false, "Please can I confirm this.")]).state === "agreed", "a quote promised is no quote; the same yes after a quote handed over settles");
+    const paid = msg(600, true, "Hi, Thanks for paying the invoice. I've put your number on the job description.");
+    ok(isDone(need({ asks: ["book"] }), L, map(a), [], undefined, [msg(0, false, "2 crew on the 4th please", true), msg(60, true, "We have 2 people booked in. Here is a quote and an invoice for the shift."), paid]).state === "agreed", "Spartan thanking the client for paying stands for the client's yes");
+    ok(isDone(need({ asks: ["book"] }), L, map(a), [], undefined, [msg(0, false, "2 crew on the 4th please", true), msg(60, true, "We have 2 people booked in. Here is a quote and an invoice for the shift."), msg(600, true, "When can we expect payment? Once payment has been received we will send the crew list.")]).state === "open", "\"once payment has been received\" is a condition, not a payment received");
+    const restated = msg(10, false, "This all looks great and checks out and happy to confirm: the 4th at 11am.", true, false);
+    ok(isDone(need({ asks: ["book"], at: AT + 10 * MIN }), L, map(a), [], undefined, [msg(0, true, "Please see the quote attached for this order."), restated]).state === "agreed", "a yes restating the booking the order holds settles it");
+    ok(isDone(need({ asks: ["book"], at: AT + 10 * MIN }), L, map(a), [], undefined, [msg(0, true, "Please see the quote attached for this order."), { ...restated, changes: true }]).state === "open", "a yes that asks for a change does not");
+
+    const qn = need({ asks: ["book"], quote: true });
+    const qreq = msg(0, false, "Please can I request a quote: 6 crew on the 4th", true);
+    const sent = msg(60, true, "Hi, Please see the quote attached for this order.");
+    const q = isDone(qn, L, map(a), [], undefined, [qreq, sent]);
+    ok(q.state === "agreed" && /^Quote sent/.test(q.text), "a quote request answered with the quote: off the TV until the client replies", q);
+    ok(isDone(qn, L, map(a), [], undefined, [qreq, sent, msg(120, false, "Thanks for this - contacts onsite for the in and the out are below.")]).state !== "agreed", "the client back after the quote, in any words, is no longer waiting");
+    ok(isDone(qn, L, map(a), [], undefined, [qreq, sent, msg(90, false, "Great, please can I confirm this.")]).state !== "agreed" || /^Agreed/.test(isDone(qn, L, map(a), [], undefined, [qreq, sent, msg(90, false, "Great, please can I confirm this.")]).text), "the client's yes after it is a settlement, not a quote still waiting");
+    ok(isDone({ ...qn, quote: false }, L, map(a), [], undefined, [qreq, sent]).state === "open", "a booking (not a quote request) is not left waiting on a quote");
+    ok(isDone(qn, L, map(order(1, ["2026-11-05"])), [], undefined, [qreq, sent]).state === "open", "no order holds the day asked: nothing in OnSinch was quoted");
+
+    const fresh = need({ asks: ["book"], fresh: true, days: ["2026-11-02"] });
+    const mon = msg(0, false, "Please could we pencil 2 crew on Monday 2nd November", true);
+    ok(isDone(fresh, [], new Map(), [], undefined, [mon, msg(240, false, "Could we look at Tuesday 3rd 19:00-23:00 instead of Monday 2nd November?", true)]).state === "agreed", "a later request \"instead of\" the day, nothing booked on it: withdrawn");
+    ok(isDone(fresh, [], new Map(), [], undefined, [mon, msg(240, false, "Can I please call the crew today from 16:30 instead of 17:45?", true)]).state === "open", "\"instead of 17:45\" replaces a time, not the request");
+    ok(isDone(fresh, [], new Map(), [], undefined, [mon, msg(240, false, "Could the crew arrive at 17:00 instead of 19:00 on Monday 2nd November?", true)]).state === "open", "a time moved on the need's day, \"instead of 19:00 on Monday 2nd\": not withdrawn");
+
+    // A guessed link to an October order on a reused thread is not a November need's job.
+    const old = order(9, ["2026-10-09"]);
+    ok(isDone(need({ days: [], asks: ["book"], fresh: true }), [{ order_id: 9, absolute: false, ref: "" }], map(old, order(10, ["2026-11-02"])), [row(10, "order_create", { model: "Order", id: "10" }, new Date(AT + 60 * MIN).toISOString())]).state === "done",
+      "the old job's link is passed over, and the order made after the email is found");
   }
 
   console.log(fails ? `\n${fails} FAILED` : "\nALL PASS");

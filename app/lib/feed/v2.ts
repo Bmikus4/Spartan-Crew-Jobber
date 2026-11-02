@@ -120,7 +120,14 @@ const OP_ASK: Record<Op["kind"], Ask> = { create_order: "book", add_shift: "book
  * the email's first decision's, so a tick or a remembered need survives the card being planned
  * again with another kind or order (a re-keyed card loses its marks).
  */
-export function v2Source(row: V2Row, now: number): FeedSource {
+export function v2Source(row0: V2Row, now: number): FeedSource {
+  // A GUESSED LINK TO AN OLD JOB IS NOT THIS EMAIL'S JOB. A client who books Monday by replying on an October thread left
+  // the thread linked to the October order (all its days over), which made the booking a "change" to it, showed its R and
+  // J, and hid the order staff made for Monday (1 Nov, 53 h on the TV). A guessed link whose order holds no day on or after
+  // the email's is dropped here; an absolute one (an R, J or PO the thread names) always stands.
+  const sentDay = new Date(Date.parse(row0.sent_at) || now).toLocaleDateString("en-CA", { timeZone: "Europe/London" });
+  const stale = !!row0.link && !row0.link.absolute && !!row0.link.order && !row0.link.order.days.some((x) => x >= sentDay);
+  const row: V2Row = stale ? { ...row0, link: null } : row0;
   const d = answerOf(row);
   const c = classify(row, d);
   // A NEED'S KIND IS ITS JOB AS IT IS NOW (ADDENDUM §13.2 change 2): a new booking on a thread linked to an order
@@ -190,6 +197,7 @@ export function v2Source(row: V2Row, now: number): FeedSource {
       at,
       asks: [...new Set([...(g?.requests ?? []).map((r) => ASK[r.action] ?? "any"), ...(g?.requests.length ? [] : c.ops.map((o) => OP_ASK[o.kind]))])],
       fresh,
+      quote: g?.intent === "quote_request",
       days, places, venues: [...new Set(shifts.map((s) => s.venue).filter((v): v is string => !!v))],
       readPlaces: [...new Set((g?.requests ?? []).map((r) => r.place_id).filter((p): p is number => !!p))],
     },

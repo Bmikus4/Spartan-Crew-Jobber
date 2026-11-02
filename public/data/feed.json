@@ -5819,5 +5819,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0286",
+  "ts": "2026-11-02T01:32:15+00:00",
+  "kind": "measurement",
+  "headline": "TV 2-day cards: PO/thanks yes, restated bookings, 'instead of <day>', quote waits off the TV; quality test (316 needs replayed, 336 blind messages) fixed provisional + sticky quote; R11871, R11893, R11862 clear",
+  "subject": "Cards the client settled in the thread leave the TV, and quote waits end when the client replies",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 125,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]

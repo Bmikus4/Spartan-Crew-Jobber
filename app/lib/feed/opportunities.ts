@@ -17,7 +17,7 @@ import { V2_FROM, liveLinks } from "./live";
 type Sql = (strings: TemplateStringsArray, ...values: unknown[]) => Promise<unknown[]>;
 
 /** What an opportunity is now, from the TV first and the thread's latest decision after. */
-export type OppState = "urgent" | "done" | "settled" | "reply" | "info" | "closed" | "undecided";
+export type OppState = "urgent" | "done" | "settled" | "quoted" | "reply" | "info" | "closed" | "undecided";
 export type Opportunity = {
   thread_id: string;
   subject: string;
@@ -69,7 +69,10 @@ export async function listOpportunities(sql: Sql, deps: FeedDeps, now: number): 
   for (const d of (await sql`SELECT thread_id, interpretation->'grounded' AS g FROM v2_decisions WHERE thread_id = ANY(${ids}) AND coalesce(code_version, '') <> 'local'`) as any[])
     days.set(String(d.thread_id), [...new Set([...(days.get(String(d.thread_id)) ?? []), ...daysOf(d.g)])].sort());
   const links = new Map((await liveLinks()).map((l) => [l.thread_id, l]));
-  const settled = new Set(((await sql`SELECT DISTINCT thread_id FROM feed_marks WHERE mark = 'agreed' AND thread_id = ANY(${ids})`) as any[]).map((m) => String(m.thread_id)));
+  // An agreed mark is a settlement, or a quote sent and waiting on the client (done.ts quoteSent), told by its words.
+  const agreedMarks = (await sql`SELECT thread_id, evidence->>'text' AS text FROM feed_marks WHERE mark = 'agreed' AND thread_id = ANY(${ids})`) as any[];
+  const quoted = new Set(agreedMarks.filter((m) => /^Quote sent/.test(String(m.text ?? ""))).map((m) => String(m.thread_id)));
+  const settled = new Set(agreedMarks.filter((m) => !/^Quote sent/.test(String(m.text ?? ""))).map((m) => String(m.thread_id)));
   const contacts = new Map(((await sql`SELECT email, name, company_name FROM onsinch_contacts WHERE email = ANY(${threads.map((t) => addr(t.first_client))})`) as any[]).map((c) => [String(c.email), c]));
 
   const items = new Map<string, Opportunity>();
@@ -82,6 +85,7 @@ export async function listOpportunities(sql: Sql, deps: FeedDeps, now: number): 
     const contact = sender ? contacts.get(sender) : undefined;
     const state: OppState = onTv ? (onTv.green ? "done" : "urgent")
       : settled.has(id) ? "settled"
+      : quoted.has(id) ? "quoted"
       : card?.lane === "reply" ? "reply"
       : card?.green ? "done"
       : !d ? "undecided"

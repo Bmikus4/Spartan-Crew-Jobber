@@ -63,9 +63,11 @@ export async function markNeeds(sql: Sql, t: Transport | null, rows: V2Row[], no
   // Each need's thread, newest words only: an agreement is the client's yes to a quote or terms Spartan sent, often
   // before the need's own email (a September quote confirmed on 27 Oct), so the history read starts at the thread's.
   const asked = new Set(rows.filter((r) => (r.grounded?.requests ?? []).some((q) => !q.history)).map((r) => r.message_id));
+  // A change or cancel in the client's own words, as against a booking restated (a yes listing the shifts it confirms).
+  const changed = new Set(rows.filter((r) => (r.grounded?.requests ?? []).some((q) => !q.history && q.action !== "new_shift")).map((r) => r.message_id));
   const threadOf = new Map<string, ThreadMsg[]>();
   for (const m of (await sql`SELECT thread_id, message_id, date_iso, is_from_spartan, body FROM thread_messages WHERE thread_id = ANY(${threads})`) as any[])
-    threadOf.set(m.thread_id, [...(threadOf.get(m.thread_id) ?? []), { at: Date.parse(m.date_iso), ours: !!m.is_from_spartan, text: latestText(String(m.body ?? "")), asks: !m.is_from_spartan && asked.has(m.message_id) }]);
+    threadOf.set(m.thread_id, [...(threadOf.get(m.thread_id) ?? []), { at: Date.parse(m.date_iso), ours: !!m.is_from_spartan, text: latestText(String(m.body ?? "")), asks: !m.is_from_spartan && asked.has(m.message_id), changes: !m.is_from_spartan && changed.has(m.message_id) }]);
   const from = new Date(Math.min(...needs.map((n) => n.need.at), ...[...threadOf.values()].flat().map((m) => m.at).filter((x) => x > 0))).toISOString();
   const history = ((await sql`SELECT id, action, creator, created, model, model_id, order_id, data FROM onsinch_timeline
     WHERE order_id = ANY(${[...orders.keys()]}) AND created > ${from}::timestamptz ORDER BY id`) as any[])
@@ -76,11 +78,18 @@ export async function markNeeds(sql: Sql, t: Transport | null, rows: V2Row[], no
   const marks = (await sql`SELECT item_key, mark, evidence FROM feed_marks WHERE item_key = ANY(${needs.map((n) => n.key)}) AND mark IN ('done', 'possibly', 'agreed')`) as any[];
   let done = 0, possibly = 0, agreed = 0;
   for (const n of needs) {
-    if (marks.some((m) => m.item_key === n.key && (m.mark === "done" || m.mark === "agreed"))) continue;
+    // A quote waiting on the client is read again each minute: the client back on the thread brings the card back. Kept,
+    // it hid a PO the client sent after the quote, which made no card of its own, for 25 h (replay from 9 Oct, 1 Nov).
+    const waiting = marks.find((m) => m.item_key === n.key && m.mark === "agreed" && /^Quote sent/.test(String(m.evidence?.text ?? "")));
+    if (marks.some((m) => m.item_key === n.key && (m.mark === "done" || (m.mark === "agreed" && !waiting)))) continue;
     const mine = links.filter((l) => l.thread_id === n.thread_id).map((l) => ({ order_id: Number(l.order_id), absolute: !!l.proof, ref: String(l.proof ?? "") }));
     const v = conflicts[n.thread_id]
       ? { state: "possibly" as const, text: `Check the order: ${conflicts[n.thread_id]}`, orders: [] as number[], rung: "conflict", at: null, creator: null }
       : isDone({ ...n.need, company_id: companyOf(n.sender), companies: senderCompanies(n.sender) }, mine, orders, history, (name) => places.get(name.trim().toLowerCase()) ?? [], threadOf.get(n.thread_id) ?? []);
+    if (waiting) {
+      if (v.state === "agreed" && /^Quote sent/.test(v.text)) continue;
+      await sql`DELETE FROM feed_marks WHERE item_key = ${n.key} AND mark = 'agreed'`;
+    }
     const had = marks.find((m) => m.item_key === n.key && m.mark === "possibly");
     if (v.state === "done") {
       // Green from when staff did it, not from when this saw it: the TV keeps a done card for a day after that, so work

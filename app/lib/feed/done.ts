@@ -20,6 +20,7 @@
 // ============================================================================
 import { utcToLondon } from "../v2/bot/ops";
 import { confirms } from "../v2/interpret/interpret";
+import { datesIn } from "../v2/interpret/ground";
 
 /** The bot's OnSinch user: its own writes are never a person's work. */
 export const BOT = 2257;
@@ -30,14 +31,14 @@ export type Ask = "book" | "change" | "cancel" | "any";
  * places the reading matched to the client's venues, a tie-break between candidate orders and never a filter: one
  * reading's place was the unused duplicate 7083 where staff booked the client's own 205 (1 Nov).
  */
-export type Need = { at: number; asks: Ask[]; fresh: boolean; days: string[]; places: number[]; venues: string[]; company_id: number | null; readPlaces?: number[]; companies?: number[] };
+export type Need = { at: number; asks: Ask[]; fresh: boolean; days: string[]; places: number[]; venues: string[]; company_id: number | null; readPlaces?: number[]; companies?: number[]; quote?: boolean };
 /** A thread's link to an order; `ref` is what named it, so one PO held by two orders is told from two POs. */
 export type Link = { order_id: number; absolute: boolean; ref: string };
 export type Order = { order_id: number; number: string | null; company_id: number | null; body: any; deleted: boolean };
 export type Row = { id: number; action: string; creator: number | null; created: string; model: string | null; model_id: string | null; order_id: number | null; data: any };
 export type Verdict = { state: "done" | "possibly" | "open" | "agreed"; orders: number[]; rung: string; text: string; at: string | null; creator: number | null };
 /** A message on the need's thread: its newest words, whose, when, and whether a client's own words asked for work. */
-export type ThreadMsg = { at: number; ours: boolean; text: string; asks: boolean };
+export type ThreadMsg = { at: number; ours: boolean; text: string; asks: boolean; changes?: boolean };
 
 type Shift = { slot: string; team: string; day: string; place: number | null; cancelled: boolean };
 
@@ -115,8 +116,12 @@ function candidates(need: Need, links: Link[], orders: Map<number, Order>, rows:
     return { rung: "named by the thread", groups };
   }
   // A guess on another company's order than the sender's is no candidate (31 Oct: R11871 would have cleared a need).
+  // A guessed link to an order with nothing on or after the email's day is an old job on a reused thread, not this need's
+  // (1 Nov: a client booked Monday on an October thread; the October order held the link and hid the new one).
+  const sentDay = utcToLondon(new Date(need.at).toISOString()).date;
   const guessed = links.filter((l) => !l.absolute).map((l) => live(l.order_id))
-    .filter((o): o is Order => !!o && (!need.days.length || holdsDay(o, need, places)) && (!need.company_id || o.company_id === need.company_id));
+    .filter((o): o is Order => !!o && (!need.days.length || holdsDay(o, need, places)) && (!need.company_id || o.company_id === need.company_id)
+      && shiftsOf(o.body).some((s) => s.day >= sentDay));
   if (guessed.length) return { rung: need.days.length ? "the thread's link, on the need's day" : "the thread's link", groups: [guessed] };
   if (!need.days.length) {
     const made = need.fresh ? client.filter((o) => madeAfter(o, rows, need, UNDATED_WINDOW_MS)) : [];
@@ -131,10 +136,20 @@ function candidates(need: Need, links: Link[], orders: Map<number, Order>, rows:
 }
 
 // ---- agreed: the client accepted Spartan's quote or terms, and OnSinch holds them ---------------------------------
-// Spartan's own wording (its staff's templates), measured on its 1,307 replies 9 Oct-1 Nov: 211 send a quote, 47 set
-// terms. A quote is the order as it stood: of 157 quotes on a thread linked to an order, staff had made or edited its
-// shifts before 156 of them (122 within the hour), so the order at the quote's moment is what the client was offered.
-const QUOTE = /\b(?:attached|updated|amended|revised|new)\s+(?:quote|quotation|proforma)|(?:quote|quotation|proforma)(?: invoice)? (?:is |are )?attached|(?:find|see) (?:the |our |your |an? )?(?:attached |updated |amended |revised )?(?:quote|quotation|proforma)/i;
+// Spartan's own wording (its staff's templates), measured on its 1,308 replies 9 Oct-1 Nov: 247 hand a quote over, 47
+// set terms. A quote is the order as it stood: of 189 quotes on a thread linked to an order, staff had made or edited
+// its shifts before 188 of them (144 within the hour), so the order at the quote's moment is what the client was
+// offered. A quote promised ("we'll send over an updated quote on Monday") is none: the words must hand one over.
+const QUOTE = /\b(?:attached|please (?:find|see)|(?:see|find) (?:the )?attached|here(?:'s| is))\b[^.\n]{0,40}\b(?:quote|quotation|proforma)\b|\b(?:quote|quotation|proforma)\b[^.\n]{0,25}\battached\b/i;
+/**
+ * The client's yes, beyond confirms(): a PO sent after the quote ("Revised PO attached"), which is how this business
+ * confirms ("no products or services are reserved until the booking is confirmed with a Purchase Order", Spartan's own
+ * footer). And Spartan acknowledging the client's yes ("Thanks for paying the invoice", "thank you for the PO", "it is
+ * now confirmed"), which stands for a yes the client gave in words that are not a phrase, or by paying. On 1 Nov one
+ * need stayed after "Revised PO attached", another after "Thanks for paying the invoice".
+ */
+const PO_SENT = /\b(?:(?:revised|new|updated|amended)\s+)?(?:po|p\.o\.|purchase order)(?:\s+(?:number|no\.?))?\s+(?:is\s+)?(?:attached|enclosed)\b|\b(?:attached|enclosed|please find|see)\b[^.\n]{0,30}\b(?:po|purchase order)\b/i;
+const ACK = /\bthank(?:s| you)\s+(?:very much\s+|so much\s+)?for\s+(?:paying|the payment|confirming|your confirmation|the (?:po|p\.o\.|purchase order)|sending (?:over |through |us )?the (?:po|p\.o\.|purchase order))|(?<!\b(?:once|when|until|after)\s)\bpayment (?:has been |was )?received\b|\b(?:it|the (?:order|booking|job)) is now confirmed\b/i;
 const TERMS = /\b(?:minimum|unfortunately|unable to|(?:can ?not|can't|cannot) (?:do|offer|provide|accommodate|book|supply)|not (?:able|possible)|fully booked|no availability|subject to)\b/i;
 /** Spartan's words without its footer, which mentions quotes on every email. */
 const spartanOwn = (text: string) => text.split(/\*?Please note, all quotes|We now provide Van services/i)[0];
@@ -148,22 +163,32 @@ const spartanOwn = (text: string) => text.split(/\*?Please note, all quotes|We n
  * terms, and if staff still had work to do, its order would have to change.
  */
 function agreedOn(need: Need, thread: ThreadMsg[], o: Order, rows: Row[]): { text: string; at: string } | null {
-  if (!need.days.length || need.asks.includes("cancel") || o.deleted || o.body?.provisional || o.body?.quote) return null;
+  // An order still in Price Quotes or provisional is staff's to raise or confirm after the yes, which is work: replayed
+  // from 9 Oct, 6 of 9 agreements were followed by staff confirming the provisional order 3 min to 3 h later, and 145
+  // of 265 October orders were confirmed from provisional. One left provisional stays on the TV until its day passes.
+  if (!need.days.length || need.asks.includes("cancel") || o.deleted || o.body?.quote || o.body?.provisional) return null;
   const active = shiftsOf(o.body).filter((s) => !s.cancelled);
   if (!need.days.every((d) => active.some((s) => s.day === d))) return null;
   const ms = [...thread].sort((a, b) => a.at - b.at);
-  // A yes that asks for something too ("confirm the order and change the timing to 10-2") accepts the offer with a
-  // change, which the offer does not hold: only a client's yes whose own words ask nothing settles.
-  for (const c of ms.filter((m) => !m.ours && m.at >= need.at && !m.asks && confirms(m.text))) {
+  // A yes that asks for a change too ("confirm the order and change the timing to 10-2") accepts the offer with a
+  // change, which the offer does not hold. A yes that restates the bookings ("happy to confirm: the 5th, the 7th at
+  // 11am...") asks for what the offer is, and the order is checked to hold every day of it.
+  // An unknown `changes` counts as asking: a yes is never read more widely than the words show.
+  const yes = (m: ThreadMsg) => (m.ours ? ACK.test(spartanOwn(m.text)) : !(m.changes ?? m.asks) && (confirms(m.text) || PO_SENT.test(m.text)));
+  for (const c of ms.filter((m) => m.at >= need.at && yes(m))) {
     // Spartan's latest offer before it: a note after a quote ("no rush, the event is in November") changes nothing.
     const s = [...ms].reverse().find((m) => m.ours && m.at < c.at && (QUOTE.test(spartanOwn(m.text)) || TERMS.test(spartanOwn(m.text))));
     if (!s) continue;
     // Spartan answered this need, or the need's own email accepts what Spartan sent before it.
     if (c.at > need.at && s.at < need.at) continue;
-    // The client asked for something else after the offer: the offer does not cover it.
-    if (ms.some((m) => !m.ours && m.asks && m.at > s.at && m.at < c.at && m.at !== need.at)) continue;
+    // The client asked for a change after the offer: the offer does not cover it.
+    if (ms.some((m) => !m.ours && (m.changes ?? m.asks) && m.at > s.at && m.at < c.at && m.at !== need.at)) continue;
     const since = { ...need, at: s.at };
     if (rows.some((r) => r.order_id === o.order_id && MADE.has(r.action) && T(r.created) > s.at)) continue;
+    // A change answered with a quote: the quote holds the change only if staff changed the order before sending it (a
+    // quote is built from the order; 188 of 189 measured). Terms refuse, and need no edit.
+    if (s.at > need.at && need.asks.includes("change") && QUOTE.test(spartanOwn(s.text))
+      && !rows.some((r) => r.order_id === o.order_id && T(r.created) > need.at && T(r.created) <= s.at && workOf(r, o, need)?.fits.includes("change"))) continue;
     const changed = rows.filter((r) => r.order_id === o.order_id).map((r) => workOf(r, o, since)).some((w) => !!w && w.fits.some((f) => f === "change" || f === "cancel" || f === "book") && w.what !== "confirmed the order");
     if (changed) continue;
     const day = new Date(s.at).toISOString().slice(0, 10);
@@ -196,6 +221,7 @@ function cancelAgreed(need: Need, thread: ThreadMsg[], orders: Map<number, Order
  * this way (5 matched looser words, none a withdrawal), so the words are narrow and OnSinch must bear it out.
  */
 const WITHDRAW = /\b(?:(?:ignore|disregard)\s+(?:my|the|that)\s+(?:last|previous|earlier|above|first)\s+(?:e-?mail|message|request|one)|(?:ignore|disregard)\s+(?:that|my)\s+(?:request|change|amendment)|scrap (?:that|my (?:last|previous) (?:e-?mail|request))|(?:keep|leave) (?:it|everything|the booking|the times|the crew) as (?:it is|it was|originally (?:booked|planned)|before)|(?:cancel|withdraw) my (?:last |previous )?(?:request|change|amendment))\b/i;
+const REPLACE = /\b(?:instead of|rather than)\b/i;
 const sentenceOf = (text: string, at: number) => text.slice(Math.max(0, text.lastIndexOf(".", at) + 1, text.lastIndexOf("\n", at) + 1), at);
 
 /**
@@ -206,14 +232,21 @@ const sentenceOf = (text: string, at: number) => text.slice(Math.max(0, text.las
 function withdrawnOn(need: Need, thread: ThreadMsg[], jobs: Order[], rows: Row[]): { text: string; at: string } | null {
   if (!need.days.length) return null;
   const ms = [...thread].sort((a, b) => a.at - b.at);
+  // "Instead of Monday 2nd November" in a client's later request replaces the earlier day's (1 Nov: a need for the 2nd
+  // stayed after the client moved it to the 3rd, which OnSinch holds). Only in an email that itself asks: the new request.
   const w = ms.find((m) => {
     if (m.ours || m.at <= need.at) return false;
-    const x = WITHDRAW.exec(m.text);
-    return !!x && !/\b(?:if|unless|otherwise)\b/i.test(sentenceOf(m.text, x.index));
+    const x = WITHDRAW.exec(m.text) ?? (m.asks ? REPLACE.exec(m.text) : null);
+    if (!x || /\b(?:if|unless|otherwise)\b/i.test(sentenceOf(m.text, x.index))) return false;
+    // "From 16:30 instead of 17:45" replaces a time, not the request: the words it replaces must name the need's own day.
+    // They end at "on"/"for"/"at": "17:00 instead of 19:00 on the 30th" moves a time ON the 30th (blind test, 1 Nov).
+    if (REPLACE.test(x[0]) && ![...datesIn(m.text.slice(x.index + x[0].length, x.index + 80).split(/[.,;?!\n]|\s(?:on|for|at|from)\s/i)[0], new Date(m.at).toISOString())].some((d) => need.days.includes(d))) return false;
+    return true;
   });
   if (!w) return null;
   // The words take back the client's latest request before them: another between makes this need not the one meant.
   if (ms.some((m) => !m.ours && m.asks && m.at > need.at && m.at < w.at)) return null;
+  if (REPLACE.test(w.text) && !WITHDRAW.test(w.text) && jobs.some((o) => shiftsOf(o.body).some((x) => !x.cancelled && need.days.includes(x.day)))) return null;
   if (jobs.length > 1) return null;
   if (jobs.length === 1) {
     const since = { ...need, at: need.at };
@@ -223,6 +256,23 @@ function withdrawnOn(need: Need, thread: ThreadMsg[], jobs: Order[], rows: Row[]
   return { text: `Withdrawn: the client took this request back on ${new Date(w.at).toISOString().slice(0, 10)}, and OnSinch shows nothing was done`, at: new Date(w.at).toISOString() };
 }
 
+/**
+ * A quote request Spartan has answered with its quote, the client not yet back: nothing is staff's to do until the
+ * client says yes, which is a new email and a new need. Borne out by OnSinch: an order holds every day asked (quotes are
+ * built from orders). On 1 Nov such a need sat on the TV 60 h saying "Not written: do it by hand", which done by hand
+ * would have booked crew the client never confirmed.
+ */
+function quoteSent(need: Need, thread: ThreadMsg[], jobs: Order[]): { text: string; at: string } | null {
+  if (!need.quote || !need.days.length) return null;
+  const q = thread.filter((m) => m.ours && m.at > need.at && QUOTE.test(spartanOwn(m.text))).sort((a, b) => a.at - b.at).pop();
+  if (!q) return null;
+  // The client back since the quote, whatever it wrote, is no longer waiting on itself: staff read it. A PO "with the
+  // contacts onsite" was read as neither a yes nor an ask, and staff confirmed the order from it the next day (1 Nov).
+  if (thread.some((m) => !m.ours && m.at > q.at)) return null;
+  if (!jobs.some((o) => need.days.every((d) => shiftsOf(o.body).some((x) => !x.cancelled && x.day === d)))) return null;
+  return { text: `Quote sent on ${new Date(q.at).toISOString().slice(0, 10)}: waiting for the client to confirm`, at: new Date(q.at).toISOString() };
+}
+
 export function isDone(need: Need, links: Link[], orders: Map<number, Order>, rows: Row[], placeNamed: (name: string) => number[] = () => [], thread: ThreadMsg[] = []): Verdict {
   const v = doneVerdict(need, links, orders, rows, placeNamed);
   if (v.state === "done" || !thread.length) return v;
@@ -230,11 +280,20 @@ export function isDone(need: Need, links: Link[], orders: Map<number, Order>, ro
   if (cx) return { state: "agreed", orders: [], rung: v.rung || "agreed", text: cx.text, at: cx.at, creator: null };
   const places = [...need.places, ...need.venues.flatMap(placeNamed)];
   const jobs = [...new Set(candidates(need, links, orders, rows, places).groups.flat())];
-  // A new booking with no candidate job is withdrawn only when the client is known: an unknown client's orders were never read.
+  // The thread's own guessed link, whatever company OnSinch keeps the order under, for what the thread itself settles
+  // (an agreement, a quote): those rest on Spartan's message on THIS thread, not on staff's work found on the order.
+  // On 1 Nov a client's change was settled by quote and PO on an order kept under another company than the sender's.
+  const own = links.filter((l) => !l.absolute).map((l) => orders.get(l.order_id)).filter((o): o is Order => !!o && !o.deleted && need.days.every((d) => shiftsOf(o.body).some((x) => x.day === d)));
+  const settledOn = jobs.length ? jobs : [...new Set(own)];
+  // A new booking with no candidate job is withdrawn only when the client is known: an unknown client's orders were
+  // never read. The thread's live linked order stands for the client when its sender is on no contact list.
+  const known = need.company_id != null || links.some((l) => { const o = orders.get(l.order_id); return !!o && !o.deleted; });
   const wd = withdrawnOn(need, thread, jobs, rows);
-  if (wd && (jobs.length || need.company_id != null)) return { state: "agreed", orders: jobs.map((o) => o.order_id), rung: v.rung || "withdrawn", text: wd.text, at: wd.at, creator: null };
-  const a = jobs.length === 1 ? agreedOn(need, thread, jobs[0], rows) : null;
-  return a ? { state: "agreed", orders: [jobs[0].order_id], rung: v.rung || "agreed", text: a.text, at: a.at, creator: null } : v;
+  if (wd && (jobs.length || known)) return { state: "agreed", orders: jobs.map((o) => o.order_id), rung: v.rung || "withdrawn", text: wd.text, at: wd.at, creator: null };
+  const a = settledOn.length === 1 ? agreedOn(need, thread, settledOn[0], rows) : null;
+  if (a) return { state: "agreed", orders: [settledOn[0].order_id], rung: v.rung || "agreed", text: a.text, at: a.at, creator: null };
+  const qs = quoteSent(need, thread, settledOn);
+  return qs ? { state: "agreed", orders: settledOn.map((o) => o.order_id), rung: v.rung || "quote sent", text: qs.text, at: qs.at, creator: null } : v;
 }
 
 function doneVerdict(need: Need, links: Link[], orders: Map<number, Order>, rows: Row[], placeNamed: (name: string) => number[]): Verdict {
@@ -259,3 +318,5 @@ function doneVerdict(need: Need, links: Link[], orders: Map<number, Order>, rows
   const text = done.map((x) => `${label(x.o)}, staff ${x.d!.what.join(", ")}`).join("; ");
   return { state: "done", orders: done.map((x) => x.o.order_id), rung, text, at: last ? new Date(T(last.created)).toISOString() : null, creator: last?.creator ?? null };
 }
+
+export const RULES = { QUOTE, PO_SENT, ACK, TERMS, WITHDRAW, REPLACE, spartanOwn };
