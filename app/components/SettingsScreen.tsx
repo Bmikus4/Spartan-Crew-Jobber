@@ -16,7 +16,7 @@ import InstallButton from "./InstallButton";
 
 type ReplyDelivery = "draft" | "send";
 type ReplyScope = "all" | "enquiries";
-interface Settings { replies_enabled: boolean; test_data_autoclear?: boolean; create_lead_days?: number; create_lead_enabled?: boolean; create_lead_applies_to?: "creates" | "changes" | "both"; analytics_tab_enabled?: boolean; intake_paused?: boolean; bot_writes_enabled?: boolean; reply_delivery: ReplyDelivery; reply_scope: ReplyScope; default_rate_card: number }
+interface Settings { replies_enabled: boolean; test_data_autoclear?: boolean; create_lead_days?: number; create_lead_enabled?: boolean; create_lead_applies_to?: "creates" | "changes" | "both"; bot_writes_enabled?: boolean; reply_delivery: ReplyDelivery; reply_scope: ReplyScope; default_rate_card: number }
 
 const SETTINGS_FALLBACK: Settings = { replies_enabled: false, reply_delivery: "draft", reply_scope: "all", default_rate_card: 315 };
 
@@ -163,7 +163,7 @@ export default function SettingsScreen({ signedInAs }: { signedInAs?: string }) 
   return shell(
     <div style={wrap}>
       <div style={{ maxWidth: 720, margin: "0 auto", display: "flex", flexDirection: "column", gap: 16 }}>
-        <FolderTab label="Analytics" onOpen={() => setAnalyticsOpen(true)} />
+        <FolderTab label="View analytics" onOpen={() => setAnalyticsOpen(true)} />
         {analyticsOpen && <AnalyticsPopup onClose={() => setAnalyticsOpen(false)} />}
         <header style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
           <div>
@@ -240,34 +240,9 @@ export default function SettingsScreen({ signedInAs }: { signedInAs?: string }) 
 
         <TestDataPanel autoclear={!!s.test_data_autoclear} onAutoclear={(v) => save({ ...s, test_data_autoclear: v })} />
 
-        <Panel
-          title="Screens"
-          blurb={<>The Live Feed is the ops list: Urgent is what the TV shows, and All Opportunities is every conversation. Analytics opens from its folder tab, which is always at the top of this screen and on the TV board when switched on.</>}
-        >
-          <div style={{ display: "flex", flexDirection: "column", gap: 13 }}>
-            <div>
-              <h3 style={{ fontSize: 13, fontWeight: 700, color: INK, margin: 0 }}>Analytics tab on the TV board</h3>
-              <p style={{ fontSize: 12.5, color: MUT, margin: "5px 0 0", lineHeight: 1.55 }}>Off by default.</p>
-            </div>
-            <Segmented label="Analytics tab on the TV board" value={!!s.analytics_tab_enabled} onChange={(v) => save({ ...s, analytics_tab_enabled: v })}
-              options={[{ id: false, label: "Off" }, { id: true, label: "On" }]} />
-            <div style={{ borderTop: `1px solid ${BORDER}`, paddingTop: 14 }}>
-              <h3 style={{ fontSize: 13, fontWeight: 700, color: INK, margin: 0 }}>Email intake paused</h3>
-              <p style={{ fontSize: 12.5, color: MUT, margin: "5px 0 0", lineHeight: 1.55 }}>On while intake is switched off on purpose: the TV reads Intake Paused instead of a sync error. Switch it off when intake is back on, or an outage is hidden.</p>
-            </div>
-            <Segmented label="Email intake paused" value={!!s.intake_paused} onChange={(v) => save({ ...s, intake_paused: v })}
-              options={[{ id: false, label: "Off" }, { id: true, label: "On" }]} />
-          </div>
-        </Panel>
-
         <Panel title="Install app" blurb="Add Spartan Crew to a phone or desktop home screen for full-screen, one-tap access.">
           <InstallButton />
         </Panel>
-
-        <Panel
-          title="Trigger"
-          blurb={<>The mailbox trigger lives in n8n. It POSTs each hydrated thread to <span className="mono" style={{ color: SUB }}>/api/n8n-inbound</span>; the engine runs here on Vercel. <span className="mono" style={{ color: SUB }}>N8N_WEBHOOK_SECRET</span> locks the endpoint.</>}
-        />
 
         {/* THE ACCOUNT PANEL IS ALWAYS HERE. It used to render only when a session
             existed, so with AUTH_REQUIRED off — which is how the board runs today —
@@ -308,38 +283,59 @@ const when = (iso: string) => new Date(iso).toLocaleString("en-GB", { day: "nume
 const summary = (c: Cleared) => `${c.orders.length} order${c.orders.length === 1 ? "" : "s"}, ${c.companies.length} compan${c.companies.length === 1 ? "y" : "ies"}, ${total(c.rows)} records`;
 const BY: Record<string, string> = { sweep: "the 15-minute sweep", button: "this button", cli: "the script" };
 
-/**
- * Clearing is two steps on purpose: the list of what would go is shown first, and only the second
- * press removes it. The rules are lib/testData.ts; this screen only asks for them to run.
- */
+/** A setting's line: what it is and what it does on the left, its control on the right (under it on a phone). */
+function Row({ title, hint, children }: { title: string; hint?: React.ReactNode; children?: React.ReactNode }) {
+  return (
+    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "10px 18px", flexWrap: "wrap" }}>
+      <div style={{ flex: "1 1 260px", minWidth: 0 }}>
+        <div style={{ fontSize: 13, fontWeight: 700, color: INK }}>{title}</div>
+        {hint && <div style={{ fontSize: 12.5, color: MUT, marginTop: 3, lineHeight: 1.5 }}>{hint}</div>}
+      </div>
+      {children}
+    </div>
+  );
+}
+
 type LeadScope = "creates" | "changes" | "both";
 function LeadDaysPanel({ days, enabled, appliesTo, onSave, onEnabled, onAppliesTo }: { days: number; enabled: boolean; appliesTo: LeadScope; onSave: (v: number) => void; onEnabled: (v: boolean) => void; onAppliesTo: (v: LeadScope) => void }) {
   const [draft, setDraft] = useState(String(days));
   useEffect(() => { setDraft(String(days)); }, [days]);
   const n = Number(draft);
   const valid = draft.trim() !== "" && Number.isInteger(n) && n >= 0 && n <= 365;
+  const changed = valid && n !== days;
   return (
     <Panel
-      title="Work this close is the office's"
-      blurb={<>When this is on, work for a day <b style={{ color: SUB }}>within this many days</b> of the email is for the office to do; further out, the system plans it. <b style={{ color: SUB }}>Applies to</b> says which work: new orders, changes to orders that already exist, or both. A PO is never held back. Only an admin can change these, and each change is recorded.</>}
+      title="Short-notice jobs go to the office"
+      blurb={<>A job that starts soon after its email is left for the office to handle in OnSinch; the bot only plans work further out. A PO is always handled. Only an admin can change this, and every change is logged.</>}
     >
-      <Segmented label="Only create orders this far ahead" value={enabled} onChange={onEnabled}
-        options={[{ id: true, label: "On" }, { id: false, label: "Off" }]} />
-      {enabled && <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginTop: 12 }}>
-        <input aria-label="Days ahead" inputMode="numeric" value={draft} onChange={(e) => setDraft(e.target.value.replace(/[^0-9]/g, ""))}
-          style={{ width: 72, padding: "9px 10px", borderRadius: "var(--radius)", border: `1px solid ${BORDER}`, background: "var(--surface)", color: INK, fontSize: 16, fontFamily: "inherit", fontVariantNumeric: "tabular-nums" }} />
-        <span style={{ fontSize: 13, color: SUB }}>days</span>
-        <button type="button" disabled={!valid || n === days} onClick={() => onSave(n)}
-          style={{ padding: "9px 16px", borderRadius: "var(--radius)", border: "1px solid var(--accent-border)", background: "var(--accent-subtle)", color: INK, fontSize: 13.5, fontWeight: 600, fontFamily: "inherit", cursor: !valid || n === days ? "default" : "pointer", opacity: !valid || n === days ? 0.5 : 1 }}>Save</button>
-      </div>}
-      {enabled && <div style={{ marginTop: 12 }}>
-        <Segmented label="Applies to" value={appliesTo} onChange={onAppliesTo}
-          options={[{ id: "creates" as LeadScope, label: "New orders" }, { id: "changes" as LeadScope, label: "Changes" }, { id: "both" as LeadScope, label: "Both" }]} />
-      </div>}
+      <Row title="Hand short-notice jobs to the office">
+        <Segmented label="Hand short-notice jobs to the office" value={enabled} onChange={onEnabled}
+          options={[{ id: false, label: "Off" }, { id: true, label: "On" }]} />
+      </Row>
+      {enabled && <>
+        <Row title="Short notice means" hint={<>The job&apos;s day is this many days or fewer after the email.</>}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <input aria-label="Days" inputMode="numeric" value={draft} onChange={(e) => setDraft(e.target.value.replace(/[^0-9]/g, ""))}
+              onKeyDown={(e) => { if (e.key === "Enter" && changed) onSave(n); }}
+              style={{ width: 64, padding: "8px 10px", borderRadius: "var(--radius)", border: `1px solid ${valid ? BORDER : "var(--danger-border)"}`, background: "var(--surface)", color: INK, fontSize: 16, fontFamily: "inherit", fontVariantNumeric: "tabular-nums", textAlign: "right" }} />
+            <span style={{ fontSize: 13, color: SUB }}>days</span>
+            {changed && <button type="button" onClick={() => onSave(n)}
+              style={{ padding: "8px 14px", borderRadius: "var(--radius)", border: "1px solid var(--accent-border)", background: "var(--accent-subtle)", color: INK, fontSize: 13, fontWeight: 600, fontFamily: "inherit", cursor: "pointer" }}>Save</button>}
+          </div>
+        </Row>
+        <Row title="Which jobs" hint="New bookings, changes to bookings that already exist, or both.">
+          <Segmented label="Which jobs" value={appliesTo} onChange={onAppliesTo}
+            options={[{ id: "creates" as LeadScope, label: "New bookings" }, { id: "changes" as LeadScope, label: "Changes" }, { id: "both" as LeadScope, label: "Both" }]} />
+        </Row>
+      </>}
     </Panel>
   );
 }
 
+/**
+ * Clearing is two steps on purpose: what would go is listed first, and only the second press removes it. The rules
+ * are lib/testData.ts; this screen only asks for them to run.
+ */
 function TestDataPanel({ autoclear, onAutoclear }: { autoclear: boolean; onAutoclear: (v: boolean) => void }) {
   const [last, setLast] = useState<Cleared | null>(null);
   const [removed, setRemoved] = useState<Cleared | null>(null);
@@ -363,49 +359,41 @@ function TestDataPanel({ autoclear, onAutoclear }: { autoclear: boolean; onAutoc
     } catch (e: any) { setError(String(e?.message ?? e)); }
     finally { setBusy(null); }
   }
-  const empty = plan && !plan.orders.length && !plan.companies.length && !plan.threads && !total(plan.rows);
-  const btn = (tone: "accent" | "danger"): React.CSSProperties => ({ alignSelf: "flex-start", padding: "10px 18px", borderRadius: "var(--radius)", border: `1px solid var(--${tone}-border)`, background: `var(--${tone}-subtle)`, color: tone === "danger" ? "var(--danger)" : INK, fontSize: 13.5, fontWeight: 600, fontFamily: "inherit", cursor: busy ? "wait" : "pointer", opacity: busy ? 0.7 : 1 });
+  const empty = !!plan && !plan.orders.length && !plan.companies.length && !plan.threads && !total(plan.rows);
+  const btn = (tone: "accent" | "danger"): React.CSSProperties => ({ padding: "9px 16px", borderRadius: "var(--radius)", border: `1px solid var(--${tone}-border)`, background: `var(--${tone}-subtle)`, color: tone === "danger" ? "var(--danger)" : INK, fontSize: 13, fontWeight: 600, fontFamily: "inherit", cursor: busy ? "wait" : "pointer", opacity: busy ? 0.7 : 1, whiteSpace: "nowrap" });
+  const records = plan ? total(plan.rows) : 0;
+  const found = plan && !empty ? [
+    plan.orders.length ? `${plan.orders.length} order${plan.orders.length === 1 ? "" : "s"} (${plan.orders.map((o) => `R${o.number}`).join(", ")})` : "",
+    plan.companies.length ? `${plan.companies.length} compan${plan.companies.length === 1 ? "y" : "ies"} (${plan.companies.map((c) => c.name).join(", ")})` : "",
+    plan.threads ? `${plan.threads} email thread${plan.threads === 1 ? "" : "s"}` : "",
+  ].filter(Boolean) : [];
   return (
     <Panel
       title="Test data"
-      blurb={<>Tests leave orders, companies and email records in the live system. This clears what tests made and nothing else: orders the automation created on a TEST company or for a test email, companies it created for test emails, and every record of emails from test addresses (Ben&apos;s own addresses, test-eventz.co.uk, example domains). <b style={{ color: SUB }}>Orders staff made, and anything named &quot;do not delete&quot;, always stay.</b></>}
+      blurb={<>Removes what tests left in the live system: orders and companies the bot made for test emails or the TEST company, and the records of emails from test addresses. <b style={{ color: SUB }}>Orders staff made, and anything named &quot;do not delete&quot;, are never touched.</b></>}
     >
-      <div>
-        <h3 style={{ fontSize: 13, fontWeight: 700, color: INK, margin: 0 }}>Clear automatically every 15 minutes</h3>
-        <p style={{ fontSize: 12.5, color: MUT, margin: "5px 0 0", lineHeight: 1.55 }}>Off means nothing is cleared on a timer; the button below still works.</p>
-      </div>
-      <Segmented label="Clear test data automatically" value={autoclear} onChange={onAutoclear}
-        options={[{ id: false, label: "Off" }, { id: true, label: "On" }]} />
-      <div style={{ borderTop: `1px solid ${BORDER}`, paddingTop: 14, display: "flex", flexDirection: "column", gap: 11 }}>
-        {!plan && (
-          <button type="button" disabled={!!busy} onClick={() => call("preview")} style={btn("accent")}>
-            {busy === "preview" ? "Looking…" : "Check for test data"}
-          </button>
-        )}
-        {plan && empty && <p style={{ fontSize: 12.5, color: SUB, margin: 0 }}>Nothing to clear.</p>}
-        {plan && !empty && (
-          <div style={{ display: "flex", flexDirection: "column", gap: 8, fontSize: 12.5, color: SUB, lineHeight: 1.55 }}>
-            <b style={{ color: INK }}>This would remove:</b>
-            {!!plan.orders.length && <span>{plan.orders.length} OnSinch order{plan.orders.length === 1 ? "" : "s"}: {plan.orders.map((o) => `R${o.number}`).join(", ")}</span>}
-            {!!plan.companies.length && <span>{plan.companies.length} compan{plan.companies.length === 1 ? "y" : "ies"}: {plan.companies.map((c) => c.name).join(", ")}</span>}
-            {!!plan.threads && <span>{plan.threads} test email thread{plan.threads === 1 ? "" : "s"}</span>}
-            <span>{total(plan.rows)} records in all</span>
-            {plan.over && <Warn>More than a clear may remove on its own ({plan.over}). Nothing will be removed; the rules need looking at first.</Warn>}
-            <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-              {!plan.over && <button type="button" disabled={!!busy} onClick={() => call("clear")} style={btn("danger")}>{busy === "clear" ? "Clearing…" : "Clear it"}</button>}
-              <button type="button" disabled={!!busy} onClick={() => setPlan(null)} style={btn("accent")}>Cancel</button>
-            </div>
+      <Row title="Clear it every 15 minutes" hint="Off: nothing is removed unless someone presses Check now.">
+        <Segmented label="Clear test data every 15 minutes" value={autoclear} onChange={onAutoclear}
+          options={[{ id: false, label: "Off" }, { id: true, label: "On" }]} />
+      </Row>
+      <Row title="Check now" hint={last
+        ? <>Last check {when(last.at)}, by {BY[last.trigger] ?? last.trigger}: {last.refused ? `refused (${last.refused})` : removed?.at === last.at ? `removed ${summary(last)}` : "nothing found"}{last.failed?.length ? `, ${last.failed.length} could not be removed` : ""}.{removed && removed.at !== last.at && <> Last removal {when(removed.at)}: {summary(removed)}.</>}</>
+        : "Lists what would be removed. Nothing goes until you confirm."}>
+        {!plan && <button type="button" disabled={!!busy} onClick={() => call("preview")} style={btn("accent")}>{busy === "preview" ? "Checking…" : "Check now"}</button>}
+      </Row>
+      {plan && (
+        <div style={{ border: `1px solid ${BORDER}`, borderRadius: "var(--radius)", padding: "12px 14px", display: "flex", flexDirection: "column", gap: 10, fontSize: 12.5, color: SUB, lineHeight: 1.55 }}>
+          {empty ? <span>No test data found.</span> : <>
+            <span><b style={{ color: INK }}>Found {records} record{records === 1 ? "" : "s"}:</b> {found.join("; ")}.</span>
+            {plan.over && <Warn>More than one clear may remove ({plan.over}). Nothing will be removed until the rules are looked at.</Warn>}
+          </>}
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+            {!empty && !plan.over && <button type="button" disabled={!!busy} onClick={() => call("clear")} style={btn("danger")}>{busy === "clear" ? "Removing…" : `Remove ${records} record${records === 1 ? "" : "s"}`}</button>}
+            <button type="button" disabled={!!busy} onClick={() => setPlan(null)} style={btn("accent")}>{empty ? "Close" : "Cancel"}</button>
           </div>
-        )}
-        {plan && empty && <button type="button" onClick={() => setPlan(null)} style={btn("accent")}>Done</button>}
-        {error && <span style={{ fontSize: 12, color: "var(--danger)", fontWeight: 700 }}>Not done: {error}</span>}
-        {last && (
-          <p style={{ fontSize: 12, color: MUT, margin: 0, lineHeight: 1.5 }}>
-            Last checked {when(last.at)} by {BY[last.trigger] ?? last.trigger}: {last.refused ? `refused, ${last.refused}` : removed?.at === last.at ? summary(last) : "nothing found"}{last.failed?.length ? `; ${last.failed.length} could not be removed` : ""}.
-            {removed && removed.at !== last.at && <><br />Last removed {when(removed.at)} by {BY[removed.trigger] ?? removed.trigger}: {summary(removed)}.</>}
-          </p>
-        )}
-      </div>
+        </div>
+      )}
+      {error && <span style={{ fontSize: 12, color: "var(--danger)", fontWeight: 700 }}>Not done: {error}</span>}
     </Panel>
   );
 }

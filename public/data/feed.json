@@ -5833,5 +5833,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0287",
+  "ts": "2026-11-02T02:55:37+00:00",
+  "kind": "measurement",
+  "headline": "TV accuracy discovery written (section 15); Opportunities filter dropdown; Settings cleaned",
+  "subject": "All Opportunities filters from a dropdown in the header; Settings drops Trigger and Screens",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 125,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]

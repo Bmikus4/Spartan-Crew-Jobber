@@ -36,7 +36,7 @@ One tile per job that needs a person. Each tile shows the client, a label, the j
 - The figures at the top count the list: **Needs Follow Up** (open jobs with nothing from anyone for 24 hours), **Within 48 Hours** (open jobs starting within two days, shown larger because time is running out), and **Needs Reply** when AI email drafts are switched on.
 - The sync sign beside them: **Synced** (green: Gmail and OnSinch are coming through), **Sync Error** (red: the board could not be read, no email has arrived for 90 minutes in working hours, or OnSinch could not be read), **Intake Paused** (grey: email intake is switched off on purpose, and jobs still sync with OnSinch), or **Offline** (grey: this screen cannot reach the system). **Fullscreen** fills the screen; the button and the cursor hide after a few idle seconds.
 - When the list is empty it says "Everything is checked." or "Nothing else waiting.", or warns that the sync is not healthy.
-- **Analytics**, a tab above the list, opens the numbers, when it is switched on in Settings.
+- **View analytics**, a tab above the list with a square-and-arrow icon, opens the numbers (not on the office TV).
 
 ## 4 · The Gmail labels
 Every thread carries exactly one of four labels, set from the board every minute; nobody sets them by hand: **Order Created**, **Order Updated**, **Order Needs Created**, **Order Needs Updated**. A thread can also carry **Needs Follow Up**, which is about the conversation, not the order.
@@ -44,7 +44,7 @@ Every thread carries exactly one of four labels, set from the board every minute
 ## 5 · What the bot does in OnSinch
 When the bot is allowed to write (the live state below says whether it is now):
 - It finds the client's order by evidence, strongest first: an R or J number anywhere in the thread, the PO or project reference in the order's name, then the day together with one more fact (the venue, the start time, the crew count). Never by the day alone.
-- A new booking: it creates the order only when the first day is more than the set number of days after the email (Settings, **Only create orders this far ahead**; 14 by default). Nearer bookings are staff's to create. Every order it creates carries a line in its description, "CHECK price list: card ..., from ...", because OnSinch does not tell it the client's default price list.
+- A new booking: it creates the order only when the first day is more than the set number of days after the email (Settings, **Short-notice jobs go to the office**; 14 days by default). Nearer bookings are staff's to create. Every order it creates carries a line in its description, "CHECK price list: card ..., from ...", because OnSinch does not tell it the client's default price list.
 - A change: it adds shifts, changes crew numbers and times, moves days and cancels shifts on the client's order.
 - It leaves a card for a person instead when crew have already signed on to the shift, when the day is already over, or when it cannot tell which order or what change is meant.
 - It never books something again from the history quoted in an email, and when staff built or changed a shift after the client's email, staff's version stands.
@@ -54,7 +54,7 @@ When the bot is allowed to write (the live state below says whether it is now):
 Every conversation in the bookings inbox since 9 October, one row per Gmail thread, newest first, with the jobs on the TV at the top in the TV's order. Every urgent job is in it: the list is built from the same read as the TV, so a job on the TV is never missing here.
 - Each row shows the client, the subject (or, for a job on the TV, what needs doing), its tags and, in columns, the R and J numbers of the order it is linked to in OnSinch, and when the last email came.
 - The tags: **New job**, **Update** or **Quote**; then where it stands: **On the TV** (a person still has to do something), **Done**, **Settled** (agreed in the emails and held in OnSinch), **Quote sent** (waiting for the client to confirm), **Needs Reply**, **No action** (nothing was asked for), **Closed** (off the board, its days passed or dealt with earlier) or **Not read** (stored but never read by the system); then the J and R numbers.
-- The lanes above the list filter by those, plus **With an order**. The search box finds a client, a subject, or an R or J number.
+- The dropdown beside the **Urgent** / **All Opportunities** switch filters the list (**All** by default; **On the TV**, **With an order**, **Settled**, **Needs Reply**, **No action**, **Closed**, **Not read**). The search box beside it finds a client, a subject, or an R or J number.
 - Click a row to open the whole conversation beside the list, as Gmail shows it: the newest email open, older ones folded to a line (click to open them, or **Expand all**), and quoted history behind the **•••** button. Under each client email it says what the system decided about it. The R and J at the top copy when clicked.
 - On an **Urgent** tile, the square button with an arrow, **Open in All Opportunities**, opens that job's conversation here.
 
@@ -62,11 +62,10 @@ Every conversation in the bookings inbox since 9 October, one row per Gmail thre
 Changes here apply to the whole team.
 - **Bot orders and updates**: the master switch for the bot creating and updating orders in OnSinch; off by default. Off, every email is still read and decided, and anything the bot would have written appears on the board as a card to do by hand. (A second switch on the server must also be on before the bot writes.)
 - **AI email drafts**: one switch for every email the system writes into a Gmail thread, replies and chases alike; off by default. **Reply delivery**: **Draft** (left in Gmail for a person to send; the default) or **Send**. **Which emails get a reply**: **All emails** or **New enquiries only**.
-- **Screens**: **Analytics tab on the TV board**.
-- **Email intake paused**: the system has been switched off on purpose; the board shows **Intake Paused** instead of an error.
-- **New orders**: **Only create orders this far ahead**, with **Days ahead**.
-- **Test data**: **Clear test data automatically** removes the practice orders made on the test company.
-- **Install app** puts the board on a phone or computer like an app. **Trigger** is the technical link from the mailbox to the tool. **Account** shows who is signed in, with **Sign out**.
+- **View analytics** (the tab at the top of Settings and of the Live Feed, with the square-and-arrow icon) opens the analytics.
+- **Short-notice jobs go to the office**: when on, a job whose day is within **Short notice means** days of its email is left for the office; **Which jobs** says new bookings, changes, or both.
+- **Test data**: **Clear it every 15 minutes** removes what tests left (never staff's orders); **Check now** lists what would go, and **Remove** clears it.
+- **Install app** puts the board on a phone or computer like an app. **Account** shows who is signed in, with **Sign out**.
 
 ## 8 · Getting help
 - This assistant (the round button at the edge of the screen; drag it anywhere) answers questions about the tool. It cannot see clients, orders or emails, and it cannot do anything for you: it tells you where to look and what to press.

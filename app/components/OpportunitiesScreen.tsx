@@ -7,6 +7,7 @@
 // The list is /api/opportunities, built around the TV's own read, so an urgent job here is the TV's card itself.
 // ============================================================================
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import type { FeedCard } from "../lib/feed/project";
 import type { Opportunity, OppState } from "../lib/feed/opportunities";
 import { latestText } from "../lib/v2/interpret/ground";
@@ -264,16 +265,18 @@ const LANES: Array<{ id: Lane; label: string; test: (o: Opportunity) => boolean 
   { id: "urgent", label: "On the TV", test: (o) => o.state === "urgent" },
   { id: "order", label: "With an order", test: (o) => !!(o.r_number || o.j_number) },
   { id: "settled", label: "Settled", test: (o) => o.state === "settled" },
-  { id: "quoted", label: "Quote sent", test: (o) => o.state === "quoted" },
-  { id: "done", label: "Done", test: (o) => o.state === "done" },
   { id: "reply", label: "Needs Reply", test: (o) => o.state === "reply" },
   { id: "info", label: "No action", test: (o) => o.state === "info" },
   { id: "closed", label: "Closed", test: (o) => o.state === "closed" },
   { id: "undecided", label: "Not read", test: (o) => o.state === "undecided" },
 ];
 
-/** `focus`: a conversation to open, sent from an Urgent tile's open button; `onFocused` says it was taken. */
-export default function OpportunitiesScreen({ isActive, focus, onFocused }: { isActive: boolean; focus: string | null; onFocused: () => void }) {
+/**
+ * `focus`: a conversation to open, sent from an Urgent tile's open button; `onFocused` says it was taken. `toolbar`: the
+ * Live Feed header's slot beside the Urgent / All Opportunities switch, where the filter and search sit (owner, 2 Nov)
+ * so the list starts higher; without one they sit above the list.
+ */
+export default function OpportunitiesScreen({ isActive, focus, onFocused, toolbar }: { isActive: boolean; focus: string | null; onFocused: () => void; toolbar?: HTMLElement | null }) {
   const [items, setItems] = useState<Opportunity[] | null>(null);
   const [failed, setFailed] = useState(false);
   const [lane, setLane] = useState<Lane>("all");
@@ -320,25 +323,24 @@ export default function OpportunitiesScreen({ isActive, focus, onFocused }: { is
   const narrow = width < 900;
   const compact = !!current && !narrow;
 
+  const tools = (
+    <>
+      <select value={lane} onChange={(e) => setLane(e.target.value as Lane)} aria-label="Filter opportunities"
+        style={{ padding: "8px 30px 8px 12px", borderRadius: 9, border: `1px solid ${BORDER}`, background: "var(--surface-2)", color: INK, fontSize: 13, fontWeight: 600, fontFamily: "inherit", cursor: "pointer" }}>
+        {LANES.filter((l) => l.id === "all" || l.id === lane || (counts.get(l.id) ?? 0) > 0).map((l) => <option key={l.id} value={l.id}>{l.label} ({counts.get(l.id) ?? 0})</option>)}
+      </select>
+      <div style={{ position: "relative", flex: "1 1 220px", minWidth: 180, maxWidth: 340 }}>
+        <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Client, subject, R or J number…" aria-label="Search opportunities"
+          style={{ width: "100%", padding: "8px 30px 8px 12px", borderRadius: 9, border: `1px solid ${BORDER}`, background: "var(--surface-2)", color: INK, fontSize: 12.5, fontFamily: "inherit" }} />
+        {query && <button onClick={() => setQuery("")} aria-label="Clear search" style={{ position: "absolute", right: 6, top: "50%", transform: "translateY(-50%)", border: "none", background: "transparent", color: MUT, cursor: "pointer", fontSize: 14 }}>×</button>}
+      </div>
+      {failed && <span style={{ fontSize: 12.5, color: "var(--warn)" }}>Could not refresh. <button onClick={() => void load()} style={{ color: A, background: "none", border: "none", cursor: "pointer", fontWeight: 700 }}>Retry</button></span>}
+    </>
+  );
+
   return (
     <div ref={rootRef} style={{ height: "100%", display: "flex", flexDirection: "column", gap: 14, minHeight: 0 }}>
-      {!(narrow && current) && (
-        <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", flexShrink: 0 }}>
-          <div className="seg" role="tablist" aria-label="Filter opportunities">
-            {LANES.filter((l) => l.id === "all" || (counts.get(l.id) ?? 0) > 0).map((l) => (
-              <button key={l.id} className="seg__btn" role="tab" aria-selected={lane === l.id} aria-pressed={lane === l.id} onClick={() => setLane(l.id)} style={{ padding: "7px 12px", fontSize: 12.5 }}>
-                {l.label} {counts.get(l.id) ?? 0}
-              </button>
-            ))}
-          </div>
-          <div style={{ position: "relative", flex: "1 1 220px", minWidth: 180, maxWidth: 340 }}>
-            <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Client, subject, R or J number…" aria-label="Search opportunities"
-              style={{ width: "100%", padding: "8px 30px 8px 12px", borderRadius: 9, border: `1px solid ${BORDER}`, background: "var(--surface-2)", color: INK, fontSize: 12.5, fontFamily: "inherit" }} />
-            {query && <button onClick={() => setQuery("")} aria-label="Clear search" style={{ position: "absolute", right: 6, top: "50%", transform: "translateY(-50%)", border: "none", background: "transparent", color: MUT, cursor: "pointer", fontSize: 14 }}>×</button>}
-          </div>
-          {failed && <span style={{ fontSize: 12.5, color: "var(--warn)" }}>Could not refresh. <button onClick={() => void load()} style={{ color: A, background: "none", border: "none", cursor: "pointer", fontWeight: 700 }}>Retry</button></span>}
-        </div>
-      )}
+      {!(narrow && current) && (toolbar ? createPortal(tools, toolbar) : <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", flexShrink: 0 }}>{tools}</div>)}
       <div style={{ flex: 1, minHeight: 0, display: "flex", gap: 0 }}>
         {!(narrow && current) && (
           <div style={{ flex: compact ? "0 0 380px" : 1, minWidth: 0, overflowY: "auto", display: "flex", flexDirection: "column", gap: 8, paddingBottom: 24 }}>

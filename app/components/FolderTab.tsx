@@ -36,12 +36,13 @@ export default function FolderTab({ label, onOpen, s = 1, face = "var(--bg)" }: 
           position: "relative", zIndex: 1, width: 188, height: 43, padding: 0,
           display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 9,
           background: face, border: "1px solid var(--border-strong)", borderBottom: "none", borderRadius: "14px 14px 0 0",
-          color: "var(--text-secondary)", fontFamily: "inherit", fontSize: 13 * Math.max(s, 0.85), fontWeight: 600, letterSpacing: "0.12em", textTransform: "uppercase", cursor: "pointer",
+          color: "var(--text-secondary)", fontFamily: "inherit", fontSize: 13.5 * Math.max(s, 0.85), fontWeight: 600, cursor: "pointer",
         }}>
-        <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-          <line x1="5" y1="20" x2="5" y2="12" /><line x1="12" y1="20" x2="12" y2="5" /><line x1="19" y1="20" x2="19" y2="9" />
-        </svg>
         {label}
+        {/* The same open icon as an Urgent tile's open button: this tab opens something, it is not a heading. */}
+        <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+          <path d="M14 3h7v7" /><path d="M10 14L21 3" /><path d="M21 14v5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5" />
+        </svg>
         <Foot side="l" face={face} />
         <Foot side="r" face={face} />
       </button>

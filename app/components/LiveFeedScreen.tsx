@@ -373,14 +373,14 @@ export default function LiveFeedScreen({ isActive, tv = false }: { isActive: boo
   /** Tiles that have just gone green: where they stood, and when. */
   const [settling, setSettling] = useState<Map<string, { index: number; since: number }>>(new Map());
   const [below, setBelow] = useState(0);
-  /** The Analytics folder tab shows on the TV only when Settings turns it on (Ben, 2026-10-11). */
-  const [analyticsTab, setAnalyticsTab] = useState(false);
   const [analyticsOpen, setAnalyticsOpen] = useState(false);
   /** The list as it stood at a moment picked from History: shown read-only until Back to live. */
   const [historyOpen, setHistoryOpen] = useState(false);
   const [past, setPast] = useState<PastList | null>(null);
   /** Urgent (the TV's list, the default) or All Opportunities; the office TV is always Urgent. */
   const [view, setView] = useState<"urgent" | "all">("urgent");
+  /** The header's slot for All Opportunities' filter and search (a callback ref, so the portal follows it). */
+  const [oppTools, setOppTools] = useState<HTMLDivElement | null>(null);
   const [focus, setFocus] = useState<string | null>(null);
   const openInAll = useCallback((thread: string) => { setPast(null); setFocus(thread); setView("all"); }, []);
   const focused = useCallback(() => setFocus(null), []);
@@ -390,15 +390,6 @@ export default function LiveFeedScreen({ isActive, tv = false }: { isActive: boo
     const id = window.setTimeout(() => setPast(null), HISTORY_VIEW_MS);
     return () => window.clearTimeout(id);
   }, [past]);
-  useEffect(() => {
-    const read = async () => {
-      try { const r = await fetch("/api/settings", { cache: "no-store" }); if (r.ok) setAnalyticsTab(!!(await r.json()).analytics_tab_enabled); } catch { /* keep what it was */ }
-    };
-    void read();
-    const id = window.setInterval(read, 60_000);
-    window.addEventListener("spartan:settings", read);
-    return () => { window.clearInterval(id); window.removeEventListener("spartan:settings", read); };
-  }, []);
   const audio = useRef<AudioContext | null>(null);
   const seen = useRef<Set<string> | null>(null);
   const lastChime = useRef(0);
@@ -624,6 +615,7 @@ export default function LiveFeedScreen({ isActive, tv = false }: { isActive: boo
             ))}
           </div>
         )}
+        {!tv && view === "all" && <div ref={setOppTools} style={{ display: "flex", alignItems: "center", gap: 10, flex: "1 1 360px", minWidth: 0, flexWrap: "wrap" }} />}
 
         <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 32 * s, flexWrap: "wrap" }}>
           {kpis.map((k) => (
@@ -651,7 +643,8 @@ export default function LiveFeedScreen({ isActive, tv = false }: { isActive: boo
         </div>
       </header>
 
-      {analyticsTab && <FolderTab label="Analytics" s={s} onOpen={() => { unlockAudio(); setAnalyticsOpen(true); }} />}
+      {/* Wherever someone can click it, never on the office TV: its Settings switch is gone (owner, 2 Nov). */}
+      {!tv && <FolderTab label="View analytics" s={s} onOpen={() => { unlockAudio(); setAnalyticsOpen(true); }} />}
 
       {past && (
         <div role="status" style={{ display: "flex", alignItems: "center", gap: 16 * s, padding: `${12 * s}px ${18 * s}px`, borderRadius: 12 * s, border: `1px solid ${AMBER}`, background: tint(AMBER, 10), fontSize: 20 * s, fontWeight: 700, flexShrink: 0 }}>
@@ -661,7 +654,7 @@ export default function LiveFeedScreen({ isActive, tv = false }: { isActive: boo
       )}
 
       {view === "all" && !tv ? (
-        <div style={{ flex: 1, minHeight: 0 }}><OpportunitiesScreen isActive={isActive} focus={focus} onFocused={focused} /></div>
+        <div style={{ flex: 1, minHeight: 0 }}><OpportunitiesScreen isActive={isActive} focus={focus} onFocused={focused} toolbar={oppTools} /></div>
       ) : (
       <div style={{ position: "relative", flex: 1, minHeight: 0, display: "flex" }}>
         <div ref={listRef} className="feed-list" onScroll={() => { lastScrollAt.current = Date.now(); }} style={{ flex: 1, minHeight: 0, overflowY: "auto", display: "flex", flexDirection: "column", gap: 12 * s, paddingBottom: 8 * s }}>
