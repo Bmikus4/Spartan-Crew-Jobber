@@ -5805,5 +5805,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0285",
+  "ts": "2026-11-02T00:03:06+00:00",
+  "kind": "measurement",
+  "headline": "Custom tooltips everywhere: TipHost in the root layout adopts every native title; 42 checked in a browser across 4 screens",
+  "subject": "Every tooltip on every screen is the app's own, not the browser's grey title",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 125,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]

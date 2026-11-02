@@ -3,6 +3,7 @@ import { GeistSans } from "geist/font/sans";
 import { GeistMono } from "geist/font/mono";
 import "./globals.css";
 import Pwa from "./components/Pwa";
+import TipHost from "./components/ui/TipHost";
 
 export const metadata: Metadata = {
   title: "Spartan Crew — Jobber",
@@ -54,6 +55,8 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
       <body className="h-full">
         <Pwa />
         {children}
+        {/* One tooltip for every screen (ui/TipHost.tsx): it takes over each native title as it is hovered. */}
+        <TipHost />
       </body>
     </html>
   );

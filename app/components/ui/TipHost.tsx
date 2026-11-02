@@ -13,9 +13,12 @@
 // costs an attribute rather than a component and a state hook. The bubble is portalled to
 // <body>, so no ancestor's overflow can clip it.
 //
-// NATIVE `title` IS THE THING THIS REPLACES. Do not leave both on one element: the browser's
-// own tip appears a second later, in its own style, saying the same words twice. Where a
-// `data-tip` is added, the `title` comes off.
+// NATIVE `title` IS THE THING THIS REPLACES, EVERYWHERE (the owner, 1 Nov: "a custom tooltip UI for the platform").
+// An element carrying a plain `title` is adopted the moment it is hovered or focused: its text becomes `data-tip` and the
+// `title` comes off, so the browser's own grey tip never appears beside this one. 34 elements across the screens wore
+// only a native title (14 a `data-tip`); none needed touching. The text also becomes the element's `aria-label` when it
+// has none, because a title was the only accessible name some icon buttons had. Mounted once in the root layout, so the
+// sign-in screen and the TV have it too.
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -40,7 +43,7 @@ interface Shown {
 export default function TipHost() {
   const [host, setHost] = useState<HTMLElement | null>(null);
   const [shown, setShown] = useState<Shown | null>(null);
-  const [pos, setPos] = useState<{ left: number; top: number; below: boolean } | null>(null);
+  const [pos, setPos] = useState<{ left: number; top: number; below: boolean; arrow: number } | null>(null);
   const bubble = useRef<HTMLDivElement>(null);
   const timer = useRef<number | null>(null);
 
@@ -69,7 +72,19 @@ export default function TipHost() {
       });
     };
 
+    /** A native title, taken over: its words become the tip (refreshed if the title changed since) and its accessible name. */
+    const adopt = (el: Element) => {
+      const t = el.getAttribute("title");
+      if (t == null) return;
+      el.removeAttribute("title");
+      if (!t.trim()) return;
+      el.setAttribute("data-tip", t);
+      if (!el.hasAttribute("aria-label") && !el.hasAttribute("aria-labelledby")) el.setAttribute("aria-label", t);
+    };
+
     const onOver = (e: Event) => {
+      const titled = (e.target as Element | null)?.closest?.("[title]");
+      if (titled && !(titled instanceof SVGElement)) adopt(titled);
       const el = (e.target as HTMLElement | null)?.closest?.("[data-tip]") as HTMLElement | null;
       clear();
       if (!el) { setShown(null); setPos(null); return; }
@@ -145,7 +160,8 @@ export default function TipHost() {
     const left = Math.max(EDGE, Math.min(shown.x - r.width / 2, vw - r.width - EDGE));
     const wanted = below ? shown.bottom + GAP : shown.top - r.height - GAP;
     const top = Math.max(EDGE, Math.min(wanted, vh - r.height - EDGE));
-    setPos({ left, top, below });
+    // The arrow points at the trigger's centre even when the bubble was nudged in from an edge.
+    setPos({ left, top, below, arrow: Math.max(10, Math.min(shown.x - left, r.width - 10)) });
   }, [shown]);
 
   if (!host || !shown) return null;
@@ -178,6 +194,13 @@ export default function TipHost() {
       }}>
         {shown.text}
       </div>
+      {pos && (
+        <span aria-hidden style={{
+          position: "absolute", left: pos.arrow - 5, width: 10, height: 10, transform: "rotate(45deg)",
+          background: "var(--surface)", border: "1px solid var(--border-strong)",
+          ...(pos.below ? { top: -6, borderRight: "none", borderBottom: "none" } : { bottom: -6, borderLeft: "none", borderTop: "none" }),
+        }} />
+      )}
       {shown.sub && (
         // The second line is for the thing a person cannot see: what it will change, or why
         // it is disabled. Never a restatement of the first line.
