@@ -5889,5 +5889,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0291",
+  "ts": "2026-11-03T00:43:26+00:00",
+  "kind": "measurement",
+  "headline": "docs/AUDIT-BRIEF.md: the outside audit's map, state, rules, dimensions and report form",
+  "subject": "An audit brief lets an AI with no context audit the whole software",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 125,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]

@@ -10,5 +10,5 @@ characters after greetings and sign-offs were stripped), done by one reader with
 point fell past 180 characters may carry the code its first sentences suggest.
 
 What it is for: the measured definition of each email type and the reference answer for the reader's three-way
-decision (card, wait, nothing) on the 1,276 client emails that have a stored v2 decision. The findings are
+decision (handoff, planned write, none) on the 1,276 client emails that have a stored v2 decision. The findings are
 `fleet/resume/Spartan-Outcome-Analysis-2026-11-02.md` and ADDENDUM §15.

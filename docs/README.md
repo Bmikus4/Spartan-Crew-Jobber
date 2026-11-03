@@ -6,6 +6,7 @@ marked **current** (still true and still used), **reference** (facts that hold, 
 
 | file | status | what it is |
 |---|---|---|
+| AUDIT-BRIEF.md | current | Everything an AI with no context needs to audit the whole software: map, state, rules, dimensions, method, report form |
 | Spartan-Crew-Onsinch-API-Reference.md | current | The OnSinch API, verified live on 07-20 with key user 2257 |
 | ASSISTED-MODE-DESIGN-2026-10-27.md | current | ADDENDUM Prompt 7's design for assisted cards and the learning loop; nothing in it is built |
 | LOCAL-BUILD-NODE25.md | current | Why `npm run build` dies with EISDIR on this machine, and the workaround |

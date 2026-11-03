@@ -66,11 +66,11 @@ After a quote, the client's next move was:
 
 ## 3. The reader against this reading
 
-1,276 client emails carry a stored v2 decision (card h, wait w, nothing n), mostly mail from 7 Oct on. In 1,132
+1,276 client emails carry a stored v2 decision (handoff h, planned write w, none n; with writes off, h and w both put the email on the TV), mostly mail from 7 Oct on. In 1,132
 threads my codes line up message for message with the dump. The join below covers those threads; 13 threads did
 not line up and are left out.
 
-| Client act (my code) | v2: card | wait | nothing |
+| Client act (my code) | v2: handoff | planned write | none |
 |---|---|---|---|
 | booking RB | 79 | 27 | 8 |
 | quote request RQ | 70 | 23 | 13 |
@@ -85,7 +85,7 @@ not line up and are left out.
 | supplier SU | 8 | 0 | 45 |
 
 - **The yes is the weak point.** Of the first confirmations after a quote, 94 of 132 (71%) were decided "nothing";
-  their intent was mostly right (booking), but no card or wait came from that email. Per S-0286 a client reply on a
+  their intent was mostly right (booking), but nothing on the TV came from that email. Per S-0286 a client reply on a
   quote-waiting thread brings the thread's card back, so this is not yet a measured TV miss. It needs a
   thread-level replay of whether a card was on the TV between the yes and staff confirming the order (next step,
   section 5).
@@ -137,7 +137,7 @@ and OnSinch's booking history.
 ## 5. What this gives the build, and what is next
 
 - **Training data:** `harness/outcome/labels.tsv`, 1,145 threads keyed by Gmail thread id, with a code per email.
-  On the 1,276 client emails with a stored decision, it is a reference answer for card, wait or nothing.
+  On the 1,276 client emails with a stored decision, it is a reference answer for handoff, planned write or none.
 - **Next measurements, all $0:**
   1. A thread-level replay of the 132 first confirmations: was a card on the TV from the yes until staff confirmed
      the order? This settles whether the reader's "nothing" on a yes matters.
