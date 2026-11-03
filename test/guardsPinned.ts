@@ -98,6 +98,16 @@ const env = (k: string, v: string | undefined) => { if (v === undefined) delete 
     env("AUTH_REQUIRED", undefined);
   }
 
+  console.log("\n[T5] the Settings clear deletes in OnSinch only as an admin, unpaused, with both write keys on");
+  {
+    env("N8N_WEBHOOK_SECRET", "s3"); env("NODE_ENV", "test");
+    const { POST } = await import("../app/api/test-data/route");
+    const call = (action: string) => POST(new Request("https://x.example/api/test-data", { method: "POST", headers: { "x-webhook-secret": "s3", "content-type": "application/json" }, body: JSON.stringify({ action }) }));
+    ok((await call("clear")).status === 403, "the intake secret is no admin: refused before anything is read or deleted");
+    ok((await call("nonsense")).status === 400, "the control: the same caller reaches the route");
+    env("N8N_WEBHOOK_SECRET", undefined);
+  }
+
   console.log(fails ? `\n${fails} FAILED` : "\nALL PASS");
   process.exit(fails ? 1 : 0);
 })();

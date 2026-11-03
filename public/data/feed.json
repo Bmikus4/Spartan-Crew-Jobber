@@ -5969,5 +5969,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0296",
+  "ts": "2026-11-03T13:34:52+00:00",
+  "kind": "measurement",
+  "headline": "Test-data clear gated like the sweep; pause window stored",
+  "subject": "The Settings test-data clear needs an admin and both write keys on",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 127,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]

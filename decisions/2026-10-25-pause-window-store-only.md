@@ -29,6 +29,8 @@
 - One more unstored client email, 1a0fd08e33c98bd9 (10-02, the first message of one of these threads), is left out. It is outside the ruling.
 - Payloads are in `.tmp-v2/backfill-payloads.json` (gitignored). The store step needs no n8n key.
 
+**Run 3 Nov 2026, not 28 Oct.** Until then 34 of the 40 were unstored and 6 had come in on later thread posts and been decided (none). The store wrote 68 messages (34 client, 34 ours); all 40 are now in `thread_messages` and in `v2_store_only`, and none has a card.
+
 **Verification after `store`:**
 - 40 of 40 are in `thread_messages`.
 - 0 of 40 have a `v2_decisions` row, re-read a few minutes later.

@@ -3,6 +3,8 @@ import { neon } from "@neondatabase/serverless";
 import { authorizeAction } from "../../lib/apiAuth";
 import { httpTransport } from "../../lib/onsinch/onsinch";
 import { planTestData, clearTestData, lastClear, type OnsinchCall } from "../../lib/testData";
+import { automationPausedFlag } from "../../lib/paused";
+import { botWrites } from "../../lib/v2/process";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -35,7 +37,16 @@ export async function POST(request: Request): Promise<Response> {
       const p = await planTestData(sql, t);
       return NextResponse.json({ ok: true, plan: { orders: p.orders, companies: p.companies, threads: p.threads.length, rows: p.rows, kept: p.kept, over: p.over ?? null } });
     }
-    if (body?.action === "clear") return NextResponse.json({ ok: true, result: await clearTestData(sql, t, "button") });
+    if (body?.action === "clear") {
+      // THE CLEAR DELETES ORDERS AND COMPANIES IN THE LIVE ONSINCH, so it takes the minute sweep's gates (testData.ts
+      // maybeSweep) and the write switches' owner: not while paused, only with both write keys on (O20: production
+      // writes nothing to OnSinch while they are off), an admin's alone (A1). Until 3 Nov any signed-in user or the
+      // intake secret could run it whatever the switches said.
+      if (!caller.admin) return NextResponse.json({ ok: false, error: "only an admin may clear test data" }, { status: 403 });
+      if (automationPausedFlag()) return NextResponse.json({ ok: false, error: "the automation is paused: nothing is cleared" }, { status: 409 });
+      if (!(await botWrites())) return NextResponse.json({ ok: false, error: "bot writes are off, so nothing is deleted in OnSinch" }, { status: 409 });
+      return NextResponse.json({ ok: true, result: await clearTestData(sql, t, "button") });
+    }
     return NextResponse.json({ ok: false, error: "action must be preview or clear" }, { status: 400 });
   } catch (e: any) {
     return NextResponse.json({ ok: false, error: String(e?.message ?? e).slice(0, 200) }, { status: 500 });
