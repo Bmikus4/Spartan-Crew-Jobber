@@ -6011,5 +6011,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0299",
+  "ts": "2026-11-03T13:56:37+00:00",
+  "kind": "measurement",
+  "headline": "Labels refused in bulk raise an alarm",
+  "subject": "Gmail refusing labels in bulk raises the owner's label-failed alarm",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 127,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]

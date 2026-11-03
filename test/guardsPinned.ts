@@ -98,6 +98,20 @@ const env = (k: string, v: string | undefined) => { if (v === undefined) delete 
     env("AUTH_REQUIRED", undefined);
   }
 
+  console.log("\n[L1] Gmail refusing labels in bulk raises the owner's alarm; a couple refused does not");
+  {
+    env("N8N_WEBHOOK_SECRET", "s4"); env("CRON_SECRET", undefined);
+    const { POST } = await import("../app/api/bot/labels/route");
+    const refuse = (n: number) => POST(new Request("https://x.example/api/bot/labels", { method: "POST", headers: { "x-webhook-secret": "s4", "content-type": "application/json" },
+      body: JSON.stringify({ mode: "failed", failed: Array.from({ length: n }, (_, k) => `t${n}-${k}`) }) }));
+    const alarms = async () => Number(((await sql`SELECT count(*)::int AS n FROM error_reports WHERE fingerprint LIKE 'bot/labels%'`) as any[])[0].n);
+    await refuse(2);
+    ok(await alarms() === 0, "two threads refused: a thread's own trouble, no alarm");
+    await refuse(6);
+    ok(await alarms() === 1, "six refused at once: the alarm is raised", await alarms());
+    env("N8N_WEBHOOK_SECRET", undefined);
+  }
+
   console.log("\n[T5] the Settings clear deletes in OnSinch only as an admin, unpaused, with both write keys on");
   {
     env("N8N_WEBHOOK_SECRET", "s3"); env("NODE_ENV", "test");
