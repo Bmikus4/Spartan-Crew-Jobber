@@ -339,6 +339,78 @@ const map = (...os: Order[]) => new Map(os.map((o) => [o.order_id, o]));
     ok(isDone(book, L, map(order(1, ["2026-11-04"])), [], undefined, [ask, quote]).state === "open", "a booking on a confirmed order is not left waiting on a quote, as before");
   }
 
+  console.log("\n[11] each ask is done on its own days (3 Nov: the 24th's shifts on no order, the need done on the 26th's work)");
+  {
+    const L = [{ order_id: 1, absolute: true, ref: "R11001" }];
+    const pairs = [{ ask: "book" as const, days: ["2026-11-24"] }, { ask: "change" as const, days: ["2026-11-26"] }];
+    const n = need({ asks: ["book", "change"], days: ["2026-11-24", "2026-11-26"], pairs });
+    const only26 = order(1, ["2026-11-26"]);
+    const add26 = row(1, "common_create", { model: "Slot", id: 1000 });
+    ok(isDone(n, L, map(only26), [crew(1, 1000), add26]).state === "open", "work on the 26th alone leaves the 24th's booking open");
+    const both = order(1, ["2026-11-24", "2026-11-26"]);
+    ok(isDone(n, L, map(both), [row(1, "common_create", { model: "Slot", id: 1000 }), crew(1, 1001)]).state === "done", "work on each day: done");
+    ok(isDone(n, L, map(both), [crew(1, 1001), row(1, "common_create", { model: "Slot", id: 1001 })]).state === "open", "both rows on the 26th: the 24th is still owed");
+
+    const mon = "2026-11-16", wed = "2026-11-18";
+    const a4 = need({ asks: ["book", "cancel"], days: [mon, wed], pairs: [{ ask: "book", days: [mon] }, { ask: "cancel", days: [wed] }] });
+    const o = order(1, [mon, wed, mon]);
+    const cancelMon = row(1, "common_change", { model: "Slot", id: 1002, diffChanges: { Slot: { cancelled: { old: 0, new: 1 } } } });
+    ok(isDone(a4, L, map(o), [row(1, "common_create", { model: "Slot", id: 1000 }), cancelMon]).state === "open", "add Monday and cancel Wednesday: a Monday cancel does not cancel Wednesday");
+    const cancelWed = row(1, "common_change", { model: "Slot", id: 1001, diffChanges: { Slot: { cancelled: { old: 0, new: 1 } } } });
+    ok(isDone(a4, L, map(o), [row(1, "common_create", { model: "Slot", id: 1000 }), cancelWed]).state === "done", "and with Wednesday cancelled: done");
+    const gone = need({ asks: ["cancel"], days: [wed], pairs: [{ ask: "cancel", days: [wed] }] });
+    ok(isDone(gone, L, map(order(1, [mon])), [row(1, "common_delete", { model: "Slot", id: 1001, data: { model: "Slot" } })]).state === "done", "a cancel made by deleting the shift: done, though the order no longer holds the day");
+
+    const days4 = ["2026-11-04", "2026-11-18", "2026-11-24", "2026-11-26"];
+    const four = need({ asks: ["book"], days: days4, pairs: days4.map((d) => ({ ask: "book" as const, days: [d] })) });
+    const refs = [{ order_id: 1, absolute: true, ref: "PO1" }, { order_id: 2, absolute: true, ref: "PO2" }, { order_id: 3, absolute: true, ref: "PO3" }];
+    const made = (id: number) => row(id, "order_create", { model: "Order", id: String(id) });
+    ok(isDone(four, refs, map(order(1, ["2026-11-04"]), order(2, ["2026-11-18"]), order(3, ["2026-11-26"])), [made(1), made(2), made(3)]).state === "open", "an order per venue for three of four days: the fourth is still owed");
+    ok(isDone(four, [...refs, { order_id: 4, absolute: true, ref: "PO4" }], map(order(1, ["2026-11-04"]), order(2, ["2026-11-18"]), order(3, ["2026-11-26"]), order(4, ["2026-11-24"])), [made(1), made(2), made(3), made(4)]).state === "done", "and with the fourth made: done");
+    ok(isDone(need({ asks: ["book", "change"], days: ["2026-11-04"] }), L, map(order(1, ["2026-11-04"])), [crew(1, 1000), row(1, "common_create", { model: "Slot", id: 1000 })]).state === "done", "a need without pairs: as before, each ask on any of its days");
+    // 2 Nov: times changed on the 5th and 7th; the 8th's asked 01:30 start was already the order's.
+    const asked = need({ asks: ["change"], days: ["2026-11-05", "2026-11-08"], pairs: [{ ask: "change", days: ["2026-11-05"], start: "09:00", end: null }, { ask: "change", days: ["2026-11-08"], start: "09:00", end: null }] });
+    const two = order(1, ["2026-11-05", "2026-11-08"]);
+    ok(isDone(asked, L, map(two), [row(1, "common_change", { model: "Slot", id: 1000, diffChanges: { Slot: { beginning: { old: "2026-11-05 08:00:00", new: "2026-11-05 09:00:00" } } } })]).state === "done", "a change the order already holds as asked needs no work");
+    const late = need({ ...asked, pairs: [asked.pairs![0], { ask: "change", days: ["2026-11-08"], start: "10:00", end: null }] });
+    ok(isDone(late, L, map(two), [row(1, "common_change", { model: "Slot", id: 1000, diffChanges: { Slot: { beginning: { old: "2026-11-05 08:00:00", new: "2026-11-05 09:00:00" } } } })]).state === "open", "one the order does not hold is still owed");
+  }
+
+  console.log("\n[12] a done mark is read again while its need has a day ahead; a past one is history");
+  {
+    const NOW = Date.parse("2026-10-28T12:00:00Z");
+    const seedOne = async (id: string, date: string) => {
+      await sql`INSERT INTO v2_decisions (message_id, thread_id, from_address, sent_at, kind, decision, interpretation, code_version, created_at)
+        VALUES (${id}, ${`t-${id}`}, 'ops@north.example', '2026-10-28T09:00:00Z', 'handoff', ${JSON.stringify({ kind: "handoff", reasons: ["x"] })}::jsonb,
+          ${JSON.stringify({ grounded: { intent: "booking", requests: [{ action: "new_shift", date, crew: 2, problems: [] }] } })}::jsonb, 'abc', '2026-10-28T09:00:00Z')`;
+      await sql`INSERT INTO thread_messages (message_id, thread_id, from_address, date_iso, subject, is_from_spartan) VALUES (${id}, ${`t-${id}`}, 'ops@north.example', '2026-10-28T09:00:00Z', 'crew', false)`;
+    };
+    const prov = order(31, ["2026-11-06"]); prov.body.provisional = true;
+    await sql`INSERT INTO onsinch_orders (order_id, number, company_id, body, read_at) VALUES (31, '11031', 7, ${JSON.stringify(prov.body)}::jsonb, now()),
+      (32, '11032', 7, ${JSON.stringify(order(32, ["2026-10-20"]).body)}::jsonb, now())`;
+    await sql`INSERT INTO onsinch_timeline (id, action, creator, created, model, model_id, order_id, data) VALUES
+      (900101, 'order_create', 413, '2026-10-28T10:00:00Z', 'Order', '31', 31, '{}'::jsonb)`;
+    await seedOne("m-prov", "2026-11-06");
+    await seedOne("m-past", "2026-10-20");
+    // The key a new booking's need has (feed/v2.ts v2Source): its kind, thread, order (none) and email.
+    const kProv = "needs-created:t-m-prov:0:m-prov", kPast = "needs-created:t-m-past:0:m-past";
+    // As the rule before O31 wrote them: done on a provisional order, and done on a day already past.
+    await sql`INSERT INTO feed_marks (item_key, thread_id, mark, evidence, at) VALUES
+      (${kProv}, 't-m-prov', 'done', ${JSON.stringify({ text: "R11031, staff made the order", orders: [31] })}::jsonb, '2026-10-28T10:00:00Z'),
+      (${kPast}, 't-m-past', 'done', ${JSON.stringify({ text: "R11032, staff made the order", orders: [32] })}::jsonb, '2026-10-28T10:00:00Z')`;
+    const r = await markNeeds(sql as any, null, (await liveFeedDeps().v2!()) as any, NOW);
+    const m = (await sql`SELECT item_key, mark, evidence FROM feed_marks WHERE item_key IN (${kProv}, ${kPast})`) as any[];
+    const of = (k: string) => m.filter((x) => x.item_key === k).map((x) => x.mark).sort().join(",");
+    ok(of(kProv) === "possibly" && r.reopened === 1, "a booking done under the old rule on a provisional order is reopened, saying it is provisional", { marks: m, r });
+    ok(/confirm R11031 in OnSinch|R11031 is still provisional/.test(String(m.find((x) => x.item_key === kProv && x.mark === "possibly")?.evidence?.text ?? "")), "its card says what is left: confirm R11031", m);
+    ok(of(kPast) === "done", "a need whose day is past keeps its mark", m);
+    await sql`UPDATE onsinch_orders SET read_at = now() WHERE order_id = 31`;
+    await sql`INSERT INTO feed_marks (item_key, thread_id, mark, evidence, at) VALUES (${kProv}, 't-m-prov', 'done', ${JSON.stringify({ text: "R11099", orders: [99] })}::jsonb, now()) ON CONFLICT DO NOTHING`;
+    await sql`DELETE FROM feed_marks WHERE item_key = ${kProv} AND mark = 'possibly'`;
+    const r2 = await markNeeds(sql as any, null, (await liveFeedDeps().v2!()) as any, NOW);
+    ok(r2.reopened === 0 && of(kProv) !== "" && ((await sql`SELECT 1 FROM feed_marks WHERE item_key = ${kProv} AND mark = 'done'`) as any[]).length === 1, "a mark naming an order this minute did not read is kept", r2);
+  }
+
   console.log(fails ? `\n${fails} FAILED` : "\nALL PASS");
   process.exit(fails ? 1 : 0);
 })();

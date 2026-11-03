@@ -5903,5 +5903,29 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0292",
+  "ts": "2026-11-03T13:08:17+00:00",
+  "kind": "measurement",
+  "headline": "Each ask is done on its own days; done marks with a day ahead read again",
+  "subject": "A need is done only when each ask has staff's work on its own days",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 125,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  },
+  "measured": {
+   "done_marks_reread": {
+    "dataset": "production feed_marks: done marks whose need has a day on or after 2026-11-03, dry run of this commit's markNeeds, read 2026-11-03",
+    "marks": 73,
+    "stay_done": 61,
+    "to_quote_wait": 10,
+    "back_on_tv": 1,
+    "kept_order_unread": 1
+   }
+  }
  }
 ]

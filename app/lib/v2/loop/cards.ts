@@ -35,7 +35,7 @@ const addr = (f: unknown) => String(f ?? "").replace(/.*</, "").replace(/>.*/, "
  * one company whose contact list holds the sender, never the decision's guess; its orders are read whole from
  * OnSinch here, in the minute sync, so the TV's read path never needs to.
  */
-export async function markNeeds(sql: Sql, t: Transport | null, rows: V2Row[], now = Date.now()): Promise<{ needs: number; done: number; possibly: number; agreed: number; reads: number }> {
+export async function markNeeds(sql: Sql, t: Transport | null, rows: V2Row[], now = Date.now()): Promise<{ needs: number; done: number; possibly: number; agreed: number; reads: number; reopened?: number }> {
   await ensureSchema(sql);
   const needs = v2Sources(rows, now).flatMap((s) => [s, ...(s.also ?? [])])
     .filter((x) => x.item && NEED.has(x.item.kind) && x.need)
@@ -78,16 +78,33 @@ export async function markNeeds(sql: Sql, t: Transport | null, rows: V2Row[], no
   const places = new Map<string, number[]>();
   for (const p of (await sql`SELECT id, lower(trim(name)) AS name FROM onsinch_places WHERE lower(trim(name)) = ANY(${venues})`) as any[]) places.set(p.name, [...(places.get(p.name) ?? []), Number(p.id)]);
   const marks = (await sql`SELECT item_key, mark, evidence FROM feed_marks WHERE item_key = ANY(${needs.map((n) => n.key)}) AND mark IN ('done', 'possibly', 'agreed')`) as any[];
-  let done = 0, possibly = 0, agreed = 0;
+  let done = 0, possibly = 0, agreed = 0, reopened = 0;
+  const today = utcToLondon(new Date(now).toISOString()).date;
   for (const n of needs) {
     // A quote waiting on the client is read again each minute: the client back on the thread brings the card back. Kept,
     // it hid a PO the client sent after the quote, which made no card of its own, for 25 h (replay from 9 Oct, 1 Nov).
     const waiting = marks.find((m) => m.item_key === n.key && m.mark === "agreed" && /^Quote sent/.test(String(m.evidence?.text ?? "")));
-    if (marks.some((m) => m.item_key === n.key && (m.mark === "done" || (m.mark === "agreed" && !waiting)))) continue;
+    if (marks.some((m) => m.item_key === n.key && m.mark === "agreed" && !waiting)) continue;
+    // A DONE MARK IS READ AGAIN WHILE ITS NEED HAS A DAY AHEAD, so a rule made after it reaches it: on 3 Nov 11 needs
+    // booking a day ahead were done under the rule before O31 on orders still provisional, and an email for the 24th
+    // and the 26th was done on the 26th's work alone. A need whose days are past keeps its mark: it is history.
+    const doneMark = marks.find((m) => m.item_key === n.key && m.mark === "done");
+    if (doneMark && !n.need.days.some((d) => d >= today)) continue;
     const mine = links.filter((l) => l.thread_id === n.thread_id).map((l) => ({ order_id: Number(l.order_id), absolute: !!l.proof, ref: String(l.proof ?? "") }));
     const v = conflicts[n.thread_id]
       ? { state: "possibly" as const, text: `Check the order: ${conflicts[n.thread_id]}`, orders: [] as number[], rung: "conflict", at: null, creator: null }
       : isDone({ ...n.need, company_id: companyOf(n.sender), companies: senderCompanies(n.sender) }, mine, orders, history, (name) => places.get(name.trim().toLowerCase()) ?? [], threadOf.get(n.thread_id) ?? []);
+    if (doneMark) {
+      // Judged on the orders the mark named, not on today's search for the job: a client found differently since (a
+      // sender now on one company's list) must not reopen work staff did. And only on a full read: an order the mark
+      // named that this minute did not read is no evidence it is undone.
+      const named = ((doneMark.evidence?.orders ?? []) as unknown[]).map(Number);
+      if (v.state === "done" || !named.length || named.some((id) => !orders.has(id))) continue;
+      const onNamed = isDone({ ...n.need, company_id: companyOf(n.sender), companies: senderCompanies(n.sender) }, named.map((id) => ({ order_id: id, absolute: true, ref: "the mark's orders" })), orders, history, (name) => places.get(name.trim().toLowerCase()) ?? [], threadOf.get(n.thread_id) ?? []);
+      if (onNamed.state === "done") continue;
+      await sql`DELETE FROM feed_marks WHERE item_key = ${n.key} AND mark = 'done'`;
+      reopened++;
+    }
     if (waiting) {
       if (v.state === "agreed" && /^Quote sent/.test(v.text)) continue;
       await sql`DELETE FROM feed_marks WHERE item_key = ${n.key} AND mark = 'agreed'`;
@@ -110,7 +127,7 @@ export async function markNeeds(sql: Sql, t: Transport | null, rows: V2Row[], no
       possibly++;
     } else if (had) await sql`DELETE FROM feed_marks WHERE item_key = ${n.key} AND mark = 'possibly'`;
   }
-  return { needs: needs.length, done, possibly, agreed, reads };
+  return { needs: needs.length, done, possibly, agreed, reads, reopened };
 }
 
 /** `onCard`: the emails the TV's cards are built from now (v2.ts rowsOnCard); a need whose email is not among them was answered by a later one. */

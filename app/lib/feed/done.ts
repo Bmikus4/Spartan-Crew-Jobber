@@ -32,7 +32,13 @@ export type Ask = "book" | "change" | "cancel" | "any";
  * places the reading matched to the client's venues, a tie-break between candidate orders and never a filter: one
  * reading's place was the unused duplicate 7083 where staff booked the client's own 205 (1 Nov).
  */
-export type Need = { at: number; asks: Ask[]; fresh: boolean; days: string[]; places: number[]; venues: string[]; company_id: number | null; readPlaces?: number[]; companies?: number[]; quote?: boolean };
+export type Need = { at: number; asks: Ask[]; fresh: boolean; days: string[]; places: number[]; venues: string[]; company_id: number | null; readPlaces?: number[]; companies?: number[]; quote?: boolean; pairs?: Pair[] };
+/**
+ * One ask and the days it is about: a need is done only when each ask has fitting work on its own days. Without pairs
+ * every ask may be met on any of the need's days, which marked an email for the 24th and the 26th done on the 26th's
+ * edits alone while the 24th was on no order (3 Nov, R11822).
+ */
+export type Pair = { ask: Ask; days: string[]; start?: string | null; end?: string | null };
 /** A thread's link to an order; `ref` is what named it, so one PO held by two orders is told from two POs. */
 export type Link = { order_id: number; absolute: boolean; ref: string };
 export type Order = { order_id: number; number: string | null; company_id: number | null; body: any; deleted: boolean };
@@ -77,37 +83,51 @@ const confirmsByEdit = (r: Row) => { const p = r.data?.diffChanges?.Order?.provi
  */
 const pending = (o: Order) => !!(o.body?.provisional || o.body?.quote);
 
-/** A row as staff's work: what it did, and which asks it answers. Null when it is not booking work. */
-function workOf(r: Row, o: Order, need: Need): { what: string; fits: Ask[] } | null {
+/**
+ * A row as staff's work: what it did, which asks it answers, and the days it touched. Null when it is not booking work.
+ * `days` empty: the day cannot be known (a deleted part), so it may answer an ask on any day. Work on the whole order
+ * (made, confirmed, cancelled, renamed) touched every day the order holds.
+ */
+function workOf(r: Row, o: Order, need: Need): { what: string; fits: Ask[]; days: Set<string> } | null {
   if (r.creator == null || Number(r.creator) === BOT || T(r.created) <= need.at) return null;
   const d = r.data ?? {};
   const days = new Set(shiftsOf(o.body).filter((s) => s.slot === String(r.model_id) || s.team === String(r.model_id)).map((s) => s.day));
   for (const f of ["beginning", "end"]) for (const v of [d.diffChanges?.Slot?.[f]?.old, d.diffChanges?.Slot?.[f]?.new]) if (v) days.add(utcToLondon(String(v)).date);
+  const whole = new Set(shiftsOf(o.body).map((s) => s.day));
   // A part is on the need's day, or its day cannot be known (a deleted part, an undated need).
   const onDay = !need.days.length || !days.size || [...days].some((x) => need.days.includes(x));
-  if (MADE.has(r.action)) return { what: "made the order", fits: ["book", "any"] };
+  if (MADE.has(r.action)) return { what: "made the order", fits: ["book", "any"], days: whole };
   // OnSinch marks staff's own order cancels "automated" (175 of 207 to 31 Oct, by 11 people): the creator is the test.
-  if (r.action === "order_cancel") return { what: "cancelled the order", fits: ["cancel", "any"] };
-  if (r.action === "order_confirm_provisional") return { what: "confirmed the order", fits: ["book", "any"] };
+  if (r.action === "order_cancel") return { what: "cancelled the order", fits: ["cancel", "any"], days: whole };
+  if (r.action === "order_confirm_provisional") return { what: "confirmed the order", fits: ["book", "any"], days: whole };
   // Staff also confirm by editing the flag (64 times since 1 Sep, 6 people, beside 472 confirm rows).
-  if (r.action === "common_change" && confirmsByEdit(r)) return { what: "confirmed the order", fits: ["book", "any"] };
-  if (r.action === "common_create" && (d.model === "SlotTeam" || d.model === "Slot") && onDay) return { what: d.model === "Slot" ? "added crew" : "added a shift", fits: ["book", "change", "any"] };
-  if (r.action === "common_delete" && /^(Slot|SlotTeam|Job)$/.test(String(d.data?.model ?? "")) && onDay) return { what: "removed a shift", fits: ["cancel", "change", "any"] };
+  if (r.action === "common_change" && confirmsByEdit(r)) return { what: "confirmed the order", fits: ["book", "any"], days: whole };
+  if (r.action === "common_create" && (d.model === "SlotTeam" || d.model === "Slot") && onDay) return { what: d.model === "Slot" ? "added crew" : "added a shift", fits: ["book", "change", "any"], days };
+  if (r.action === "common_delete" && /^(Slot|SlotTeam|Job)$/.test(String(d.data?.model ?? "")) && onDay) return { what: "removed a shift", fits: ["cancel", "change", "any"], days };
   if (r.action === "common_change") {
     const f = Object.entries(d.diffChanges ?? {}).flatMap(([m, x]) => Object.keys(x as object).map((k) => `${m}.${k}`));
-    if (f.includes("Slot.cancelled") && onDay) return { what: "cancelled a shift", fits: ["cancel", "any"] };
-    if (f.some((x) => /^Slot\.(size|beginning|end|profession_id)$/.test(x)) && onDay) return { what: f.includes("Slot.size") ? "changed the crew" : "changed the times", fits: ["change", "any"] };
-    if (f.some((x) => /^Order\.(intern_name|name)$/.test(x))) return { what: "changed the order's details", fits: ["any"] };
+    if (f.includes("Slot.cancelled") && onDay) return { what: "cancelled a shift", fits: ["cancel", "any"], days };
+    if (f.some((x) => /^Slot\.(size|beginning|end|profession_id)$/.test(x)) && onDay) return { what: f.includes("Slot.size") ? "changed the crew" : "changed the times", fits: ["change", "any"], days };
+    if (f.some((x) => /^Order\.(intern_name|name)$/.test(x))) return { what: "changed the order's details", fits: ["any"], days: whole };
   }
   return null;
 }
+
+const pairsOf = (need: Need): Pair[] => need.pairs?.length ? need.pairs : (need.asks.length ? need.asks : (["any"] as Ask[])).map((ask) => ({ ask, days: need.days }));
+const pairKey = (p: Pair) => `${p.ask}|${[...p.days].sort().join(",")}|${p.start ?? ""}|${p.end ?? ""}`;
+/** A change OnSinch already holds: a live shift on its day starts (and ends) as asked, London time. */
+const heldAsAsked = (o: Order, p: Pair) => p.ask === "change" && !!(p.start || p.end) && ([].concat(o.body?.Job ?? []) as any[])
+  .flatMap((j) => ([].concat(j?.SlotTeam ?? []) as any[]).flatMap((t) => ([].concat(t?.Slot ?? []) as any[]).map((x) => ({ x, team: t }))))
+  .some(({ x, team }) => x?.beginning && !(x.cancelled === true || Number(x.cancelled) > 0 || team.cancelled === true || Number(team.cancelled) > 0)
+    && p.days.includes(utcToLondon(String(x.beginning)).date) && (!p.start || utcToLondon(String(x.beginning)).time === p.start)
+    && (!p.end || (!!x.end && utcToLondon(String(x.end)).time === p.end)));
 
 /**
  * Every ask has staff work that fits it on this order after the email (with the latest such row), or a new booking was
  * on it already. `provisional`: the booking is on an order still provisional or in Price Quotes, which is not done until
  * staff confirm it (pending).
  */
-function doneOn(o: Order, rows: Row[], need: Need, places: number[]): { what: string[]; last: Row | null; provisional: boolean } | null {
+function doneOn(o: Order, rows: Row[], need: Need, places: number[]): { what: string[]; last: Row | null; provisional: boolean; covered: string[] } | null {
   const mine = rows.filter((r) => r.order_id === o.order_id);
   const active = shiftsOf(o.body).filter((s) => !s.cancelled);
   const undone = (r: Row) => r.action === "order_cancel" && mine.some((u) => u.action === "order_uncancel" && T(u.created) > T(r.created));
@@ -115,12 +135,20 @@ function doneOn(o: Order, rows: Row[], need: Need, places: number[]): { what: st
   const confirmed = work.some((x) => x.w.what === "confirmed the order");
   const asks = need.asks.length ? need.asks : (["any"] as Ask[]);
   const provisional = pending(o) && !confirmed && asks.includes("book");
-  if (need.fresh && need.days.length && !madeAfter(o, rows, need) && need.days.every((d) => active.some((s) => s.day === d && atPlace(s, places)))) return { what: ["booked it before the email"], last: null, provisional };
+  // The asks this order answers for: those about no day, a day it holds, or a day its work touched (a shift deleted to
+  // cancel it leaves the order holding nothing that day, and a deleted part's day is unknown). An ask about a day no
+  // order holds or touched is answered by none, and doneVerdict keeps the need open for it.
+  const holds = new Set(shiftsOf(o.body).map((s) => s.day));
+  const touched = (d: string) => work.some((x) => !x.w.days.size || x.w.days.has(d));
+  const mineAsks = pairsOf(need).filter((p) => !p.days.length || p.days.some((d) => holds.has(d) || touched(d)));
+  const covered = mineAsks.map(pairKey);
+  if (need.fresh && need.days.length && !madeAfter(o, rows, need) && need.days.every((d) => active.some((s) => s.day === d && atPlace(s, places)))) return { what: ["booked it before the email"], last: null, provisional, covered };
   const cancelled = work.find((x) => x.r.action === "order_cancel");
-  if (cancelled) return { what: ["cancelled the order"], last: cancelled.r, provisional: false };
-  if (!work.length || !asks.every((a) => work.some((x) => x.w.fits.includes(a)))) return null;
+  if (cancelled) return { what: ["cancelled the order"], last: cancelled.r, provisional: false, covered };
+  const fits = (p: Pair, w: NonNullable<ReturnType<typeof workOf>>) => w.fits.includes(p.ask) && (!p.days.length || !w.days.size || p.days.some((d) => w.days.has(d)));
+  if (!work.length || !mineAsks.length || !mineAsks.every((p) => work.some((x) => fits(p, x.w)) || heldAsAsked(o, p))) return null;
   const last = work.reduce((a, b) => (T(b.r.created) > T(a.r.created) ? b : a)).r;
-  return { what: [...new Set(work.map((x) => x.w.what))], last, provisional };
+  return { what: [...new Set(work.map((x) => x.w.what))], last, provisional, covered };
 }
 
 /** The need's candidate jobs: groups that must each come to one order, from the first rung that yields any. */
@@ -361,9 +389,28 @@ function doneVerdict(need: Need, links: Link[], orders: Map<number, Order>, rows
   }
   if (found.some((f) => !f.length)) return open;
   const done = found.map((f) => f[0]);
+  // An ask about a day the need's jobs do not hold is another job's (O18: one email, several orders): staff's fitting
+  // work on that day on any of the client's orders settles it, and a cancel is settled when none of the client's
+  // orders holds a live shift that day. Anything else asked and not answered keeps the need open.
+  const covered = new Set(done.flatMap((x) => x.d!.covered));
+  const cos = new Set([need.company_id, ...(need.companies ?? [])].filter((c): c is number => c != null));
+  const clients = [...orders.values()].filter((o) => !o.deleted && o.company_id != null && cos.has(o.company_id));
+  // Work found there on an order still provisional is the quote's order (a quote with options makes one per option):
+  // held, as a provisional job of the need's own is.
+  const heldElsewhere: Order[] = [];
+  const elsewhere = (p: Pair): boolean => {
+    if (!p.days.length) return false;
+    if ([...done.map((x) => x.o), ...clients].some((o) => heldAsAsked(o, p))) return true;
+    if (p.ask === "cancel" && cos.size && p.days.every((d) => !clients.some((o) => shiftsOf(o.body).some((s) => !s.cancelled && s.day === d)))) return true;
+    const hits = clients.map((o) => ({ o, d: doneOn(o, rows, { ...need, days: p.days, pairs: [p] }, places) })).filter((x) => x.d?.covered.includes(pairKey(p)));
+    if (hits.some((x) => !x.d!.provisional)) return true;
+    heldElsewhere.push(...hits.map((x) => x.o));
+    return hits.length > 0;
+  };
+  if (pairsOf(need).filter((p) => !covered.has(pairKey(p))).map(elsewhere).some((x) => !x)) return open;
   // Staff's work found, on an order still provisional: the card stays, and says what is left.
-  const held = done.filter((x) => x.d!.provisional);
-  if (held.length) return { ...open, state: "possibly", orders: held.map((x) => x.o.order_id), provisional: true, text: `${held.map((x) => label(x.o)).join(" and ")} ${held.length > 1 ? "are" : "is"} still provisional: confirm in OnSinch once the client says yes` };
+  const held = [...new Set([...done.filter((x) => x.d!.provisional).map((x) => x.o), ...heldElsewhere])];
+  if (held.length) return { ...open, state: "possibly", orders: held.map((o) => o.order_id), provisional: true, text: `${held.map(label).join(" and ")} ${held.length > 1 ? "are" : "is"} still provisional: confirm in OnSinch once the client says yes` };
   const last = done.map((x) => x.d!.last).filter((r): r is Row => !!r).sort((a, b) => T(b.created) - T(a.created))[0] ?? null;
   const text = done.map((x) => `${label(x.o)}, staff ${x.d!.what.join(", ")}`).join("; ");
   return { state: "done", orders: done.map((x) => x.o.order_id), rung, text, at: last ? new Date(T(last.created)).toISOString() : null, creator: last?.creator ?? null };

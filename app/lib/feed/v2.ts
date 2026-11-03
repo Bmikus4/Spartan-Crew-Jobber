@@ -200,6 +200,12 @@ export function v2Source(row0: V2Row, now: number): FeedSource {
       quote: g?.intent === "quote_request",
       days, places, venues: [...new Set(shifts.map((s) => s.venue).filter((v): v is string => !!v))],
       readPlaces: [...new Set((g?.requests ?? []).map((r) => r.place_id).filter((p): p is number => !!p))],
+      // Each ask with its own days (a move is about the day it leaves and the day it goes to): done.ts clears the need
+      // only when every one has fitting work on its days.
+      pairs: [...new Map((g?.requests.length
+        ? g.requests.map((r) => ({ ask: ASK[r.action] ?? "any", days: [...new Set([r.target?.date, r.date].filter((x): x is string => !!x && /^\d{4}-\d{2}-\d{2}$/.test(x)))].sort(), start: r.start ?? null, end: r.end ?? null }))
+        : c.ops.map((o) => ({ ask: OP_ASK[o.kind], days: [...new Set(opDays(o).map((s) => s.date))].sort(), start: null, end: null }))
+      ).map((p) => [`${p.ask}|${p.days.join(",")}|${p.start ?? ""}|${p.end ?? ""}`, p] as const)).values()],
     },
     ask: note.ask,
     check: note.check,
