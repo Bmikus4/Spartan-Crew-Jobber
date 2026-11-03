@@ -166,10 +166,15 @@ export function scoreEmail(input: { plan: Op[] | null; days: string[]; venues: n
     const p = { ...base, plan_keys: [] as string[] };
     return mine.length ? { ...p, bucket: "staff acted, no plan", why: null } : { ...p, bucket: "staff did nothing", why: days.length ? null : "the email names no day" };
   }
-  const v = judge(ops, truth);
+  // A PO is cosmetic (V33): beside a booking it neither makes nor breaks the plan, so a plan that books is judged on its
+  // booking alone. And acts that touch no booking field (a PO typed, a note) are staff doing nothing the plan could
+  // match: 4 of 18 judged "wrong" on 3 Nov were these (audit S-17).
+  const booking = ops.filter((o) => o.kind !== "set_po");
+  const isPo = (k: string) => k.startsWith("po ");
+  const v = booking.length ? judge(booking, { keys: truth.keys.filter((k) => !isPo(k)), other: truth.other }) : judge(ops, truth);
   const plan_keys = [...new Set(ops.flatMap(bookingKeys))].sort();
   const out = { ...base, plan_keys };
-  if (!mine.length) return { ...out, bucket: "staff did nothing", why: null };
+  if (!mine.length || (booking.length && !truth.keys.some((k) => !isPo(k)) && !truth.other.length)) return { ...out, bucket: "staff did nothing", why: null };
   if (v.verdict === "completed") return { ...out, bucket: "matched", why: null };
   if (v.verdict === "partial") return { ...out, bucket: "partial", why: "staff also did what the plan does not hold" };
   // Wrong: say why in the fields OnSinch holds.

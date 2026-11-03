@@ -107,7 +107,11 @@ console.log("\n[5] changes to an existing order");
   const wrongOrder = run(plan, [x, y], [sizeEdit(511, 9601, 4, 6, 1)]);
   ok(wrongOrder.bucket === "wrong" && /^another order/.test(wrongOrder.why ?? ""), "staff changed another order on that day and venue: wrong, another order", wrongOrder);
   const more = run(plan, [x], [sizeEdit(510, 9501, 4, 6, 1), poEdit(510, 11510, "PO9", 2)]);
-  ok(more.bucket === "partial", "the plan right and staff also set a PO on that order: partial", more);
+  ok(more.bucket === "matched", "the plan right and staff also set a PO on that order: matched, a PO is cosmetic (V33)", more);
+  const onlyPo = run([...plan, { kind: "set_po", order_id: 510, po: "PO9" } as Op], [x], [poEdit(510, 11510, "PO9", 2)]);
+  ok(onlyPo.bucket === "staff did nothing", "a size and a PO planned, staff only typed the PO: staff did nothing on the booking, not a wrong plan", onlyPo);
+  const noted = run(plan, [x], [poEdit(510, 11510, "PO9", 2)]);
+  ok(noted.bucket === "staff did nothing", "a size planned, staff only set a PO: staff did nothing the plan could match", noted);
   const value = run(plan, [x], [sizeEdit(510, 9501, 4, 5, 1)]);
   ok(value.bucket === "wrong" && /different value/.test(value.why ?? ""), "the right position, another size: wrong, a different value", value);
 }
