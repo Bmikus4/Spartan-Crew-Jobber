@@ -5927,5 +5927,19 @@
     "kept_order_unread": 1
    }
   }
+ },
+ {
+  "id": "S-0293",
+  "ts": "2026-11-03T13:14:45+00:00",
+  "kind": "measurement",
+  "headline": "View analytics tab removed from the Live Feed",
+  "subject": "The Live Feed no longer shows a View analytics tab",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 125,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]

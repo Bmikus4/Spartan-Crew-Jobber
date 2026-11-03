@@ -36,7 +36,6 @@ One tile per job that needs a person. Each tile shows the client, a label, the j
 - The figures at the top count the list: **Needs Follow Up** (open jobs with nothing from anyone for 24 hours), **Within 48 Hours** (open jobs starting within two days, shown larger because time is running out), and **Needs Reply** when AI email drafts are switched on.
 - The sync sign beside them: **Synced** (green: Gmail and OnSinch are coming through), **Sync Error** (red: the board could not be read, no email has arrived for 90 minutes in working hours, or OnSinch could not be read), **Intake Paused** (grey: email intake is switched off on purpose, and jobs still sync with OnSinch), or **Offline** (grey: this screen cannot reach the system). **Fullscreen** fills the screen; the button and the cursor hide after a few idle seconds.
 - When the list is empty it says "Everything is checked." or "Nothing else waiting.", or warns that the sync is not healthy.
-- **View analytics**, a tab above the list with a square-and-arrow icon, opens the numbers (not on the office TV).
 
 ## 4 · The Gmail labels
 Every thread carries exactly one of four labels, set from the board every minute; nobody sets them by hand: **Order Created**, **Order Updated**, **Order Needs Created**, **Order Needs Updated**. A thread can also carry **Needs Follow Up**, which is about the conversation, not the order.
@@ -62,7 +61,7 @@ Every conversation in the bookings inbox since 9 October, one row per Gmail thre
 Changes here apply to the whole team.
 - **Bot orders and updates**: the master switch for the bot creating and updating orders in OnSinch; off by default. Off, every email is still read and decided, and anything the bot would have written appears on the board as a card to do by hand. (A second switch on the server must also be on before the bot writes.)
 - **AI email drafts**: one switch for every email the system writes into a Gmail thread, replies and chases alike; off by default. **Reply delivery**: **Draft** (left in Gmail for a person to send; the default) or **Send**. **Which emails get a reply**: **All emails** or **New enquiries only**.
-- **View analytics** (the tab at the top of Settings and of the Live Feed, with the square-and-arrow icon) opens the analytics.
+- **View analytics** (the tab at the top of Settings, with the square-and-arrow icon) opens the analytics.
 - **Short-notice jobs go to the office**: when on, a job whose day is within **Short notice means** days of its email is left for the office; **Which jobs** says new bookings, changes, or both.
 - **Test data**: **Clear it every 15 minutes** removes what tests left (never staff's orders); **Check now** lists what would go, and **Remove** clears it.
 - **Install app** puts the board on a phone or computer like an app. **Account** shows who is signed in, with **Sign out**.

@@ -19,8 +19,6 @@ import { Fragment, memo, useCallback, useEffect, useRef, useState } from "react"
 import type { FeedCard, FeedCounts, FeedItem } from "../lib/feed/project";
 import { deadline, londonDay, nextDay, QUIET_MS } from "../lib/feed/order";
 import { BrandMark, BrandWordmark } from "./BrandLogo";
-import FolderTab from "./FolderTab";
-import AnalyticsPopup from "./AnalyticsPopup";
 import HistoryPicker, { momentLabel, type PastList } from "./FeedHistory";
 import OpportunitiesScreen from "./OpportunitiesScreen";
 
@@ -373,7 +371,6 @@ export default function LiveFeedScreen({ isActive, tv = false }: { isActive: boo
   /** Tiles that have just gone green: where they stood, and when. */
   const [settling, setSettling] = useState<Map<string, { index: number; since: number }>>(new Map());
   const [below, setBelow] = useState(0);
-  const [analyticsOpen, setAnalyticsOpen] = useState(false);
   /** The list as it stood at a moment picked from History: shown read-only until Back to live. */
   const [historyOpen, setHistoryOpen] = useState(false);
   const [past, setPast] = useState<PastList | null>(null);
@@ -644,7 +641,6 @@ export default function LiveFeedScreen({ isActive, tv = false }: { isActive: boo
       </header>
 
       {/* Wherever someone can click it, never on the office TV: its Settings switch is gone (owner, 2 Nov). */}
-      {!tv && <FolderTab label="View analytics" s={s} onOpen={() => { unlockAudio(); setAnalyticsOpen(true); }} />}
 
       {past && (
         <div role="status" style={{ display: "flex", alignItems: "center", gap: 16 * s, padding: `${12 * s}px ${18 * s}px`, borderRadius: 12 * s, border: `1px solid ${AMBER}`, background: tint(AMBER, 10), fontSize: 20 * s, fontWeight: 700, flexShrink: 0 }}>
@@ -695,7 +691,6 @@ export default function LiveFeedScreen({ isActive, tv = false }: { isActive: boo
       </div>
       )}
 
-      {analyticsOpen && <AnalyticsPopup onClose={() => setAnalyticsOpen(false)} />}
       {historyOpen && <HistoryPicker s={s} onClose={() => setHistoryOpen(false)} onPick={(l) => { setPast(l); setHistoryOpen(false); listRef.current?.scrollTo({ top: 0 }); }} />}
 
       {undo && undo.until > now && (
