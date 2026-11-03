@@ -494,7 +494,19 @@ export type PlanOpts = {
 export async function plan(msg: Message, i: Interpretation, world0: World, threadOrderId: number | null = null, opts: PlanOpts = {}): Promise<Decision> {
   const world = once(world0);
   const ev = await evidenceOf(msg, i, world, threadOrderId, opts).catch(() => null);
-  return coded(await leadOverChanges(settle(await decide(msg, i, world, threadOrderId, opts, ev), i, ev, !!opts.again), msg, world, opts));
+  return coded(await provisionalHeld(await leadOverChanges(settle(await decide(msg, i, world, threadOrderId, opts, ev), i, ev, !!opts.again), msg, world, opts), world));
+}
+
+/**
+ * ALREADY BOOKED IS NOT BOOKED ON AN ORDER STILL PROVISIONAL OR IN PRICE QUOTES (DECISIONS O31). Staff make that order
+ * to quote and confirm it after the client's yes, so "please go ahead" on it was decided "none: already booked" and no
+ * card waited for the confirm: 10 of 30 such yeses, 9 Oct-2 Nov, had no need open on their thread (audit, 3 Nov).
+ */
+async function provisionalHeld(d: Decision, world: World): Promise<Decision> {
+  if (d.kind !== "none" || !d.found?.length || !world.orderById || !/already booked|already as asked/.test(d.reason)) return d;
+  const held = (await Promise.all(d.found.map((id) => world.orderById!(id).catch(() => null)))).filter((o: any) => !!o && !!(o.provisional || o.quote));
+  if (!held.length) return d;
+  return { kind: "handoff", reasons: [`${held.map((o: any) => `R${o.number}`).join(", ")} holds what the client asked but is still provisional: confirm it in OnSinch once the client has said yes`], order_id: Number(held[0].id) };
 }
 
 const CHANGE_KINDS = new Set(["set_position_size", "set_position_times", "cancel_position", "add_shift", "add_position"]);

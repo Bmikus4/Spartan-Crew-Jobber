@@ -26,6 +26,7 @@ export const REASON_CODES: ReadonlyArray<readonly [string, RegExp]> = [
   ["policy_past_day", /before the email was sent/],
   ["policy_day_over", /is already over/],
   ["policy_confirmed_proposal", /the client confirmed/],
+  ["policy_provisional", /is still provisional: confirm it in OnSinch/],
   // Before system_failed: "linked to order N, which the system could not read" is a booking gone, not a fault.
   ["booking_link_unreadable", /linked to order \d+, which the system could not read/],
   ["system_failed", /could not (read|plan|decide)|replay threw|not decided when it arrived/],

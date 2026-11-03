@@ -5941,5 +5941,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0294",
+  "ts": "2026-11-03T13:21:48+00:00",
+  "kind": "measurement",
+  "headline": "Yes on a provisional order opens a confirm card",
+  "subject": "A yes on a provisional order is a card to confirm it, not already booked",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 126,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]
