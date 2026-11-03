@@ -206,7 +206,7 @@ async function auditExtras(model: string, ids: string[], cursor: number, allowed
 const BOT_USER = 2257;
 
 /** Refusals that need no browser: the order, the position, a cut below its workers, and TEST-only while benching. */
-async function preflight(op: Op, order: any, testOnly: boolean): Promise<string[]> {
+export async function preflight(op: Op, order: any, testOnly: boolean): Promise<string[]> {
   if (op.kind === "create_order") return testOnly && op.company_id !== "515" ? ["bench mode: creates only on TEST 515"] : [];
   if (!order) return [`order ${op.order_id} not found`];
   if (testOnly && Number(order.company_id) !== 515) return ["bench mode: writes only on TEST 515"];
@@ -249,6 +249,9 @@ async function step(h: { bot: Bot }, fn: (bot: Bot) => Promise<EditOutcome>): Pr
   try { h.bot = await openBot(); } catch { return out; }
   return fn(h.bot);
 }
+
+/** A throw before the browser opened sent nothing (blocked); after it, the save may have landed, so it is unknown and never run again. */
+export const throwStatus = (phase: "pre" | "browser"): "blocked" | "unknown" => (phase === "pre" ? "blocked" : "unknown");
 
 export async function runOp(source: string, op: Op, opts: { testOnly: boolean } = { testOnly: true }): Promise<RunResult> {
   const key = opKey(source, op);
@@ -364,7 +367,7 @@ export async function runOp(source: string, op: Op, opts: { testOnly: boolean } 
     return finish(key, op, out, orderId!, edit.model, edit.id, cursor);
   } catch (e) {
     const msg = String((e as Error)?.message ?? e).slice(0, 300);
-    const status = phase === "pre" ? "blocked" : "unknown";
+    const status = throwStatus(phase);
     await ledgerSet(key, status, { error: msg }).catch(() => {});
     return { op_key: key, status, reasons: [msg] };
   } finally {

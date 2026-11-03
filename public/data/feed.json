@@ -5955,5 +5955,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0295",
+  "ts": "2026-11-03T13:29:49+00:00",
+  "kind": "measurement",
+  "headline": "9 unpinned guards now fail a test when removed",
+  "subject": "The write and auth guards the whole suite let go are pinned by tests",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 127,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]
