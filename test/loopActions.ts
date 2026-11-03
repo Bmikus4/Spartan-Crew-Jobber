@@ -105,6 +105,14 @@ const order = (id: number, number: number, slots: any[], o: Record<string, unkno
     const later = (await sql`SELECT first_id FROM v2_staff_actions WHERE order_id = 500 ORDER BY first_id`) as any[];
     ok(later.map((x) => Number(x.first_id)).join(",") === "1,5", "an hour on, the 11:50 edit is its own action, and the first is not recorded again", later);
     void r; void reads;
+
+    // A confirm of a provisional order is staff's work, recorded like any other (O31's settling act).
+    await sql`INSERT INTO onsinch_timeline (id, action, creator, created, model, model_id, order_id, data)
+      VALUES (6, 'order_confirm_provisional', 413, '2026-10-20T12:40:00Z'::timestamptz, 'Order', '11950', 950, ${JSON.stringify({ id: "11950", model: "Order" })}::jsonb)`;
+    await sql`UPDATE v2_loop_meta SET value = '"2026-10-20T14:00:00.000Z"'::jsonb WHERE key = 'timeline_complete_at'`;
+    await recordActions(sql as any, t);
+    const conf = (await sql`SELECT what FROM v2_staff_actions WHERE first_id = 6`) as any[];
+    ok(conf.length === 1 && JSON.stringify(conf[0].what) === '["confirm order"]', "a staff confirm is an action", conf);
   }
 
   console.log(fails ? `\n${fails} FAILED` : "\nALL PASS");

@@ -57,12 +57,12 @@ export function groupActs(acts: Array<Act & { row_id: number }>): Group[] {
   return out;
 }
 
-/** The London days an action touched on its order; a PO or a whole-order cancel touches none. */
+/** The London days an action touched on its order: a made or confirmed order every day it holds; a PO or a whole-order cancel none. */
 export function actionDays(g: Pick<Group, "acts">, o: any): string[] {
   const slots = slotsOf(o).filter((s) => s.beginning);
   const ds = new Set<string>();
   for (const a of g.acts) {
-    if (a.what === "create order") live(o).forEach((s) => ds.add(dayOf(s.beginning)));
+    if (a.what === "create order" || a.what === "confirm order") live(o).forEach((s) => ds.add(dayOf(s.beginning)));
     else if (a.model === "SlotTeam") slots.filter((s) => s.team === a.model_id).forEach((s) => ds.add(dayOf(s.beginning)));
     else if (a.model === "Slot" && a.model_id) {
       const b = a.changes?.beginning?.new ?? slots.find((s) => Number(s.id) === a.model_id)?.beginning;
@@ -174,10 +174,11 @@ export async function recordActions(sql: Sql, t: Transport, opts: { deadline?: n
         AND created <= ${new Date(until).toISOString()}::timestamptz ORDER BY id`) as any[])
       .map((r) => ({ ...r, id: Number(r.id), order_id: Number(r.order_id), created: new Date(r.created).toISOString() })) as Row[];
     const { acts } = actsOf(rows, () => ({ number: "", company_id: 0 }));
-    const withIds = acts.filter((a) => a.what !== "confirm order");
+    // A confirm is staff's work: the act that settles a client's yes on a provisional order (O31). Until 3 Nov this
+    // table left out every one (219, 9 Oct-2 Nov), so the loop could not see the asks it settles.
     // Closed in this run: its last change 30 minutes or more before the timeline's complete time, and after the
     // last run's.
-    const closed = groupActs(withIds).filter((g) => g.last_at + GAP > from && g.last_at + GAP <= until);
+    const closed = groupActs(acts).filter((g) => g.last_at + GAP > from && g.last_at + GAP <= until);
     const recs = closed.map((g) => ({ order_id: g.order_id, by: g.by, first_id: g.first_id, first_at: new Date(g.first_at).toISOString(), last_at: new Date(g.last_at).toISOString(),
       rows: g.acts.length, what: [...new Set(g.acts.map((a) => a.what))].sort(), moved_start: movedStarts(g), acts: g.acts }));
     for (let i = 0; i < recs.length; i += 200) {

@@ -5983,5 +5983,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0297",
+  "ts": "2026-11-03T13:41:33+00:00",
+  "kind": "measurement",
+  "headline": "Staff confirms are staff actions",
+  "subject": "The loop's staff actions include staff confirming a provisional order",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 127,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]
