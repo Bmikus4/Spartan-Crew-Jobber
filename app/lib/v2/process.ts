@@ -218,8 +218,12 @@ const decideNewest: Decide = async (newest, earlier) => processMessage(newest, {
 
 /** An email intake stored this long ago and never decided is the sweep's; anything younger may still be in intake's hands (maxDuration 300s). */
 export const UNDECIDED_AFTER_MINUTES = 10;
-/** How far back the sweep looks: mail older than this was the paused engine's, or a person's by now. */
-export const UNDECIDED_WITHIN_HOURS = 24;
+/**
+ * How far back the sweep looks, as long as the sent window below: an email stored and left undecided for more than
+ * 24 h was never picked up, and the heartbeat, which reads the same window, never said so (audit, 3 Nov). Paused
+ * mail is v2_store_only and stays out.
+ */
+export const UNDECIDED_WITHIN_HOURS = 7 * 24;
 /** And how recently it was sent: older mail first stored now is history. */
 export const UNDECIDED_SENT_WITHIN_DAYS = 7;
 const NOT_DECIDED = "this email was not decided when it arrived";

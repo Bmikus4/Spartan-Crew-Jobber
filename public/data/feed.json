@@ -5997,5 +5997,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0298",
+  "ts": "2026-11-03T13:49:11+00:00",
+  "kind": "measurement",
+  "headline": "Undecided sweep looks back 7 days",
+  "subject": "An email left undecided past a day is still swept and still raised",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 127,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]

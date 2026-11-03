@@ -147,6 +147,16 @@ const deps = (over: Partial<DecideDeps>, recorded: unknown[]): DecideDeps => ({
     ok(called && resumed.decided?.includes("p1"), "and unpaused, the same email is decided (the control for the line above)", resumed);
   }
 
+  console.log("\n[g] an email the sweep missed for more than a day is still the sweep's (audit, 3 Nov)");
+  {
+    await at(T0);
+    await captureInboundRaw({ thread_id: "tg", messages: [mail("g1", "2026-11-02T08:00:00Z")] });
+    await at(T0 + 30 * 60 * MIN);
+    let called = false;
+    const g = await sweepUndecided({ decide: async () => { called = true; } });
+    ok(called && g.decided?.includes("g1"), "stored 30 h ago and never decided: decided now, not left for good", g);
+  }
+
   console.log(fails ? `\n${fails} FAILED` : "\nALL PASS");
   process.exit(fails ? 1 : 0);
 })().catch((e) => { console.error(e); process.exit(1); });
