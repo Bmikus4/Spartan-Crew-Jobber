@@ -157,16 +157,15 @@ export function errorEmailText(
 }
 
 /**
- * NO WEBHOOK-CAPABLE ENVIRONMENT MEANS NO EMAIL. A preview deployment and a local run have no
- * business emailing anyone: in HoH, local test runs sent 17 real emails before this gate
- * existed. `SPARTAN_ERROR_NOTIFY=1` is the deliberate override for verifying the channel by
- * hand — one env var, typed on purpose, rather than a default that has to be remembered.
+ * NO EMAIL UNLESS SPARTAN_ERROR_NOTIFY=1. The owner asked on 4 Nov to stop error emails to his inbox, so a
+ * deployment no longer emails by default; the variable, set in Vercel on purpose, is the one way to turn the
+ * channel back on. A local run never emailed by default either: in HoH, local test runs sent 17 real emails
+ * before a gate existed.
  *
- * The gate is about the CHANNEL, not the count: a blocked report is still recorded.
+ * The gate is about the CHANNEL, not the count: a blocked report is still recorded in error_reports.
  */
 export function notifyAllowed(): boolean {
-  if ((process.env.SPARTAN_ERROR_NOTIFY || "").trim() === "1") return true;
-  return !!(process.env.VERCEL || "").trim();
+  return (process.env.SPARTAN_ERROR_NOTIFY || "").trim() === "1";
 }
 
 // --- counting -----------------------------------------------------------------------------

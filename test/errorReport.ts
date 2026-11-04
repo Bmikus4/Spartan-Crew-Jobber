@@ -51,11 +51,15 @@ function spyFetch(reply: () => Promise<Response> | Response) {
   return { calls, restore: () => { globalThis.fetch = real; } };
 }
 
-/** The environment a deployment has: allowed to send. Restored by each caller. */
+/** A deployment with the email channel switched on (SPARTAN_ERROR_NOTIFY=1): allowed to send. Restored by each caller. */
 function asDeployment() {
-  const prior = process.env.VERCEL;
+  const prior = process.env.VERCEL, priorN = process.env.SPARTAN_ERROR_NOTIFY;
   process.env.VERCEL = "1";
-  return () => { if (prior === undefined) delete process.env.VERCEL; else process.env.VERCEL = prior; };
+  process.env.SPARTAN_ERROR_NOTIFY = "1";
+  return () => {
+    if (prior === undefined) delete process.env.VERCEL; else process.env.VERCEL = prior;
+    if (priorN === undefined) delete process.env.SPARTAN_ERROR_NOTIFY; else process.env.SPARTAN_ERROR_NOTIFY = priorN;
+  };
 }
 
 (async () => {
@@ -219,9 +223,12 @@ function asDeployment() {
       ok(store.rows.get(fingerprint("t/gate", "boom"))?.lastEmailedAt === null,
         "and the production email slot is left unclaimed");
 
-      // One env var, typed on purpose, is how the channel gets verified by hand.
+      // A deployment alone no longer emails: the owner switched error email off (4 Nov).
+      process.env.VERCEL = "1";
+      ok(!notifyAllowed(), "a deployment without SPARTAN_ERROR_NOTIFY=1 emails nobody");
+      // One env var, typed on purpose, is how the channel is turned back on.
       process.env.SPARTAN_ERROR_NOTIFY = "1";
-      ok(notifyAllowed(), "the deliberate local override opens it");
+      ok(notifyAllowed(), "SPARTAN_ERROR_NOTIFY=1 opens it");
     } finally {
       spy.restore();
       if (priorV === undefined) delete process.env.VERCEL; else process.env.VERCEL = priorV;
