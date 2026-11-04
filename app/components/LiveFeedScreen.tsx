@@ -89,7 +89,8 @@ function evidenceLine(it: FeedItem): string | null {
   const e = (g.evidence ?? {}) as { text?: string; at?: string; r_number?: string | null; held?: boolean; name?: string };
   const when = hhmm(Date.parse(e.at ?? "") || g.at);
   if ((g.evidence as { ported?: boolean } | null)?.ported) return "Completed, carried over from the jobs board";
-  if (g.mark === "checked") { const who = personName(g.by, e.name); return `Confirmed${who ? ` by ${who}` : ""} ${when}`; }
+  // A person's Confirm says they made the update themselves (O32), so it reads as done like any other (O33).
+  if (g.mark === "checked") { const who = personName(g.by, e.name); return `Done${who ? ` by ${who}` : ""}, ${when}`; }
   if (e.held) return "Already in OnSinch: every shift asked for";
   if (g.mark === "done") return `Done in OnSinch: ${e.text ?? "staff did it"}, ${when}`;
   if (g.mark === "staff-edit") return `Changed in OnSinch by staff: ${e.text ?? "edited"}, ${when}`;
@@ -222,25 +223,26 @@ function When({ card, it, lead, now, s }: { card: FeedCard; it: FeedItem | null;
 
 /**
  * The tick, as CONFIRM (Ben, 2026-10-04): the one thing on a tile a person is meant to
- * press. Pressed, it goes green and still undoes; green from evidence, it is a label that
- * says Done and does nothing.
+ * press. Once green it reads Done and looks the same whether a person confirmed it or the
+ * work was found in OnSinch (Ben, 4 Nov, DECISIONS O33); only a person's own Confirm still
+ * undoes on a press.
  */
 function Tick({ card, it, s, height, onTick }: { card: FeedCard; it: FeedItem; s: number; height: number; onTick: (c: FeedCard, it: FeedItem, checked: boolean) => void }) {
   const ticked = it.green?.mark === "checked";
-  const autoGreen = !!it.green && !ticked;
+  const autoGreen = !!it.green;
   const h = height * s;
-  const label = ticked ? "Confirmed" : it.green ? "Done" : "Confirm";
+  const label = it.green ? "Done" : "Confirm";
   return (
     <button
       aria-label={ticked ? "Undo confirm" : label}
-      onClick={() => { if (!autoGreen) onTick(card, it, !ticked); }}
+      onClick={() => { if (!it.green || ticked) onTick(card, it, !ticked); }}
       style={{
         height: h, minWidth: h * 2.7, padding: `0 ${h * 0.36}px`, borderRadius: h * 0.24, flexShrink: 0,
         display: "inline-flex", alignItems: "center", justifyContent: "center", gap: h * 0.16,
         fontSize: h * 0.4, fontWeight: 700, whiteSpace: "nowrap",
-        color: autoGreen ? GREEN : it.green ? "#fff" : CONFIRM_TEXT, background: autoGreen ? "transparent" : it.green ? GREEN : CONFIRM_FILL,
+        color: autoGreen ? GREEN : CONFIRM_TEXT, background: autoGreen ? "transparent" : CONFIRM_FILL,
         border: autoGreen ? `1px solid ${tint(GREEN, 45)}` : "none",
-        cursor: autoGreen ? "default" : "pointer", transition: "background-color 200ms, color 200ms",
+        cursor: autoGreen && !ticked ? "default" : "pointer", transition: "background-color 200ms, color 200ms",
       }}>
       {it.green && (
         <svg width={h * 0.4} height={h * 0.4} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.2" strokeLinecap="round" strokeLinejoin="round"><polyline points="4.5 12.5 10 18 19.5 6.5" /></svg>
