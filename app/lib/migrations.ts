@@ -573,6 +573,40 @@ export const MIGRATIONS: ReadonlyArray<readonly [id: string, statement: string]>
   // lib/v2/ask.ts: the reading's canonical ask (versioned, every value with its tier and words), derived-only —
   // canonicalAsk() recomputes it from this row's interpretation, so it may be rewritten, never hand-edited.
   ["110_alter_table_v2_decisions_ask", `ALTER TABLE v2_decisions ADD COLUMN IF NOT EXISTS ask JSONB`],
+  // lib/v2/loop/events.ts: every event once, append-only, so a day replays from one relation. (source, ref)
+  // names the event in its own table's key; a landed row is never rewritten (first state stands), and rows
+  // survive their source's pruning (v2_trace keeps 90 days), which is why this is a table and not just the view.
+  ["111_create_table_event_log", `CREATE TABLE IF NOT EXISTS event_log (
+    source TEXT NOT NULL, ref TEXT NOT NULL, at TIMESTAMPTZ NOT NULL, kind TEXT,
+    thread_id TEXT, order_id BIGINT, ask_key TEXT, actor TEXT,
+    stored_at TIMESTAMPTZ NOT NULL DEFAULT now(), PRIMARY KEY (source, ref))`],
+  ["112_create_index_event_log_at", `CREATE INDEX IF NOT EXISTS event_log_at ON event_log (at)`],
+  // The six event tables on one grain. The minute sync lands what this holds that event_log does not, so no
+  // writer is touched and a missed minute loses nothing. Changing the derivation is a new migration replacing
+  // the view. ask_key: only marks and exits carry one today (the item key); the fold will key the rest.
+  ["113_create_view_event_view", `CREATE OR REPLACE VIEW event_view AS
+    SELECT 'mail' AS source, message_id AS ref, date_iso::timestamptz AS at,
+           CASE WHEN is_from_spartan THEN 'outbound' ELSE 'inbound' END AS kind,
+           thread_id, NULL::bigint AS order_id, NULL::text AS ask_key,
+           CASE WHEN is_from_spartan THEN 'spartan' ELSE 'client' END AS actor
+      FROM thread_messages WHERE date_iso IS NOT NULL
+    UNION ALL
+    SELECT 'reader', message_id, created_at, kind, thread_id, NULL, NULL, 'model' FROM v2_decisions
+    UNION ALL
+    SELECT 'trace', id::text, at, component,
+           CASE WHEN EXISTS (SELECT 1 FROM thread_messages m WHERE m.thread_id = v2_trace.trace_id) THEN trace_id END,
+           NULL, NULL, source
+      FROM v2_trace
+    UNION ALL
+    SELECT 'onsinch', id::text, created, action, NULL, order_id, NULL, creator::text FROM onsinch_timeline
+    UNION ALL
+    SELECT 'mark', item_key || ':' || mark || '@' || at, at, mark, thread_id, NULL, item_key, by FROM feed_marks
+    UNION ALL
+    SELECT 'exit', item_key || '@open', opened_at, 'open', thread_id, NULL, item_key, NULL
+      FROM v2_card_exits WHERE opened_at IS NOT NULL
+    UNION ALL
+    SELECT 'exit', item_key || '@exit', exit_at, exit, thread_id, NULL, item_key, exit_by
+      FROM v2_card_exits WHERE exit_at IS NOT NULL`],
 ];
 
 /**

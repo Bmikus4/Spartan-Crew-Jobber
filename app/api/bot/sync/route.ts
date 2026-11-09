@@ -6,6 +6,7 @@ import { resumeStopped } from "../../../lib/v2/resume";
 import { replanOpen } from "../../../lib/v2/replan";
 import { pruneTrace } from "../../../lib/v2/traceLive";
 import { pullTruth } from "../../../lib/v2/loop/truth";
+import { syncEventLog } from "../../../lib/v2/loop/events";
 import { scoreOutcomes } from "../../../lib/v2/loop/outcomes";
 import { recordActions } from "../../../lib/v2/loop/actions";
 import { markNeeds, recordCardExits } from "../../../lib/v2/loop/cards";
@@ -61,6 +62,9 @@ async function sync(request: Request, labels: boolean): Promise<Response> {
     // OnSinch's booking timeline and contact lists, stored for the measurement loop (ADDENDUM §12.2): GETs only,
     // so it runs paused too; a read that fails turns the sync red rather than leaving a gap nobody sees.
     ["truth", () => pullTruth(sql, t as never)],
+    // Whatever event_view holds that event_log does not lands now, after the minute's timeline rows (build 3):
+    // append-only, derived, so a missed minute loses nothing.
+    ["events", () => syncEventLog(sql)],
     // Every email since 9 Oct judged against what staff did once its window closed (ADDENDUM §12.2); GETs only.
     ["outcomes", () => scoreOutcomes(sql, t as never, { deadline: Date.now() + 90_000 })],
     // Each staff action once: covered by a card first or not, a moved start, a new order against one per venue.

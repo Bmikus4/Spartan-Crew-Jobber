@@ -6095,5 +6095,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0305",
+  "ts": "2026-11-09T03:12:20+00:00",
+  "kind": "measurement",
+  "headline": "event_log + event_view (migrations 111-113) land the six event tables on one grain from the minute sync's new events step, no writer touched; the key gaps: 65% of OnSinch events have no conversation key (research gap list, 8 Nov)",
+  "subject": "A day replays from one relation: event_log holds every event, append-only",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 129,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]
