@@ -6123,5 +6123,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0307",
+  "ts": "2026-11-09T12:25:44+00:00",
+  "kind": "measurement",
+  "headline": "fold scored on production: work-detect 86% acc / 96% recall at $0 on build 0's own 50 and truth (baseline 68%/52%, $0.73); refold determinism 0/548; diff now compares canonical JSON (jsonb key order + dropped undefined keys faked 548 drifts)",
+  "subject": "The refold drift check goes red only on real drift, and production shows none",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 130,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]

@@ -46,18 +46,21 @@ for (const l of links) for (const a of actsByOrder.get(Number(l.order_id)) ?? []
   push(l.thread_id, { t: new Date(a.t).toISOString(), kind: "act", id: `act:${a.id}:${l.thread_id}`, order_id: Number(a.order_id), row_id: Number(a.id), creator: Number(a.creator) });
 
 const RANK = { mail: 0, reading: 1, act: 2 } as const;
+// jsonb returns keys in its own order, so a byte compare of plain stringify always "drifts".
+const stable = (x: any): string => Array.isArray(x) ? `[${x.map(stable).join(",")}]`
+  : x && typeof x === "object" ? `{${Object.keys(x).filter((k) => x[k] !== undefined).sort().map((k) => `${JSON.stringify(k)}:${stable(x[k])}`).join(",")}}`
+  : JSON.stringify(x);
 let filled = 0, differ = 0, askTotal = 0;
 const stored = mode === "diff"
-  ? new Map(((await sql`SELECT thread_id, state FROM fold_state`) as any[]).map((r: any) => [r.thread_id, JSON.stringify(r.state)]))
+  ? new Map(((await sql`SELECT thread_id, state FROM fold_state`) as any[]).map((r: any) => [r.thread_id, stable(r.state)]))
   : new Map();
 const updates: Array<{ thread_id: string; state: string; last_event: string | null; last_t: string | null }> = [];
 for (const tid of ids) {
   const events = (byThread.get(tid) ?? []).sort((a, b) => a.t.localeCompare(b.t) || RANK[a.kind] - RANK[b.kind] || a.id.localeCompare(b.id));
   const s = foldAll(tid, events);
   askTotal += s.asks.length;
-  const j = JSON.stringify(s);
-  if (mode === "diff") { if (stored.get(tid) !== j) differ++; continue; }
-  updates.push({ thread_id: tid, state: j, last_event: s.last_event, last_t: s.last_t });
+  if (mode === "diff") { if (stored.get(tid) !== stable(s)) differ++; continue; }
+  updates.push({ thread_id: tid, state: JSON.stringify(s), last_event: s.last_event, last_t: s.last_t });
 }
 if (mode === "diff") {
   console.log(`refolded ${ids.length} threads (${askTotal} asks): ${differ} differ from fold_state${differ ? " — REFOLD DRIFT, investigate before trusting stored state" : ""}`);
