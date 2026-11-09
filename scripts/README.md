@@ -4,7 +4,7 @@ Made by `node scripts/scripts-index.mjs` from each script's own code; test/scrip
 is missing here or its class has changed. **Never run a script marked writes without reading it first**: the gate
 (scripts/session.py) is the only sanctioned way to ship, and production is read only through scripts/_readonly.mts.
 
-135 scripts: 43 can write, 66 read production, 26 are offline. npm marks the ones package.json runs.
+136 scripts: 44 can write, 66 read production, 26 are offline. npm marks the ones package.json runs.
 
 | script | can touch | npm | what it says it is for |
 |---|---|---|---|
@@ -15,6 +15,7 @@ is missing here or its class has changed. **Never run a script marked writes wit
 | backfill-envelope.mjs | writes: database | npm | Fills inbound_raw.envelope and inbound_raw.message_ids for rows captured before the |
 | backfill-gate-reason.mjs | writes: database |  | Give the already-dismissed tickets their reason back, deterministically. |
 | backfill-job-numbers.ts | writes: database |  | Fill in the identifiers a human searches OnSinch with — J<Job.id> and |
+| backfill-orders-raw.mts | writes: database |  | Every order OnSinch serves, stored raw and append-only (research build 1). |
 | backfill-pause-window.mts | writes: n8n |  | Store, without deciding, the client emails intake never took during the 10-21 pause. |
 | backfill-thread-messages.mjs | writes: database | npm | Decomposes the inbound_raw payloads already stored into thread_messages, so the history |
 | build-n8n-workflow.mjs | writes: OnSinch, n8n, Gmail |  | PHASE C2/C3 — generate the NEW n8n trigger workflow that feeds the Vercel |

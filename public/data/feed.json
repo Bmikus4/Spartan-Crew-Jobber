@@ -6067,5 +6067,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0303",
+  "ts": "2026-11-09T02:58:46+00:00",
+  "kind": "measurement",
+  "headline": "onsinch_orders_raw (109) + backfill script; probe: OnSinch serves 7,625 orders (113..11997, from Nov 2023) and the timeline API reaches id 1 (Oct 2023) against our 867675+",
+  "subject": "The database keeps every order OnSinch serves as fetched, append-only",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 127,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]

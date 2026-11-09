@@ -564,6 +564,12 @@ export const MIGRATIONS: ReadonlyArray<readonly [id: string, statement: string]>
   ["107_alter_table_onsinch_contacts", `ALTER TABLE onsinch_contacts ADD COLUMN IF NOT EXISTS name TEXT`],
   // lib/feed/history.ts: the TV's list as it stood, so the team can look back (the owner, 1 Nov); 30 days kept.
   ["108_create_table_feed_history", `CREATE TABLE IF NOT EXISTS feed_history (at TIMESTAMPTZ PRIMARY KEY, digest TEXT NOT NULL, body JSONB NOT NULL)`],
+  // scripts/backfill-orders-raw.mts: every order OnSinch serves, as fetched. onsinch_orders is a current-state
+  // cache whose body each refresh overwrites; a row here is never updated, so an order's body at fetch time stays
+  // readable after later fetches. As-of joins need that history, and OnSinch itself keeps none for deleted orders.
+  ["109_create_table_onsinch_orders_raw", `CREATE TABLE IF NOT EXISTS onsinch_orders_raw (
+    order_id BIGINT NOT NULL, fetched_at TIMESTAMPTZ NOT NULL DEFAULT now(), number TEXT, company_id INTEGER,
+    body JSONB NOT NULL, PRIMARY KEY (order_id, fetched_at))`],
 ];
 
 /**
