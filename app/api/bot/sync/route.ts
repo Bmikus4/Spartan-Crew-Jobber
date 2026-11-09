@@ -7,6 +7,7 @@ import { replanOpen } from "../../../lib/v2/replan";
 import { pruneTrace } from "../../../lib/v2/traceLive";
 import { pullTruth } from "../../../lib/v2/loop/truth";
 import { syncEventLog } from "../../../lib/v2/loop/events";
+import { syncFold } from "../../../lib/v2/fold/live";
 import { scoreOutcomes } from "../../../lib/v2/loop/outcomes";
 import { recordActions } from "../../../lib/v2/loop/actions";
 import { markNeeds, recordCardExits } from "../../../lib/v2/loop/cards";
@@ -65,6 +66,9 @@ async function sync(request: Request, labels: boolean): Promise<Response> {
     // Whatever event_view holds that event_log does not lands now, after the minute's timeline rows (build 3):
     // append-only, derived, so a missed minute loses nothing.
     ["events", () => syncEventLog(sql)],
+    // The fold: refold the threads whose events moved, and once a day refold everything and throw on
+    // any difference (the owner wired it in 9 Nov after it scored 86%/96% against behavior).
+    ["fold", () => syncFold(sql)],
     // Every email since 9 Oct judged against what staff did once its window closed (ADDENDUM §12.2); GETs only.
     ["outcomes", () => scoreOutcomes(sql, t as never, { deadline: Date.now() + 90_000 })],
     // Each staff action once: covered by a card first or not, a moved start, a new order against one per venue.

@@ -6137,5 +6137,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0308",
+  "ts": "2026-11-09T12:31:46+00:00",
+  "kind": "measurement",
+  "headline": "syncFold wired into /api/bot/sync after events: incremental refold of moved threads (index 115 for the timeline arm), version-bump heal, daily refold-and-diff throws on drift; refold.mts collapsed onto the same lib; no consumer reads fold_state yet",
+  "subject": "The minute sync keeps every conversation's fold state current, drift checked daily",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 131,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]
