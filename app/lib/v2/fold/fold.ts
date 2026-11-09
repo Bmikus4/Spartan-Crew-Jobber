@@ -11,7 +11,8 @@
 // ============================================================================
 import type { CanonicalAsk } from "../ask";
 
-export const FOLD_VERSION = "fold-v1";
+// v1.1: asks carry place_id for the comparator's venue check; the version bump refolds every thread once.
+export const FOLD_VERSION = "fold-v1.1";
 
 export type FoldEvent =
   | { t: string; kind: "mail"; id: string; from: "client" | "spartan" }
@@ -23,6 +24,8 @@ export type AskState = {
   akind: string;          // the reading's action
   date?: string;
   order_id?: number;
+  /** The resolved venue from the reading, for the comparator's venue check. */
+  place_id?: number;
   values: Record<string, unknown>;
   status: "open" | "acted" | "withdrawn";
   opened_at: string;
@@ -73,7 +76,9 @@ export function foldEvent(s: FoldState, e: FoldEvent): FoldState {
         open.merged.push(r.key);
         if (open.status === "acted") { open.status = "open"; open.acted_at = undefined; }
       } else {
-        asks.push({ key: r.key, akind: r.kind, date, order_id: r.order_id ?? undefined, values: vals, status: "open", opened_at: e.t, proof: [], merged: [] });
+        const fresh: typeof asks[number] = { key: r.key, akind: r.kind, date, order_id: r.order_id ?? undefined, values: vals, status: "open", opened_at: e.t, proof: [], merged: [] };
+        if (r.place_id !== undefined && r.place_id !== null) fresh.place_id = r.place_id;
+        asks.push(fresh);
       }
     }
   } else if (e.kind === "act") {

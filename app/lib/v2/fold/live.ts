@@ -12,6 +12,7 @@
 import type { NeonQueryFunction } from "@neondatabase/serverless";
 import { ensureSchema } from "../../migrations";
 import { foldAll, FOLD_VERSION, type FoldEvent } from "./fold";
+import { compare, tally } from "./compare";
 
 type Sql = NeonQueryFunction<false, false>;
 
@@ -86,12 +87,48 @@ const setMeta = (sql: Sql, key: string, value: string) => sql`INSERT INTO v2_loo
   VALUES (${key}, ${JSON.stringify(value)}::jsonb, now()) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, at = now()`;
 
 export const DIFF_EVERY_MS = 24 * 3600e3;
+/** Verdicts re-read per run beyond the refolded: the whole table comes round in about 15 minutes. */
+export const COMPARE_PER_RUN = 40;
+
+/**
+ * The comparator over these threads: the freshest stored body per reachable order (the live cache
+ * first, the raw pull where the cache is empty), then compare(), stored beside the state.
+ */
+export async function compareThreads(sql: Sql, tids: string[]): Promise<Record<string, number>> {
+  if (!tids.length) return {};
+  const states = (await sql`SELECT thread_id, state FROM fold_state WHERE thread_id = ANY(${tids}::text[])`) as any[];
+  const links = (await sql`SELECT thread_id, order_id FROM job_links
+    WHERE thread_id = ANY(${tids}::text[]) AND state IN ('linked','relinked')`) as any[];
+  const ordersBy = new Map<string, number[]>();
+  for (const l of links) { const a = ordersBy.get(l.thread_id) ?? []; a.push(Number(l.order_id)); ordersBy.set(l.thread_id, a); }
+  const named = states.flatMap((r: any) => (r.state.asks ?? []).map((a: any) => Number(a.order_id)).filter(Boolean));
+  const oids = [...new Set([...links.map((l: any) => Number(l.order_id)), ...named])];
+  const bodies = new Map<number, any>();
+  if (oids.length) {
+    const live = (await sql`SELECT order_id, body FROM onsinch_orders
+      WHERE order_id = ANY(${oids}::bigint[]) AND body IS NOT NULL AND deleted_at IS NULL`) as any[];
+    for (const b of live) bodies.set(Number(b.order_id), b.body);
+    const missing = oids.filter((o) => !bodies.has(o));
+    if (missing.length) {
+      const raw = (await sql`SELECT DISTINCT ON (order_id) order_id, body FROM onsinch_orders_raw
+        WHERE order_id = ANY(${missing}::bigint[]) ORDER BY order_id, fetched_at DESC`) as any[];
+      for (const b of raw) bodies.set(Number(b.order_id), b.body);
+    }
+  }
+  const total: Record<string, number> = {};
+  for (const r of states) {
+    const v = compare(r.state, bodies, ordersBy.get(r.thread_id) ?? []);
+    for (const [k, n] of Object.entries(tally(v))) total[k] = (total[k] ?? 0) + n;
+    await sql`UPDATE fold_state SET verdicts = ${JSON.stringify(v)}::jsonb, compared_at = now() WHERE thread_id = ${r.thread_id}`;
+  }
+  return total;
+}
 
 /**
  * The minute step. Refolds the threads whose events moved since the cursor, every thread on a
  * version bump, and once a day refolds everything without writing and throws on any difference.
  */
-export async function syncFold(sql: Sql, now = Date.now()): Promise<{ refolded: number; asks: number; drift?: number }> {
+export async function syncFold(sql: Sql, now = Date.now()): Promise<{ refolded: number; asks: number; verdicts?: Record<string, number>; drift?: number }> {
   await ensureSchema(sql);
   const cursor = (await meta(sql, "fold_sync_at")) ?? "1970-01-01T00:00:00Z";
   const started = new Date(now).toISOString();
@@ -109,6 +146,11 @@ export async function syncFold(sql: Sql, now = Date.now()): Promise<{ refolded: 
   const asks = await foldThreads(sql, tids);
   await setMeta(sql, "fold_sync_at", started);
 
+  // The comparator: the refolded threads now, plus the stalest-compared on a rolling sweep.
+  const sweep = (await sql`SELECT thread_id FROM fold_state WHERE NOT (thread_id = ANY(${tids}::text[]))
+    ORDER BY compared_at NULLS FIRST LIMIT ${COMPARE_PER_RUN}`) as any[];
+  const verdicts = await compareThreads(sql, [...tids, ...sweep.map((r: any) => r.thread_id)]);
+
   const lastDiff = await meta(sql, "fold_diff_at");
   if (!lastDiff || now - Date.parse(lastDiff) >= DIFF_EVERY_MS) {
     const all = await allThreads(sql);
@@ -118,7 +160,7 @@ export async function syncFold(sql: Sql, now = Date.now()): Promise<{ refolded: 
     for (const tid of all) if (stored.get(tid) !== stable(foldAll(tid, events.get(tid) ?? []))) drift++;
     await setMeta(sql, "fold_diff_at", started);
     if (drift) throw new Error(`refold-and-diff: ${drift} of ${all.length} threads differ from fold_state — the fold or its feed has drifted`);
-    return { refolded: tids.length, asks, drift: 0 };
+    return { refolded: tids.length, asks, verdicts, drift: 0 };
   }
-  return { refolded: tids.length, asks };
+  return { refolded: tids.length, asks, verdicts };
 }

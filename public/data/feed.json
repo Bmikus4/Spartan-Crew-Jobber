@@ -6151,5 +6151,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0309",
+  "ts": "2026-11-09T12:56:10+00:00",
+  "kind": "measurement",
+  "headline": "the comparator (compare.ts, verdicts on fold_state via 116): agreement = settled-confirmed/open/withdrawn-confirmed; disagreement = acted-not-held, done-unacted, withdrawn-but-held; unkeyed said never guessed; fold-v1.1 adds place_id for the venue check; sync compares refolded + 40-sweep; disagreements counted, not yet carded",
+  "subject": "Every ask carries a verdict: the fold's word against what OnSinch holds",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 132,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]

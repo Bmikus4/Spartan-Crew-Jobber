@@ -616,6 +616,10 @@ export const MIGRATIONS: ReadonlyArray<readonly [id: string, statement: string]>
   // lib/v2/fold/live.ts syncFold: the minute step finds threads whose timeline rows arrived since the
   // cursor; without this the join scans every stored row each minute.
   ["115_create_index_onsinch_timeline_stored", `CREATE INDEX IF NOT EXISTS onsinch_timeline_stored ON onsinch_timeline (stored_at)`],
+  // lib/v2/fold/compare.ts: the comparator's verdicts per ask, derived-only like the state they sit
+  // beside — recomputed by the sync for refolded threads and on a rolling sweep, so compared_at says
+  // how stale a verdict may be; never hand-edited.
+  ["116_alter_table_fold_state_verdicts", `ALTER TABLE fold_state ADD COLUMN IF NOT EXISTS verdicts JSONB, ADD COLUMN IF NOT EXISTS compared_at TIMESTAMPTZ`],
 ];
 
 /**
