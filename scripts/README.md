@@ -4,7 +4,7 @@ Made by `node scripts/scripts-index.mjs` from each script's own code; test/scrip
 is missing here or its class has changed. **Never run a script marked writes without reading it first**: the gate
 (scripts/session.py) is the only sanctioned way to ship, and production is read only through scripts/_readonly.mts.
 
-136 scripts: 44 can write, 66 read production, 26 are offline. npm marks the ones package.json runs.
+137 scripts: 44 can write, 67 read production, 26 are offline. npm marks the ones package.json runs.
 
 | script | can touch | npm | what it says it is for |
 |---|---|---|---|
@@ -63,6 +63,7 @@ is missing here or its class has changed. **Never run a script marked writes wit
 | audit-live-windows.mjs | reads production |  | Which live orders still hold the wrong hour? |
 | audit-vocabulary.mjs | reads production |  | THE CONTROL patch-visible.mjs NEVER RAN |
 | audit-workflow-refs.mjs | reads production |  | Read-only audit: nodes whose expressions reference a node that does not exist |
+| backfill-asks.mts | reads production |  | Every stored reading gets its canonical ask (research build 2). |
 | build-testset.ts | reads production |  | The test set: every live thread, joined to what the engine did and what OnSinch holds. |
 | change-and-copy.mjs | reads production |  | WHAT `common_change` CARRIES, AND WHETHER CONFIRM IS A COPY |
 | check-new-enquiries.mjs | reads production |  | Read-only: what the engine made of every enquiry that arrived after a given |

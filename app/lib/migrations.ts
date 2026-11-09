@@ -570,6 +570,9 @@ export const MIGRATIONS: ReadonlyArray<readonly [id: string, statement: string]>
   ["109_create_table_onsinch_orders_raw", `CREATE TABLE IF NOT EXISTS onsinch_orders_raw (
     order_id BIGINT NOT NULL, fetched_at TIMESTAMPTZ NOT NULL DEFAULT now(), number TEXT, company_id INTEGER,
     body JSONB NOT NULL, PRIMARY KEY (order_id, fetched_at))`],
+  // lib/v2/ask.ts: the reading's canonical ask (versioned, every value with its tier and words), derived-only —
+  // canonicalAsk() recomputes it from this row's interpretation, so it may be rewritten, never hand-edited.
+  ["110_alter_table_v2_decisions_ask", `ALTER TABLE v2_decisions ADD COLUMN IF NOT EXISTS ask JSONB`],
 ];
 
 /**

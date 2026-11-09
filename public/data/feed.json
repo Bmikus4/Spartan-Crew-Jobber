@@ -6081,5 +6081,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0304",
+  "ts": "2026-11-09T03:04:53+00:00",
+  "kind": "measurement",
+  "headline": "ask-v1 (migration 110, app/lib/v2/ask.ts): the canonical ask is a pure function of the stored reading; 1,375 of 1,376 past readings canonicalise (940 asks); recordDecision writes it on every new reading",
+  "subject": "Every reading carries a canonical ask: versioned values with tier and words",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 128,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]

@@ -15,6 +15,7 @@ import { httpTransport, OnsinchClient } from "../onsinch/onsinch";
 import { matchCompanyBySender, normName } from "../onsinch/resolve";
 import { extractWithMeta, malformedReading, type Extraction, type ExtractMeta } from "./interpret/extract";
 import { ground, type Interpretation, type Request } from "./interpret/interpret";
+import { canonicalAsk } from "./ask";
 import { latestText } from "./interpret/ground";
 import { plan, shareReads, type Decision, type PlanOpts, type World } from "./interpret/plan";
 import { planVariants, recordVariants, type Variant } from "./loop/variants";
@@ -354,12 +355,13 @@ export type Recorded = { kind: Decision["kind"]; interpretation: { extraction: E
  * processMessage's check for something sent runs before this and is not atomic with it; this is the second guard.
  */
 export async function recordDecision(sql: NeonQueryFunction<false, false>, m: { message_id: string; thread_id: string; from: string; sent_at: string }, d: Recorded): Promise<void> {
+  const ask = canonicalAsk(m.message_id, d.interpretation);
   await sql`
-    INSERT INTO v2_decisions (message_id, thread_id, from_address, sent_at, kind, interpretation, decision, executed, code_version, company_id, company)
-    VALUES (${m.message_id}, ${m.thread_id}, ${m.from}, ${m.sent_at}, ${d.kind}, ${JSON.stringify(d.interpretation)}::jsonb, ${JSON.stringify(d.decision)}::jsonb, ${d.executed ? JSON.stringify(d.executed) : null}::jsonb, ${codeVersion()}, ${d.client.id}, ${d.client.name})
+    INSERT INTO v2_decisions (message_id, thread_id, from_address, sent_at, kind, interpretation, decision, executed, code_version, company_id, company, ask)
+    VALUES (${m.message_id}, ${m.thread_id}, ${m.from}, ${m.sent_at}, ${d.kind}, ${JSON.stringify(d.interpretation)}::jsonb, ${JSON.stringify(d.decision)}::jsonb, ${d.executed ? JSON.stringify(d.executed) : null}::jsonb, ${codeVersion()}, ${d.client.id}, ${d.client.name}, ${ask ? JSON.stringify(ask) : null}::jsonb)
     ON CONFLICT (message_id) DO UPDATE SET kind = EXCLUDED.kind, interpretation = EXCLUDED.interpretation, decision = EXCLUDED.decision,
       executed = coalesce(EXCLUDED.executed, v2_decisions.executed), code_version = EXCLUDED.code_version,
-      company_id = EXCLUDED.company_id, company = EXCLUDED.company`;
+      company_id = EXCLUDED.company_id, company = EXCLUDED.company, ask = EXCLUDED.ask`;
 }
 
 /**
