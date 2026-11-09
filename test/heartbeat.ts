@@ -97,11 +97,11 @@ const wheres = (r: Array<{ where: string }>) => r.map((x) => x.where).sort().joi
     await captureInboundRaw({ thread_id: "lq2", messages: [mail("lq2a", "sam@client.co.uk", "2026-10-01T09:00:00Z")] });
     await at(T0 + 2 * MIN);
     await captureInboundRaw({ thread_id: "lq3", messages: [mail("lq3a", "noreply@onsinch.com", "2026-11-04T09:01:00Z")] });
-    ok(await oldestUndecidedAt() === null, "store-only mail, history stored late and non-client mail are no lag", await oldestUndecidedAt());
+    ok(await oldestUndecidedAt(clock.now()) === null, "store-only mail, history stored late and non-client mail are no lag", await oldestUndecidedAt(clock.now()));
     await at(T0 + 3 * MIN);
     await captureInboundRaw({ thread_id: "lq4", messages: [mail("lq4a", "sam@client.co.uk", "2026-11-04T09:02:00Z")] });
     await at(T0 + 30 * MIN);
-    ok(await oldestUndecidedAt() === T0 + 3 * MIN, "a client email nothing decided: its storing time", await oldestUndecidedAt());
+    ok(await oldestUndecidedAt(clock.now()) === T0 + 3 * MIN, "a client email nothing decided: its storing time", await oldestUndecidedAt(clock.now()));
   }
 
   console.log(fails ? `\n${fails} FAILED` : "\nALL PASS");

@@ -236,7 +236,7 @@ export type SweepReport = { paused?: true; threads: number; decided: string[]; c
  * (heartbeat.ts). The same mail the sweep would take, test and non-client mail and store-only
  * mail and history stored late left out, so a lag means the sweep itself has stalled.
  */
-export async function oldestUndecidedAt(): Promise<number | null> {
+export async function oldestUndecidedAt(now = Date.now()): Promise<number | null> {
   const sql = await db();
   const rows = ((await sql`
     SELECT m.message_id, m.thread_id, m.from_address, m.date_iso, m.first_seen_at FROM thread_messages m
@@ -246,8 +246,10 @@ export async function oldestUndecidedAt(): Promise<number | null> {
       AND NOT EXISTS (SELECT 1 FROM v2_store_only s WHERE s.message_id = m.message_id)
     ORDER BY m.first_seen_at LIMIT 200`) as any[])
     .filter((r) => !notClient(addr(r.from_address)) && !isTestSender(addr(r.from_address)) && !isTestId(r.message_id) && !isTestId(r.thread_id))
-    // History stored late (a backfill) is not the sweep's, so it is not a lag either.
-    .filter((r) => !(Date.parse(r.date_iso) < Date.now() - UNDECIDED_SENT_WITHIN_DAYS * 86_400_000));
+    // History stored late (a backfill) is not the sweep's, so it is not a lag either. The reference
+    // moment is injectable: the SQL windows above follow the test clock, and a raw Date.now() here
+    // made fixture mail age out of the 7-day window by wall time (2 of 130 red on 9 Nov, no change).
+    .filter((r) => !(Date.parse(r.date_iso) < now - UNDECIDED_SENT_WITHIN_DAYS * 86_400_000));
   return rows.length ? Date.parse(String(rows[0].first_seen_at instanceof Date ? rows[0].first_seen_at.toISOString() : rows[0].first_seen_at)) : null;
 }
 
@@ -280,7 +282,7 @@ export async function storeOnly(message_ids: string[], reason: string): Promise<
  * decision on its thread already overtook is never read now: acting on "4 crew" after "make it
  * 5" was done would undo the newer request, so a person reads it.
  */
-export async function sweepUndecided(opts: { decide?: Decide; limit?: number } = {}): Promise<SweepReport> {
+export async function sweepUndecided(opts: { decide?: Decide; limit?: number; now?: number } = {}): Promise<SweepReport> {
   if (automationPausedFlag()) return { paused: true, threads: 0, decided: [], carded: [], filtered: [] };
   const sql = await db();
   const rows = ((await sql`
@@ -295,7 +297,9 @@ export async function sweepUndecided(opts: { decide?: Decide; limit?: number } =
     // sent weeks ago and stored only now came from a backfill (scripts/backfill-thread-messages.mjs
     // decomposes old payloads), not from a delivery whose decision was lost.
     .filter((r) => !isTestSender(addr(r.from_address)) && !isTestId(r.message_id) && !isTestId(r.thread_id))
-    .filter((r) => !(Date.parse(r.date_iso) < Date.now() - UNDECIDED_SENT_WITHIN_DAYS * 86_400_000));
+    // Injectable for the same reason as oldestUndecidedAt's: the SQL windows follow the test clock,
+    // and this JS filter must follow the same moment or fixtures age out by wall time.
+    .filter((r) => !(Date.parse(r.date_iso) < (opts.now ?? Date.now()) - UNDECIDED_SENT_WITHIN_DAYS * 86_400_000));
   const rep: SweepReport = { threads: 0, decided: [], carded: [], filtered: [] };
   const record = (r: any, kind: "none" | "handoff", decision: Decision) => sql`
     INSERT INTO v2_decisions (message_id, thread_id, from_address, sent_at, kind, decision, code_version)

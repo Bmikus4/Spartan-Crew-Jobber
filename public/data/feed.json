@@ -6109,5 +6109,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0306",
+  "ts": "2026-11-09T12:19:24+00:00",
+  "kind": "measurement",
+  "headline": "fold-v1 (fold.ts, fold_state 114, refold.mts fill|diff): pure, chunk-equal, cancel/merge/reopen pinned; not wired into the pipeline. Also defused: the sweep's 7-day sent filter read the wall clock past the test clock, so fixture mail aged out and 3 files went red by date alone (now injectable, opts.now)",
+  "subject": "A conversation's standing state folds from its stored events, pure and replayable",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 130,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]

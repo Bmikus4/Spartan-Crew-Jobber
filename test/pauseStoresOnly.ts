@@ -48,7 +48,7 @@ const at = async (ms: number) => { clock.set(ms); await syncSqlClock(); };
   await captureInboundRaw({ thread_id: "tu", messages: [mail("u1", "2026-11-02T08:10:00Z")] });
   await at(T0 + 20 * MIN);
   const asked: string[] = [];
-  const rep = await sweepUndecided({ decide: async (id: string) => { asked.push(id); } });
+  const rep = await sweepUndecided({ now: clock.now(), decide: async (id: string) => { asked.push(id); } });
   ok(!asked.includes("q2") && !asked.includes("q1"), "the pause-time mail is never decided", { asked, rep });
   ok(asked.includes("u1"), "control: mail stored outside the pause is decided", { asked, rep });
   const rows = (await sql`SELECT message_id FROM v2_decisions WHERE message_id IN ('q1', 'q2')`) as any[];

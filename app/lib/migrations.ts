@@ -607,6 +607,12 @@ export const MIGRATIONS: ReadonlyArray<readonly [id: string, statement: string]>
     UNION ALL
     SELECT 'exit', item_key || '@exit', exit_at, exit, thread_id, NULL, item_key, exit_by
       FROM v2_card_exits WHERE exit_at IS NOT NULL`],
+  // lib/v2/fold/fold.ts: a conversation's standing state, derived-only — scripts/refold.mts recomputes every row
+  // from the stored events, so a row may be overwritten by a refold and is never hand-edited or trusted over the
+  // log it came from. fold_version + last_event say what made it and how fresh it is.
+  ["114_create_table_fold_state", `CREATE TABLE IF NOT EXISTS fold_state (
+    thread_id TEXT PRIMARY KEY, state JSONB NOT NULL, fold_version TEXT NOT NULL,
+    last_event TEXT, last_t TIMESTAMPTZ, folded_at TIMESTAMPTZ NOT NULL DEFAULT now())`],
 ];
 
 /**

@@ -79,7 +79,7 @@ const deps = (over: Partial<DecideDeps>, recorded: unknown[]): DecideDeps => ({
   console.log("\n[d] the sweep decides what intake stored and never decided");
   {
     await at(T0 + 4 * MIN);
-    const early = await sweepUndecided({ decide: async () => { throw new Error("not reached"); } });
+    const early = await sweepUndecided({ now: clock.now(), decide: async () => { throw new Error("not reached"); } });
     ok((early.decided?.length ?? 0) === 0 && (early.carded?.length ?? 0) === 0, "an email stored under 10 minutes ago is still intake's", early);
 
     await at(T0 + 20 * MIN);
@@ -89,7 +89,7 @@ const deps = (over: Partial<DecideDeps>, recorded: unknown[]): DecideDeps => ({
       if (newest === "a1") throw new Error("record failed");
       await sql`UPDATE v2_decisions SET kind = 'write', decision = ${JSON.stringify({ kind: "write", ops: [], why: ["test"] })}::jsonb WHERE message_id = ${newest}`;
     };
-    const rep = await sweepUndecided({ decide });
+    const rep = await sweepUndecided({ now: clock.now(), decide });
     ok(asked.some(([n, e]) => n === "c2" && JSON.stringify(e) === '["c1"]'), "a thread's undecided emails are read together, decided on the newest", asked);
     const c = await rowsFor(["c1", "c2"]);
     ok(c.length === 2 && c[1].kind === "write" && c[0].kind === "none" && /read together with the later email c2/.test(c[0].decision.reason), "the newest carries the decision, the earlier one says it was read with it", c);
@@ -99,7 +99,7 @@ const deps = (over: Partial<DecideDeps>, recorded: unknown[]): DecideDeps => ({
     ok(card?.item?.kind === "needs-created", "and the TV shows it", card?.item);
     ok(rep.carded?.includes("a1") && rep.decided?.includes("c2"), "the sweep says what it did", rep);
 
-    const again = await sweepUndecided({ decide: async () => { throw new Error("must not be asked twice"); } });
+    const again = await sweepUndecided({ now: clock.now(), decide: async () => { throw new Error("must not be asked twice"); } });
     ok((again.decided?.length ?? 0) === 0 && (again.carded?.length ?? 0) === 0, "a second pass finds nothing left", again);
   }
 
@@ -110,7 +110,7 @@ const deps = (over: Partial<DecideDeps>, recorded: unknown[]): DecideDeps => ({
     await sql`INSERT INTO v2_decisions (message_id, thread_id, from_address, sent_at, kind, decision) VALUES ('e2', 'te', 'sam@client.co.uk', '2026-11-02T08:30:00Z', 'write', ${JSON.stringify({ kind: "write", ops: [], why: [] })}::jsonb)`;
     await at(T0 + 20 * MIN);
     let called = false;
-    await sweepUndecided({ decide: async () => { called = true; } });
+    await sweepUndecided({ now: clock.now(), decide: async () => { called = true; } });
     const e = await rowsFor(["e1"]);
     ok(!called && e.length === 1 && e[0].kind === "handoff" && /a later email on the thread was decided first/.test(e[0].decision.reasons[0]), "reading it now could undo the later one, so a person reads it", e);
   }
@@ -125,14 +125,14 @@ const deps = (over: Partial<DecideDeps>, recorded: unknown[]): DecideDeps => ({
     ] });
     await at(T0 + 20 * MIN);
     let called = false;
-    await sweepUndecided({ decide: async () => { called = true; } });
+    await sweepUndecided({ now: clock.now(), decide: async () => { called = true; } });
     const f = await rowsFor(["f1", "f2", "f3"]);
     ok(!called && f.length === 1 && f[0].message_id === "f3" && f[0].kind === "none", "our own mail and test mail are not decided; system mail gets its 'not a client' row", f);
 
     await at(T0);
     await captureInboundRaw({ thread_id: "th", messages: [mail("h1", "2026-08-01T08:00:00Z")] });
     await at(T0 + 20 * MIN);
-    await sweepUndecided({ decide: async () => { called = true; } });
+    await sweepUndecided({ now: clock.now(), decide: async () => { called = true; } });
     ok(!called && (await rowsFor(["h1"])).length === 0, "an email sent weeks ago and stored only now is history (a backfill), never a model call", await rowsFor(["h1"]));
 
     await at(T0);
@@ -140,10 +140,10 @@ const deps = (over: Partial<DecideDeps>, recorded: unknown[]): DecideDeps => ({
     await captureInboundRaw({ thread_id: "tp", messages: [mail("p1", "2026-11-02T08:00:00Z")] });
     await at(T0 + 20 * MIN);
     process.env.SPARTAN_PAUSED = "1";
-    const p = await sweepUndecided({ decide: async () => { called = true; } });
+    const p = await sweepUndecided({ now: clock.now(), decide: async () => { called = true; } });
     delete process.env.SPARTAN_PAUSED;
     ok(p.paused === true && !called && (await rowsFor(["p1"])).length === 0, "paused, the sweep reads and writes nothing", p);
-    const resumed = await sweepUndecided({ decide: async () => { called = true; } });
+    const resumed = await sweepUndecided({ now: clock.now(), decide: async () => { called = true; } });
     ok(called && resumed.decided?.includes("p1"), "and unpaused, the same email is decided (the control for the line above)", resumed);
   }
 
@@ -153,7 +153,7 @@ const deps = (over: Partial<DecideDeps>, recorded: unknown[]): DecideDeps => ({
     await captureInboundRaw({ thread_id: "tg", messages: [mail("g1", "2026-11-02T08:00:00Z")] });
     await at(T0 + 30 * 60 * MIN);
     let called = false;
-    const g = await sweepUndecided({ decide: async () => { called = true; } });
+    const g = await sweepUndecided({ now: clock.now(), decide: async () => { called = true; } });
     ok(called && g.decided?.includes("g1"), "stored 30 h ago and never decided: decided now, not left for good", g);
   }
 

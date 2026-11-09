@@ -4,7 +4,7 @@ Made by `node scripts/scripts-index.mjs` from each script's own code; test/scrip
 is missing here or its class has changed. **Never run a script marked writes without reading it first**: the gate
 (scripts/session.py) is the only sanctioned way to ship, and production is read only through scripts/_readonly.mts.
 
-137 scripts: 44 can write, 67 read production, 26 are offline. npm marks the ones package.json runs.
+138 scripts: 45 can write, 67 read production, 26 are offline. npm marks the ones package.json runs.
 
 | script | can touch | npm | what it says it is for |
 |---|---|---|---|
@@ -40,6 +40,7 @@ is missing here or its class has changed. **Never run a script marked writes wit
 | probe-live-wiring.mjs | writes: database |  | Prove the DEPLOYED wiring the way n8n will actually call it: the dedupe claim |
 | probe-threading.mjs | writes: n8n |  | Can RFC headers reproduce Gmail's own threading? Ask Gmail, then check. |
 | prove-browser-bot.mts | writes: OnSinch |  | PROOF THAT THE BROWSER BOT WRITES THE ORDERS, from OnSinch's own log, not ours. |
+| refold.mts | writes: database |  | Every conversation's fold state, recomputed from the stored events (research: the fold, 9 Nov). |
 | repoint-ai-model.mjs | writes: n8n |  | Repoint the workflow's AI classifier nodes at a model that actually exists. |
 | repoint-gmail-cred.mjs | writes: n8n, Gmail |  | Repoint every Gmail node in the live workflow at a different, already-existing |
 | restore-workflow.mjs | writes: n8n |  | Restore the live workflow from one of the timestamped backups in n8n/backups/. |
