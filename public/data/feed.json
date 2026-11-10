@@ -6165,5 +6165,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0310",
+  "ts": "2026-11-10T03:49:38+00:00",
+  "kind": "measurement",
+  "headline": "fold-v2: day-matched acting + the supersede rule; every thread refolds once",
+  "subject": "The fold is v2: an act touches only its days; a restated date supersedes",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 132,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]

@@ -4,7 +4,10 @@
 // Pinned: same events, same state, byte for byte; folding in chunks equals folding whole (the
 // associativity property); a restated ask merges instead of duplicating; a cancel withdraws its
 // target; a staff act marks open asks acted with proof; an acted ask asked again reopens; expiry
-// is computed at a stated time, never the wall clock. Offline, no database.
+// is computed at a stated time, never the wall clock. fold-v2: an act naming its days acts only
+// asks on those days (dayless acts keep v1's everything); a restated date supersedes the old ask
+// only when exactly one same-kind ask on the same named order matches, never a sibling from the
+// same email. Offline, no database.
 // npx tsx test/fold.ts
 // ============================================================================
 import { emptyState, foldAll, foldEvent, expired, type FoldEvent } from "../app/lib/v2/fold/fold";
@@ -19,7 +22,7 @@ const ask = (key: string, kind: string, date?: string, extra: Record<string, unk
 });
 const reading = (t: string, id: string, asks: any[]): FoldEvent => ({ t, kind: "reading", id, ask: { version: "ask-v1", message_id: id, intent: "booking", asks, problems: [] } as any });
 const mail = (t: string, id: string, from: "client" | "spartan"): FoldEvent => ({ t, kind: "mail", id, from });
-const act = (t: string, id: string, order_id: number, row_id: number): FoldEvent => ({ t, kind: "act", id, order_id, row_id, creator: 7 });
+const act = (t: string, id: string, order_id: number, row_id: number, days?: string[]): FoldEvent => ({ t, kind: "act", id, order_id, row_id, creator: 7, ...(days ? { days } : {}) });
 
 const events: FoldEvent[] = [
   mail("2026-11-02T09:00Z", "m1", "client"),
@@ -69,6 +72,54 @@ const two = foldAll("t3", [
   act("2026-11-02T10:00Z", "a2", 500, 9002),
 ]);
 ok(two.asks[0].status === "acted" && two.asks[1].status === "open", "order-named asks wait for their own order", two.asks.map((a) => a.status));
+
+console.log("\n[days] an act naming its days acts only asks on those days (fold-v2)");
+const monTue = reading("2026-11-02T09:00Z", "m5", [ask("m5:0", "new_shift", "2026-11-12"), ask("m5:1", "new_shift", "2026-11-13")]);
+const dayed = foldAll("t4", [monTue, act("2026-11-02T10:00Z", "a3", 500, 9003, ["2026-11-12"])]);
+ok(dayed.asks[0].status === "acted" && dayed.asks[1].status === "open", "the act's day is acted, the other day waits", dayed.asks.map((a) => `${a.date}:${a.status}`));
+const moved = foldAll("t4b", [monTue, act("2026-11-02T10:00Z", "a4", 500, 9004, ["2026-11-13", "2026-11-14"])]);
+ok(moved.asks[0].status === "open" && moved.asks[1].status === "acted", "a move names both its days; the old day's ask is among them", moved.asks.map((a) => `${a.date}:${a.status}`));
+const dayless = foldAll("t4c", [monTue, act("2026-11-02T10:00Z", "a5", 500, 9005)]);
+ok(dayless.asks.every((a) => a.status === "acted"), "an act with no recoverable day keeps v1: never less acted", dayless.asks.map((a) => a.status));
+const dateless = foldAll("t4d", [reading("2026-11-02T09:00Z", "m6", [ask("m6:0", "change_crew")]), act("2026-11-02T10:00Z", "a6", 500, 9006, ["2026-11-20"])]);
+ok(dateless.asks[0].status === "acted", "an ask naming no day cannot be day-gated", dateless.asks[0]);
+
+console.log("\n[supersede] a restated date replaces the old ask; ambiguity and siblings never do");
+const dated = (key: string, date: string, order_id = 600, kind = "new_shift") => ({ ...ask(key, kind, date), order_id });
+const sup = foldAll("t5", [
+  reading("2026-11-02T09:00Z", "m7", [dated("m7:0", "2026-11-12")]),
+  reading("2026-11-03T09:00Z", "m8", [dated("m8:0", "2026-11-14")]),
+]);
+ok(sup.asks[0].status === "superseded" && sup.asks[0].merged.includes("m8:0") && sup.asks[1].status === "open",
+  "same kind, same order, new date: the old ask is superseded with the new key in merged", sup.asks.map((a) => `${a.date}:${a.status}`));
+const acted = foldAll("t5b", [
+  reading("2026-11-02T09:00Z", "m7", [dated("m7:0", "2026-11-12")]),
+  act("2026-11-02T10:00Z", "a7", 600, 9007),
+  reading("2026-11-03T09:00Z", "m8", [dated("m8:0", "2026-11-14")]),
+]);
+ok(acted.asks[0].status === "superseded" && acted.asks[0].acted_at !== undefined, "an acted ask is superseded too, keeping its acted_at as history", acted.asks[0]);
+const siblings = foldAll("t5c", [reading("2026-11-02T09:00Z", "m9", [dated("m9:0", "2026-11-12"), dated("m9:1", "2026-11-13")])]);
+ok(siblings.asks.every((a) => a.status === "open"), "two dates in one email are two shifts, never a restatement", siblings.asks.map((a) => a.status));
+const ambiguous = foldAll("t5d", [
+  reading("2026-11-02T09:00Z", "m9", [dated("m9:0", "2026-11-12"), dated("m9:1", "2026-11-13")]),
+  reading("2026-11-03T09:00Z", "m10", [dated("m10:0", "2026-11-14")]),
+]);
+ok(ambiguous.asks.filter((a) => a.status === "open").length === 3, "two standing dates match: which is replaced is a guess, so neither is", ambiguous.asks.map((a) => `${a.date}:${a.status}`));
+const otherOrder = foldAll("t5e", [
+  reading("2026-11-02T09:00Z", "m7", [dated("m7:0", "2026-11-12", 600)]),
+  reading("2026-11-03T09:00Z", "m8", [dated("m8:0", "2026-11-14", 700)]),
+]);
+ok(otherOrder.asks.every((a) => a.status === "open"), "another order never supersedes", otherOrder.asks.map((a) => a.status));
+const noOrder = foldAll("t5f", [
+  reading("2026-11-02T09:00Z", "m7", [ask("m7:0", "new_shift", "2026-11-12")]),
+  reading("2026-11-03T09:00Z", "m8", [ask("m8:0", "new_shift", "2026-11-14")]),
+]);
+ok(noOrder.asks.every((a) => a.status === "open"), "no named order on the new ask: no supersede", noOrder.asks.map((a) => a.status));
+const back = foldEvent(sup, reading("2026-11-04T09:00Z", "m11", [dated("m11:0", "2026-11-12")]));
+ok(back.asks[0].status === "open" && back.asks[0].merged.includes("m11:0"), "a superseded ask restated identically reopens", back.asks.map((a) => `${a.date}:${a.status}`));
+const noCancel = foldEvent(sup, reading("2026-11-04T09:00Z", "m12", [dated("m12:0", "2026-11-12", 600, "cancel_shift")]));
+ok(noCancel.asks[0].status === "superseded" && noCancel.asks[2].akind === "cancel_shift" && noCancel.asks[2].status === "open",
+  "a cancel never withdraws a superseded ask: it opens its own", noCancel.asks.map((a) => `${a.akind}:${a.status}`));
 
 console.log(fails ? `\n${fails} FAILED` : "\nall passed");
 process.exitCode = fails ? 1 : 0;

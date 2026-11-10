@@ -13,6 +13,7 @@ import type { NeonQueryFunction } from "@neondatabase/serverless";
 import { ensureSchema } from "../../migrations";
 import { foldAll, FOLD_VERSION, type FoldEvent } from "./fold";
 import { compare, tally } from "./compare";
+import { utcToLondon } from "../bot/ops";
 
 type Sql = NeonQueryFunction<false, false>;
 
@@ -23,7 +24,22 @@ export const stable = (x: any): string => Array.isArray(x) ? `[${x.map(stable).j
 
 const RANK = { mail: 0, reading: 1, act: 2 } as const;
 
-/** Every fold event of the given threads, from the stored rows, sorted as the fold eats them. */
+/** The London day of a timeline timestamp (zoneless strings are UTC); undefined when unreadable. */
+const londonDayOf = (v: unknown): string | undefined => {
+  if (typeof v !== "string" || !v) return undefined;
+  try { return utcToLondon(v).date; } catch { return undefined; }
+};
+
+/**
+ * Every fold event of the given threads, from the stored rows, sorted as the fold eats them.
+ *
+ * An act's days (fold-v2) come from two channels: a Slot row's beginning diff names the old and new
+ * day itself; a row without one reaches a day through its model_id and the order's stored body
+ * (Slot id → its day, SlotTeam id → its slots' days). The body is current state, so a recovered day
+ * can change when the slot moves again — but every OnSinch edit lands as timeline rows, which mark
+ * the thread moved and refold it with the same body the daily diff will read. A body that changed
+ * with no timeline row shows up as refold drift, which throws: loud by design, not patched here.
+ */
 export async function buildEvents(sql: Sql, tids: string[]): Promise<Map<string, FoldEvent[]>> {
   const byThread = new Map<string, FoldEvent[]>();
   if (!tids.length) return byThread;
@@ -38,12 +54,41 @@ export async function buildEvents(sql: Sql, tids: string[]): Promise<Map<string,
     WHERE thread_id = ANY(${tids}::text[]) AND state IN ('linked','relinked')`) as any[];
   const orderIds = [...new Set(links.map((l: any) => Number(l.order_id)))];
   if (orderIds.length) {
-    const acts = (await sql`SELECT id, order_id, creator, created::text t FROM onsinch_timeline
+    const acts = (await sql`SELECT id, order_id, creator, created::text t, model, model_id,
+        data->'diffChanges'->'Slot'->'beginning' AS beg FROM onsinch_timeline
       WHERE order_id = ANY(${orderIds}::bigint[]) AND creator IS NOT NULL`) as any[];
+    // The freshest stored body per order (the live cache first, raw where it is empty), for the
+    // model_id → slot-day join of rows whose diff names no day.
+    const slotDay = new Map<string, string>();
+    const teamDays = new Map<string, string[]>();
+    const live = (await sql`SELECT order_id, body FROM onsinch_orders
+      WHERE order_id = ANY(${orderIds}::bigint[]) AND body IS NOT NULL AND deleted_at IS NULL`) as any[];
+    const cached = new Set(live.map((b: any) => Number(b.order_id)));
+    const raw = (await sql`SELECT DISTINCT ON (order_id) order_id, body FROM onsinch_orders_raw
+      WHERE order_id = ANY(${orderIds.filter((o) => !cached.has(o))}::bigint[]) ORDER BY order_id, fetched_at DESC`) as any[];
+    for (const r of [...live, ...raw]) for (const j of r.body?.Job ?? []) for (const st of j?.SlotTeam ?? []) {
+      const days: string[] = [];
+      for (const s of st?.Slot ?? []) {
+        const d = londonDayOf(s?.beginning);
+        if (!d) continue;
+        if (s.id != null) slotDay.set(String(s.id), d);
+        days.push(d);
+      }
+      if (st?.id != null && days.length) teamDays.set(String(st.id), [...new Set(days)].sort());
+    }
+    const daysOf = (a: any): string[] | undefined => {
+      const diffed = [a.beg?.old, a.beg?.new].map(londonDayOf).filter((d): d is string => !!d);
+      if (diffed.length) return [...new Set(diffed)].sort();
+      if (a.model === "Slot" && a.model_id != null) { const d = slotDay.get(String(a.model_id)); if (d) return [d]; }
+      if (a.model === "SlotTeam" && a.model_id != null) return teamDays.get(String(a.model_id));
+      return undefined;
+    };
     const actsByOrder = new Map<number, any[]>();
     for (const a of acts) { const k = Number(a.order_id); const v = actsByOrder.get(k) ?? []; v.push(a); actsByOrder.set(k, v); }
-    for (const l of links) for (const a of actsByOrder.get(Number(l.order_id)) ?? [])
-      push(l.thread_id, { t: new Date(a.t).toISOString(), kind: "act", id: `act:${a.id}:${l.thread_id}`, order_id: Number(a.order_id), row_id: Number(a.id), creator: Number(a.creator) });
+    for (const l of links) for (const a of actsByOrder.get(Number(l.order_id)) ?? []) {
+      const days = daysOf(a);
+      push(l.thread_id, { t: new Date(a.t).toISOString(), kind: "act", id: `act:${a.id}:${l.thread_id}`, order_id: Number(a.order_id), row_id: Number(a.id), creator: Number(a.creator), ...(days?.length ? { days } : {}) });
+    }
   }
   for (const tid of tids) {
     const events = (byThread.get(tid) ?? []).sort((a, b) => a.t.localeCompare(b.t) || RANK[a.kind] - RANK[b.kind] || a.id.localeCompare(b.id));

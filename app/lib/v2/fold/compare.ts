@@ -7,6 +7,7 @@
 // verdicts: settled-confirmed and withdrawn-confirmed and open are agreement; acted-not-held (staff
 // acted, the ask is not in the state), done-unacted (the state holds it with no email-visible act —
 // the phone/portal half showing itself) and withdrawn-but-held are the disagreements worth eyes.
+// A superseded ask (fold-v2: its date was restated) is neither: the newer key carries the grade.
 // Pure: the caller supplies the state and the bodies; the same inputs always give the same verdicts,
 // so stored verdicts are derived-only and recomputable, like everything else on the board.
 // ============================================================================
@@ -16,6 +17,7 @@ export type Held = "exact" | "adjusted" | "absent" | "unkeyed";
 export type Verdict =
   | "settled-confirmed" | "open" | "withdrawn-confirmed"            // agreement
   | "acted-not-held" | "done-unacted" | "withdrawn-but-held"        // disagreement
+  | "superseded"                                                    // replaced by a newer date: judged through the newer ask's key
   | "unkeyed";                                                      // nothing to compare against
 
 export type AskVerdict = { key: string; status: AskState["status"]; held: Held; verdict: Verdict; differs?: string[]; order_id?: number };
@@ -61,6 +63,9 @@ function heldIn(a: AskState, slots: Slot[]): { held: Held; differs: string[] } {
 export function compare(state: FoldState, bodies: Map<number, any>, threadOrders: number[]): AskVerdict[] {
   const out: AskVerdict[] = [];
   for (const a of state.asks ?? []) {
+    // A superseded ask left the live population when its date was restated; the world is compared
+    // against the newer ask's key, so grading this one again would double-count the same shift.
+    if (a.status === "superseded") { out.push({ key: a.key, status: a.status, held: "unkeyed", verdict: "superseded" }); continue; }
     const cand = a.order_id ? [a.order_id] : threadOrders;
     const withBody = cand.filter((o) => bodies.has(o));
     if (!withBody.length) { out.push({ key: a.key, status: a.status, held: "unkeyed", verdict: "unkeyed" }); continue; }

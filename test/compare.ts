@@ -16,7 +16,7 @@ import { syncFold } from "../app/lib/v2/fold/live";
 let fails = 0;
 const ok = (c: boolean, m: string, d?: unknown) => { console.log(`  ${c ? "PASS" : "FAIL"}  ${m}${c ? "" : "  " + JSON.stringify(d)}`); if (!c) fails++; };
 
-const askS = (key: string, status: "open" | "acted" | "withdrawn", date?: string, values: Record<string, unknown> = {}, extra: Record<string, unknown> = {}) =>
+const askS = (key: string, status: "open" | "acted" | "withdrawn" | "superseded", date?: string, values: Record<string, unknown> = {}, extra: Record<string, unknown> = {}) =>
   ({ key, akind: "new_shift", date, values, status, opened_at: "2026-11-02T09:00:00Z", proof: [], merged: [], ...extra });
 const state = (asks: any[]) => ({ version: "fold-v1", thread_id: "t1", asks, waiting: null, last_event: "e", last_t: "2026-11-02T09:00:00Z", events: 1 }) as any;
 const body = (slots: Array<{ day: string; start?: string; size?: number; cancelled?: boolean; place?: number }>) => ({
@@ -43,6 +43,12 @@ const body = (slots: Array<{ day: string; start?: string; size?: number; cancell
   ok(by["e:0"] === "withdrawn-but-held", "withdrawn yet the state holds it", by["e:0"]);
   ok(by["f:0"] === "withdrawn-confirmed", "withdrawn and gone", by["f:0"]);
   ok(by["g:0"] === "unkeyed", "no day named: said, not guessed", by["g:0"]);
+
+  console.log("\n[superseded] a replaced date is graded through its newer key, never twice");
+  const vs = compare(state([askS("s:0", "superseded", "2026-11-13"), askS("s:1", "superseded", "2026-11-12")]), bodies, [500]);
+  ok(vs[0].verdict === "superseded" && vs[1].verdict === "superseded", "superseded whether its old day is gone or still held", vs.map((x) => x.verdict));
+  const vsU = compare(state([askS("s:2", "superseded", "2026-11-13")]), new Map(), []);
+  ok(vsU[0].verdict === "superseded", "and with no reachable body it is still superseded, not unkeyed", vsU[0]);
 
   console.log("\n[values] a held day with different values names the fields");
   const v2 = compare(state([askS("h:0", "acted", "2026-11-12", { start: "08:00", crew: 6 })]), bodies, [500]);

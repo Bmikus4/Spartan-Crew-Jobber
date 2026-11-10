@@ -11,13 +11,17 @@
 // ============================================================================
 import type { CanonicalAsk } from "../ask";
 
-// v1.1: asks carry place_id for the comparator's venue check; the version bump refolds every thread once.
-export const FOLD_VERSION = "fold-v1.1";
+// v2: acts carry the London days they provably touched and mark only asks on those days (a dayless
+// act still acts everything, as v1 did — the conservative side); a restated date supersedes the old
+// one. Of the comparator's first 683 asks, 80 were acted-not-held, mostly old-date asks stranded by
+// a date change and then "acted" by the move itself. The version bump refolds every thread once.
+export const FOLD_VERSION = "fold-v2";
 
 export type FoldEvent =
   | { t: string; kind: "mail"; id: string; from: "client" | "spartan" }
   | { t: string; kind: "reading"; id: string; ask: CanonicalAsk }
-  | { t: string; kind: "act"; id: string; order_id: number; row_id: number; creator: number };
+  /** days: the London days the act provably touched (live.ts recovers them); absent = unknown. */
+  | { t: string; kind: "act"; id: string; order_id: number; row_id: number; creator: number; days?: string[] };
 
 export type AskState = {
   key: string;            // the first ask_key that opened it
@@ -27,7 +31,7 @@ export type AskState = {
   /** The resolved venue from the reading, for the comparator's venue check. */
   place_id?: number;
   values: Record<string, unknown>;
-  status: "open" | "acted" | "withdrawn";
+  status: "open" | "acted" | "withdrawn" | "superseded";
   opened_at: string;
   acted_at?: string;
   proof: number[];        // timeline row ids of the acts that touched it
@@ -59,6 +63,9 @@ export function foldEvent(s: FoldState, e: FoldEvent): FoldState {
   if (e.kind === "mail") {
     waiting = e.from === "client" ? "spartan" : "client";
   } else if (e.kind === "reading") {
+    // Asks this event itself opened or touched: siblings in one email are parallel work and must
+    // never supersede each other ("crew Mon, crew Tue" is two shifts, not a restatement).
+    const touched = new Set<string>();
     for (const r of e.ask.asks ?? []) {
       const date = (r.values as any)?.date?.value as string | undefined;
       const vals: Record<string, unknown> = {};
@@ -71,14 +78,26 @@ export function foldEvent(s: FoldState, e: FoldEvent): FoldState {
       const id = identity(r.kind, date, r.order_id ?? undefined);
       const open = asks.find((a) => a.status !== "withdrawn" && identity(a.akind, a.date, a.order_id) === id);
       if (open) {
-        // The same ask restated: the newest given words win; an acted ask asked again reopens.
+        // The same ask restated: the newest given words win; an acted or superseded ask asked again reopens.
         Object.assign(open.values, vals);
         open.merged.push(r.key);
-        if (open.status === "acted") { open.status = "open"; open.acted_at = undefined; }
+        if (open.status === "acted" || open.status === "superseded") { open.status = "open"; open.acted_at = undefined; }
+        touched.add(open.key);
       } else {
+        // Supersede: the same kind on the same named booking with a new date is a date change, and
+        // the old-date ask would otherwise sit open until the move itself "acts" it, then grade
+        // acted-not-held forever. Only when exactly one earlier ask matches — two matches mean a
+        // multi-shift booking, where replacing either would collapse real work into a guess.
+        if (date !== undefined && r.order_id != null) {
+          const olds = asks.filter((a) => (a.status === "open" || a.status === "acted")
+            && a.akind === r.kind && a.order_id === r.order_id
+            && a.date !== undefined && a.date !== date && !touched.has(a.key));
+          if (olds.length === 1) { olds[0].status = "superseded"; olds[0].merged.push(r.key); }
+        }
         const fresh: typeof asks[number] = { key: r.key, akind: r.kind, date, order_id: r.order_id ?? undefined, values: vals, status: "open", opened_at: e.t, proof: [], merged: [] };
         if (r.place_id !== undefined && r.place_id !== null) fresh.place_id = r.place_id;
         asks.push(fresh);
+        touched.add(fresh.key);
       }
     }
   } else if (e.kind === "act") {
@@ -89,6 +108,9 @@ export function foldEvent(s: FoldState, e: FoldEvent): FoldState {
       if (a.status !== "open") continue;
       if (a.order_id && a.order_id !== e.order_id) continue;
       if (a.opened_at > e.t) continue;
+      // Day-matched (v2): an act that names its days touches only asks on those days. No days
+      // recovered, or an ask with no day, falls back to v1's everything — never less acted than v1.
+      if (e.days?.length && a.date && !e.days.includes(a.date)) continue;
       a.status = "acted";
       a.acted_at = a.acted_at ?? e.t;
       if (a.proof.length < 20) a.proof.push(e.row_id);
