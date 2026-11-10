@@ -201,5 +201,30 @@ console.log("shapes HEAD still refused on 10-25 (eval/iterations.md, iteration 1
   ok(datesIn("1-30 November", oct).size <= 2, "a range over two weeks is not read as days");
 }
 
+console.log("shapes stored refusals still held on 11-10 (spartan-research r37; model's read correct in each)");
+{
+  // The shapes are verbatim from the red baseline (shapes only, letters masked there); the
+  // words around them are invented. Each line names how many stored refusals carried the shape.
+  eq(parseTime("9am."), "09:00", "a full stop straight after the time (3 refusals)");
+  eq(parseTime("1200."), "12:00", "and after a 24h time (2 refusals)");
+  ok(timesIn("we finish loading by 8am. then travel").has("08:00"), "the dotted time inside a phrase");
+  eq(parseTime("18;00"), "18:00", "a semicolon where the colon goes (2 refusals)");
+  eq(parseTime("25;00"), null, "but 25;00 is still no time");
+  eq(parseTime("900hrs"), "09:00", "three figures with an hrs suffix (1 refusal)");
+  eq(parseTime("930h"), "09:30", "and with h");
+  eq(parseTime("900"), null, "three bare figures stay refused: 900 could be anything");
+  const tue = "2026-11-03T10:00:00Z";
+  eq(parseDate("Saturday 5pm", tue), "2026-11-07", "a weekday with its time, in date position (2 refusals)");
+  eq(parseDate("Saturday 11am", tue), "2026-11-07", "whichever meridiem");
+  eq(parseDate("Friday 5pm", "2026-11-06T10:00:00Z"), null, "the sent day's own weekday: still today or a week today");
+  eq(parseDate("Saturday 8th November", "2026-10-27T10:00:00Z"), null, "a weekday that contradicts the date stays refused (8 Nov 2026 is a Sunday)");
+  eq(parseDate("05Nov", "2026-11-04T10:00:00Z"), "2026-11-05", "the day glued to its month (1 refusal)");
+  eq(parseDate("Thursday 12 th November", "2026-11-05T10:00:00Z"), "2026-11-12", "a space before the ordinal (4 refusals)");
+  eq(parseDate("13 th November", "2026-11-05T10:00:00Z"), "2026-11-13", "without its weekday too");
+  eq(parseDate("(Thursday evening) Friday 13 th November", "2026-11-05T10:00:00Z"), "2026-11-13", "an aside's weekday belongs to its own clause (1 refusal)");
+  eq(parseDate("the 14th (Saturday)", "2026-11-05T10:00:00Z"), "2026-11-14", "an aside's weekday still counts when it is the only one");
+  eq(parseDate("the 14th (Sunday)", "2026-11-05T10:00:00Z"), null, "and must still agree");
+}
+
 if (fails) { console.log(`\n${fails} FAILED`); process.exit(1); }
 console.log("\nall passed");

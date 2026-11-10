@@ -58,11 +58,13 @@ export function quoteIn(text: string, quote: string | null | undefined): boolean
 
 /**
  * "9.30am", "15:30pm" (a 24h time with a redundant suffix), "8AM", "midday", "noon",
- * "1800", "18:30hrs", "7pm", "0830" -> "HH:MM". Null for anything else ("TBC", "evening").
+ * "1800", "18:30hrs", "7pm", "0830", "9am.", "18;00", "900hrs" -> "HH:MM". Null for anything
+ * else ("TBC", "evening", a bare "900").
  */
 export function parseTime(raw: string): string | null {
   // "@ 18:30", "starting midday", "from 9am": the lead-in word carries no time (measured 10-09).
-  const q = norm(raw).replace(/\s+/g, "").replace(/^(@|at|from|starting(at|from)?|start(ing)?(at)?)(?=\d|mid|noon)/, "");
+  // "9am." / "1200.": sentence punctuation after the time held 5 stored refusals (r37, 10 Nov).
+  const q = norm(raw).replace(/\s+/g, "").replace(/[.,;:!?]+$/, "").replace(/^(@|at|from|starting(at|from)?|start(ing)?(at)?)(?=\d|mid|noon)/, "");
   if (/^(midday|noon|12noon)$/.test(q)) return "12:00";
   if (q === "midnight") return "00:00";
   // "0800 AM" (Wall to Wall, 10-09) as well as "9.30am".
@@ -77,10 +79,14 @@ export function parseTime(raw: string): string | null {
     }
     return `${String(h).padStart(2, "0")}:${String(mi).padStart(2, "0")}`;
   }
-  m = /^(\d{1,2})[:.](\d{2})(?:hrs?|h)?$/.exec(q);
+  // "18;00": a semicolon where the colon goes (2 stored refusals, r37 10 Nov).
+  m = /^(\d{1,2})[:.;](\d{2})(?:hrs?|h)?$/.exec(q);
   if (m && Number(m[1]) <= 23 && Number(m[2]) <= 59) return `${m[1].padStart(2, "0")}:${m[2]}`;
   m = /^(\d{2})(\d{2})(?:hrs?|h)?$/.exec(q);
   if (m && Number(m[1]) <= 23 && Number(m[2]) <= 59) return `${m[1]}:${m[2]}`;
+  // "900hrs": three figures are a time only when the suffix says so; a bare "900" stays null.
+  m = /^(\d)(\d{2})(?:hrs?|h)$/.exec(q);
+  if (m && Number(m[2]) <= 59) return `0${m[1]}:${m[2]}`;
   return null;
 }
 
@@ -211,7 +217,11 @@ const weekdayIn = (q: string): string | null =>
  * a week today), and "next Friday" (this coming one, or the one after, in British use).
  */
 function weekdayAlone(q: string, weekday: string, sent: Date): string | null {
-  if (/\d/.test(q) || /\b(next|last|following|previous)\b/.test(q)) return null;
+  // "Saturday 5pm": a time's figures are not a day of the month (2 stored date refusals, r37
+  // 10 Nov; the 5 read as a possible 5th blocked the weekday). Only am/pm or hh:mm shapes are
+  // time enough to ignore: "Saturday 5" could still be the 5th, and stays refused.
+  const rest = q.replace(/\b\d{1,2}(?:[:.]\d{2})?\s*(?:am|pm)\b|\b\d{1,2}[:.]\d{2}\b/g, "");
+  if (/\d/.test(rest) || /\b(next|last|following|previous)\b/.test(q)) return null;
   const gap = (WEEKDAYS.indexOf(weekday) - sent.getUTCDay() + 7) % 7;
   return gap === 0 ? null : new Date(sent.getTime() + gap * 864e5).toISOString().slice(0, 10);
 }
@@ -273,7 +283,11 @@ export function parseDate(raw: string, sentIso: string): string | null {
     return iso;
   }
   const sent = new Date(sentDay + "T12:00:00Z");
-  const weekday = weekdayIn(q);
+  // "(Thursday evening) Friday 13 th November": an aside in brackets carries its own clause's
+  // weekday (1 stored refusal, r37 10 Nov). It yields to a weekday outside the brackets, and
+  // still counts - and must still agree - when it is the only one ("the 14th (Saturday)").
+  const aside = q.replace(/\([^)]*\)/g, " ");
+  const weekday = weekdayIn(aside) ?? weekdayIn(q);
   let d: number, mo: number | null = null, y: number | null = null;
   // A year is 2020-2099, or two digits that are not the start of a time: '2 Nov 0900' read the
   // 24-hour time as the year 900 (O Films, 10-15) and '2 Nov 09:00' as 2009. All three forms.
@@ -282,7 +296,9 @@ export function parseDate(raw: string, sentIso: string): string | null {
     d = Number(m[1]); mo = Number(m[2]) - 1; if (m[3]) y = Number(m[3].length === 2 ? `20${m[3]}` : m[3]);
   } else {
     // "28-Nov" (a booking table, 10-12) as well as "28 Nov": the month may follow a hyphen.
-    m = /\b(\d{1,2})(?:st|nd|rd|th)?(?:\s+|-)(?:of\s+)?([a-z]{3,9})\b(?:[\s-]+'?(\d{2}(?![:.]\d)|20[2-9]\d)\b)?/.exec(q);
+    // "05Nov" (glued) and "12 th November" (a space before the ordinal): 5 stored refusals
+    // (r37, 10 Nov). The month is still named, so neither loosens what counts as a date.
+    m = /\b(\d{1,2})(?:\s?(?:st|nd|rd|th))?(?:\s+|-)?(?:of\s+)?([a-z]{3,9})\b(?:[\s-]+'?(\d{2}(?![:.]\d)|20[2-9]\d)\b)?/.exec(q);
     let mi = m ? MONTHS.indexOf(m[2].slice(0, 3)) : -1;
     // "November 4th", "October 8 2026": month first. Read before the bare "4th" fallback,
     // which would otherwise take the day and put it in the sent month (measured 10-08).

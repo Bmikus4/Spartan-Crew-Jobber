@@ -98,7 +98,7 @@ function rig(o: { throwOn?: string } = {}) {
   ok(marked.join() === "d1", "the poll marks only what it stored; n8n's intake marks its own", marked);
   await at(T0 + 20 * MIN);
   const asked: string[] = [];
-  await sweepUndecided({ decide: async (id: string) => { asked.push(id); }, limit: 10 });
+  await sweepUndecided({ now: clock.now(), decide: async (id: string) => { asked.push(id); }, limit: 10 });
   ok(!asked.includes("d1"), "the sweep skips the marked message after the pause", asked);
   ok(asked.includes("e1"), "control: an unmarked one is the sweep's", asked);
 

@@ -6258,5 +6258,41 @@
   "sources": [
    "spartan-research/scripts/r33-foldv3-delta.mts"
   ]
+ },
+ {
+  "id": "S-0314",
+  "ts": "2026-11-10T13:15:51+00:00",
+  "kind": "measurement",
+  "headline": "seven refusal shapes become reads: 15 stored date/time refusals now ground (44 of 116)",
+  "subject": "ground.ts reads seven more shapes; 44 of 116 stored refusals ground, was 29",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 132,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  },
+  "measured": {
+   "ground_refusal_shapes": {
+    "dataset": "all 116 stored date/time grounding refusals in v2_decisions since 2026-10-09 (test senders and company 515 out), re-judged under the production check() predicate (whole-quote parse + timesIn/datesIn membership behind directed()), spartan-research scripts/r37-gap-verify.mts; shapes-only record 01-data/ground-redbase-2026-11-10.txt",
+    "datetime_refusals": 116,
+    "grounded_before": 29,
+    "grounded_after": 44,
+    "refusals_now_read": 15,
+    "shapes_shipped": 7,
+    "shape_rows": {
+     "trailing_punctuation": 5,
+     "semicolon_colon": 2,
+     "military_3digit_suffix": 1,
+     "weekday_plus_time": 2,
+     "glued_day_month": 1,
+     "spaced_ordinal": 4,
+     "aside_weekday": 1
+    },
+    "shape_rows_note": "the aside_weekday row is one of the 4 spaced-ordinal rows (it needed both fixes), so the shapes sum to 16 over 15 distinct rows",
+    "still_refused": 72,
+    "still_refused_note": "word-only references under the no-inference rule, model values contradicting the words, the two designed weekday-contradiction nulls, and 2 rows with an unnamed one-letter particle after the clock figure (r38 probe: not a/p/h)"
+   }
+  }
  }
 ]

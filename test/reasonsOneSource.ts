@@ -49,7 +49,7 @@ const walk = (d: string): string[] => readdirSync(d).flatMap((f) => { const p = 
       ('o2', 'to', '2026-11-03T08:30:00Z', 'none', ${JSON.stringify({ kind: "none", reason: "no change asked for", code: "none_nothing_to_do" })}::jsonb)`;
     clock.set(T0 + 20 * 60_000); await syncSqlClock();
     const asked: string[] = [];
-    await sweepUndecided({ decide: async (id: string) => { asked.push(id); }, limit: 10 });
+    await sweepUndecided({ now: clock.now(), decide: async (id: string) => { asked.push(id); }, limit: 10 });
     ok(asked.includes("n1"), "a later not-a-client decision, reworded, does not overtake: the email is read", asked);
     ok(!asked.includes("o1"), "control: a later client decision does overtake, so a person reads it", asked);
   }
