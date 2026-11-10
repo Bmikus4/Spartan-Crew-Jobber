@@ -6179,5 +6179,38 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0311",
+  "ts": "2026-11-10T03:58:26+00:00",
+  "kind": "measurement",
+  "headline": "after the fold-v2 refold: acted-not-held 80 to 77, 5 superseded, open 5 to 11",
+  "subject": "fold-v2 measured: acted-not-held 77 of 712 asks (was 80 of 683); 5 superseded",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 132,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  },
+  "measured": {
+   "foldv2_refold_delta": {
+    "dataset": "production fold_state after the fold-v2 version-bump refold (all 565 threads, every verdict recomputed in the same sync), read 2026-11-10 04:0x UTC via spartan-research scripts/r30-foldv2-delta.mts; baseline = the 9 Nov fold-v1.1 comparator tally (683 asks)",
+    "threads_on_fold_v2": 565,
+    "verdicts_recomputed": 565,
+    "asks": 712,
+    "acted_not_held": 77,
+    "acted_not_held_baseline": 80,
+    "superseded_asks": 5,
+    "open_verdicts": 11,
+    "open_verdicts_baseline": 5,
+    "settled_confirmed": 459,
+    "settled_confirmed_baseline": 442,
+    "note": "the ask population grew 683 to 712 between tallies, so deltas are directional, not matched pairs; the strict supersede scope (same kind + same NAMED order) fired on 5 asks - most of the 77 strand some other way, naming them is queued work"
+   }
+  },
+  "sources": [
+   "spartan-research/scripts/r30-foldv2-delta.mts"
+  ]
  }
 ]
