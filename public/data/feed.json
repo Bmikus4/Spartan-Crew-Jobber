@@ -6226,5 +6226,37 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0313",
+  "ts": "2026-11-10T04:27:46+00:00",
+  "kind": "measurement",
+  "headline": "after the fold-v3 refold: disagreement pile 98 of 683 (14%) down to 49 of 712 (7%)",
+  "subject": "fold-v3 measured: acted-not-held 29 of 712 (was 77); cancelled-after 44",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 132,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  },
+  "measured": {
+   "foldv3_refold_delta": {
+    "dataset": "production fold_state after the fold-v3 version-bump refold (all 565 threads, every verdict recomputed), read 2026-11-10 via spartan-research scripts/r33-foldv3-delta.mts; same 712-ask population as the fold-v2 tally earlier today; v1.1 baseline 9 Nov was 683 asks",
+    "asks": 712,
+    "acted_not_held": 29,
+    "acted_not_held_at_v2": 77,
+    "acted_not_held_at_v1_1": 80,
+    "cancelled_after": 44,
+    "superseded_asks": 41,
+    "superseded_at_v2": 5,
+    "settled_confirmed": 427,
+    "done_unacted": 19,
+    "note": "cross-check against the 77 named per case (r31): cancellation predicted up to 45, measured 44; supersede predicted ~43, measured 41; the disagreement pile (acted-not-held + done-unacted + withdrawn-but-held) is 49 of 712 (7%), from 98 of 683 (14%) at v1.1"
+   }
+  },
+  "sources": [
+   "spartan-research/scripts/r33-foldv3-delta.mts"
+  ]
  }
 ]
