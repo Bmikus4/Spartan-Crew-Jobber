@@ -8,14 +8,18 @@
 // acted, the ask is not in the state), done-unacted (the state holds it with no email-visible act —
 // the phone/portal half showing itself) and withdrawn-but-held are the disagreements worth eyes.
 // A superseded ask (fold-v2: its date was restated) is neither: the newer key carries the grade.
+// cancelled-after is agreement too: staff acted and the day was then cancelled — a cancelled slot in
+// the body, or a cancel ask naming the date (a cancel never withdraws an acted ask, so the acted ask
+// outlives the cancellation). Of the 77 acted-not-held named 10 Nov, cancellation explained 45.
 // Pure: the caller supplies the state and the bodies; the same inputs always give the same verdicts,
 // so stored verdicts are derived-only and recomputable, like everything else on the board.
 // ============================================================================
 import type { AskState, FoldState } from "./fold";
 
-export type Held = "exact" | "adjusted" | "absent" | "unkeyed";
+export type Held = "exact" | "adjusted" | "absent" | "cancelled" | "unkeyed";
 export type Verdict =
   | "settled-confirmed" | "open" | "withdrawn-confirmed"            // agreement
+  | "cancelled-after"                                               // agreement: acted, then the day was cancelled
   | "acted-not-held" | "done-unacted" | "withdrawn-but-held"        // disagreement
   | "superseded"                                                    // replaced by a newer date: judged through the newer ask's key
   | "unkeyed";                                                      // nothing to compare against
@@ -44,7 +48,8 @@ function heldIn(a: AskState, slots: Slot[]): { held: Held; differs: string[] } {
   const day = slots.filter((s) => s.day === date);
   const open = day.filter((s) => !s.cancelled);
   if (a.akind === "cancel_shift") return { held: open.length ? "absent" : day.length ? "exact" : "exact", differs: [] };
-  if (!open.length) return { held: "absent", differs: [] };
+  // The day is in the body but every slot on it is cancelled: not the same thing as never held.
+  if (!open.length) return { held: day.length ? "cancelled" : "absent", differs: [] };
   const v: any = a.values ?? {};
   const differs: string[] = [];
   const near = v.start ? open.filter((s) => s.start === v.start) : open;
@@ -75,13 +80,20 @@ export function compare(state: FoldState, bodies: Map<number, any>, threadOrders
       if (r.held === "unkeyed") { best = { ...r, order: o }; break; }
       if (r.held === "exact") { best = { ...r, order: o }; break; }
       if (r.held === "adjusted" && best.held !== "exact") best = { ...r, order: o };
+      else if (r.held === "cancelled" && best.held === "absent") best = { ...r, order: o };
     }
     const held = best.held;
+    const gone = held === "absent" || held === "cancelled";
+    // A cancellation shows itself two ways: cancelled slots in the body, or a cancel ask naming the
+    // same day in the state (a cancel never withdraws an acted ask, so the acted ask outlives it).
+    const cancelled = held === "cancelled" || (a.akind !== "cancel_shift" && (state.asks ?? []).some((c) =>
+      c.key !== a.key && c.akind === "cancel_shift" && c.status !== "withdrawn" && c.date === a.date
+      && (!c.order_id || !a.order_id || c.order_id === a.order_id)));
     const verdict: Verdict =
       held === "unkeyed" ? "unkeyed"
-      : a.status === "withdrawn" ? (held === "absent" ? "withdrawn-confirmed" : "withdrawn-but-held")
-      : a.status === "acted" ? (held === "absent" ? "acted-not-held" : "settled-confirmed")
-      : held === "absent" ? "open" : "done-unacted";
+      : a.status === "withdrawn" ? (gone ? "withdrawn-confirmed" : "withdrawn-but-held")
+      : a.status === "acted" ? (gone ? (cancelled ? "cancelled-after" : "acted-not-held") : "settled-confirmed")
+      : gone ? "open" : "done-unacted";
     const row: AskVerdict = { key: a.key, status: a.status, held, verdict };
     if (best.differs.length) row.differs = best.differs;
     if (best.order !== undefined) row.order_id = best.order;

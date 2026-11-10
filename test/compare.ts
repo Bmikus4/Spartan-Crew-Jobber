@@ -44,6 +44,23 @@ const body = (slots: Array<{ day: string; start?: string; size?: number; cancell
   ok(by["f:0"] === "withdrawn-confirmed", "withdrawn and gone", by["f:0"]);
   ok(by["g:0"] === "unkeyed", "no day named: said, not guessed", by["g:0"]);
 
+  console.log("\n[cancelled-after] acted then the day cancelled is agreement, not a silent error");
+  const cb = new Map<number, any>([[500, body([{ day: "2026-11-12", cancelled: true }, { day: "2026-11-20" }])]]);
+  const vca = compare(state([
+    askS("p:0", "acted", "2026-11-12"),
+    askS("q:0", "acted", "2026-11-15"),
+    askS("r:0", "acted", "2026-11-16"),
+    { ...askS("r2:0", "open", "2026-11-16"), akind: "cancel_shift" },
+    askS("w:0", "withdrawn", "2026-11-12"),
+    askS("o:0", "open", "2026-11-12"),
+  ]), cb, [500]);
+  const byCa = Object.fromEntries(vca.map((x) => [x.key, x.verdict]));
+  ok(byCa["p:0"] === "cancelled-after" && vca[0].held === "cancelled", "every slot on the day cancelled in the body", vca[0]);
+  ok(byCa["q:0"] === "acted-not-held", "absent with no cancellation anywhere stays the real disagreement", byCa["q:0"]);
+  ok(byCa["r:0"] === "cancelled-after", "absent day + a cancel ask naming it: the cancel outlives the acted ask", byCa["r:0"]);
+  ok(byCa["w:0"] === "withdrawn-confirmed", "withdrawn and the day cancelled: still confirmed gone", byCa["w:0"]);
+  ok(byCa["o:0"] === "open", "an open ask on a cancelled day stays visible as open", byCa["o:0"]);
+
   console.log("\n[superseded] a replaced date is graded through its newer key, never twice");
   const vs = compare(state([askS("s:0", "superseded", "2026-11-13"), askS("s:1", "superseded", "2026-11-12")]), bodies, [500]);
   ok(vs[0].verdict === "superseded" && vs[1].verdict === "superseded", "superseded whether its old day is gone or still held", vs.map((x) => x.verdict));

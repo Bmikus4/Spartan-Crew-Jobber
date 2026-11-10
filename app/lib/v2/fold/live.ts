@@ -22,7 +22,7 @@ export const stable = (x: any): string => Array.isArray(x) ? `[${x.map(stable).j
   : x && typeof x === "object" ? `{${Object.keys(x).filter((k) => x[k] !== undefined).sort().map((k) => `${JSON.stringify(k)}:${stable(x[k])}`).join(",")}}`
   : JSON.stringify(x);
 
-const RANK = { mail: 0, reading: 1, act: 2 } as const;
+const RANK = { mail: 0, link: 1, reading: 2, act: 3 } as const;
 
 /** The London day of a timeline timestamp (zoneless strings are UTC); undefined when unreadable. */
 const londonDayOf = (v: unknown): string | undefined => {
@@ -50,8 +50,9 @@ export async function buildEvents(sql: Sql, tids: string[]): Promise<Map<string,
   const readings = (await sql`SELECT thread_id, message_id, sent_at, ask FROM v2_decisions
     WHERE thread_id = ANY(${tids}::text[]) AND ask IS NOT NULL`) as any[];
   for (const r of readings) push(r.thread_id, { t: new Date(r.sent_at ?? 0).toISOString(), kind: "reading", id: `read:${r.message_id}`, ask: r.ask });
-  const links = (await sql`SELECT thread_id, order_id FROM job_links
+  const links = (await sql`SELECT thread_id, order_id, first_seen FROM job_links
     WHERE thread_id = ANY(${tids}::text[]) AND state IN ('linked','relinked')`) as any[];
+  for (const l of links) push(l.thread_id, { t: new Date(l.first_seen ?? 0).toISOString(), kind: "link", id: `link:${l.order_id}:${l.thread_id}`, order_id: Number(l.order_id) });
   const orderIds = [...new Set(links.map((l: any) => Number(l.order_id)))];
   if (orderIds.length) {
     const acts = (await sql`SELECT id, order_id, creator, created::text t, model, model_id,

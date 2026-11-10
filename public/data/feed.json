@@ -6212,5 +6212,19 @@
   "sources": [
    "spartan-research/scripts/r30-foldv2-delta.mts"
   ]
+ },
+ {
+  "id": "S-0312",
+  "ts": "2026-11-10T04:19:36+00:00",
+  "kind": "measurement",
+  "headline": "cancelled-after class + fold-v3 one-order supersede, from naming the 77",
+  "subject": "A cancelled day grades cancelled-after; one-order threads supersede unnamed asks",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 132,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]

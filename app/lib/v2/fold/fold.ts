@@ -15,11 +15,16 @@ import type { CanonicalAsk } from "../ask";
 // act still acts everything, as v1 did — the conservative side); a restated date supersedes the old
 // one. Of the comparator's first 683 asks, 80 were acted-not-held, mostly old-date asks stranded by
 // a date change and then "acted" by the move itself. The version bump refolds every thread once.
-export const FOLD_VERSION = "fold-v2";
+// v3: the thread's absolute links are events too, and on a thread whose whole life holds ONE linked
+// order, an ask naming no order is read as on that order for the supersede match (38 of the 46
+// supersede misses named 10 Nov sat on one-linked-order threads). Two named orders never match.
+export const FOLD_VERSION = "fold-v3";
 
 export type FoldEvent =
   | { t: string; kind: "mail"; id: string; from: "client" | "spartan" }
   | { t: string; kind: "reading"; id: string; ask: CanonicalAsk }
+  /** An absolute link (job_links linked/relinked) at the moment we first saw it. */
+  | { t: string; kind: "link"; id: string; order_id: number }
   /** days: the London days the act provably touched (live.ts recovers them); absent = unknown. */
   | { t: string; kind: "act"; id: string; order_id: number; row_id: number; creator: number; days?: string[] };
 
@@ -42,6 +47,8 @@ export type FoldState = {
   version: typeof FOLD_VERSION;
   thread_id: string;
   asks: AskState[];
+  /** Every order this thread has been absolutely linked to, in the order the links were seen. */
+  orders: number[];
   waiting: "client" | "spartan" | null;
   last_event: string | null; // the last event id folded in, the staleness stamp
   last_t: string | null;
@@ -49,7 +56,7 @@ export type FoldState = {
 };
 
 export function emptyState(thread_id: string): FoldState {
-  return { version: FOLD_VERSION, thread_id, asks: [], waiting: null, last_event: null, last_t: null, events: 0 };
+  return { version: FOLD_VERSION, thread_id, asks: [], orders: [], waiting: null, last_event: null, last_t: null, events: 0 };
 }
 
 /** The identity an ask keeps across restatements: what it is, on which day, on which booking. */
@@ -60,8 +67,11 @@ const CANCEL = "cancel_shift";
 export function foldEvent(s: FoldState, e: FoldEvent): FoldState {
   const asks = s.asks.map((a) => ({ ...a, proof: [...a.proof], merged: [...a.merged], values: { ...a.values } }));
   let waiting = s.waiting;
+  let orders = s.orders;
   if (e.kind === "mail") {
     waiting = e.from === "client" ? "spartan" : "client";
+  } else if (e.kind === "link") {
+    if (!orders.includes(e.order_id)) orders = [...orders, e.order_id];
   } else if (e.kind === "reading") {
     // Asks this event itself opened or touched: siblings in one email are parallel work and must
     // never supersede each other ("crew Mon, crew Tue" is two shifts, not a restatement).
@@ -84,13 +94,17 @@ export function foldEvent(s: FoldState, e: FoldEvent): FoldState {
         if (open.status === "acted" || open.status === "superseded") { open.status = "open"; open.acted_at = undefined; }
         touched.add(open.key);
       } else {
-        // Supersede: the same kind on the same named booking with a new date is a date change, and
-        // the old-date ask would otherwise sit open until the move itself "acts" it, then grade
-        // acted-not-held forever. Only when exactly one earlier ask matches — two matches mean a
-        // multi-shift booking, where replacing either would collapse real work into a guess.
-        if (date !== undefined && r.order_id != null) {
+        // Supersede: the same kind on the same booking with a new date is a date change, and the
+        // old-date ask would otherwise sit open until the move itself "acts" it, then grade
+        // acted-not-held forever. "Same booking" is a named order on both sides, or (v3) the thread's
+        // single linked order standing in for an unnamed one — never across two named orders, and
+        // never on a thread linked to several. Only when exactly one earlier ask matches — two
+        // matches mean a multi-shift booking, where replacing either would collapse real work.
+        const theOne = orders.length === 1 ? orders[0] : undefined;
+        const want = r.order_id ?? theOne;
+        if (date !== undefined && want !== undefined) {
           const olds = asks.filter((a) => (a.status === "open" || a.status === "acted")
-            && a.akind === r.kind && a.order_id === r.order_id
+            && a.akind === r.kind && (a.order_id ?? theOne) === want
             && a.date !== undefined && a.date !== date && !touched.has(a.key));
           if (olds.length === 1) { olds[0].status = "superseded"; olds[0].merged.push(r.key); }
         }
@@ -116,7 +130,7 @@ export function foldEvent(s: FoldState, e: FoldEvent): FoldState {
       if (a.proof.length < 20) a.proof.push(e.row_id);
     }
   }
-  return { ...s, asks, waiting, last_event: e.id, last_t: e.t, events: s.events + 1 };
+  return { ...s, asks, orders, waiting, last_event: e.id, last_t: e.t, events: s.events + 1 };
 }
 
 export function foldAll(thread_id: string, events: FoldEvent[]): FoldState {

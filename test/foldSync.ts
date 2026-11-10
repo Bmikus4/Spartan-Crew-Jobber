@@ -72,6 +72,7 @@ const ask = (mid: string, date: string) => JSON.stringify({ version: "ask-v1", m
   ok(byDate["2026-11-12"].proof.join() === "902", "a beginning diff names the act's day; the other days' acts never touch it", byDate["2026-11-12"]?.proof);
   ok(byDate["2026-11-14"].proof.join() === "903", "a diffless Slot row reaches its day through model_id and the stored body", byDate["2026-11-14"]?.proof);
   ok(byDate["2027-06-11"].proof.join() === "904", "a zoneless 23:30 UTC beginning lands on the next London day in summer", byDate["2027-06-11"]?.proof);
+  ok((s4[0].state.orders ?? []).join() === "600", "the link is an event: the state carries the order roster", s4[0].state.orders);
 
   console.log("\n[drift] a corrupted row makes the daily diff throw");
   await sql`UPDATE fold_state SET state = jsonb_set(state, '{waiting}', '"client"') WHERE thread_id = 't1'`;

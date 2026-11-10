@@ -23,6 +23,7 @@ const ask = (key: string, kind: string, date?: string, extra: Record<string, unk
 const reading = (t: string, id: string, asks: any[]): FoldEvent => ({ t, kind: "reading", id, ask: { version: "ask-v1", message_id: id, intent: "booking", asks, problems: [] } as any });
 const mail = (t: string, id: string, from: "client" | "spartan"): FoldEvent => ({ t, kind: "mail", id, from });
 const act = (t: string, id: string, order_id: number, row_id: number, days?: string[]): FoldEvent => ({ t, kind: "act", id, order_id, row_id, creator: 7, ...(days ? { days } : {}) });
+const link = (t: string, id: string, order_id: number): FoldEvent => ({ t, kind: "link", id, order_id });
 
 const events: FoldEvent[] = [
   mail("2026-11-02T09:00Z", "m1", "client"),
@@ -115,6 +116,39 @@ const noOrder = foldAll("t5f", [
   reading("2026-11-03T09:00Z", "m8", [ask("m8:0", "new_shift", "2026-11-14")]),
 ]);
 ok(noOrder.asks.every((a) => a.status === "open"), "no named order on the new ask: no supersede", noOrder.asks.map((a) => a.status));
+console.log("\n[supersede v3] the thread's single linked order stands in for an unnamed ask");
+const oneLink: FoldEvent[] = [
+  link("2026-11-01T09:00Z", "l600", 600),
+  reading("2026-11-02T09:00Z", "m13", [ask("m13:0", "new_shift", "2026-11-12")]),
+  reading("2026-11-03T09:00Z", "m14", [ask("m14:0", "new_shift", "2026-11-14")]),
+];
+const v3 = foldAll("t6", oneLink);
+ok(v3.orders.join() === "600", "a link is an event: the state carries the thread's order roster", v3.orders);
+ok(v3.asks[0].status === "superseded" && v3.asks[0].merged.includes("m14:0") && v3.asks[1].status === "open",
+  "unnamed asks on a one-order thread supersede like named ones", v3.asks.map((a) => `${a.date}:${a.status}`));
+for (const cut of [1, 2]) {
+  const part = oneLink.slice(cut).reduce(foldEvent, oneLink.slice(0, cut).reduce(foldEvent, emptyState("t6")));
+  ok(JSON.stringify(part) === JSON.stringify(v3), `chunked across the link event, split at ${cut}`);
+}
+const mixedNames = foldAll("t6b", [
+  link("2026-11-01T09:00Z", "l600", 600),
+  reading("2026-11-02T09:00Z", "m13", [dated("m13:0", "2026-11-12", 600)]),
+  reading("2026-11-03T09:00Z", "m14", [ask("m14:0", "new_shift", "2026-11-14")]),
+]);
+ok(mixedNames.asks[0].status === "superseded", "a named old ask and an unnamed new one meet on the single order", mixedNames.asks.map((a) => a.status));
+const foreign = foldAll("t6c", [
+  link("2026-11-01T09:00Z", "l600", 600),
+  reading("2026-11-02T09:00Z", "m13", [dated("m13:0", "2026-11-12", 700)]),
+  reading("2026-11-03T09:00Z", "m14", [ask("m14:0", "new_shift", "2026-11-14")]),
+]);
+ok(foreign.asks.every((a) => a.status === "open"), "an ask naming ANOTHER order than the thread's one never matches", foreign.asks.map((a) => a.status));
+const twoLinks = foldAll("t6d", [
+  link("2026-11-01T09:00Z", "l600", 600), link("2026-11-01T10:00Z", "l601", 601),
+  reading("2026-11-02T09:00Z", "m13", [ask("m13:0", "new_shift", "2026-11-12")]),
+  reading("2026-11-03T09:00Z", "m14", [ask("m14:0", "new_shift", "2026-11-14")]),
+]);
+ok(twoLinks.asks.every((a) => a.status === "open"), "two linked orders: which booking an unnamed ask means is a guess, so none", twoLinks.asks.map((a) => a.status));
+
 const back = foldEvent(sup, reading("2026-11-04T09:00Z", "m11", [dated("m11:0", "2026-11-12")]));
 ok(back.asks[0].status === "open" && back.asks[0].merged.includes("m11:0"), "a superseded ask restated identically reopens", back.asks.map((a) => `${a.date}:${a.status}`));
 const noCancel = foldEvent(sup, reading("2026-11-04T09:00Z", "m12", [dated("m12:0", "2026-11-12", 600, "cancel_shift")]));
