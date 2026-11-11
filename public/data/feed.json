@@ -6294,5 +6294,19 @@
     "still_refused_note": "word-only references under the no-inference rule, model values contradicting the words, the two designed weekday-contradiction nulls, and 2 rows with an unnamed one-letter particle after the clock figure (r38 probe: not a/p/h)"
    }
   }
+ },
+ {
+  "id": "S-0315",
+  "ts": "2026-11-11T00:17:07+00:00",
+  "kind": "measurement",
+  "headline": "Order bodies append to onsinch_orders_raw on change; as-of verdicts stay reconstructible",
+  "subject": "Every fetched order body is kept; the raw history had no production writer",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 132,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]

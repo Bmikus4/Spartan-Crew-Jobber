@@ -257,6 +257,23 @@ export async function refreshOrders(sql: Sql, t: Transport, now = Date.now()): P
 }
 
 /**
+ * Every fetched body, appended to onsinch_orders_raw unless identical to the LAST kept one. The live
+ * onsinch_orders is a cache each refresh overwrites, so this append is the only thing that keeps an
+ * order's earlier slots readable — what an as-of comparator verdict, and any tuning on past states,
+ * stands on. Deduping against the latest row only means a body that flips back and forth is kept each
+ * time: this is a history, not a set. Bodies carry no fetch-time field (only OnSinch's own `modified`),
+ * so equal content really means nothing changed.
+ */
+export async function keepRawBodies(sql: Sql, orders: unknown[], at: string): Promise<void> {
+  for (let i = 0; i < orders.length; i += 50) await sql`INSERT INTO onsinch_orders_raw (order_id, fetched_at, number, company_id, body)
+    SELECT (o->>'id')::bigint, ${at}::timestamptz, o->>'number', (o->>'company_id')::int, o
+    FROM jsonb_array_elements(${JSON.stringify(orders.slice(i, i + 50))}::jsonb) o
+    WHERE NOT EXISTS (SELECT 1 FROM onsinch_orders_raw r WHERE r.order_id = (o->>'id')::bigint AND r.body = o
+      AND r.fetched_at = (SELECT max(r2.fetched_at) FROM onsinch_orders_raw r2 WHERE r2.order_id = r.order_id))
+    ON CONFLICT (order_id, fetched_at) DO NOTHING`;
+}
+
+/**
  * The orders of each client with an open need, read whole every half hour: done.ts finds a need's job among the
  * client's orders that day, and "the only order that day" is only true of a list read whole, not of the orders
  * staff happened to touch since 9 Oct. A few clients a minute; a client not read stays as last read.
@@ -270,6 +287,7 @@ export async function readClientOrders(sql: Sql, t: Transport, companies: number
     for (let i = 0; i < orders.length; i += 50) await sql`INSERT INTO onsinch_orders (order_id, number, company_id, body, read_at)
       SELECT (o->>'id')::bigint, o->>'number', (o->>'company_id')::int, o, ${new Date(now).toISOString()}::timestamptz FROM jsonb_array_elements(${JSON.stringify(orders.slice(i, i + 50))}::jsonb) o
       ON CONFLICT (order_id) DO UPDATE SET number = EXCLUDED.number, company_id = EXCLUDED.company_id, body = EXCLUDED.body, read_at = EXCLUDED.read_at`;
+    await keepRawBodies(sql, orders, new Date(now).toISOString());
     await rememberOrders(sql, orders);
     at[c] = new Date(now).toISOString();
   }
@@ -295,6 +313,7 @@ export async function readLinkedOrders(sql: Sql, t: Transport, now = Date.now())
       VALUES (${Number(order_id)}, ${o ? String(o.number) : null}, ${o ? Number(o.company_id) : null}, ${o ? JSON.stringify(o) : null}::jsonb, ${at}::timestamptz, ${o ? null : at}::timestamptz)
       ON CONFLICT (order_id) DO UPDATE SET number = coalesce(EXCLUDED.number, onsinch_orders.number), company_id = coalesce(EXCLUDED.company_id, onsinch_orders.company_id),
         body = coalesce(EXCLUDED.body, onsinch_orders.body), read_at = EXCLUDED.read_at, deleted_at = EXCLUDED.deleted_at`;
+    if (o) await keepRawBodies(sql, [o], at);
     if (o) await rememberOrder(sql, o);
   }
   return due.length;

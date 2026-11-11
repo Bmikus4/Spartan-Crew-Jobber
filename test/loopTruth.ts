@@ -10,7 +10,7 @@
 // npx tsx --require ./test/fixtures/pg.ts test/loopTruth.ts
 // ============================================================================
 import { sql } from "./fixtures/pg";
-import { pullTimeline, refreshContacts, refreshOrders, refreshPlaces, rememberOrder, TIMELINE_FROM_ID } from "../app/lib/v2/loop/truth";
+import { pullTimeline, readClientOrders, readLinkedOrders, refreshContacts, refreshOrders, refreshPlaces, rememberOrder, TIMELINE_FROM_ID } from "../app/lib/v2/loop/truth";
 
 let fails = 0;
 const ok = (c: boolean, m: string, d?: unknown) => { console.log(`  ${c ? "PASS" : "FAIL"}  ${m}${c ? "" : "  " + JSON.stringify(d)}`); if (!c) fails++; };
@@ -21,6 +21,7 @@ let rows: any[] = [];
 let companies: any[] = [];
 let places: any[] = [];
 let held: number[] = [], hiddenFromList: number[] = [];
+const bodies = new Map<number, any>();
 let down = false, shuffled = false;
 const t = (async (_m: string, path: string) => {
   if (down) return { status: 500, data: null };
@@ -36,6 +37,15 @@ const t = (async (_m: string, path: string) => {
   }
   if (u.pathname === "/orders") {
     const eq = u.searchParams.get("id[eq]");
+    const byCompany = u.searchParams.get("company_id[eq]");
+    if (byCompany) {
+      const hit = [...bodies.values()].filter((b) => Number(b.company_id) === Number(byCompany));
+      return { status: 200, data: { data: hit, pagination: { pageCount: 1, count: hit.length } } };
+    }
+    if (eq && u.searchParams.get("with")) {
+      const hit = bodies.has(Number(eq)) ? [bodies.get(Number(eq))] : [];
+      return { status: 200, data: { data: hit, pagination: { pageCount: 1, count: hit.length } } };
+    }
     if (eq) return { status: 200, data: { data: held.filter((x) => x === Number(eq)).map((id) => ({ id })), pagination: { pageCount: 1, count: 1 } } };
     const hit = held.filter((x) => x > Number(u.searchParams.get("id[gt]")) && !hiddenFromList.includes(x)).sort((a, b) => b - a);
     return { status: 200, data: { data: hit.slice((page - 1) * 100, page * 100).map((id) => ({ id })), pagination: { pageCount: Math.ceil(hit.length / 100), count: hit.length } } };
@@ -160,6 +170,27 @@ const cursorNow = async () => Number(((await sql`SELECT value FROM v2_loop_meta 
   rows.push(row(F + 952, "order_uncancel", { model: "Order", id: "11500", data: { automated: false } }));
   await pullTimeline(sql, t);
   ok(!(await stored()).some((r) => r.id === F + 952), "read back once only: later the forward read keeps them", await late());
+
+  console.log("\n[9] every fetched body is kept raw, once per change: a cache refresh must not eat history");
+  const rawOf = async (id: number) => (await sql`SELECT body FROM onsinch_orders_raw WHERE order_id = ${id} ORDER BY fetched_at`) as any[];
+  const body801 = (size: number) => ({ id: 801, number: 18801, company_id: 10, Job: [{ id: 1, SlotTeam: [{ id: 2, Slot: [{ id: 31, beginning: "2026-11-20T09:00:00Z", size }] }] }] });
+  bodies.set(801, body801(2));
+  const t9 = day1 + 72 * 3600e3;
+  await readClientOrders(sql, t, [10], t9);
+  const cached = (await sql`SELECT body FROM onsinch_orders WHERE order_id = 801`) as any[];
+  ok(cached.length === 1 && (await rawOf(801)).length === 1, "a client-list read fills the cache and keeps the first raw body", { cached: cached.length, raw: (await rawOf(801)).length });
+  await readClientOrders(sql, t, [10], t9 + 31 * 60e3);
+  ok((await rawOf(801)).length === 1, "an unchanged body read again is not kept twice", (await rawOf(801)).length);
+  bodies.set(801, body801(4));
+  await readClientOrders(sql, t, [10], t9 + 62 * 60e3);
+  const r801 = await rawOf(801);
+  ok(r801.length === 2 && r801[1].body.Job[0].SlotTeam[0].Slot[0].size === 4, "a changed body is appended, the earlier one stays readable", r801.length);
+  ok(r801[0].body.Job[0].SlotTeam[0].Slot[0].size === 2, "the superseded body still says what the world said then", r801[0].body?.Job?.[0]?.SlotTeam?.[0]?.Slot?.[0]?.size);
+  bodies.set(802, { id: 802, number: 18802, company_id: 11, Job: [] });
+  await sql`INSERT INTO job_links (thread_id, order_id, state) VALUES ('t-raw', 802, 'linked') ON CONFLICT DO NOTHING`;
+  await readLinkedOrders(sql, t, t9);
+  ok((await rawOf(802)).length === 1, "a linked-order read keeps its body raw too", (await rawOf(802)).length);
+  ok(!(await rawOf(9002)).length, "a deletion mark keeps no raw row: nothing was fetched", (await rawOf(9002)).length);
 
   console.log(fails ? `\n${fails} FAILED` : "\nALL PASS");
   process.exit(fails ? 1 : 0);
