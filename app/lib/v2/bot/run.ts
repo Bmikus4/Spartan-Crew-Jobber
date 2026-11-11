@@ -18,7 +18,9 @@ import { httpTransport, OnsinchClient } from "../../onsinch/onsinch";
 import contracts from "./contracts.json";
 import type { Contract } from "./contract";
 import { acquireLease, releaseLease, ledgerGet, ledgerIntent, ledgerSet, type LedgerStatus } from "./db";
-import { apiRole, builderDate, builderEdit, legacyOpKey, opKey, positionCreateFields, rowsFor, shiftCreateFields, shiftWindow, utcToLondon, type Op, type PositionSpec } from "./ops";
+import { apiRole, BOT_USER, builderDate, builderEdit, legacyOpKey, opKey, positionCreateFields, rowsFor, shiftCreateFields, shiftWindow, utcToLondon, type Op, type PositionSpec } from "./ops";
+import { ladderGate } from "./ladder";
+import { reportError } from "../../errorReport";
 import { openBot, BROWSER_DIED, type Bot } from "./session";
 import { cancelNode, createChild, editNode, type EditOutcome } from "./builder";
 import { apiCreateOrder, firstRow, ORDER_MANAGER_ID } from "./apiCreate";
@@ -202,9 +204,6 @@ async function auditExtras(model: string, ids: string[], cursor: number, allowed
   return rows ? extras : null;
 }
 
-/** The OnSinch user the bot's login (and the old engine's API key) writes as. */
-const BOT_USER = 2257;
-
 /** Refusals that need no browser: the order, the position, a cut below its workers, and TEST-only while benching. */
 export async function preflight(op: Op, order: any, testOnly: boolean): Promise<string[]> {
   if (op.kind === "create_order") return testOnly && op.company_id !== "515" ? ["bench mode: creates only on TEST 515"] : [];
@@ -264,6 +263,14 @@ export async function runOp(source: string, op: Op, opts: { testOnly: boolean } 
   let phase: "pre" | "browser" = "pre";
   try {
     if (!(await ledgerIntent(key, source, op.kind, op))) return { op_key: key, status: "seen", reasons: ["raced"] };
+    if (!opts.testOnly) {
+      // THE LADDER'S GATE LIVES INSIDE THE ONE OP RUNNER (DECISIONS O34), so neither the decide
+      // path nor the resume path can route around it; bench writes on TEST 515 are not its
+      // business. The {live: true} mark after it is what the daily cap counts.
+      const stop = await ladderGate(op.kind);
+      if (stop.length) { await ledgerSet(key, "blocked", { reasons: stop }); return { op_key: key, status: "blocked", reasons: stop }; }
+      await ledgerSet(key, "intent", { live: true });
+    }
     const orderId = op.kind === "create_order" ? null : op.order_id;
     const before = orderId ? await readOrder(orderId) : null;
     const refusals = await preflight(op, before, opts.testOnly);
@@ -369,6 +376,9 @@ export async function runOp(source: string, op: Op, opts: { testOnly: boolean } 
     const msg = String((e as Error)?.message ?? e).slice(0, 300);
     const status = throwStatus(phase);
     await ledgerSet(key, status, { error: msg }).catch(() => {});
+    // "Sent, outcome unknown" is the write path's own failure, and the ladder's check (c) reads
+    // error_reports, so an unknown that went unreported could never roll a class off (O34).
+    if (status === "unknown") void reportError({ route: "write-unconfirmed", where: "bot/run", what: `${op.kind}: sent, outcome unknown`, detail: msg });
     return { op_key: key, status, reasons: [msg] };
   } finally {
     await releaseLease(key).catch(() => {});

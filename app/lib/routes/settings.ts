@@ -12,7 +12,7 @@ import type { Caller } from "../apiAuth";
  * covers a setting (DECISIONS O8). Only an admin (apiAuth isSwitchAdmin) may change one; each change is stored
  * with its actor and time and raised to the owner. The other settings stay any signed-in user's.
  */
-export const SWITCHES = ["bot_writes_enabled", "replies_enabled", "reply_delivery", "create_lead_enabled", "create_lead_days", "create_lead_applies_to"] as const;
+export const SWITCHES = ["bot_writes_enabled", "bot_write_classes", "replies_enabled", "reply_delivery", "create_lead_enabled", "create_lead_days", "create_lead_applies_to"] as const;
 
 export type SwitchChange = { field: string; from: unknown; to: unknown; actor: string; at: string };
 
@@ -41,7 +41,8 @@ export async function handleSettingsPost(request: Request, io: SettingsIO = prod
   try {
     const now = await io.get();
     const at = new Date().toISOString();
-    changes = SWITCHES.filter((k) => next[k] !== undefined && next[k] !== now[k])
+    // Stringified, not ===: bot_write_classes is an object, and a re-save of the same map is not a change.
+    changes = SWITCHES.filter((k) => next[k] !== undefined && JSON.stringify(next[k]) !== JSON.stringify(now[k]))
       .map((k) => ({ field: k, from: now[k], to: next[k], actor: caller.actor ?? "unknown", at }));
   } catch {
     // Without the current values a switch change cannot be told from a re-save, so nothing is written.

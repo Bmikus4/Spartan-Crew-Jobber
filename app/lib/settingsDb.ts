@@ -4,6 +4,7 @@
 
 import { neon, type NeonQueryFunction } from "@neondatabase/serverless";
 import { DEFAULT_SETTINGS, type Settings } from "./onsinch/types";
+import { OP_KINDS } from "./v2/bot/ops";
 import { reportError } from "./errorReport";
 import { ensureSchema } from "./migrations";
 
@@ -46,6 +47,15 @@ export function coerceSettings(body: unknown): Partial<Settings> {
   if (typeof b.analytics_tab_enabled === "boolean") next.analytics_tab_enabled = b.analytics_tab_enabled;
   if (typeof b.intake_paused === "boolean") next.intake_paused = b.intake_paused;
   if (typeof b.bot_writes_enabled === "boolean") next.bot_writes_enabled = b.bot_writes_enabled;
+  // All-or-nothing: a map with one bad entry (a typo'd kind, an unparseable date, cap 0) is
+  // dropped whole, so a mistyped enable can never half-apply and look like it worked.
+  if (b.bot_write_classes && typeof b.bot_write_classes === "object" && !Array.isArray(b.bot_write_classes)) {
+    const entries = Object.entries(b.bot_write_classes as Record<string, unknown>);
+    const good = entries.every(([k, v]) => (OP_KINDS as string[]).includes(k) && !!v && typeof v === "object"
+      && typeof (v as { since?: unknown }).since === "string" && Number.isFinite(Date.parse((v as { since: string }).since))
+      && ((v as { cap?: unknown }).cap === null || (Number.isInteger((v as { cap?: unknown }).cap) && (v as { cap: number }).cap >= 1)));
+    if (good) next.bot_write_classes = b.bot_write_classes as Settings["bot_write_classes"];
+  }
   if (b.reply_delivery === "draft" || b.reply_delivery === "send") next.reply_delivery = b.reply_delivery;
   if (b.reply_scope === "all" || b.reply_scope === "enquiries") next.reply_scope = b.reply_scope;
   // 0 is a real value here - it means "no fallback, hold the thread" - so this

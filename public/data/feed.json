@@ -6325,5 +6325,22 @@
   "sources": [
    "decisions/2026-11-11-bot-write-promotion-ladder.md"
   ]
+ },
+ {
+  "id": "S-0317",
+  "ts": "2026-11-11T13:57:24+00:00",
+  "kind": "measurement",
+  "headline": "O34 stage-1 built: bot_write_classes + the gate inside runOp + 3 rollback checks in the sync; nothing enabled",
+  "subject": "The ladder's stage-1 apparatus: per-class flags, gate in runOp, auto-rollback",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 133,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  },
+  "sources": [
+   "app/lib/v2/bot/ladder.ts"
+  ]
  }
 ]

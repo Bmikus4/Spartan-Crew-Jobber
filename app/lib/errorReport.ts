@@ -37,11 +37,14 @@ export type Severity = "alert" | "log";
  * not running cannot report that it is not running. It is asked from outside on a schedule —
  * see app/api/health/intake. The other three are the engine reporting on itself.
  */
-export type Route = "booking-lost" | "write-unconfirmed" | "engine-threw" | "intake-quiet" | "mail-undeliverable" | "mail-pull-failed" | "label-failed" | "help-report" | "system-failed" | "heartbeat" | "settings-changed";
+export type Route = "booking-lost" | "write-unconfirmed" | "engine-threw" | "intake-quiet" | "mail-undeliverable" | "mail-pull-failed" | "label-failed" | "help-report" | "system-failed" | "heartbeat" | "settings-changed" | "ladder-rollback";
 
 const ROUTE_TITLE: Record<Route, string> = {
   "booking-lost": "A BOOKING WAS LOST",
   "write-unconfirmed": "A WRITE COULD NOT BE CONFIRMED",
+  // The promotion ladder's pre-registered auto-rollback fired (DECISIONS O34): a write class
+  // turned itself off, and only a person's dated decision may turn it back on.
+  "ladder-rollback": "A BOT-WRITE CLASS ROLLED ITSELF OFF",
   "engine-threw": "THE ENGINE THREW",
   "intake-quiet": "THE INTAKE WENT QUIET",
   // The routing-rule intake received a delivery with no raw MIME in it, which means the

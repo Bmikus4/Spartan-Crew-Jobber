@@ -3,6 +3,7 @@ import { authorizeCronCall } from "../../../lib/apiAuth";
 import { backfillBoardLinks, backfillLinks, linkAbsolute, sweepLinks } from "../../../lib/v2/links";
 import { botWrites, retryUnread, sweepUndecided } from "../../../lib/v2/process";
 import { resumeStopped } from "../../../lib/v2/resume";
+import { ladderCheck } from "../../../lib/v2/bot/ladder";
 import { replanOpen } from "../../../lib/v2/replan";
 import { pruneTrace } from "../../../lib/v2/traceLive";
 import { pullTruth } from "../../../lib/v2/loop/truth";
@@ -50,6 +51,10 @@ async function sync(request: Request, labels: boolean): Promise<Response> {
     // Each thread's absolute links (an R, J or PO it names, the bot's own order), again whenever an email or an order
     // changes; an absolute link overrules a guessed one (DECISIONS O17).
     ["links", () => linkAbsolute(sql).then((r) => ({ graded: r.graded, added: r.added.length, replaced: r.replaced.length, conflicts: Object.keys(r.conflicts).length }))],
+    // O34's pre-registered auto-rollback (bot/ladder.ts), before any write resumes this minute: a
+    // mismatch ledger row, a staff reversal within 72h, or a write-path error report turns the
+    // class (or all of them) off in Settings, which the gate inside runOp reads next.
+    ["ladder", () => ladderCheck(sql, Date.now())],
     ["retry", () => resumeStopped(sql)],
     // A stored client email with no decision is decided, or becomes a card (process.ts sweepUndecided).
     ["undecided", () => sweepUndecided()],

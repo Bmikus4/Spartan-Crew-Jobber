@@ -36,6 +36,14 @@ export type Op =
   | { kind: "add_shift"; order_id: number; location_id: number; name: string; date: string; start: string; end: string; positions: PositionSpec[] }
   | { kind: "add_position"; order_id: number; shift_id: number; date: string; start: string; end: string; position: PositionSpec };
 
+/** The OnSinch user the bot's login (and the old engine's API key) writes as. */
+export const BOT_USER = 2257;
+
+// Record<Op["kind"], 1> so adding or renaming a kind refuses to compile until this list follows:
+// the ladder's settings whitelist and gate read it at runtime (DECISIONS O34).
+const _everyKind: Record<Op["kind"], 1> = { create_order: 1, set_position_size: 1, set_position_times: 1, set_po: 1, cancel_position: 1, add_shift: 1, add_position: 1 };
+export const OP_KINDS = Object.keys(_everyKind) as Op["kind"][];
+
 /** Keys sorted at every depth; a field left undefined is left out, as JSON leaves it. */
 export const canonical = (v: unknown): string => Array.isArray(v) ? `[${v.map(canonical).join(",")}]`
   : v && typeof v === "object" ? `{${Object.keys(v).sort().filter((k) => (v as Record<string, unknown>)[k] !== undefined).map((k) => `${JSON.stringify(k)}:${canonical((v as Record<string, unknown>)[k])}`).join(",")}}`

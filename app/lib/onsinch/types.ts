@@ -493,6 +493,14 @@ export interface Settings {
    */
   bot_writes_enabled?: boolean;
   /**
+   * THE PROMOTION LADDER'S PER-CLASS FLAGS (DECISIONS O34, decisions/2026-11-11-bot-write-promotion-
+   * ladder.md): the op kinds the bot may write live, each with the day it was enabled (the rollback
+   * checks read nothing older, so history cannot trip a later enable) and a daily cap (null is
+   * uncapped, stage 2). ENABLING a class is a person's dated decision; the sync's ladder step may
+   * only ever REMOVE one. Both master switches still gate above the classes.
+   */
+  bot_write_classes?: Record<string, { since: string; cap: number | null }>;
+  /**
    * Clear test data every 15 minutes (Ben, 2026-10-14), from the minute sync (lib/testData.ts
    * says what counts as a test). Off means nothing is cleared on a timer; the Settings button
    * still clears on demand. Optional so a row written before it existed reads as off.
@@ -585,6 +593,7 @@ export const DEFAULT_SETTINGS: Settings = {
   analytics_tab_enabled: false,
   intake_paused: false,
   bot_writes_enabled: false,
+  bot_write_classes: {},
   reply_delivery: "draft",
   reply_scope: "all",
   default_rate_card: 315,
