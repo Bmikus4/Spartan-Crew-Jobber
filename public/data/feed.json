@@ -6308,5 +6308,22 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0316",
+  "ts": "2026-11-11T13:10:51+00:00",
+  "kind": "decision",
+  "headline": "O34: promotion ladder ratified - set_position_size canary, pre-registered auto-rollback; shadow has an exit",
+  "subject": "Bot-write promotion ladder decided; shadow mode now has an exit",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 132,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  },
+  "sources": [
+   "decisions/2026-11-11-bot-write-promotion-ladder.md"
+  ]
  }
 ]
