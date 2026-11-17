@@ -6356,5 +6356,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0319",
+  "ts": "2026-11-17T22:45:41+00:00",
+  "kind": "measurement",
+  "headline": "Outage backfill: client emails in the 12-17 Nov gap 30 -> 159, all decided; 367 of 367 window messages stored; one thread the New label never marked found by audit",
+  "subject": "The 12-17 Nov intake gap is stored and decided: 159 client emails, 0 unstored",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 133,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]
