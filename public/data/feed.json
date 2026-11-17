@@ -6370,5 +6370,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0320",
+  "ts": "2026-11-17T23:33:41+00:00",
+  "kind": "measurement",
+  "headline": "Owner's call: Spartan Intake Watchdog and Spartan Alarms deactivated in n8n; outage signals are error_reports and the Live Feed banner only",
+  "subject": "n8n's intake watchdog and alarm emails are off; no Spartan alarm emails anyone",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 133,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]
