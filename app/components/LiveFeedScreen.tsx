@@ -644,6 +644,17 @@ export default function LiveFeedScreen({ isActive, tv = false }: { isActive: boo
 
       {/* Wherever someone can click it, never on the office TV: its Settings switch is gone (owner, 2 Nov). */}
 
+      {/* AN OUTAGE TAKES THE SCREEN, NOT ONLY THE DOT. Intake was dead from 12 Nov 16:40Z to 17 Nov 13:32Z (an
+          n8n Gmail credential): the dot said "no new email for 90+ min", the owner's alarm emails are off (4 Nov),
+          and the list sat at 0 needs because it could see nothing. intake_stale counts working-hours silence only. */}
+      {emailStale && !past && (
+        <div role="alert" style={{ display: "flex", alignItems: "center", gap: 16 * s, padding: `${14 * s}px ${20 * s}px`, borderRadius: 12 * s, border: `2px solid ${RED}`, background: tint(RED, 14), fontSize: 24 * s, fontWeight: 800, flexShrink: 0 }}>
+          {data?.health.last_email_at
+            ? <>No email has come in since {momentLabel(data.health.last_email_at)}: anything sent after that is missing from this list.</>
+            : <>No email has come in: this list is missing every request.</>}
+        </div>
+      )}
+
       {past && (
         <div role="status" style={{ display: "flex", alignItems: "center", gap: 16 * s, padding: `${12 * s}px ${18 * s}px`, borderRadius: 12 * s, border: `1px solid ${AMBER}`, background: tint(AMBER, 10), fontSize: 20 * s, fontWeight: 700, flexShrink: 0 }}>
           History: the list as it stood on {momentLabel(past.at)}

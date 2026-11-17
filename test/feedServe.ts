@@ -160,6 +160,8 @@ void (async () => {
     // 10-21: the office screen kept drawing the deleted Everything tab until reloaded by hand.
     const screen = readFileSync("app/components/LiveFeedScreen.tsx", "utf8");
     ok(/build/.test(get) && /build\.current !== body\.build\) \{ window\.location\.reload\(\)/.test(screen), "the feed says which build answered, and a screen that sees it change reloads itself");
+    // 12-17 Nov: intake was dead 4.5 days behind a red dot while the list read 0 needs.
+    ok(/emailStale && !past && \(\s*<div role="alert"/.test(screen), "a stale intake puts a banner across the screen, not only the sync dot");
   }
 
   console.log(fails ? `\n${fails} FAILED` : "\nALL PASS");

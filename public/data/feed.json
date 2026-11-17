@@ -6342,5 +6342,19 @@
   "sources": [
    "app/lib/v2/bot/ladder.ts"
   ]
+ },
+ {
+  "id": "S-0318",
+  "ts": "2026-11-17T13:47:31+00:00",
+  "kind": "measurement",
+  "headline": "Intake dead 4.5 days unseen behind a dot; a stale intake now takes the screen",
+  "subject": "A dead intake now puts a red banner across the Live Feed, not only a dot",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 133,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]
