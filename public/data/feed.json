@@ -6384,5 +6384,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0321",
+  "ts": "2026-11-17T23:38:49+00:00",
+  "kind": "measurement",
+  "headline": "Watchdog + Spartan Alarms deleted from n8n; definitions and history (2,450 checks, 35 alarm sends) kept in n8n/retired/2026-11-17; the outage alarms did reach the owner (13 emails)",
+  "subject": "The retired n8n watchdog and alarm workflows' history is kept in the repo",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 133,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]

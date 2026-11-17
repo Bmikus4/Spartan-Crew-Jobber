@@ -1,0 +1,94 @@
+{
+  "id": "mQkxdu2rLkTovYwn",
+  "name": "Spartan Alarms",
+  "retired": "2026-11-17",
+  "was_active_since": "2026-10-16T12:56:04.918Z",
+  "last_updated": "2026-10-16T12:56:04.918Z",
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "nodes": [
+    {
+      "id": "a1d3c0de-0001-4a1a-9a00-000000000001",
+      "name": "Alarm in",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "spartan-alarm",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "webhookId": "8baf52e2-2eff-4657-8f31-47bbc965d69b"
+    },
+    {
+      "id": "a1d3c0de-0002-4a1a-9a00-000000000002",
+      "name": "Email the alarm",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        272,
+        0
+      ],
+      "parameters": {
+        "sendTo": "={{ ['[email]'].includes(String($json.body.to || '').trim().toLowerCase()) ? String($json.body.to).trim() + ', [email]' : '[email], [email]' }}",
+        "subject": "={{ $json.body.letter && $json.body.subject ? $json.body.subject : ($json.body.user_name || 'Spartan alarm') + ' - ' + ($json.body.route || 'unknown') }}",
+        "emailType": "text",
+        "message": "={{ $json.body.ticket_text || JSON.stringify($json.body) }}{{ $json.body.letter ? '' : '\\n\\n-----\\nRef: ' + $json.body.record_id + '\\nWhen: ' + $json.body.ts + '\\nWhere: ' + $json.body.route + '\\nBuild: ' + $json.body.deploy_sha + '\\n' + ($json.body.transcript || '') + '\\n\\nSent by the n8n workflow \"Spartan Alarms\" on the Test Email credential.' }}",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "C6DU44mTQD705sno",
+          "name": "Test Email"
+        }
+      },
+      "webhookId": "f3af9088-cc6b-4609-9876-e45df879d0e8"
+    },
+    {
+      "id": "a1d3c0de-0003-4a1a-9a00-000000000003",
+      "name": "Answer ok",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        544,
+        0
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\"ok\": true}",
+        "options": {}
+      }
+    }
+  ],
+  "connections": {
+    "Alarm in": {
+      "main": [
+        [
+          {
+            "node": "Email the alarm",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Email the alarm": {
+      "main": [
+        [
+          {
+            "node": "Answer ok",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}
