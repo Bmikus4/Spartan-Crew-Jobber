@@ -6447,5 +6447,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0325",
+  "ts": "2026-11-18T13:39:12+00:00",
+  "kind": "measurement",
+  "headline": "TV autoclear restored (O49): 72 open cards back to the system-cleared board; check/X kept",
+  "subject": "TV cards clear on the app's own reading again; the check and X stay",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 133,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]

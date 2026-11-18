@@ -145,7 +145,7 @@ const map = (...os: Order[]) => new Map(os.map((o) => [o.order_id, o]));
     ok(r.done === 1 && marks.length === 1 && marks[0].mark === "done" && /R11001, staff changed the crew/.test(marks[0].evidence.text), "the need is marked done with what staff did", { r, marks });
     ok(new Date(marks[0].at).toISOString() === "2026-10-28T10:00:00.000Z", "dated when staff did it, not when the sync saw it", marks[0].at);
     const tv = await serveFeed({ ...liveFeedDeps(), jobs: undefined, remember: undefined }, NOW);
-    ok(tv.status === 200 && !(tv.all ?? []).some((c) => c.green) && (tv.all ?? []).some((c) => /^Looks done in OnSinch/.test(c.check ?? "")), "the TV shows the mark as a hint and leaves the card to a person (Ben, 18 Nov)", tv.status);
+    ok(tv.status === 200 && (tv.all ?? []).some((c) => c.green), "the TV shows it green from the mark alone", tv.status);
 
     const count = async () => { let n = 0; fault.when = () => { n++; return false; }; await serveFeed({ ...liveFeedDeps(), jobs: undefined, remember: undefined }, NOW); fault.when = null; return n; };
     const one = await count();
@@ -225,8 +225,7 @@ const map = (...os: Order[]) => new Map(os.map((o) => [o.order_id, o]));
     const card = (((before.body as any).items ?? []) as any[]).find((c) => c.thread_id === "t-keep");
     await sql`INSERT INTO feed_marks (item_key, thread_id, mark, evidence) VALUES (${card.items[0].item_key}, 't-keep', 'agreed', ${JSON.stringify({ text: "Agreed" })}::jsonb)`;
     const after = await serveFeed({ ...liveFeedDeps(), jobs: undefined, remember: undefined }, Date.parse("2026-10-28T12:00:00Z"));
-    const kept = (((after.body as any).items ?? []) as any[]).find((c) => c.thread_id === "t-keep");
-    ok(kept && !kept.green && /^Looks agreed with the client/.test(kept.check ?? ""), "an agreed need stays on the TV with the hint, for a person to clear (Ben, 18 Nov)");
+    ok(!(((after.body as any).items ?? []) as any[]).some((c) => c.thread_id === "t-keep"), "an agreed need is off the TV");
   }
 
   console.log("\n[8] withdrawn: the client took its own request back, and OnSinch shows nothing done (the owner, 1 Nov)");

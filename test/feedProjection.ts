@@ -70,7 +70,7 @@ console.log("\n[3] what the engine made stays open until somebody checks it (Ben
   ok(!c.green && c.lane === "need" && c.items[0].green === null && c.items[0].status === "Order was created, check to verify", "a create is open, reading check to verify");
   ok(p.counts.to_check === 2 && p.counts.done === 0 && p.counts.needs_created === 0 && p.counts.needs_updated === 0, "both counted to check, not done and not as needs");
   const ed = project(new Map(), [{ ...mark(`updated-check:902:${NOW - 2 * H}`, "d", NOW - H, "done"), by: null }], null, NOW, new Map(), [...fromStates([updated("d", NOW - 2 * H)], new Map(), NOW)]);
-  ok(!ed.cards[0].green && ed.cards[0].lane === "need" && /^Looks done in OnSinch/.test(ed.cards[0].check ?? ""), "staff's work found after the write (done.ts) is a hint; the card waits for a person (Ben, 18 Nov)");
+  ok(ed.cards[0].green && ed.cards[0].items[0].green?.mark === "done", "staff's work found after the write (done.ts) closes it");
   const t = project(new Map(), [mark(`created-check:901:${NOW - H}`, "c", NOW - 60_000)], null, NOW, new Map(), [...fromStates([created("c", NOW - H)], new Map(), NOW)]);
   ok(t.cards[0].items[0].green?.mark === "checked" && t.cards[0].items[0].green?.by === "kate@spartancrew.co.uk", "a tick on it shows who checked it");
   ok(t.cards[0].items[0].green?.at === NOW - 60_000 && t.counts.done === 1, "and it went green when it was checked");
@@ -109,8 +109,8 @@ console.log("\n[7] green needs, and how long done work stays");
 {
   const key = `needs-updated:b:900:${NOW - 3 * H}`;
   let p = project(new Map([["b", NOW - 3 * H]]), [mark(key, "b", NOW - 10 * 60_000, "done")], null, NOW, new Map(), [...fromStates([needsUpdated("b")], new Map([["b", NOW - 3 * H]]), NOW)]);
-  ok(p.cards[0]?.green === false && p.cards[0].lane === "need" && p.counts.done === 0 && /^Looks done in OnSinch/.test(p.cards[0].check ?? ""), "staff's work found (done.ts) does not close a need: it is a hint (Ben, 18 Nov)");
-  p = project(new Map([["b", NOW - 3 * H]]), [mark(key, "b", NOW - 10 * 60_000, "done"), mark(key, "b", NOW - 5 * 60_000, "denied")], null, NOW, new Map(), [...fromStates([needsUpdated("b")], new Map([["b", NOW - 3 * H]]), NOW)]);
+  ok(p.cards[0]?.green === true && p.cards[0].lane === "done" && p.counts.done === 1 && p.counts.needs_updated === 0, "staff's work found (done.ts) closes a need (O49)");
+  p = project(new Map([["b", NOW - 3 * H]]), [mark(key, "b", NOW - 5 * 60_000, "denied")], null, NOW, new Map(), [...fromStates([needsUpdated("b")], new Map([["b", NOW - 3 * H]]), NOW)]);
   ok(p.cards[0]?.green === true && p.cards[0].lane === "done" && p.cards[0].items[0].green?.mark === "denied" && p.counts.done === 1, "a person's X clears it, as their check does");
   p = project(new Map([["b", NOW - 3 * H]]), [mark(key, "b", NOW - DONE_DWELL_MS - 1)], null, NOW, new Map(), [...fromStates([needsUpdated("b")], new Map([["b", NOW - 3 * H]]), NOW)]);
   ok(p.cards.length === 0, "a done card leaves after a day");
@@ -227,10 +227,10 @@ console.log("\n[14] a need that resolves without an engine write turns green ins
   const res: FeedMark = { item_key: key, thread_id: "a", mark: "resolved", by: null, evidence: p.remember[0].evidence, at: NOW - 60_000 };
   p = project(inbound, [open, res], null, NOW, new Map(), [...fromStates([gone], inbound, NOW)]);
   const c = p.cards[0];
-  ok(c?.green === false && c.lane === "need" && c.items[0].kind === "needs-created" && c.colour === "red" && c.items[0].green === null, "then it stays an open card, as the need it was (Ben, 18 Nov)");
-  ok(p.counts.done === 0 && p.remember.length === 0, "not counted done, and remembered once");
-  ok(c?.check === "Looks resolved: no order needed any more, per the system", "with the system's reading as a hint");
-  ok(project(inbound, [open, { ...res, at: NOW - DONE_DWELL_MS - 1 }], null, NOW, new Map(), [...fromStates([gone], inbound, NOW)]).cards.length === 1, "and it stays until a person clears it, however old the hint");
+  ok(c?.green === true && c.lane === "done" && c.items[0].kind === "needs-created" && c.colour === "red" && c.items[0].green?.mark === "resolved", "then it is a done card, as the need it was");
+  ok(c?.items[0].green?.at === NOW - 60_000 && p.counts.done === 1 && p.counts.needs_created === 0, "green from when it resolved, and counted done");
+  ok((c?.items[0].green?.evidence as { text?: string })?.text === "No order needed any more, per the system", "saying what happened");
+  ok(project(inbound, [open, { ...res, at: NOW - DONE_DWELL_MS - 1 }], null, NOW, new Map(), [...fromStates([gone], inbound, NOW)]).cards.length === 0, "it leaves after a day like any done card");
   const naj = st({ thread_id: "a", classification: "not-a-job", status: "ordered" });
   ok((project(inbound, [open], null, NOW, new Map(), [...fromStates([naj], inbound, NOW)]).remember[0]?.evidence as { text?: string })?.text === "Read as not a job by the system", "a reclassified thread says so");
   p = project(inbound, [open], null, NOW, new Map(), [...fromStates([created("a", NOW - 5 * H)], inbound, NOW)]);

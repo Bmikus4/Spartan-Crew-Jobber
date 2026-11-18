@@ -14,3 +14,14 @@ second corrected the first reading of B.
 | O48 | **E: when the app or intake goes quiet, one email to the owner's inbox, and nowhere else.** | Amends O39 (email alarms removed completely) for this one alarm. Not built yet. Today no alarm reaches anyone: `errorReport.ts` posts to the n8n webhook of the deleted Spartan Alarms workflow. |
 
 Also settled: the n8n Watchdog and Alarms workflows were already deleted, so that item leaves the owner's list.
+
+## Later on 18 Nov: Stop 2 answers, and O43 reversed
+
+**Decided by:** the owner, 18 Nov, after the Stop 2 report (`fleet/resume/Spartan-Audit-Report-2026-11-18.md`).
+
+| id | ruling | supersedes |
+|---|---|---|
+| O49 | **The app's own reading clears cards again.** "Revert my change about removing autoclear, go back to the 7." Staff's work found in OnSinch (`done`), agreed with the client (`agreed`) and answered by a later email (`resolved`) close a card as they did before O43. The green check and red X stay (O44), and the X clears a card like the check. The timers are unchanged: a dated job leaves the day after its last day (O13), an undated need after 14 quiet days, a cleared card after 24 hours. Measured: under O43 the TV went from 7 open cards to 72 the minute it deployed (feed_history 07:00Z and 07:39Z); done.ts found the right work for 75% of 205 closures and the wrong work for 5% (report 4.2). | Reverses O43; restores O33. O44 stands. |
+| O50 | **F: one model for the write gates, yes, off by default.** Settings get two switches, Enable updates and Enable creates, each with its own day window, both off. When a type is on, a person's check books the plan for that type in OnSinch; the bot writes nothing on its own. `SPARTAN_WRITES` stays as the server's stop; the O34 roll-back checks and daily cap stay under each switch; `order_mode` is deleted. Built in Phase 5. | Replaces `bot_writes_enabled`, `create_lead_*` and O8 (as the 17 Nov ruling said); O34's stages become the order of Phase 7. |
+| O51 | **G: the smaller rules, yes as proposed** (report section 11). A PO alone is a "set PO" update, never a shift change or a red card; on a provisional order it is the client's yes (O30). O10 is the bot's default, shown as the plan's choice, never a refusal. On an add, V13 applies to the shift's new total (to be confirmed on the Phase 4 replay). A guessed link to a finished order is not a key. A plan may split orders by venue or weekend for staff to confirm; a quote is never booked by the bot; the usual length stays a shown guess; the bot never adds drivers. | Closes G. |
+| O52 | **The Stop 2 deletion list D1-D12, yes.** Phase 3 carries them out in small ships, each table already in the data home, worktrees unlinked and verified first (never `git worktree remove --force`), uncommitted work archived before removal. | Closes the Stop 2 deletion asks. |
