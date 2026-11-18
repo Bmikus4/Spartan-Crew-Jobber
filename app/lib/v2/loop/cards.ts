@@ -27,7 +27,7 @@ import { ensureSchema } from "../../migrations";
 
 type Sql = NeonQueryFunction<false, false>;
 const NEED = new Set(["needs-created", "needs-updated"]);
-const GREEN_EXIT: Record<string, string> = { checked: "a person's tick", done: "staff's work found in OnSinch", resolved: "answered by a later email", agreed: "agreed with the client, held in OnSinch" };
+const GREEN_EXIT: Record<string, string> = { checked: "a person's tick", denied: "a person's no", done: "staff's work found in OnSinch", resolved: "answered by a later email", agreed: "agreed with the client, held in OnSinch" };
 const addr = (f: unknown) => String(f ?? "").replace(/.*</, "").replace(/>.*/, "").trim().toLowerCase();
 
 /**

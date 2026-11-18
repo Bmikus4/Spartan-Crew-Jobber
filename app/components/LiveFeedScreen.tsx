@@ -2,8 +2,8 @@
 
 // The office TV: everything the engine processed that is still waiting on a person.
 //
-// A DISPLAY, NOT A WORKSPACE. The only control that writes is the tick, and the tick
-// writes only its own record (app/lib/feed/check.ts). The same component runs in the app
+// A DISPLAY, NOT A WORKSPACE. The only controls that write are a card's check and X, and they
+// write only their own record (app/lib/feed/check.ts). The same component runs in the app
 // shell and fullscreen on the TV; `s` (scale) is the only difference.
 //
 // ONE LIST, ONE TILE PER JOB, TOP TO BOTTOM IN THE SERVER'S ORDER (Ben, 2026-10-10:
@@ -91,6 +91,7 @@ function evidenceLine(it: FeedItem): string | null {
   if ((g.evidence as { ported?: boolean } | null)?.ported) return "Completed, carried over from the jobs board";
   // A person's Confirm says they made the update themselves (O32), so it reads as done like any other (O33).
   if (g.mark === "checked") { const who = personName(g.by, e.name); return `Done${who ? ` by ${who}` : ""}, ${when}`; }
+  if (g.mark === "denied") { const who = personName(g.by, e.name); return `Not needed${who ? `, said ${who}` : ""}, ${when}`; }
   if (e.held) return "Already in OnSinch: every shift asked for";
   if (g.mark === "done") return `Done in OnSinch: ${e.text ?? "staff did it"}, ${when}`;
   if (g.mark === "staff-edit") return `Changed in OnSinch by staff: ${e.text ?? "edited"}, ${when}`;
@@ -159,6 +160,7 @@ const isOpen = (c: FeedCard) => c.lane !== "done";
 function labelOf(card: FeedCard, it: FeedItem | null): { text: string; ok: boolean } {
   const kind = (it ?? card.items[0]).kind;
   if (kind === "needs-reply") return { text: "Needs Reply", ok: false };
+  if (it?.green?.mark === "denied") return { text: "Not Needed", ok: true };
   const created = kind === "needs-created" || kind === "created-check";
   if (card.green || kind === "created-check" || kind === "updated-check") return { text: created ? "Order Created" : "Order Updated", ok: true };
   return { text: created ? "Order Needs Created" : "Order Needs Updated", ok: false };
@@ -222,34 +224,39 @@ function When({ card, it, lead, now, s }: { card: FeedCard; it: FeedItem | null;
 }
 
 /**
- * The tick, as CONFIRM (Ben, 2026-10-04): the one thing on a tile a person is meant to
- * press. Once green it reads Done and looks the same whether a person confirmed it or the
- * work was found in OnSinch (Ben, 4 Nov, DECISIONS O33); only a person's own Confirm still
- * undoes on a press.
+ * THE CHECK AND THE X (Ben, 18 Nov): every decision on a card is staff's, so each card carries a green check (done,
+ * right) and a red X (not needed) at its right-hand end: icon-only rounded rectangles, large enough to hit on the TV.
+ * Either press clears the card; pressing the lit one again undoes it. Neither writes to OnSinch (O35: the check books
+ * the plan only once a write type is enabled in Settings). Red here is the X, which Ben asked for by name, so the
+ * 10-10 rule that kept Confirm off red ("red means New job") does not apply to it.
  */
-function Tick({ card, it, s, height, onTick }: { card: FeedCard; it: FeedItem; s: number; height: number; onTick: (c: FeedCard, it: FeedItem, checked: boolean) => void }) {
-  const ticked = it.green?.mark === "checked";
-  const autoGreen = !!it.green;
+type OnTick = (c: FeedCard, it: FeedItem, checked: boolean, denied?: boolean) => void;
+function Decide({ card, it, s, height, onTick }: { card: FeedCard; it: FeedItem; s: number; height: number; onTick: OnTick }) {
+  const mark = it.green?.mark;
+  const decided = mark === "checked" || mark === "denied";
   const h = height * s;
-  const label = it.green ? "Done" : "Confirm";
-  return (
-    <button
-      aria-label={ticked ? "Undo confirm" : label}
-      onClick={() => { if (!it.green || ticked) onTick(card, it, !ticked); }}
-      style={{
-        height: h, minWidth: h * 2.7, padding: `0 ${h * 0.36}px`, borderRadius: h * 0.24, flexShrink: 0,
-        display: "inline-flex", alignItems: "center", justifyContent: "center", gap: h * 0.16,
-        fontSize: h * 0.4, fontWeight: 700, whiteSpace: "nowrap",
-        color: autoGreen ? GREEN : CONFIRM_TEXT, background: autoGreen ? "transparent" : CONFIRM_FILL,
-        border: autoGreen ? `1px solid ${tint(GREEN, 45)}` : "none",
-        cursor: autoGreen && !ticked ? "default" : "pointer", transition: "background-color 200ms, color 200ms",
-      }}>
-      {it.green && (
-        <svg width={h * 0.4} height={h * 0.4} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.2" strokeLinecap="round" strokeLinejoin="round"><polyline points="4.5 12.5 10 18 19.5 6.5" /></svg>
-      )}
-      {label}
-    </button>
-  );
+  const button = (yes: boolean) => {
+    const lit = decided && (yes ? mark === "checked" : mark === "denied");
+    // A green the system set (a card carried over from the jobs board) is not staff's to undo or overrule.
+    const off = (decided && !lit) || (!!it.green && !decided);
+    const name = yes ? (lit ? "Undo confirm" : "Confirm") : (lit ? "Undo not needed" : "Not needed");
+    return (
+      <button
+        aria-label={name} title={name} disabled={off}
+        onClick={() => (lit ? onTick(card, it, false) : onTick(card, it, true, !yes))}
+        style={{
+          width: h * 1.5, height: h, borderRadius: h * 0.3, border: "none", flexShrink: 0,
+          display: "inline-flex", alignItems: "center", justifyContent: "center",
+          background: yes ? GREEN : RED, color: "#fff", opacity: off ? 0.18 : 1,
+          cursor: off ? "default" : "pointer", transition: "opacity 200ms",
+        }}>
+        <svg width={h * 0.55} height={h * 0.55} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+          {yes ? <polyline points="4.5 12.5 10 18 19.5 6.5" /> : <><line x1="6.5" y1="6.5" x2="17.5" y2="17.5" /><line x1="17.5" y1="6.5" x2="6.5" y2="17.5" /></>}
+        </svg>
+      </button>
+    );
+  };
+  return <div style={{ display: "inline-flex", gap: h * 0.25 }}>{button(true)}{button(false)}</div>;
 }
 
 /**
@@ -287,7 +294,7 @@ const clamp = (lines: number): React.CSSProperties => ({ display: "-webkit-box",
  *   3. the one thing to check, the PO, who wrote and how long ago; on a done tile, what was done.
  * Fixed columns keep every number and every Confirm on one vertical down the screen.
  */
-const JobTile = memo(function JobTile({ card, now, s, phase, onTick, readOnly = false, onOpen }: { card: FeedCard; now: number; s: number; phase: Phase; onTick: (c: FeedCard, it: FeedItem, checked: boolean) => void; readOnly?: boolean; onOpen?: (thread: string) => void }) {
+const JobTile = memo(function JobTile({ card, now, s, phase, onTick, readOnly = false, onOpen }: { card: FeedCard; now: number; s: number; phase: Phase; onTick: OnTick; readOnly?: boolean; onOpen?: (thread: string) => void }) {
   const it = orderItem(card);
   const lead = it ?? card.items[0];
   const done = card.green;
@@ -342,7 +349,7 @@ const JobTile = memo(function JobTile({ card, now, s, phase, onTick, readOnly = 
       <div style={cell(true)}><When card={card} it={it} lead={lead} now={now} s={s} /></div>
 
       <div style={{ display: "flex", justifyContent: "flex-end", paddingLeft: 24 * s }}>
-        {it && !readOnly && <Tick card={card} it={it} s={s} height={52} onTick={onTick} />}
+        {it && !readOnly && <Decide card={card} it={it} s={s} height={52} onTick={onTick} />}
       </div>
     </article>
   );
@@ -369,7 +376,7 @@ export default function LiveFeedScreen({ isActive, tv = false }: { isActive: boo
   const [now, setNow] = useState(() => Date.now());
   const [full, setFull] = useState(false);
   const [idle, setIdle] = useState(false);
-  const [undo, setUndo] = useState<{ card: FeedCard; item: FeedItem; until: number } | null>(null);
+  const [undo, setUndo] = useState<{ card: FeedCard; item: FeedItem; denied: boolean; until: number } | null>(null);
   /** Tiles that have just gone green: where they stood, and when. */
   const [settling, setSettling] = useState<Map<string, { index: number; since: number }>>(new Map());
   const [below, setBelow] = useState(0);
@@ -518,19 +525,19 @@ export default function LiveFeedScreen({ isActive, tv = false }: { isActive: boo
     } catch { /* the browser refused; the screen still works windowed */ }
   };
 
-  const tick = useCallback(async (card: FeedCard, item: FeedItem, checked: boolean) => {
+  const tick = useCallback(async (card: FeedCard, item: FeedItem, checked: boolean, denied = false) => {
     unlockAudio();
     setData((d) => d && {
       ...d,
       items: d.items.map((c) => c.thread_id !== card.thread_id ? c : {
         ...c,
         green: checked && !hasReply(c),
-        items: c.items.map((i) => i.item_key !== item.item_key ? i : { ...i, green: checked ? { mark: "checked" as const, by: null, evidence: null, at: Date.now() } : null }),
+        items: c.items.map((i) => i.item_key !== item.item_key ? i : { ...i, green: checked ? { mark: denied ? "denied" as const : "checked" as const, by: null, evidence: null, at: Date.now() } : null }),
       }),
     });
-    setUndo(checked ? { card, item, until: Date.now() + UNDO_MS } : null);
+    setUndo(checked ? { card, item, denied, until: Date.now() + UNDO_MS } : null);
     try {
-      await fetch("/api/feed/check", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ item_key: item.item_key, thread_id: card.thread_id, checked }) });
+      await fetch("/api/feed/check", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ item_key: item.item_key, thread_id: card.thread_id, checked, denied }) });
     } finally {
       void load();
     }
@@ -708,7 +715,7 @@ export default function LiveFeedScreen({ isActive, tv = false }: { isActive: boo
 
       {undo && undo.until > now && (
         <div role="status" style={{ position: "absolute", left: "50%", bottom: 32 * s, transform: "translateX(-50%)", background: "var(--surface-2)", color: "var(--text-primary)", border: "1px solid var(--border-strong)", borderRadius: 12 * s, padding: `${12 * s}px ${16 * s}px ${12 * s}px ${20 * s}px`, fontSize: 18 * s, fontWeight: 600, display: "flex", gap: 16 * s, alignItems: "center" }}>
-          Confirmed{undo.card.company ? `: ${undo.card.company}` : ""}
+          {undo.denied ? "Not needed" : "Confirmed"}{undo.card.company ? `: ${undo.card.company}` : ""}
           <button onClick={() => { const u = undo; setUndo(null); void tick(u.card, u.item, false); }} style={{ fontSize: 15 * s, fontWeight: 700, padding: `${6 * s}px ${14 * s}px`, borderRadius: 8 * s, border: "none", background: "var(--accent)", color: "var(--accent-contrast)", cursor: "pointer" }}>Undo</button>
         </div>
       )}

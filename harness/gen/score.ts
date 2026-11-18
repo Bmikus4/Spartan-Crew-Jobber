@@ -59,7 +59,9 @@ export function score(c: GenCase, out: Outcome): Scored {
     const card = s?.shown ?? null;
     // A reply the client is owed is a card staff answer by email, kept off the TV's order list (lane "reply").
     const reply = !card && s?.any?.items?.[0]?.kind === "needs-reply";
-    const state = reply ? "reply" : !card ? "absent" : card.green ? "done" : /^Possibly done/.test(card.check ?? "") ? "possibly" : "open";
+    // Since O43 (18 Nov) only a person clears a card, so the system's own "done" is the hint on the open card. That
+    // reading is what a case scores; reading only green would score every staff-done case open.
+    const state = reply ? "reply" : !card ? "absent" : card.green || /^Looks done in OnSinch/.test(card.check ?? "") ? "done" : /^Possibly done/.test(card.check ?? "") ? "possibly" : "open";
     const tag = l.label.replace(/\s+/g, "_");
     o(`tv.${tag}.state`, state === l.state, `expected ${l.state}; the TV shows ${state}${card ? ` (${card.items?.[0]?.kind}, "${card.check ?? ""}")` : ""}`);
     if (card && l.kind) o(`tv.${tag}.kind`, card.items?.[0]?.kind === l.kind, `expected ${l.kind}; got ${card.items?.[0]?.kind}`);

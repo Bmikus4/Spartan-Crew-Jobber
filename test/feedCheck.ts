@@ -32,7 +32,7 @@ function memStore() {
   const calls: string[] = [];
   const store: CheckStore = {
     async addMark(m) { calls.push(`add:${m.mark}`); const k = `${m.item_key}|${m.mark}`; if (!rows.has(k)) rows.set(k, { ...m, at: NOW }); },
-    async removeCheck(item_key) { calls.push("remove:checked"); rows.delete(`${item_key}|checked`); },
+    async removeCheck(item_key) { calls.push("remove:checked"); rows.delete(`${item_key}|checked`); rows.delete(`${item_key}|denied`); },
   };
   return { rows, calls, store };
 }
@@ -46,6 +46,19 @@ void (async () => {
     const row = [...s.rows.values()][0];
     ok(s.rows.size === 1 && row.mark === "checked" && row.by === "kate@spartancrew.co.uk", "one 'checked' row, by the signed-in person");
     ok(project(new Map(), [...s.rows.values()], null, NOW, new Map(), [...fromStates([state], new Map(), NOW)]).cards[0]?.green === true, "and the card is green");
+  }
+
+  console.log("\n[1a] the X (Ben, 18 Nov): a person's no clears the card too, and a changed mind never leaves both");
+  {
+    const s = memStore();
+    await applyCheck({ item_key: KEY, thread_id: "c", checked: true, denied: true }, "kate@spartancrew.co.uk", s.store);
+    ok(s.rows.size === 1 && [...s.rows.values()][0].mark === "denied", "one 'denied' row");
+    ok(project(new Map(), [...s.rows.values()], null, NOW, new Map(), [...fromStates([state], new Map(), NOW)]).cards[0]?.green === true, "and the card is cleared");
+    await applyCheck({ item_key: KEY, thread_id: "c", checked: true }, "kate@spartancrew.co.uk", s.store);
+    ok(s.rows.size === 1 && [...s.rows.values()][0].mark === "checked", "pressing the check after the X leaves only the check");
+    await applyCheck({ item_key: KEY, thread_id: "c", checked: false }, "kate@spartancrew.co.uk", s.store);
+    ok(s.rows.size === 0, "undo leaves neither");
+    ok((await applyCheck({ item_key: KEY, thread_id: "c", checked: true, denied: "yes" }, "k", s.store)).status === 400, "denied must be a boolean when given");
   }
 
   console.log("\n[1b] the tick carries the signer's display name; the email stays the audit identity");
@@ -89,7 +102,7 @@ void (async () => {
     ok(/status: 401/.test(post), "refuses with 401");
     ok(/import \{ addMark, removeCheck \} from "..\/..\/..\/lib\/feed\/marksDb"/.test(src) && !/conversation_state|onsinch|gmail/i.test(src), "imports only the tick's two writes");
     const db = readFileSync("app/lib/feed/marksDb.ts", "utf8");
-    ok(/DELETE FROM feed_marks WHERE item_key = \$\{item_key\} AND mark = 'checked'/.test(db), "the only delete is of a tick");
+    ok(/DELETE FROM feed_marks WHERE item_key = \$\{item_key\} AND mark IN \('checked', 'denied'\)/.test(db) && (db.match(/DELETE FROM/g) ?? []).length === 1, "the only delete is of a person's check or X");
   }
 
   console.log(fails ? `\n${fails} FAILED` : "\nALL PASS");

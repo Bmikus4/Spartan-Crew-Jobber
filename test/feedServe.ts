@@ -94,7 +94,8 @@ void (async () => {
     const need = { ...created, classification: "update", status: "error", order_action_log: [] } as unknown as ConversationState;
     const marks: FeedMark[] = [{ item_key: "needs-updated:c:901:0", thread_id: "c", mark: "done", by: null, evidence: { text: "R11312, staff changed the crew" }, at: NOW }];
     const g = await serveFeed(deps({ sources: async (inb, at) => fromStates([need], inb, at), marks: async () => marks }), NOW);
-    ok((g.body.items as { green: boolean }[])[0]?.green === true, "the minute sync's done mark turns the need green");
+    const gi = (g.body.items as FeedCard[])[0];
+    ok(gi?.green === false && /^Looks done in OnSinch: R11312/.test(gi.check ?? ""), "the minute sync's done mark is a hint on the open card, never green (Ben, 18 Nov)");
     const old = await serveFeed(deps({ sources: async (inb, at) => fromStates([need], inb, at), marks: async () => [{ ...marks[0], mark: "staff-edit" as const }] }), NOW);
     ok((old.body.items as { green: boolean }[])[0]?.green === false, "the old verifier's mark clears nothing");
   }
@@ -109,7 +110,7 @@ void (async () => {
     const gone = { ...need, status: "ordered" } as ConversationState;
     const r = await serveFeed(deps({ sources: async (inb, at) => fromStates([gone], inb, at), marks: async () => [...marks], remember }), NOW + 60_000);
     const items = r.body.items as FeedCard[];
-    ok(items.length === 1 && items[0].green && items[0].items[0].green?.mark === "resolved", "resolved: green on the same refresh, not gone");
+    ok(items.length === 1 && !items[0].green && /^Looks /.test(items[0].check ?? "") && marks.some((m) => m.mark === "resolved"), "resolved: stored, and on the same refresh the card stays open with the hint, not gone");
     const failing = await serveFeed(deps({ sources: async (inb, at) => fromStates([need], inb, at), remember: boom }), NOW);
     ok(failing.status === 200 && (failing.body.items as unknown[]).length === 1, "a failed memory write never costs the feed");
     ok(/remember: async/.test(readFileSync("app/lib/feed/live.ts", "utf8")), "production wires memory to addMark");

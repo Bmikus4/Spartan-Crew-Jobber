@@ -56,5 +56,5 @@ export async function addMark(m: Omit<FeedMark, "at"> & { at?: number }): Promis
 export async function removeCheck(item_key: string): Promise<void> {
   const sql = need();
   await ensure(sql);
-  await sql`DELETE FROM feed_marks WHERE item_key = ${item_key} AND mark = 'checked'`;
+  await sql`DELETE FROM feed_marks WHERE item_key = ${item_key} AND mark IN ('checked', 'denied')`;
 }

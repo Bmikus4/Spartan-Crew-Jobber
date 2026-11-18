@@ -35,13 +35,21 @@ export type FeedLane = "reply" | "need" | "done";
  * stopped yielding it. Without them the card vanished mid-list, which on a full screen
  * reads as a job lost, not a job done.
  */
-export type MarkKind = "checked" | "staff-edit" | "order-found" | "stamps" | "matched" | "dismissed" | "open" | "resolved" | "done" | "possibly" | "agreed";
+export type MarkKind = "checked" | "denied" | "staff-edit" | "order-found" | "stamps" | "matched" | "dismissed" | "open" | "resolved" | "done" | "possibly" | "agreed";
 /**
- * Done is a person's tick, staff's work found by the one evaluator (done.ts, marked by the minute sync's cards step),
- * or a later email answering the need. The old verifier's marks (staff-edit, order-found) are kept as history and
- * clear nothing: they were the system's guesses, and one in eight named another order (10-21).
+ * ONLY A PERSON CLEARS A CARD (Ben, 18 Nov: "the app never marks anything confirmed in the dashboard anymore; all
+ * decisions are up to staff"). Green is staff's check (`checked`) or staff's X (`denied`), nothing else. What the
+ * system infers, staff's work found in OnSinch (`done`), agreed with the client (`agreed`) or answered by a later
+ * email (`resolved`), is shown on the card as a hint and never clears it: from 12 Oct to 17 Nov those three closed
+ * 225 of 335 cards on their own while staff ticked 22. The old verifier's marks (staff-edit, order-found) are history.
  */
-const GREEN_MARKS = new Set<MarkKind>(["checked", "done", "resolved"]);
+const GREEN_MARKS = new Set<MarkKind>(["checked", "denied"]);
+/** The hint each inferred mark puts on line 3 of an open card, in place of clearing it. */
+const HINT: Partial<Record<MarkKind, (text: string) => string>> = {
+  done: (t) => `Looks done in OnSinch: ${t || "staff did it"}`,
+  agreed: (t) => `Looks agreed with the client${t ? `: ${t}` : ""}`,
+  resolved: (t) => `Looks resolved: ${t ? `${t.charAt(0).toLowerCase()}${t.slice(1)}` : "answered by a later email"}`,
+};
 
 /** The requester's wording, byte for byte (test/feedProjection.ts pins it). */
 export const STATUS_TEXT: Record<FeedKind, string> = {
@@ -229,8 +237,12 @@ export function project(
   // A tick outranks automatic evidence for what the card SAYS, not for when it went green.
   const ticked = new Map(marks.filter((m) => m.mark === "checked").map((m) => [m.item_key, m]));
   const possibly = new Map(marks.filter((m) => m.mark === "possibly").map((m) => [m.item_key, String((m.evidence as { text?: unknown } | null)?.text ?? "")]));
-  // Agreed with the client and held in OnSinch (done.ts agreedOn): nothing was left to do, so the need is not shown at all.
-  const agreed = new Set(marks.filter((m) => m.mark === "agreed").map((m) => m.item_key));
+  const hint = new Map<string, string>();
+  for (const m of [...marks].sort((a, b) => b.at - a.at)) {
+    const f = HINT[m.mark];
+    if (f && !hint.has(m.item_key)) hint.set(m.item_key, f(String((m.evidence as { text?: unknown } | null)?.text ?? "")));
+  }
+  const resolvedKeys = new Set(marks.filter((m) => m.mark === "resolved").map((m) => m.item_key));
   // A card's R and J are its thread's own (the link the planner keeps, v2.ts), never the
   // verifier's find for the screen: 11 of its 83 finds named another order than the evidence
   // finder (10-21), and the R/J-only list (serve.ts) would have listed those as known jobs.
@@ -303,7 +315,7 @@ export function project(
        */
       const was = s === source ? lastOpen.get(s.thread_id) : undefined;
       if (was && !carried.has(was.item_key) && (!it || ((it.kind === "created-check" || it.kind === "updated-check") && it.at < was.at))) {
-        if (!byKey.has(was.item_key)) {
+        if (!resolvedKeys.has(was.item_key) && !byKey.has(was.item_key)) {
           // Shown once stored: serveFeed writes this and projects again, so its time is the first sighting.
           remember.push({ item_key: was.item_key, thread_id: s.thread_id, mark: "resolved", by: null, evidence: { text: s.resolvedText } });
           continue;
@@ -311,7 +323,7 @@ export function project(
         const kind = was.item_key.split(":")[0] as FeedKind;
         it = { item_key: was.item_key, kind, status: STATUS_TEXT[kind], at: was.at, order_id: s.order_id };
       }
-      if (!it || it.at < from || agreed.has(it.item_key)) continue;
+      if (!it || it.at < from) continue;
       // A question, a quote or a missing detail is answered by writing back: once an email of
       // ours is on the thread after it, it is done (a draft is not an email: only sent mail is
       // in lastOutbound). Our email answers that and nothing else on the card.
@@ -375,7 +387,7 @@ export function project(
       quiet: !g && now - lastActivity > QUIET_MS,
       follow_up: followUp,
       ask: s.ask,
-      check: g ? null : possibly.get(it.item_key) ?? s.check,
+      check: g ? null : hint.get(it.item_key) ?? possibly.get(it.item_key) ?? s.check,
       po: s.po ?? null,
     });
     // Needs only: a check's key is its write, and a remembered check would read as resolved

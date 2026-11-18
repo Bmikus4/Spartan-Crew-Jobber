@@ -6433,5 +6433,19 @@
    "app/lib/mail/threadLabels.ts",
    "test/threadLabels.ts"
   ]
+ },
+ {
+  "id": "S-0324",
+  "ts": "2026-11-18T07:35:44+00:00",
+  "kind": "measurement",
+  "headline": "TV: green check + red X replace Confirm; inferred done/agreed/resolved are hints (O43-O48)",
+  "subject": "Only a person's check or X clears a TV card; the app's own reading is a hint",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 133,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]

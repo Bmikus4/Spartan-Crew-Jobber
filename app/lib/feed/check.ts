@@ -1,7 +1,8 @@
 // ============================================================================
-// The tick: "a person has looked, and it is right".
+// The tick and the X: "a person has looked, and it is right" (checked) or "it is not needed" (denied).
 // ----------------------------------------------------------------------------
-// It records who and when, and does NOTHING else — no OnSinch write, no email, no label.
+// It records who and when, and does NOTHING else — no OnSinch write, no email, no label. One item holds at most
+// one of the two: setting either removes both first, so a changed mind never leaves a check and an X together.
 // A reply cannot be ticked: it clears only when the follow-up board stops listing it,
 // because a person glancing at the TV has not answered the client.
 // ============================================================================
@@ -23,9 +24,10 @@ export async function applyCheck(body: unknown, actor: string, store: CheckStore
   const b = (body ?? {}) as Record<string, unknown>;
   const item_key = typeof b.item_key === "string" ? b.item_key : "";
   const thread_id = typeof b.thread_id === "string" ? b.thread_id : "";
-  if (!TICKABLE.test(item_key) || item_key.length > 300 || !thread_id || typeof b.checked !== "boolean")
+  if (!TICKABLE.test(item_key) || item_key.length > 300 || !thread_id || typeof b.checked !== "boolean" || (b.denied !== undefined && typeof b.denied !== "boolean"))
     return { status: 400, body: { ok: false, error: "item_key, thread_id and checked are required, and only an order item can be ticked" } };
-  if (b.checked) await store.addMark({ item_key, thread_id, mark: "checked", by: actor, evidence: name ? { name } : null });
-  else await store.removeCheck(item_key);
-  return { status: 200, body: { ok: true, item_key, checked: b.checked } };
+  const denied = b.checked && b.denied === true;
+  await store.removeCheck(item_key);
+  if (b.checked) await store.addMark({ item_key, thread_id, mark: denied ? "denied" : "checked", by: actor, evidence: name ? { name } : null });
+  return { status: 200, body: { ok: true, item_key, checked: b.checked, denied } };
 }
