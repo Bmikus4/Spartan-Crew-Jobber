@@ -2,7 +2,8 @@
 // beside them, and nothing at all once a card is ticked or seen resolved.
 //
 // Offline.  npx tsx test/threadLabels.ts
-import { labelsFor, changes, ORDER_LABELS, FOLLOW_UP } from "../app/lib/mail/threadLabels";
+import { labelsFor, changes, labelsRefusedAlarm, ORDER_LABELS, FOLLOW_UP } from "../app/lib/mail/threadLabels";
+import { fingerprint } from "../app/lib/errorReport";
 import type { FeedCard, FeedItem } from "../app/lib/feed/project";
 import { readFileSync } from "node:fs";
 let fails = 0;
@@ -32,6 +33,14 @@ ok(/body\.mode === "failed"/.test(route) && /DELETE FROM thread_labels WHERE thr
 const n8n = readFileSync("scripts/_labelNodes.mjs", "utf8");
 ok(/batchSize: 5/.test(n8n) && /"Label thread": \{ main: \[\[to\("Refused threads"\)\]\] \}/.test(n8n), "n8n writes 5 threads at a time and reports the refused ones");
 ok(new Set(ORDER_LABELS).size === 4 && !ORDER_LABELS.includes(FOLLOW_UP as any), "four order labels, and follow-up is not one of them (CLAUDE.md)");
+
+// One broken credential is one error_reports row: 3-17 Nov it was 34, one per refused count.
+const ids = (n: number) => Array.from({ length: n }, (_, i) => `t${i}`);
+const a5 = labelsRefusedAlarm(ids(5)), a37 = labelsRefusedAlarm(ids(37));
+ok(labelsRefusedAlarm(ids(4)) === null, "under the line: a thread's own trouble, no alarm");
+ok(!!a5 && !!a37 && fingerprint("bot/labels", a5.what) === fingerprint("bot/labels", a37.what), "5 refused and 37 refused are the same alarm", [a5, a37]);
+ok(!!a37 && a37.detail.startsWith("37 threads refused"), "the count is kept, in the detail", a37);
+ok(/const alarm = labelsRefusedAlarm\(failed\)/.test(route) && /\.\.\.alarm/.test(route), "the route raises exactly that alarm");
 
 console.log(fails ? `\n${fails} FAILED` : "\nall passed");
 process.exit(fails ? 1 : 0);

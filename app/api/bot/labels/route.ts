@@ -6,7 +6,7 @@ import { automationPausedFlag } from "../../../lib/paused";
 import { serveFeed } from "../../../lib/feed/serve";
 import { liveFeedDeps } from "../../../lib/feed/live";
 import type { FeedCard } from "../../../lib/feed/project";
-import { changes, labelsFor, COLOURS, FOLLOW_UP, ORDER_LABELS, RENAMES, STRIP } from "../../../lib/mail/threadLabels";
+import { changes, labelsFor, labelsRefusedAlarm, COLOURS, FOLLOW_UP, ORDER_LABELS, RENAMES, STRIP } from "../../../lib/mail/threadLabels";
 import { ensureSchema } from "../../../lib/migrations";
 import { reportError } from "../../../lib/errorReport";
 
@@ -16,8 +16,6 @@ export const dynamic = "force-dynamic";
 
 /** Gmail calls one n8n run makes for threads; the rest wait for the next minute. */
 const PER_RUN = 150;
-/** Threads refused in one run that mean the mailbox, not a thread: the alarm's line. */
-const LABELS_REFUSED_ALARM = 5;
 
 /**
  * Which labels each bookings thread should wear, for the label steps of the n8n workflow
@@ -46,8 +44,8 @@ export async function POST(request: Request): Promise<Response> {
     // REFUSED IN BULK IS A BROKEN GMAIL CONNECTION, NOT A BAD THREAD: on 3 Nov thread_labels held no row at all while
     // the job reported ok every minute, so Gmail showed no label and nobody was told. A handful refused is a thread's
     // own trouble; this many is the mailbox's credential, which only a person can reconnect.
-    if (failed.length >= LABELS_REFUSED_ALARM) await reportError({ route: "label-failed", where: "bot/labels", severity: "alert",
-      what: `Gmail refused the labels on ${failed.length} threads at once: the mailbox's connection in n8n is likely broken`, detail: `threads ${failed.slice(0, 5).join(", ")}` });
+    const alarm = labelsRefusedAlarm(failed);
+    if (alarm) await reportError({ route: "label-failed", where: "bot/labels", severity: "alert", ...alarm });
     return NextResponse.json({ ok: true, forgotten: failed.length });
   }
 

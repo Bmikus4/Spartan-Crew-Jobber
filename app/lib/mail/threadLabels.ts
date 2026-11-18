@@ -70,3 +70,20 @@ export function changes(now: ThreadLabels[], last: Map<string, { order: string |
   }
   return out;
 }
+
+/** Threads refused in one run that mean the mailbox, not a thread: the alarm's line. */
+export const LABELS_REFUSED_ALARM = 5;
+
+/**
+ * The alarm for one run in which Gmail refused many threads, or null under the line. The count lives in
+ * `detail` and never in `what`: errorReport's fingerprint keeps numbers under four digits, so a count in
+ * `what` turned every new count into a new error_reports row (34 rows and 12,281 occurrences for one broken
+ * credential, 3-17 Nov) instead of one row whose occurrences rise.
+ */
+export function labelsRefusedAlarm(failed: string[]): { what: string; detail: string } | null {
+  if (failed.length < LABELS_REFUSED_ALARM) return null;
+  return {
+    what: "Gmail refused the labels on many threads at once: the mailbox's connection in n8n is likely broken",
+    detail: `${failed.length} threads refused; first ${failed.slice(0, 5).join(", ")}`,
+  };
+}

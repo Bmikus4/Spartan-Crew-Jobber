@@ -6415,5 +6415,23 @@
   "sources": [
    "decisions/2026-11-17-data-home-program-rulings.md"
   ]
+ },
+ {
+  "id": "S-0323",
+  "ts": "2026-11-18T02:57:57+00:00",
+  "kind": "measurement",
+  "headline": "label alarm: count moved to detail; 34 rows for one outage becomes 1",
+  "subject": "One broken Gmail connection is one label alarm row, not one per refused count",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 133,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  },
+  "sources": [
+   "app/lib/mail/threadLabels.ts",
+   "test/threadLabels.ts"
+  ]
  }
 ]
