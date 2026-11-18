@@ -6398,5 +6398,22 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0322",
+  "ts": "2026-11-18T02:51:05+00:00",
+  "kind": "decision",
+  "headline": "17 Nov rulings O35-O42 recorded; open decisions A-G with working assumptions",
+  "subject": "Eight 17 Nov rulings are recorded with what each supersedes: O35-O42, open A-G",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 133,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  },
+  "sources": [
+   "decisions/2026-11-17-data-home-program-rulings.md"
+  ]
  }
 ]
