@@ -34,6 +34,15 @@ export const RENAMES: Array<{ from: string; to: OrderLabel }> = [
 /** Labels earlier systems put on bookings threads; they come off every thread (Ben, 10-15). [DECISIONS V21] */
 export const STRIP = ["HIGH", "MEDIUM", "LOW", "SamurAI", "TEST"];
 
+/**
+ * ONLY "ORDER NEEDS UPDATED" IS WORN, FOR NOW (Ben, 19 Nov, O53: "I don't want to see Needs created or needs follow up
+ * labels anywhere. Only needs updated, in Gmail and the Dashboard"). labelsFor gives no other label, so the next sync
+ * takes Order Needs Created, Needs Follow Up, Order Created and Order Updated off every thread wearing them: changes()
+ * removes every label of ours a thread is not given. The others stay defined so they can be taken off, and so turning
+ * one back on is adding its name here.
+ */
+export const SHOWN_LABELS: ReadonlySet<string> = new Set<string>(["Order Needs Updated"]);
+
 export type ThreadLabels = { thread_id: string; order: OrderLabel | null; follow_up: boolean; r_number: string | null };
 
 /** A failure outranks a success, as the TV leads with it. */
@@ -48,8 +57,9 @@ const ORDER_OF: OrderLabel[] = ["Order Needs Created", "Order Needs Updated", "O
 export function labelsFor(card: FeedCard): ThreadLabels {
   if (card.green) return { thread_id: card.thread_id, order: null, follow_up: false, r_number: card.r_number };
   const open = card.items.filter((i) => !i.green).map((i) => RANK[i.kind]).filter(Boolean);
-  const order = ORDER_OF.find((l) => open.includes(l)) ?? null;
-  return { thread_id: card.thread_id, order, follow_up: !!card.follow_up, r_number: card.r_number };
+  // A thread needing a create and an update wears Needs Updated: the hidden label does not hide the shown one.
+  const order = ORDER_OF.find((l) => open.includes(l) && SHOWN_LABELS.has(l)) ?? null;
+  return { thread_id: card.thread_id, order, follow_up: SHOWN_LABELS.has(FOLLOW_UP) && !!card.follow_up, r_number: card.r_number };
 }
 
 /** What changes on Gmail: threads whose labels differ from what was last applied, and threads that left the TV. */

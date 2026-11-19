@@ -11,7 +11,7 @@
 // ============================================================================
 import { project, type FeedMark } from "../app/lib/feed/project";
 import { v2Sources, rowsOnCard, type V2Row } from "../app/lib/feed/v2";
-import { labelsFor } from "../app/lib/mail/threadLabels";
+import { labelsFor, SHOWN_LABELS } from "../app/lib/mail/threadLabels";
 import { fromStates } from "./fixtures/stateSource";
 
 let fails = 0;
@@ -40,7 +40,7 @@ console.log("\n[1] a booking handed off, then a question on the same thread");
   const c = card([A, B]);
   ok(keyOf(c, "mA")?.kind === "needs-created" && !!c?.items[0].item_key.endsWith(":mA"), "the booking still leads the card", c?.items);
   ok(!!c?.items.some((i) => i.kind === "needs-reply"), "and the question is on it too", c?.items);
-  ok(c?.lane === "need" && labelsFor(c!).order === "Order Needs Created", "so the TV lists it and the thread keeps its Needs Created label", { lane: c?.lane, label: c && labelsFor(c).order });
+  ok(c?.lane === "need" && labelsFor(c!).order === (SHOWN_LABELS.has("Order Needs Created") ? "Order Needs Created" : null), "so the TV lists it, and the thread wears Needs Created whenever that label is shown (O53: not for now)", { lane: c?.lane, label: c && labelsFor(c).order });
 }
 
 console.log("\n[2] we answer the question");

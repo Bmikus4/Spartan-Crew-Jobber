@@ -10,7 +10,7 @@
 // ============================================================================
 import { decideMessage, type DecideDeps } from "../app/lib/v2/process";
 import type { World } from "../app/lib/v2/interpret/plan";
-import { labelsFor } from "../app/lib/mail/threadLabels";
+import { labelsFor, SHOWN_LABELS } from "../app/lib/mail/threadLabels";
 import { cardOf } from "../harness/real/system";
 import { boardOf, type BoardCard } from "../harness/board/board";
 
@@ -89,7 +89,9 @@ const CLIENT = "ops@northwind.example";
   ];
   for (const [name, run, card, label] of cases) {
     const got = await run();
-    ok(got.card === card && got.label === label, name, got);
+    // The table names each case's label in the full design; Gmail wears only the shown ones (O53, for now).
+    const worn = label && SHOWN_LABELS.has(label) ? label : null;
+    ok(got.card === card && got.label === worn, name, got);
   }
   console.log(fails ? `\n${fails} FAILED` : "\nALL PASS");
   process.exitCode = fails ? 1 : 0;

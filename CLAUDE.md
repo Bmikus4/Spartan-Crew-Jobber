@@ -70,6 +70,8 @@ ticket and deletes it. Old tickets may be thinned to headlines, never rewritten 
 - **Four, and only four, order labels** (`app/lib/mail/threadLabels.ts`): Order Created, Order Updated, Order
   Needs Created, Order Needs Updated, mutually exclusive. Needs Follow Up is another axis. They are derived from
   the TV's cards every minute; nothing sets one by hand.
+  **For now (O53, 19 Nov) only Order Needs Updated is worn** (`SHOWN_LABELS`), and the Live Feed lists only
+  needs-updated items (`LiveFeedScreen.tsx` SHOWN_KINDS). The other labels stay defined so the sync can take them off.
 - **A draft is not a message.** An unsent draft of ours never counts as Spartan having replied.
 - **Never write Job.min_beginning / max_end**, and treat the job window as unreliable input
   (`app/lib/onsinch/README.md` has the measurement).

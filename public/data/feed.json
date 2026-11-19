@@ -6461,5 +6461,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0326",
+  "ts": "2026-11-19T14:27:21+00:00",
+  "kind": "measurement",
+  "headline": "O53: only Needs Updated shown on the TV and in Gmail; creates and follow-ups hidden",
+  "subject": "The TV and Gmail show only needs-updated work; creates and follow-ups are hidden",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 133,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]

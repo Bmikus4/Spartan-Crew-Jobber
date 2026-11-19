@@ -2,7 +2,7 @@
 // beside them, and nothing at all once a card is ticked or seen resolved.
 //
 // Offline.  npx tsx test/threadLabels.ts
-import { labelsFor, changes, labelsRefusedAlarm, ORDER_LABELS, FOLLOW_UP } from "../app/lib/mail/threadLabels";
+import { labelsFor, changes, labelsRefusedAlarm, ORDER_LABELS, FOLLOW_UP, SHOWN_LABELS } from "../app/lib/mail/threadLabels";
 import { fingerprint } from "../app/lib/errorReport";
 import type { FeedCard, FeedItem } from "../app/lib/feed/project";
 import { readFileSync } from "node:fs";
@@ -12,19 +12,28 @@ const ok = (c: boolean, m: string, d?: unknown) => { console.log(`  ${c ? "PASS"
 const item = (kind: FeedItem["kind"], green = false): FeedItem => ({ item_key: `${kind}:x`, kind, status: "", at: 0, green: green ? { mark: "checked", by: null, evidence: null, at: 0 } : null } as FeedItem);
 const card = (thread_id: string, items: FeedItem[], over: Partial<FeedCard> = {}): FeedCard => ({ thread_id, items, green: items.every((i) => !!i.green), follow_up: false, r_number: null, ...over } as unknown as FeedCard);
 
-ok(labelsFor(card("a", [item("created-check")])).order === "Order Created", "an order the bot created and nobody has ticked: Order Created");
-ok(labelsFor(card("b", [item("needs-updated"), item("created-check")])).order === "Order Needs Updated", "a need outranks a success on the same thread");
-ok(labelsFor(card("c", [item("needs-created", true)])).order === null, "ticked: no label at all (Ben: confirmed orders lose all their tags)");
-ok(labelsFor(card("d", [item("needs-reply")], { follow_up: true })).order === null && labelsFor(card("d", [item("needs-reply")], { follow_up: true })).follow_up, "a question waiting a day: Needs Follow Up only");
+// O53 (Ben, 19 Nov): "Only needs updated, in Gmail and the Dashboard", for now.
+ok([...SHOWN_LABELS].join() === "Order Needs Updated", "Gmail is given one label only: Order Needs Updated");
+ok(labelsFor(card("b", [item("needs-updated"), item("created-check")])).order === "Order Needs Updated", "a need to update wears Order Needs Updated");
+ok(labelsFor(card("h", [item("needs-created"), item("needs-updated")])).order === "Order Needs Updated", "a thread needing a create and an update wears Needs Updated: the hidden label never hides the shown one");
+const nc = labelsFor(card("f", [item("needs-created")], { follow_up: true }));
+ok(nc.order === null && !nc.follow_up, "no Order Needs Created and no Needs Follow Up", nc);
+const nu = labelsFor(card("g", [item("needs-updated")], { follow_up: true }));
+ok(nu.order === "Order Needs Updated" && !nu.follow_up, "a need to update that also waits for a follow-up wears Needs Updated alone", nu);
+ok(labelsFor(card("a", [item("created-check")])).order === null && labelsFor(card("u", [item("updated-check")])).order === null, "the bot's own Order Created and Order Updated are not worn either");
+ok(labelsFor(card("c", [item("needs-updated", true)])).order === null, "ticked: no label at all (Ben: confirmed orders lose all their tags)");
 
 const all = [...ORDER_LABELS, FOLLOW_UP];
-const now = [labelsFor(card("a", [item("created-check")])), labelsFor(card("e", [item("needs-created")], { follow_up: true }))];
+const tl = (thread_id: string, order: (typeof ORDER_LABELS)[number] | null, follow_up = false) => ({ thread_id, order, follow_up, r_number: null });
+const now = [tl("a", "Order Needs Updated"), tl("e", null)];
 const first = changes(now, new Map());
-ok(first.length === 2 && first[0].add.join() === "Order Created" && first[0].remove.length === all.length - 1, "first sight: the one label on, every other of ours off", first[0]);
-ok(first[1].add.join() === `Order Needs Created,${FOLLOW_UP}`, "follow-up rides beside the order label", first[1].add);
-const steady = changes(now, new Map([["a", { order: "Order Created", follow_up: false }], ["e", { order: "Order Needs Created", follow_up: true }]]));
+ok(first.length === 2 && first[0].add.join() === "Order Needs Updated" && first[0].remove.length === all.length - 1, "first sight: the one label on, every other of ours off", first[0]);
+ok(first[1].add.length === 0 && first[1].remove.length === all.length, "a thread given no label has every label of ours taken off", first[1]);
+const steady = changes(now, new Map([["a", { order: "Order Needs Updated", follow_up: false }], ["e", { order: null, follow_up: false }]]));
 ok(steady.length === 0, "nothing changed: nothing is sent to Gmail");
-const gone = changes([labelsFor(card("e", [item("needs-created")], { follow_up: true }))], new Map([["a", { order: "Order Created", follow_up: false }], ["e", { order: "Order Needs Created", follow_up: true }]]));
+const before = changes([tl("e", null)], new Map([["e", { order: "Order Needs Created", follow_up: true }]]));
+ok(before.length === 1 && !before[0].add.length && before[0].remove.includes("Order Needs Created") && before[0].remove.includes(FOLLOW_UP), "a thread wearing Needs Created and Needs Follow Up from before loses both at the next sync", before);
+const gone = changes([tl("e", null)], new Map([["a", { order: "Order Created", follow_up: false }], ["e", { order: null, follow_up: false }]]));
 ok(gone.length === 1 && gone[0].thread_id === "a" && gone[0].add.length === 0 && gone[0].remove.length === all.length, "a thread that left the TV loses every label of ours", gone);
 // The route forgets a thread Gmail refused, so the next minute sends it again (10-16: 9 of 29
 // refused on the first live run). Pinned in the source: the route talks to the database.

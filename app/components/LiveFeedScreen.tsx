@@ -147,6 +147,18 @@ function chime(ctx: AudioContext) {
   }
 }
 
+/**
+ * ONLY "NEEDS UPDATED" IS SHOWN, FOR NOW (Ben, 19 Nov, O53: "Only things that explicitly need updated. If they need
+ * updated and a follow up, display them. I also don't want to see Needs created or needs follow up labels anywhere").
+ * A card is listed for its needs-updated items alone, with no follow-up badge; a card with none is not listed. History
+ * passes through the same filter, so no stored board shows the hidden ones either. Gmail: threadLabels.ts SHOWN_LABELS.
+ */
+const SHOWN_KINDS = new Set<FeedItem["kind"]>(["needs-updated"]);
+function shownForNow(c: FeedCard): FeedCard | null {
+  const items = c.items.filter((i) => SHOWN_KINDS.has(i.kind));
+  return items.length ? { ...c, items, follow_up: false, colour: "blue" } : null;
+}
+
 const orderItem = (c: FeedCard) => c.items.find((i) => i.kind !== "needs-reply") ?? null;
 const hasReply = (c: FeedCard) => c.items.some((i) => i.kind === "needs-reply");
 const isOpen = (c: FeedCard) => c.lane !== "done";
@@ -545,7 +557,7 @@ export default function LiveFeedScreen({ isActive, tv = false }: { isActive: boo
 
   // The server's order (orderCards, app/lib/feed/order.ts), where test/feedProjection.ts pins it. In History, the kept list
   // as it was: its ages read from that moment, nothing to tick.
-  const cards = past ? past.items : data?.items ?? [];
+  const cards = (past ? past.items : data?.items ?? []).map(shownForNow).filter((c): c is FeedCard => c !== null);
   const tileNow = past ? Date.parse(past.at) : now;
   const noTick = useCallback(() => {}, []);
 
@@ -596,8 +608,7 @@ export default function LiveFeedScreen({ isActive, tv = false }: { isActive: boo
   // No Needs Created, Needs Updated or To Check counts (Ben, 2026-10-11): each tile already carries its label.
   const kpis: Array<{ label: string; n: number; color: string; loud?: boolean }> = c ? [
     ...(data?.health.replies_enabled ? [{ label: "Needs Reply", n: c.needs_reply, color: "var(--text-primary)" }] : []),
-    // In History the counts are the kept list's, as it stood then.
-    { label: "Needs Follow Up", n: past ? cards.filter((x) => x.follow_up).length : c.needs_follow_up ?? 0, color: AMBER },
+    // No Needs Follow Up count, for now (O53): it comes back with "Needs Follow Up" in SHOWN_KINDS' rule above.
     // The one count that is about time running out, so it is set heavier than the rest (Ben, 2026-10-10).
     { label: "Within 48 Hours", n: urgentCount, color: AMBER, loud: true },
   ] : [];
