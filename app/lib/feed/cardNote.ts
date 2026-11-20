@@ -41,6 +41,21 @@ const span = (start?: string, end?: string) => (start && end ? `${clock(start)} 
 const plural = (n: number, w: string) => `${n} ${w}${n === 1 || /s$|^crew$/.test(w) ? "" : "s"}`;
 const sentence = (s: string) => `${s[0].toUpperCase()}${s.slice(1)}${/[.!?]$/.test(s) ? "" : "."}`;
 
+/**
+ * A LONG JOB IS SUMMED UP, NOT LISTED (Ben, 19 Nov: "We can summarize 'Add (total number of crew) over (this many
+ * dates)'"). A 12-shift booking listed every shift and was cut off on the TV after two lines. Four shifts or more read
+ * "Book 106 crew over 6 dates"; on one date, "over 4 shifts on Fri 4 Dec". The total is said only when every shift
+ * has a count; otherwise the shifts are counted instead, so no number is guessed.
+ */
+const LIST_UP_TO = 3;
+function summed(verb: string, shifts: Array<{ date?: string; crew?: number }>): string {
+  const dates = [...new Set(shifts.map((s) => s.date).filter((d): d is string => !!d))];
+  const total = shifts.every((s) => s.crew && s.crew > 0) ? shifts.reduce((a, s) => a + (s.crew ?? 0), 0) : null;
+  const what = total ? `${total} crew` : plural(shifts.length, "shift");
+  if (dates.length === 1) return total ? `${verb} ${what} over ${shifts.length} shifts on ${day(dates[0])}` : `${verb} ${what} on ${day(dates[0])}`;
+  return `${verb} ${what} over ${dates.length ? plural(dates.length, "date") : "several dates"}`;
+}
+
 const tradeWord = (r: Request) => { const t = tradeOf(r.trade); return t && !t.asCrew ? t.label : null; };
 const crewOf = (n: number | undefined, r: Request) => (n ? plural(n, tradeWord(r) ?? "crew") : "");
 const shiftOf = (r: Request) => [r.date ? day(r.date) : "", span(r.start, r.end), crewOf(r.crew, r)].filter(Boolean).join(", ");
@@ -52,8 +67,9 @@ function asked(i: Interpretation | null, reply: boolean, fresh: boolean): string
   const by = (a: Request["action"]) => rs.filter((r) => r.action === a);
   const out: string[] = [];
   const shifts = by("new_shift").map(shiftOf).filter(Boolean);
-  if (i?.intent === "quote_request") out.push(shifts.length ? `Price this and send a quote: ${shifts.join("; ")}` : "Price this and send a quote");
-  else if (by("new_shift").length) out.push(shifts.length ? `${fresh ? "Book a new order" : "Add to the order"}: ${shifts.join("; ")}` : fresh ? "Book a new order" : "Add a shift to the order");
+  const long = by("new_shift").length > LIST_UP_TO ? by("new_shift").map((r) => ({ date: r.date, crew: r.crew })) : null;
+  if (i?.intent === "quote_request") out.push(long ? summed("Price this and send a quote:", long) : shifts.length ? `Price this and send a quote: ${shifts.join("; ")}` : "Price this and send a quote");
+  else if (by("new_shift").length) out.push(long ? summed(fresh ? "Book" : "Add", long) : shifts.length ? `${fresh ? "Book a new order" : "Add to the order"}: ${shifts.join("; ")}` : fresh ? "Book a new order" : "Add a shift to the order");
   for (const r of by("change_times")) {
     const from = r.target?.date, to = r.date, when = span(r.start, r.end);
     if (from && to && from !== to) out.push(`Move the ${day(from)} shift to ${day(to)}${when ? `, ${when}` : ""}`);
@@ -85,11 +101,16 @@ function wrote(ops: Op[], why: string[]): string {
   const parts: string[] = [];
   for (const op of ops) {
     if (op.kind === "create_order") {
+      // A shift's crew is one number: a crew chief is inside the headcount (V13), so "1 crew chief and 5 crew" is
+      // "6 crew", never "1 crew and 5 crew" as it read before 19 Nov. Trades are still named ("6 crew and 2 carpenters").
+      const crewIn = (s: (typeof op.shifts)[number]) => s.positions.filter((p) => p.profession_id === "1" || p.profession_id === "36").reduce((a, p) => a + p.size, 0);
       const shifts = op.shifts.map((s) => {
-        const profs = s.positions.map((p) => plural(p.size, p.profession_id === "1" || p.profession_id === "36" ? "crew" : PROFESSION_NAME[p.profession_id] ?? "crew"));
-        return [day(s.date), span(s.start, s.end), profs.join(" and ")].filter(Boolean).join(", ");
+        const trades = s.positions.filter((p) => p.profession_id !== "1" && p.profession_id !== "36").map((p) => plural(p.size, PROFESSION_NAME[p.profession_id] ?? "crew"));
+        const crew = crewIn(s);
+        return [day(s.date), span(s.start, s.end), [crew ? plural(crew, "crew") : "", ...trades].filter(Boolean).join(" and ")].filter(Boolean).join(", ");
       });
-      parts.push(`Book a new order: ${shifts.join("; ")}${op.po ? `, PO ${op.po}` : ""}`);
+      const long = op.shifts.length > LIST_UP_TO ? op.shifts.map((s) => ({ date: s.date, crew: s.positions.reduce((a, p) => a + p.size, 0) })) : null;
+      parts.push(`${long ? summed("Book", long) : `Book a new order: ${shifts.join("; ")}`}${op.po ? `, PO ${op.po}` : ""}`);
     } else if (op.kind === "set_position_times") parts.push(`Change the times on ${day(op.date)}: ${span(op.start, op.end)}`);
     else if (op.kind === "add_shift") parts.push(`Add a shift on ${day(op.date)}, ${span(op.start, op.end)}`);
     else if (op.kind === "cancel_position") parts.push(why.some((w) => /crew chief removed/.test(w)) ? "Remove the crew chief" : "Cancel the shift");

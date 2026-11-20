@@ -6517,5 +6517,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0330",
+  "ts": "2026-11-20T03:44:27+00:00",
+  "kind": "measurement",
+  "headline": "Long cards summed up: Book N crew over D dates; chief counted inside the crew",
+  "subject": "A TV card sums up four or more shifts as crew over dates; a chief is in the count",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 133,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]

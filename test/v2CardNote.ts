@@ -64,5 +64,31 @@ eq(cardNote({ decision: two, grounded: null, executed: [{ status: "verified" } a
 console.log("\n[3] an unknown reason is never shown as text");
 ok(checkOf("a reason added to the planner next month (shift 99999)") === "Read the email.", "falls back to Read the email");
 
+// A long job is summed up (Ben, 19 Nov: "Add (total number of crew) over (this many dates)"); a crew chief is inside
+// the headcount, never "1 crew and 5 crew".
+{
+  const pos = (chief: number, crew: number, extra: any[] = []) => [...(chief ? [{ profession_id: "36", size: chief, role: "crew_chief" }] : []), { profession_id: "1", size: crew, role: "crew" }, ...extra];
+  const sh = (date: string, start: string, end: string, positions: any[]) => ({ date, start, end, place_id: 1, positions });
+  const write = (shifts: any[]) => ({ kind: "write" as const, ops: [{ op: { kind: "create_order", shifts } }], why: [] }) as any;
+  const twelve = [
+    sh("2026-12-04", "10:00", "12:00", pos(1, 5)), sh("2026-12-04", "10:00", "14:00", pos(1, 3)), sh("2026-12-04", "17:00", "19:00", pos(1, 3)),
+    sh("2026-12-05", "01:00", "05:00", pos(2, 8)), sh("2026-12-05", "08:00", "10:00", pos(1, 7)), sh("2026-12-05", "08:00", "12:00", pos(1, 4)),
+    sh("2026-12-11", "17:00", "19:00", pos(2, 16)), sh("2026-12-12", "01:00", "05:00", pos(2, 17)), sh("2026-12-17", "10:00", "15:00", pos(1, 7)),
+    sh("2026-12-17", "17:00", "19:00", pos(1, 5)), sh("2026-12-18", "01:00", "05:00", pos(2, 8)), sh("2026-12-18", "08:00", "10:00", pos(1, 7)),
+  ];
+  const long = cardNote({ decision: write(twelve), grounded: null, executed: null, written: false });
+  ok(long.ask === "Book 106 crew over 6 dates.", "a 12-shift order: Book 106 crew over 6 dates", String(long.ask));
+  const short = cardNote({ decision: write([sh("2026-12-04", "10:00", "12:00", pos(1, 5)), sh("2026-12-05", "08:00", "12:00", pos(0, 4, [{ profession_id: "5", size: 2, role: "crew" }]))]), grounded: null, executed: null, written: false });
+  ok(/Fri 4 Dec, 10am to noon, 6 crew;/.test(short.ask ?? "") && !/1 crew and 5 crew/.test(short.ask ?? ""), "a chief is inside the count: 6 crew, not 1 crew and 5 crew", String(short.ask));
+  const req = (date: string, crew?: number) => ({ action: "new_shift", date, start: "09:00", end: "13:00", crew, problems: [] });
+  const asks = cardNote({ decision: handoff(["a new booking from 2026-12-04, within 14 days of the email, is for staff to create"]), grounded: g([req("2026-12-04", 4), req("2026-12-05", 6), req("2026-12-06", 2), req("2026-12-07", 3)]) as any, executed: null, written: false });
+  ok(/^Book 15 crew over 4 dates\./.test(asks.ask ?? ""), "four requested shifts: Book 15 crew over 4 dates", String(asks.ask));
+  const unknown = cardNote({ decision: handoff(["a new booking from 2026-12-04, within 14 days of the email, is for staff to create"]), grounded: g([req("2026-12-04", 4), req("2026-12-05"), req("2026-12-05", 2), req("2026-12-06", 3)]) as any, executed: null, written: false });
+  ok(/^Book 4 shifts over 3 dates\./.test(unknown.ask ?? ""), "a missing count is never guessed: the shifts are counted instead", String(unknown.ask));
+  const quote = cardNote({ decision: handoff(["the client asked for a quote"], true), grounded: g([req("2026-12-04", 4), req("2026-12-04", 6), req("2026-12-04", 2), req("2026-12-04", 3)], "quote_request") as any, executed: null, written: false });
+  ok(/^Price this and send a quote: 15 crew over 4 shifts on Fri 4 Dec\./.test(quote.ask ?? ""), "one date: over 4 shifts on Fri 4 Dec", String(quote.ask));
+  ok(!INTERNAL.test([long.ask, short.ask, asks.ask, unknown.ask, quote.ask].join(" ")), "no internal wording in any of them");
+}
+
 console.log(fails ? `\n${fails} FAILED` : "\nall passed");
 process.exit(fails ? 1 : 0);
