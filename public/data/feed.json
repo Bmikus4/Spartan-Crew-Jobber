@@ -6545,5 +6545,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0332",
+  "ts": "2026-11-20T04:42:46+00:00",
+  "kind": "measurement",
+  "headline": "One description per card (template); generic checks and PO/age line removed",
+  "subject": "Each TV card has one description; generic checks and the PO and age line are gone",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 133,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]

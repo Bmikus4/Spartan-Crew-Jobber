@@ -176,10 +176,11 @@ const CHECKS: Array<[RegExp, (m: RegExpExecArray) => string | null]> = [
   [/sent with a later email|later client message/, () => null],
 ];
 
+const READ_THE_EMAIL = "Read the email.";
 /** The check a reason means, "Read the email" when no template knows it, null when it needs none. */
 export function checkOf(reason: string): string | null {
   for (const [re, f] of CHECKS) { const m = re.exec(reason); if (m) return f(m); }
-  return "Read the email.";
+  return READ_THE_EMAIL;
 }
 
 /** Notes kept with a write that a person checking it should see. */
@@ -201,12 +202,15 @@ export function cardNote({ decision: d, grounded, executed, written, fresh = tru
     const what = wrote(d.ops.map((o) => o.op), d.why);
     if (written) return { ask: what ? `The system did this: ${what}` : null, check: noteCheck(d.why) };
     const stopped = executed?.find((r) => r.status !== "verified");
-    return { ask: what || null, check: stopped ? (executed!.some((r) => r.status === "verified") ? "The system stopped partway: check OnSinch." : "The system could not write it: do it by hand.") : "Not written: do it by hand." };
+    return { ask: what || null, check: stopped ? (executed!.some((r) => r.status === "verified") ? "The system stopped partway: check OnSinch." : "The system could not write it: do it by hand.") : null };
   }
   if (d.kind === "handoff") {
     const confirmed = d.reasons.some((r) => /the client confirmed .+, and no order holds it yet/.test(r));
     const ask = asked(grounded, !!d.reply, fresh);
-    const check = d.reasons.flatMap((r) => r.split("; ")).map(checkOf).find((c): c is string => !!c) ?? (ask ? null : "Read the email.");
+    // ONE DESCRIPTION (Ben, 19 Nov): a check is shown only when it names something to look at. "Read the email" (a reason
+    // no template knows) and "Not written: do it by hand" (every card while writes are off) told staff nothing; the first
+    // stays only on a card that would otherwise say nothing at all.
+    const check = d.reasons.flatMap((r) => r.split("; ")).map(checkOf).find((c): c is string => !!c && c !== READ_THE_EMAIL) ?? (ask ? null : READ_THE_EMAIL);
     return { ask: ask && confirmed ? `${ask} The client has confirmed.` : ask, check: confirmed && check === "The client has confirmed, and no order holds it yet." ? "No order holds it yet." : check };
   }
   return { ask: null, check: null };

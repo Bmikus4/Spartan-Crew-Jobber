@@ -56,7 +56,7 @@ eq(cardNote({ decision: handoff(["sent with a later email (1a11afc6bff4c2f4); th
   { ask: null, check: "Read the email." }, "a message id never reaches the screen");
 const write = { kind: "write" as const, ops: [{ source: "s", op: { kind: "set_position_times", order_id: 1, slot_id: 2, date: "2026-10-11", start: "17:00", end: "23:00" } as any }], why: ["R11224 shift 41611: times to 17:00-23:00"] };
 eq(cardNote({ decision: write, grounded: null, executed: [{ status: "verified" } as any], written: true }), { ask: "The system did this: Change the times on Sun 11 Oct: 5pm to 11pm.", check: null }, "a write that ran");
-eq(cardNote({ decision: write, grounded: null, executed: null, written: false }), { ask: "Change the times on Sun 11 Oct: 5pm to 11pm.", check: "Not written: do it by hand." }, "a write that did not run");
+eq(cardNote({ decision: write, grounded: null, executed: null, written: false }), { ask: "Change the times on Sun 11 Oct: 5pm to 11pm.", check: null }, "a write that did not run says only the change: writes are off, so every card is done by hand (19 Nov)");
 const two = { ...write, ops: [...write.ops, write.ops[0]] };
 eq(cardNote({ decision: two, grounded: null, executed: [{ status: "verified" } as any, { status: "failed", reasons: ["x"] } as any], written: false }),
   { ask: "Change the times on Sun 11 Oct: 5pm to 11pm.", check: "The system stopped partway: check OnSinch." }, "a write that stopped partway says so");

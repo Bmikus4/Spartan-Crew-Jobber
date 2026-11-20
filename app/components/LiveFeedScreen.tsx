@@ -69,14 +69,6 @@ const CONFIRM_TEXT = "var(--accent-contrast)";
 
 const hhmm = (ms: number) => new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/London", hour: "2-digit", minute: "2-digit" }).format(ms);
 const fmt = (ms: number, o: Intl.DateTimeFormatOptions) => new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/London", ...o }).format(ms);
-function ago(ms: number, now: number): string {
-  const m = Math.max(0, Math.floor((now - ms) / 60_000));
-  if (m < 1) return "just now";
-  if (m < 60) return `${m}m ago`;
-  const h = Math.floor(m / 60);
-  if (h < 48) return `${h}h ago`;
-  return `${Math.floor(h / 24)}d ago`;
-}
 /** The signer's first name as the tick recorded it; ticks before 2026-10-05 carry only an email. */
 function personName(by: string | null, name: unknown): string {
   if (typeof name === "string" && name.trim()) return name.trim().split(/\s+/)[0];
@@ -325,7 +317,6 @@ const JobTile = memo(function JobTile({ card, now, s, phase, onTick, readOnly = 
   const done = card.green;
   const evidence = it ? evidenceLine(it) : null;
   const shown = card.colour !== "neutral";
-  const facts = [card.po ? `PO ${card.po}` : null, card.contact ? `from ${card.contact}` : null, ago(lead.at, now)].filter(Boolean).join(" · ");
   const label = labelOf(card, it);
   const cell = (line: boolean): React.CSSProperties => ({ alignSelf: "stretch", display: "flex", alignItems: "center", justifyContent: "flex-end", padding: `0 ${22 * s}px`, borderLeft: line ? `${2 * s}px solid ${TAN}` : undefined, minWidth: 0 });
   const num = (v: string | null) => <span className="mono" style={{ fontSize: 24 * s, fontWeight: 600, color: "var(--text-primary)", whiteSpace: "nowrap" }}>{shown ? v : null}</span>;
@@ -357,14 +348,14 @@ const JobTile = memo(function JobTile({ card, now, s, phase, onTick, readOnly = 
             </button>
           )}
         </div>
-        {card.ask && <div style={{ fontSize: 20 * s, fontWeight: 500, lineHeight: 1.3, color: "var(--text-primary)", ...clamp(2) }}>{card.ask}</div>}
-        <div style={{ fontSize: 17 * s, fontWeight: 500, color: "var(--text-muted)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-          {evidence
-            ? <span style={{ color: GREEN }}>{evidence}</span>
-            : card.check ? <span style={{ color: AMBER, fontWeight: 600 }}>{card.check}</span> : null}
-          {(evidence || card.check) && <span style={{ color: "var(--text-faint)" }}> · </span>}
-          {facts}
-        </div>
+        {/* ONE DESCRIPTION (Ben, 19 Nov): what needs doing and, only when there is one, the thing to check, as one block.
+            The old third line (a check, the PO, who wrote, how long ago) is gone; a cleared tile still says who cleared it. */}
+        {(card.ask || card.check) && (
+          <div style={{ fontSize: 20 * s, fontWeight: 500, lineHeight: 1.3, color: "var(--text-primary)", ...clamp(2) }}>
+            {card.ask}{card.ask && card.check ? " " : ""}{card.check && <span style={{ color: AMBER, fontWeight: 600 }}>{card.check}</span>}
+          </div>
+        )}
+        {evidence && <div style={{ fontSize: 17 * s, fontWeight: 500, color: GREEN, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{evidence}</div>}
       </div>
 
       {/* The numbers find the job in OnSinch. */}
