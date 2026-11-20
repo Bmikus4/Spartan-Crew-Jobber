@@ -6489,5 +6489,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0328",
+  "ts": "2026-11-20T01:03:36+00:00",
+  "kind": "measurement",
+  "headline": "TV buttons: CONFIRM word added, both bigger, False flag taller",
+  "subject": "The TV's Confirm carries its word; both buttons are bigger, False flag taller",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 133,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]

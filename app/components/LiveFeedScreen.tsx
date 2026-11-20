@@ -257,22 +257,24 @@ function Decide({ card, it, s, height, onTick }: { card: FeedCard; it: FeedItem;
     // A green the system set (a card carried over from the jobs board) is not staff's to undo or overrule.
     const off = (decided && !lit) || (!!it.green && !decided);
     const name = yes ? (lit ? "Undo confirm" : "Confirm") : (lit ? "Undo false flag" : "False flag");
-    // Ben's sketch (19 Nov): Confirm a large green block; False flag a thin red strip under it, the same width,
-    // with its words and a flag. The strip is about two fifths of Confirm's height.
-    const bh = yes ? h : h * 0.42;
+    // Ben's sketch (19 Nov): Confirm a large green block; False flag a red strip under it, the same width, with its
+    // words and a flag. Then (19 Nov): the strip a little taller (half Confirm's height), both a little bigger, and
+    // Confirm's word beside its check.
+    const bh = yes ? h : h * 0.5;
     return (
       <button
         aria-label={name} title={name} disabled={off}
         onClick={() => (lit ? onTick(card, it, false) : onTick(card, it, true, !yes))}
         style={{
-          width: h * 2.15, height: bh, borderRadius: yes ? 8 * s : 4 * s, border: "none", flexShrink: 0,
-          display: "flex", alignItems: "center", justifyContent: yes ? "center" : "space-between",
-          padding: yes ? 0 : `0 ${8 * s}px 0 ${10 * s}px`,
+          width: h * 2.25, height: bh, borderRadius: yes ? 8 * s : 4 * s, border: "none", flexShrink: 0,
+          display: "flex", alignItems: "center", justifyContent: yes ? "center" : "space-between", gap: yes ? 8 * s : 0,
+          padding: yes ? 0 : `0 ${9 * s}px 0 ${11 * s}px`,
           background: yes ? GREEN : RED, color: "#fff", opacity: off ? 0.18 : 1,
           cursor: off ? "default" : "pointer", transition: "opacity 200ms",
         }}>
-        {!yes && <span style={{ fontSize: bh * 0.52, fontWeight: 800, letterSpacing: "0.04em", whiteSpace: "nowrap", minWidth: 0, overflow: "hidden" }}>FALSE FLAG</span>}
-        <svg width={yes ? bh * 0.6 : bh * 0.66} height={yes ? bh * 0.6 : bh * 0.66} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={yes ? 3.4 : 2.6} strokeLinecap="round" strokeLinejoin="round" aria-hidden style={{ flexShrink: 0 }}>
+        {!yes && <span style={{ fontSize: bh * 0.42, fontWeight: 800, letterSpacing: "0.03em", whiteSpace: "nowrap", minWidth: 0, overflow: "hidden" }}>FALSE FLAG</span>}
+        {yes && <span style={{ fontSize: bh * 0.27, fontWeight: 800, letterSpacing: "0.05em", whiteSpace: "nowrap" }}>CONFIRM</span>}
+        <svg width={yes ? bh * 0.42 : bh * 0.62} height={yes ? bh * 0.42 : bh * 0.62} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={yes ? 3.4 : 2.6} strokeLinecap="round" strokeLinejoin="round" aria-hidden style={{ flexShrink: 0 }}>
           {yes ? <polyline points="4.5 12.5 10 18 19.5 6.5" /> : <><path d="M5.5 21V4" /><path d="M5.5 4.5h11l-2.5 4 2.5 4h-11" /></>}
         </svg>
       </button>
@@ -370,7 +372,7 @@ const JobTile = memo(function JobTile({ card, now, s, phase, onTick, readOnly = 
       <div style={cell(true)}><When card={card} it={it} lead={lead} now={now} s={s} /></div>
 
       <div style={{ display: "flex", justifyContent: "flex-end", paddingLeft: 24 * s }}>
-        {it && !readOnly && <Decide card={card} it={it} s={s} height={60} onTick={onTick} />}
+        {it && !readOnly && <Decide card={card} it={it} s={s} height={66} onTick={onTick} />}
       </div>
     </article>
   );
