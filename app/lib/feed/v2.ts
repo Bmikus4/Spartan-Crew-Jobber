@@ -209,6 +209,7 @@ export function v2Source(row0: V2Row, now: number): FeedSource {
     },
     ask: note.ask,
     check: note.check,
+    pen: note.pen ?? null,
     po: g?.po ?? null,
     resolvedText: "Answered by a later email",
   };

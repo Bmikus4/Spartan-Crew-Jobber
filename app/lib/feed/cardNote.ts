@@ -195,14 +195,20 @@ const NOTE_CHECKS: Array<[RegExp, (m: RegExpExecArray) => string]> = [
 const noteCheck = (why: string[]) => { for (const w of why) for (const [re, f] of NOTE_CHECKS) { const m = re.exec(w); if (m) return f(m); } return null; };
 
 export type NoteInput = { decision: Decision; grounded: Interpretation | null; executed: RunResult[] | null; written: boolean; fresh?: boolean };
-export type Note = { ask: string | null; check: string | null };
+/**
+ * THE PEN (Ben, 19 Nov): who enters the change in OnSinch, as an icon, not a sentence. "todo": the system planned it and
+ * did not write it, so a person enters it (orange). "done": the system wrote it, so a person checks it (green). Null
+ * when the system made no plan of its own (the card's description is the whole job).
+ */
+export type Pen = "todo" | "done" | null;
+export type Note = { ask: string | null; check: string | null; pen?: Pen };
 
 export function cardNote({ decision: d, grounded, executed, written, fresh = true }: NoteInput): Note {
   if (d.kind === "write") {
     const what = wrote(d.ops.map((o) => o.op), d.why);
-    if (written) return { ask: what ? `The system did this: ${what}` : null, check: noteCheck(d.why) };
+    if (written) return { ask: what ? `The system did this: ${what}` : null, check: noteCheck(d.why), pen: "done" };
     const stopped = executed?.find((r) => r.status !== "verified");
-    return { ask: what || null, check: stopped ? (executed!.some((r) => r.status === "verified") ? "The system stopped partway: check OnSinch." : "The system could not write it: do it by hand.") : null };
+    return { ask: what || null, check: stopped ? (executed!.some((r) => r.status === "verified") ? "The system stopped partway: check OnSinch." : "The system could not write it: do it by hand.") : null, pen: "todo" };
   }
   if (d.kind === "handoff") {
     const confirmed = d.reasons.some((r) => /the client confirmed .+, and no order holds it yet/.test(r));

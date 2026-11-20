@@ -92,5 +92,13 @@ ok(checkOf("a reason added to the planner next month (shift 99999)") === "Read t
   ok(!INTERNAL.test([long.ask, short.ask, one.ask, asks.ask, unknown.ask, quote.ask].join(" ")), "no internal wording in any of them");
 }
 
+// The pen (Ben, 19 Nov): orange when the system planned a change and did not write it, green when it wrote it.
+{
+  const w = { kind: "write" as const, ops: [{ op: { kind: "set_position_times", order_id: 1, slot_id: 1, date: "2026-10-11", start: "17:00", end: "23:00" } }], why: [] } as any;
+  ok(cardNote({ decision: w, grounded: null, executed: null, written: false }).pen === "todo", "a planned write the system did not make: the orange pen, not a sentence");
+  ok(cardNote({ decision: w, grounded: null, executed: null, written: true }).pen === "done", "a write the system made: the green pen");
+  ok(!cardNote({ decision: handoff(["no venue in the email"]), grounded: g([{ action: "new_shift", date: "2026-12-04", crew: 2, problems: [] }]) as any, executed: null, written: false }).pen, "no plan of its own: no pen");
+}
+
 console.log(fails ? `\n${fails} FAILED` : "\nall passed");
 process.exit(fails ? 1 : 0);

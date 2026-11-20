@@ -118,8 +118,10 @@ export interface FeedCard {
   quiet: boolean;
   /** The tile's second line: what the job is and what needs doing, in plain sentences (cardNote.ts). */
   ask: string | null;
-  /** The tile's third line: the one thing a person must check, or the jobs staff may have done it in (done.ts). */
+  /** The one thing a person must check, or the jobs staff may have done it in (done.ts); said after the description. */
   check: string | null;
+  /** Who enters the change in OnSinch (cardNote.ts Pen): an orange pen to do by hand, a green one the system wrote. */
+  pen?: "todo" | "done" | null;
   /** The PO the email gives. */
   po?: string | null;
 }
@@ -199,6 +201,8 @@ export interface FeedSource {
   need?: Omit<Need, "company_id">;
   ask: string | null;
   check: string | null;
+  /** Who enters the change in OnSinch (cardNote.ts Pen): the TV shows it as an orange or green pen. */
+  pen?: "todo" | "done" | null;
   po?: string | null;
   resolvedText: string;
 }
@@ -372,6 +376,7 @@ export function project(
       quiet: !g && now - lastActivity > QUIET_MS,
       ask: s.ask,
       check: g ? null : possibly.get(it.item_key) ?? s.check,
+      pen: g ? null : s.pen ?? null,
       po: s.po ?? null,
     });
     // Needs only: a check's key is its write, and a remembered check would read as resolved

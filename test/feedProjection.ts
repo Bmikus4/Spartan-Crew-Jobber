@@ -264,7 +264,7 @@ console.log("\n[15] the rebuild's decisions reach ops on the TV and nowhere else
   // A quote is answered by a reply, not an order (Ben, 10-11), and the line is cardNote's.
   ok(by.get("q")?.items[0].kind === "needs-reply" && by.get("q")?.ask === "Price this and send a quote." && by.get("q")?.check === null && by.get("q")?.company === "Impact Collective", "a quote is a reply for a person, with what to do on the card", by.get("q")?.ask ?? "");
   ok(by.get("c")?.items[0].kind === "needs-updated" && by.get("c")?.r_number === null && by.get("c")?.dates[0] === "2026-10-12" && by.get("c")?.crew === 6, "a change it could not make reads needs updated; the R its reason names is not shown until the planner links that order (Ben 10-21: always the correct numbers)");
-  ok(by.get("w")?.items[0].kind === "needs-updated" && by.get("w")?.order_id === 950 && by.get("w")?.ask === "Change the times on Sat 10 Oct: 11am to 3pm." && by.get("w")?.check === null, "a planned write not yet made is still a person's job, saying what the system would do (no generic do-it-by-hand line, 19 Nov)");
+  ok(by.get("w")?.items[0].kind === "needs-updated" && by.get("w")?.order_id === 950 && by.get("w")?.ask === "Change the times on Sat 10 Oct: 11am to 3pm." && by.get("w")?.check === null && by.get("w")?.pen === "todo", "a planned write not yet made is still a person's job, saying what the system would do (no generic do-it-by-hand line, 19 Nov)");
   ok(by.get("x")?.items[0].kind === "updated-check" && !by.get("x")?.green && p.counts.to_check === 1, "a write the system made is a check, never an automatic green");
   ok(p.counts.needs_reply === 1 && p.counts.needs_created === 0 && p.counts.needs_updated === 2, "counted with the rest", JSON.stringify(p.counts));
 

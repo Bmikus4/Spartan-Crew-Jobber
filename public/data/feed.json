@@ -6559,5 +6559,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0333",
+  "ts": "2026-11-20T04:48:33+00:00",
+  "kind": "measurement",
+  "headline": "Pen icon replaces 'Not written: do it by hand' (orange to do, green written; hover says what to do)",
+  "subject": "A TV card shows who enters the change as a pen: orange to do by hand, green done",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 133,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]

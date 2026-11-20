@@ -300,6 +300,25 @@ function Sync({ s, state, why }: { s: number; state: "ok" | "offline" | "error" 
   );
 }
 
+/**
+ * THE PEN (Ben, 19 Nov: "opt for a green or orange pen icon instead. when hovered over it tells you what to do"), in
+ * place of the sentence "Not written: do it by hand". Orange: the system planned the change and did not write it, so a
+ * person enters it in OnSinch. Green: the system wrote it, so a person checks it. The words are in the hover text.
+ */
+const PEN_SAYS = {
+  todo: "Not written by the system: make this change in OnSinch yourself, then press Confirm.",
+  done: "Written by the system in OnSinch: check it there, then press Confirm.",
+} as const;
+function Pen({ s, pen }: { s: number; pen: "todo" | "done" }) {
+  return (
+    <span role="img" aria-label={PEN_SAYS[pen]} title={PEN_SAYS[pen]} style={{ display: "inline-flex", verticalAlign: "-0.15em", marginRight: 8 * s, cursor: "help" }}>
+      <svg width={21 * s} height={21 * s} viewBox="0 0 24 24" fill="none" stroke={pen === "todo" ? AMBER : GREEN} strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+        <path d="M17 3a2.85 2.85 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" /><path d="m15 5 4 4" />
+      </svg>
+    </span>
+  );
+}
+
 type Phase = "steady" | "hold" | "fade";
 
 const clamp = (lines: number): React.CSSProperties => ({ display: "-webkit-box", WebkitLineClamp: lines, WebkitBoxOrient: "vertical", overflow: "hidden", overflowWrap: "anywhere" });
@@ -352,6 +371,7 @@ const JobTile = memo(function JobTile({ card, now, s, phase, onTick, readOnly = 
             The old third line (a check, the PO, who wrote, how long ago) is gone; a cleared tile still says who cleared it. */}
         {(card.ask || card.check) && (
           <div style={{ fontSize: 20 * s, fontWeight: 500, lineHeight: 1.3, color: "var(--text-primary)", ...clamp(2) }}>
+            {card.pen && <Pen s={s} pen={card.pen} />}
             {card.ask}{card.ask && card.check ? " " : ""}{card.check && <span style={{ color: AMBER, fontWeight: 600 }}>{card.check}</span>}
           </div>
         )}
