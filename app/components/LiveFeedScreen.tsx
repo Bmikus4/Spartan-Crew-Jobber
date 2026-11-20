@@ -280,7 +280,8 @@ function Decide({ card, it, s, height, onTick }: { card: FeedCard; it: FeedItem;
       </button>
     );
   };
-  return <div style={{ display: "inline-flex", flexDirection: "column", gap: 5 * s }}>{button(true)}{button(false)}</div>;
+  // Looser above, below and between (Ben, 19 Nov), so the pair never crowds the tile's edges.
+  return <div style={{ display: "inline-flex", flexDirection: "column", gap: 8 * s, margin: `${12 * s}px 0` }}>{button(true)}{button(false)}</div>;
 }
 
 /**
@@ -372,7 +373,7 @@ const JobTile = memo(function JobTile({ card, now, s, phase, onTick, readOnly = 
       <div style={cell(true)}><When card={card} it={it} lead={lead} now={now} s={s} /></div>
 
       <div style={{ display: "flex", justifyContent: "flex-end", paddingLeft: 24 * s }}>
-        {it && !readOnly && <Decide card={card} it={it} s={s} height={66} onTick={onTick} />}
+        {it && !readOnly && <Decide card={card} it={it} s={s} height={76} onTick={onTick} />}
       </div>
     </article>
   );

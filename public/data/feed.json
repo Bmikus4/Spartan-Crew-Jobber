@@ -6503,5 +6503,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0329",
+  "ts": "2026-11-20T03:38:40+00:00",
+  "kind": "measurement",
+  "headline": "TV buttons 15% bigger with looser margins",
+  "subject": "The TV's Confirm and False flag are 15% bigger, with more room above and below",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 133,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]
