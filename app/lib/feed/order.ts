@@ -28,6 +28,24 @@ export function nextDay(c: FeedCard, now: number): string | null {
   return c.dates.find((d) => d >= today) ?? null;
 }
 
+/**
+ * THE DAY A CARD SHOWS IS THE ONE CLOSEST TO TODAY (Ben, 19 Nov: "the date that appears on an opp should always be
+ * the closest date to present if it has multiple dates"), past or to come; a tie goes to the day to come. Until then a
+ * card whose days had all passed showed its first, the furthest from today. Display only: ordering and urgency still
+ * follow nextDay.
+ */
+export function closestDay(c: FeedCard, now: number): string | null {
+  const t0 = Date.parse(`${londonDay(now)}T12:00:00Z`);
+  let best: string | null = null, bestGap = Infinity;
+  for (const d of c.dates) {
+    const gap = Date.parse(`${d}T12:00:00Z`) - t0;
+    if (Number.isNaN(gap)) continue;
+    const a = Math.abs(gap);
+    if (a < bestGap || (a === bestGap && gap > 0)) { best = d; bestGap = a; }
+  }
+  return best;
+}
+
 /** When the job next starts: its first block not yet started, else the start of its next day. */
 export function deadline(c: FeedCard, now: number): number | null {
   if (c.starts_at != null) return c.starts_at;

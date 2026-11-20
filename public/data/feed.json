@@ -6531,5 +6531,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0331",
+  "ts": "2026-11-20T03:56:24+00:00",
+  "kind": "measurement",
+  "headline": "Cards in one plain line (Book N crew on/over dates); date column = closest day",
+  "subject": "Every TV card says its booking in one plain line; the date shown is the closest",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 133,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]

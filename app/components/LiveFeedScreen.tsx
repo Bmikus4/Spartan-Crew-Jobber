@@ -17,7 +17,7 @@
 
 import { Fragment, memo, useCallback, useEffect, useRef, useState } from "react";
 import type { FeedCard, FeedCounts, FeedItem } from "../lib/feed/project";
-import { deadline, londonDay, nextDay, QUIET_MS } from "../lib/feed/order";
+import { closestDay, deadline, londonDay, QUIET_MS } from "../lib/feed/order";
 import { BrandMark, BrandWordmark } from "./BrandLogo";
 import HistoryPicker, { momentLabel, type PastList } from "./FeedHistory";
 import OpportunitiesScreen from "./OpportunitiesScreen";
@@ -210,12 +210,12 @@ function numbersOf(c: FeedCard): string | null {
 /** The system's reason, minus the Gmail message ids it quotes: ops cannot act on a hex id. */
 
 /**
- * The job's own timing: its next day, said as Today or Tomorrow when it is, amber within
+ * The job's own timing: the day closest to today (order.ts closestDay), said as Today or Tomorrow when it is, amber within
  * 48 hours, with the count of further days a multi-day job runs. A reply-only card has no
  * job, so it shows the day the client wrote instead.
  */
 function When({ card, it, lead, now, s }: { card: FeedCard; it: FeedItem | null; lead: FeedItem; now: number; s: number }) {
-  const day = nextDay(card, now) ?? card.dates[0] ?? null;
+  const day = closestDay(card, now);
   const t = day ? Date.parse(`${day}T12:00:00Z`) : null;
   const today = londonDay(now);
   const tomorrow = londonDay(Date.parse(`${today}T12:00:00Z`) + 86_400_000);

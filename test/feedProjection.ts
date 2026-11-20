@@ -10,6 +10,7 @@
 import { project, STATUS_TEXT, DONE_DWELL_MS, STALE_UNDATED_MS, QUIET_MS, dismissKey, londonInstant, type FeedMark } from "../app/lib/feed/project";
 import type { ConversationState } from "../app/lib/onsinch/types";
 import { v2Sources, type V2Row } from "../app/lib/feed/v2";
+import { closestDay } from "../app/lib/feed/order";
 import { fromStates } from "./fixtures/stateSource";
 
 let fails = 0;
@@ -296,6 +297,17 @@ console.log("\n[15] the rebuild's decisions reach ops on the TV and nowhere else
   ok(fresh.cards.length === 2 && cut.cards.length === 0, "the TV starts from a given moment: older emails are not shown (Ben, 2026-10-10)");
   const past = row("old", { grounded: { intent: "change", requests: [{ action: "change_times", date: "2026-09-30", problems: [] }], problems: [] } });
   ok(project(new Map(), [], null, NOW, new Map(), v2Sources([past], NOW)).cards.length === 0, "a job that is over leaves the TV");
+}
+
+console.log("\n[D] the day a card shows is the one closest to today (Ben, 19 Nov)");
+{
+  const at = Date.parse("2026-11-19T12:00:00Z");
+  const c = (dates: string[]) => ({ dates } as any);
+  ok(closestDay(c(["2026-11-10", "2026-11-18", "2026-11-25"]), at) === "2026-11-18", "yesterday is closer than next week");
+  ok(closestDay(c(["2026-11-18", "2026-11-20"]), at) === "2026-11-20", "a tie goes to the day to come");
+  ok(closestDay(c(["2026-11-01", "2026-11-12"]), at) === "2026-11-12", "all past: the latest, not the first");
+  ok(closestDay(c(["2026-11-19", "2026-11-30"]), at) === "2026-11-19", "today when it is one of them");
+  ok(closestDay(c([]), at) === null, "no day: none");
 }
 
 console.log(fails ?`\n${fails} FAILED` : "\nALL PASS");
