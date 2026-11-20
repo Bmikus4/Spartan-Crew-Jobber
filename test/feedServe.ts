@@ -128,7 +128,7 @@ void (async () => {
     const items = r.body.items as FeedCard[];
     const counts = r.body.counts as Record<string, number>;
     ok(items.some((c) => c.thread_id === "n") && items.some((c) => c.thread_id === "b"), "the job with its numbers and the one still without are both listed: no job is hidden for lacking them", items.map((c) => c.thread_id).join());
-    ok(counts.needs_follow_up === 2 && !("unlinked" in counts), "Needs Follow Up counts the list, and nothing is counted as hidden", JSON.stringify(counts));
+    ok(!("needs_follow_up" in counts) && !("unlinked" in counts), "no Needs Follow Up count (removed 19 Nov), and nothing is counted as hidden", JSON.stringify(counts));
     const h2 = items.find((c) => c.thread_id === "h2");
     ok(!items.some((c) => c.thread_id === "h") && !!h2 && h2.r_number === null && /R11600 is no longer in OnSinch/.test(h2.ask ?? ""), "a held link's job that is over leaves; one still to come shows no R: the number is a gone order's, and may be reused", JSON.stringify(h2));
     // The jobs board's tiles: numbers from the thread's live link, or no tile.
@@ -162,6 +162,24 @@ void (async () => {
     ok(/build/.test(get) && /build\.current !== body\.build\) \{ window\.location\.reload\(\)/.test(screen), "the feed says which build answered, and a screen that sees it change reloads itself");
     // 12-17 Nov: intake was dead 4.5 days behind a red dot while the list read 0 needs.
     ok(/emailStale && !past && \(\s*<div role="alert"/.test(screen), "a stale intake puts a banner across the screen, not only the sync dot");
+  }
+
+  console.log("\n[T] the Needs Created toggle (Ben, 19 Nov): off, no new booking on the list or in what Gmail reads");
+  {
+    const nc = { ...created, thread_id: "nc", status: "needs-info", order_action_log: [], onsinch_order_id: undefined } as unknown as ConversationState;
+    const up = { ...created, thread_id: "up", classification: "update", status: "error", order_action_log: [] } as unknown as ConversationState;
+    const src = { sources: async (inb: any, at: number) => fromStates([nc, up], inb, at) };
+    const kinds = (cs: FeedCard[]) => cs.flatMap((c) => c.items.map((i) => i.kind));
+    const on = await serveFeed(deps({ ...src, showCreates: async () => true }), NOW);
+    const off = await serveFeed(deps({ ...src, showCreates: async () => false }), NOW);
+    const unset = await serveFeed(deps(src), NOW);
+    const broken = await serveFeed(deps({ ...src, showCreates: boom }), NOW);
+    const k = (r: typeof on) => kinds(r.body.items as FeedCard[]);
+    ok(k(on).includes("needs-created") && k(on).includes("needs-updated"), "on: both kinds are listed", k(on).join());
+    ok(!k(off).includes("needs-created") && k(off).includes("needs-updated"), "off: the update stays, the create is gone from the list", k(off).join());
+    ok(!kinds(off.all ?? []).includes("needs-created"), "off: and gone from every card Gmail reads, so no Order Needs Created label", kinds(off.all ?? []).join());
+    ok((off.body.counts as Record<string, number>).needs_created === 0, "off: counted as none");
+    ok(k(unset).includes("needs-created") && k(broken).includes("needs-created"), "no setting, or a failed settings read: creates are shown (on by default; never hidden on an error)");
   }
 
   console.log(fails ? `\n${fails} FAILED` : "\nALL PASS");

@@ -44,7 +44,7 @@ async function board(from: string, subject: string, text: string, x: any): Promi
       world, threadOrderId: async () => null, run: null, record: async (r: any) => { rec = r; }, trace: () => {} } as DecideDeps);
   const item = cardOf({ thread_id: "tb", message_id: "b1", sent_at: SENT, subject, from_address: from }, rec.kind, rec.decision, rec.executed, rec.interpretation?.grounded ?? null, rec.client.id);
   const card = boardOf(item);
-  const label = item ? labelsFor({ thread_id: "tb", green: false, follow_up: false, r_number: null, items: [{ kind: item.replace(/\+work$/, ""), green: false }] } as any).order : null;
+  const label = item ? labelsFor({ thread_id: "tb", green: false, r_number: null, items: [{ kind: item.replace(/\+work$/, ""), green: false }] } as any).order : null;
   return { card, label, code: rec.decision.code };
 }
 const X = (intent: string, requests: any[], extra: any = {}) => ({ intent, po: null, note: "", requests, ...extra });

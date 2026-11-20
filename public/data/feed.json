@@ -6475,5 +6475,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0327",
+  "ts": "2026-11-20T00:28:53+00:00",
+  "kind": "measurement",
+  "headline": "O54: Needs Follow Up removed; Needs Created toggle (default on); Confirm + False flag buttons",
+  "subject": "Needs Follow Up is removed; Needs Created is a Settings toggle; Confirm and False flag",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 133,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]

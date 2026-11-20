@@ -1,7 +1,7 @@
 export const runtime = "nodejs";
 export const maxDuration = 15;
 
-// The TV's check and X. Writes and deletes feed_marks rows with mark = 'checked' or 'denied'
+// The TV's Confirm and False flag. Writes and deletes feed_marks rows with mark = 'checked' or 'denied'
 // and nothing else; see app/lib/feed/check.ts.
 
 import { authorizeAction } from "../../../lib/apiAuth";

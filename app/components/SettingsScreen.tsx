@@ -16,7 +16,7 @@ import InstallButton from "./InstallButton";
 
 type ReplyDelivery = "draft" | "send";
 type ReplyScope = "all" | "enquiries";
-interface Settings { replies_enabled: boolean; test_data_autoclear?: boolean; create_lead_days?: number; create_lead_enabled?: boolean; create_lead_applies_to?: "creates" | "changes" | "both"; bot_writes_enabled?: boolean; reply_delivery: ReplyDelivery; reply_scope: ReplyScope; default_rate_card: number }
+interface Settings { replies_enabled: boolean; test_data_autoclear?: boolean; create_lead_days?: number; create_lead_enabled?: boolean; create_lead_applies_to?: "creates" | "changes" | "both"; bot_writes_enabled?: boolean; needs_created_enabled?: boolean; reply_delivery: ReplyDelivery; reply_scope: ReplyScope; default_rate_card: number }
 
 const SETTINGS_FALLBACK: Settings = { replies_enabled: false, reply_delivery: "draft", reply_scope: "all", default_rate_card: 315 };
 
@@ -178,6 +178,14 @@ export default function SettingsScreen({ signedInAs }: { signedInAs?: string }) 
         </header>
 
         <Panel
+          title="Needs Created"
+          blurb={<>Show new bookings to make: a card on the office TV and the <b style={{ color: SUB }}>Order Needs Created</b> label in Gmail. <b style={{ color: SUB }}>Off</b>, only bookings that need updating are shown. <b style={{ color: SUB }}>On by default</b>.</>}
+        >
+          <Segmented label="Needs Created" value={s.needs_created_enabled !== false} onChange={(v) => save({ ...s, needs_created_enabled: v })}
+            options={[{ id: false, label: "Off" }, { id: true, label: "On" }]} />
+        </Panel>
+
+        <Panel
           title="Bot orders and updates"
           blurb={<>The master switch for the bot&apos;s work in OnSinch: creating new orders in Orders To Confirm and updating existing ones. <b style={{ color: SUB }}>Off</b>, every email is still read and decided, and anything the bot would write shows on the TV for a person to do by hand. Off by default.</>}
         >
@@ -188,7 +196,7 @@ export default function SettingsScreen({ signedInAs }: { signedInAs?: string }) 
 
         <Panel
           title="AI email drafts"
-          blurb={<>One switch for every email the system writes in a Gmail thread for a person: a reply to an inbound email, in Spartan&apos;s voice with the whole thread as context, and a follow-up on a job the office TV marks <b style={{ color: SUB }}>Needs Follow Up</b> (nothing from anyone for 24 hours). <b style={{ color: SUB }}>Off by default</b>: orders are read and made without it.</>}
+          blurb={<>One switch for every email the system writes in a Gmail thread for a person: a reply to an inbound email, in Spartan&apos;s voice with the whole thread as context, and a chase on a job with nothing from anyone for 24 hours. <b style={{ color: SUB }}>Off by default</b>: orders are read and made without it.</>}
         >
           <Segmented label="AI email drafts" value={s.replies_enabled} onChange={(v) => save({ ...s, replies_enabled: v })}
             options={[{ id: false, label: "Off" }, { id: true, label: "On" }]} />

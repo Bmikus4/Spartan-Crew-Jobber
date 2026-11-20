@@ -56,7 +56,6 @@ export function portedCards(jobs: Job[], onTv: Set<string>, links: Map<string, L
       r_number: `R${String(link.r_number).replace(/^R/i, "")}`,
       j_number: `J${link.job_id}`,
       quiet: false,
-      follow_up: false,
       ask: null,
       check: null,
     });

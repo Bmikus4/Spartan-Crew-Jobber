@@ -3,8 +3,8 @@
 // every thread's labels and applies them; the app decides, n8n only carries it out.
 // ----------------------------------------------------------------------------
 // Four order labels, exclusive (CLAUDE.md: a thread wearing done and outstanding at once says
-// both), plus Needs Follow Up on its own axis. All of them come off when a person ticks the card
-// or the system sees the item resolved: a green card wears nothing.
+// both). All of them come off when a person ticks the card or the system sees the item resolved:
+// a green card wears nothing. Needs Follow Up was removed on 19 Nov (Ben).
 //
 // Why it matters, measured 10-15: since 10-12, 7 of 8 real bot orders were keyed again by staff
 // 10 to 30 minutes later, 2 of them identical. The order was right and nobody saw it. Staff
@@ -13,7 +13,6 @@
 import type { FeedCard } from "../feed/project";
 
 export const ORDER_LABELS = ["Order Created", "Order Updated", "Order Needs Created", "Order Needs Updated"] as const;
-export const FOLLOW_UP = "Needs Follow Up";
 export type OrderLabel = (typeof ORDER_LABELS)[number];
 
 /** Same colours the old four wore, so the inbox reads as it did. */
@@ -22,7 +21,6 @@ export const COLOURS: Record<string, { backgroundColor: string; textColor: strin
   "Order Updated": { backgroundColor: "#4a86e8", textColor: "#ffffff" },
   "Order Needs Created": { backgroundColor: "#cc3a21", textColor: "#ffffff" },
   "Order Needs Updated": { backgroundColor: "#eaa041", textColor: "#ffffff" },
-  "Needs Follow Up": { backgroundColor: "#a479e2", textColor: "#ffffff" },
 };
 
 /** The old names, renamed in place so threads that wear them keep them under the new name. */
@@ -35,15 +33,14 @@ export const RENAMES: Array<{ from: string; to: OrderLabel }> = [
 export const STRIP = ["HIGH", "MEDIUM", "LOW", "SamurAI", "TEST"];
 
 /**
- * ONLY "ORDER NEEDS UPDATED" IS WORN, FOR NOW (Ben, 19 Nov, O53: "I don't want to see Needs created or needs follow up
- * labels anywhere. Only needs updated, in Gmail and the Dashboard"). labelsFor gives no other label, so the next sync
- * takes Order Needs Created, Needs Follow Up, Order Created and Order Updated off every thread wearing them: changes()
- * removes every label of ours a thread is not given. The others stay defined so they can be taken off, and so turning
- * one back on is adding its name here.
+ * THE LABELS GMAIL WEARS (Ben, 19 Nov): Order Needs Updated, and Order Needs Created while its Settings toggle is on.
+ * The toggle is applied before this, by serve.ts (showCreates), which leaves no needs-created item on a card when it is
+ * off. The system's own Order Created and Order Updated stay off (O53). changes() removes every label of ours a thread
+ * is not given, so a label leaving this set comes off every thread at the next sync.
  */
-export const SHOWN_LABELS: ReadonlySet<string> = new Set<string>(["Order Needs Updated"]);
+export const SHOWN_LABELS: ReadonlySet<string> = new Set<string>(["Order Needs Updated", "Order Needs Created"]);
 
-export type ThreadLabels = { thread_id: string; order: OrderLabel | null; follow_up: boolean; r_number: string | null };
+export type ThreadLabels = { thread_id: string; order: OrderLabel | null; r_number: string | null };
 
 /** A failure outranks a success, as the TV leads with it. */
 const RANK: Record<string, OrderLabel> = {
@@ -55,28 +52,28 @@ const RANK: Record<string, OrderLabel> = {
 const ORDER_OF: OrderLabel[] = ["Order Needs Created", "Order Needs Updated", "Order Created", "Order Updated"];
 
 export function labelsFor(card: FeedCard): ThreadLabels {
-  if (card.green) return { thread_id: card.thread_id, order: null, follow_up: false, r_number: card.r_number };
+  if (card.green) return { thread_id: card.thread_id, order: null, r_number: card.r_number };
   const open = card.items.filter((i) => !i.green).map((i) => RANK[i.kind]).filter(Boolean);
-  // A thread needing a create and an update wears Needs Updated: the hidden label does not hide the shown one.
+  // A failure outranks a success, and a label not worn never hides one that is.
   const order = ORDER_OF.find((l) => open.includes(l) && SHOWN_LABELS.has(l)) ?? null;
-  return { thread_id: card.thread_id, order, follow_up: SHOWN_LABELS.has(FOLLOW_UP) && !!card.follow_up, r_number: card.r_number };
+  return { thread_id: card.thread_id, order, r_number: card.r_number };
 }
 
 /** What changes on Gmail: threads whose labels differ from what was last applied, and threads that left the TV. */
-export function changes(now: ThreadLabels[], last: Map<string, { order: string | null; follow_up: boolean }>): Array<ThreadLabels & { add: string[]; remove: string[] }> {
+export function changes(now: ThreadLabels[], last: Map<string, { order: string | null }>): Array<ThreadLabels & { add: string[]; remove: string[] }> {
   const out: Array<ThreadLabels & { add: string[]; remove: string[] }> = [];
   const seen = new Set<string>();
-  const all = [...ORDER_LABELS, FOLLOW_UP];
+  const all: string[] = [...ORDER_LABELS];
   for (const t of now) {
     seen.add(t.thread_id);
     const was = last.get(t.thread_id);
-    if (was && was.order === t.order && was.follow_up === t.follow_up) continue;
-    const add = [...(t.order ? [t.order] : []), ...(t.follow_up ? [FOLLOW_UP] : [])];
+    if (was && was.order === t.order) continue;
+    const add: string[] = t.order ? [t.order] : [];
     out.push({ ...t, add, remove: all.filter((l) => !add.includes(l)) });
   }
   for (const [thread_id, was] of last) {
-    if (seen.has(thread_id) || (!was.order && !was.follow_up)) continue;
-    out.push({ thread_id, order: null, follow_up: false, r_number: null, add: [], remove: all });
+    if (seen.has(thread_id) || !was.order) continue;
+    out.push({ thread_id, order: null, r_number: null, add: [], remove: all });
   }
   return out;
 }

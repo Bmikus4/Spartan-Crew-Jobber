@@ -46,6 +46,7 @@ export function coerceSettings(body: unknown): Partial<Settings> {
     next.create_lead_days = b.create_lead_days;
   if (typeof b.analytics_tab_enabled === "boolean") next.analytics_tab_enabled = b.analytics_tab_enabled;
   if (typeof b.intake_paused === "boolean") next.intake_paused = b.intake_paused;
+  if (typeof b.needs_created_enabled === "boolean") next.needs_created_enabled = b.needs_created_enabled;
   if (typeof b.bot_writes_enabled === "boolean") next.bot_writes_enabled = b.bot_writes_enabled;
   // All-or-nothing: a map with one bad entry (a typo'd kind, an unparseable date, cap 0) is
   // dropped whole, so a mistyped enable can never half-apply and look like it worked.

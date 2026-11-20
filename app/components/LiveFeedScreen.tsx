@@ -2,7 +2,7 @@
 
 // The office TV: everything the engine processed that is still waiting on a person.
 //
-// A DISPLAY, NOT A WORKSPACE. The only controls that write are a card's check and X, and they
+// A DISPLAY, NOT A WORKSPACE. The only controls that write are a card's Confirm and False flag, and they
 // write only their own record (app/lib/feed/check.ts). The same component runs in the app
 // shell and fullscreen on the TV; `s` (scale) is the only difference.
 //
@@ -91,7 +91,7 @@ function evidenceLine(it: FeedItem): string | null {
   if ((g.evidence as { ported?: boolean } | null)?.ported) return "Completed, carried over from the jobs board";
   // A person's Confirm says they made the update themselves (O32), so it reads as done like any other (O33).
   if (g.mark === "checked") { const who = personName(g.by, e.name); return `Done${who ? ` by ${who}` : ""}, ${when}`; }
-  if (g.mark === "denied") { const who = personName(g.by, e.name); return `Not needed${who ? `, said ${who}` : ""}, ${when}`; }
+  if (g.mark === "denied") { const who = personName(g.by, e.name); return `False flag${who ? `, said ${who}` : ""}, ${when}`; }
   if (e.held) return "Already in OnSinch: every shift asked for";
   if (g.mark === "done") return `Done in OnSinch: ${e.text ?? "staff did it"}, ${when}`;
   if (g.mark === "staff-edit") return `Changed in OnSinch by staff: ${e.text ?? "edited"}, ${when}`;
@@ -148,15 +148,14 @@ function chime(ctx: AudioContext) {
 }
 
 /**
- * ONLY "NEEDS UPDATED" IS SHOWN, FOR NOW (Ben, 19 Nov, O53: "Only things that explicitly need updated. If they need
- * updated and a follow up, display them. I also don't want to see Needs created or needs follow up labels anywhere").
- * A card is listed for its needs-updated items alone, with no follow-up badge; a card with none is not listed. History
- * passes through the same filter, so no stored board shows the hidden ones either. Gmail: threadLabels.ts SHOWN_LABELS.
+ * THE TWO NOTIFICATIONS: NEEDS UPDATED AND NEEDS CREATED (Ben, 19 Nov). Needs Created comes and goes with its
+ * Settings toggle, applied by the server (serve.ts showCreates), so this list and Gmail agree. The system's own
+ * checks and the reply lane stay off the list (O53). History passes through the same filter.
  */
-const SHOWN_KINDS = new Set<FeedItem["kind"]>(["needs-updated"]);
+const SHOWN_KINDS = new Set<FeedItem["kind"]>(["needs-updated", "needs-created"]);
 function shownForNow(c: FeedCard): FeedCard | null {
   const items = c.items.filter((i) => SHOWN_KINDS.has(i.kind));
-  return items.length ? { ...c, items, follow_up: false, colour: "blue" } : null;
+  return items.length ? { ...c, items } : null;
 }
 
 const orderItem = (c: FeedCard) => c.items.find((i) => i.kind !== "needs-reply") ?? null;
@@ -172,7 +171,7 @@ const isOpen = (c: FeedCard) => c.lane !== "done";
 function labelOf(card: FeedCard, it: FeedItem | null): { text: string; ok: boolean } {
   const kind = (it ?? card.items[0]).kind;
   if (kind === "needs-reply") return { text: "Needs Reply", ok: false };
-  if (it?.green?.mark === "denied") return { text: "Not Needed", ok: true };
+  if (it?.green?.mark === "denied") return { text: "False Flag", ok: true };
   const created = kind === "needs-created" || kind === "created-check";
   if (card.green || kind === "created-check" || kind === "updated-check") return { text: created ? "Order Created" : "Order Updated", ok: true };
   return { text: created ? "Order Needs Created" : "Order Needs Updated", ok: false };
@@ -239,10 +238,16 @@ function When({ card, it, lead, now, s }: { card: FeedCard; it: FeedItem | null;
  * THE CHECK AND THE X (Ben, 18 Nov): every decision on a card is staff's, so each card carries a green check (done,
  * right) and a red X (not needed) at its right-hand end: icon-only rounded rectangles, large enough to hit on the TV.
  * Either press clears the card; pressing the lit one again undoes it. Neither writes to OnSinch (O35: the check books
- * the plan only once a write type is enabled in Settings). Red here is the X, which Ben asked for by name, so the
+ * the plan only once a write type is enabled in Settings). Red here is False flag, which Ben asked for by name, so the
  * 10-10 rule that kept Confirm off red ("red means New job") does not apply to it.
  */
 type OnTick = (c: FeedCard, it: FeedItem, checked: boolean, denied?: boolean) => void;
+/**
+ * CONFIRM AND FALSE FLAG (Ben, 19 Nov). Confirm is the primary action: large, green, a check. False flag is red,
+ * rectangular and visibly shorter, with a flag. They do exactly what the check and X did before them: Confirm stores a
+ * person's `checked` mark, False flag a person's `denied` mark (feed/check.ts), and either clears the card; pressing
+ * the lit one undoes it. Neither writes to OnSinch. Sizes are set for a TV read from across the office.
+ */
 function Decide({ card, it, s, height, onTick }: { card: FeedCard; it: FeedItem; s: number; height: number; onTick: OnTick }) {
   const mark = it.green?.mark;
   const decided = mark === "checked" || mark === "denied";
@@ -251,24 +256,29 @@ function Decide({ card, it, s, height, onTick }: { card: FeedCard; it: FeedItem;
     const lit = decided && (yes ? mark === "checked" : mark === "denied");
     // A green the system set (a card carried over from the jobs board) is not staff's to undo or overrule.
     const off = (decided && !lit) || (!!it.green && !decided);
-    const name = yes ? (lit ? "Undo confirm" : "Confirm") : (lit ? "Undo not needed" : "Not needed");
+    const name = yes ? (lit ? "Undo confirm" : "Confirm") : (lit ? "Undo false flag" : "False flag");
+    // Ben's sketch (19 Nov): Confirm a large green block; False flag a thin red strip under it, the same width,
+    // with its words and a flag. The strip is about two fifths of Confirm's height.
+    const bh = yes ? h : h * 0.42;
     return (
       <button
         aria-label={name} title={name} disabled={off}
         onClick={() => (lit ? onTick(card, it, false) : onTick(card, it, true, !yes))}
         style={{
-          width: h * 1.5, height: h, borderRadius: h * 0.3, border: "none", flexShrink: 0,
-          display: "inline-flex", alignItems: "center", justifyContent: "center",
+          width: h * 2.15, height: bh, borderRadius: yes ? 8 * s : 4 * s, border: "none", flexShrink: 0,
+          display: "flex", alignItems: "center", justifyContent: yes ? "center" : "space-between",
+          padding: yes ? 0 : `0 ${8 * s}px 0 ${10 * s}px`,
           background: yes ? GREEN : RED, color: "#fff", opacity: off ? 0.18 : 1,
           cursor: off ? "default" : "pointer", transition: "opacity 200ms",
         }}>
-        <svg width={h * 0.55} height={h * 0.55} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-          {yes ? <polyline points="4.5 12.5 10 18 19.5 6.5" /> : <><line x1="6.5" y1="6.5" x2="17.5" y2="17.5" /><line x1="17.5" y1="6.5" x2="6.5" y2="17.5" /></>}
+        {!yes && <span style={{ fontSize: bh * 0.52, fontWeight: 800, letterSpacing: "0.04em", whiteSpace: "nowrap", minWidth: 0, overflow: "hidden" }}>FALSE FLAG</span>}
+        <svg width={yes ? bh * 0.6 : bh * 0.66} height={yes ? bh * 0.6 : bh * 0.66} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={yes ? 3.4 : 2.6} strokeLinecap="round" strokeLinejoin="round" aria-hidden style={{ flexShrink: 0 }}>
+          {yes ? <polyline points="4.5 12.5 10 18 19.5 6.5" /> : <><path d="M5.5 21V4" /><path d="M5.5 4.5h11l-2.5 4 2.5 4h-11" /></>}
         </svg>
       </button>
     );
   };
-  return <div style={{ display: "inline-flex", gap: h * 0.25 }}>{button(true)}{button(false)}</div>;
+  return <div style={{ display: "inline-flex", flexDirection: "column", gap: 5 * s }}>{button(true)}{button(false)}</div>;
 }
 
 /**
@@ -334,7 +344,6 @@ const JobTile = memo(function JobTile({ card, now, s, phase, onTick, readOnly = 
           </span>
           <Badge s={s} text={label.text} ok={label.ok} />
           {hasReply(card) && it && <Badge s={s} text="Needs Reply" ok={false} />}
-          {card.follow_up && <Badge s={s} text="Needs Follow Up" ok={false} />}
           {/* Opens this job's conversation in All Opportunities. Not on the office TV: nobody clicks a wall. */}
           {onOpen && (
             <button onClick={() => onOpen(card.thread_id)} aria-label="Open in All Opportunities" title="Open in All Opportunities"
@@ -361,7 +370,7 @@ const JobTile = memo(function JobTile({ card, now, s, phase, onTick, readOnly = 
       <div style={cell(true)}><When card={card} it={it} lead={lead} now={now} s={s} /></div>
 
       <div style={{ display: "flex", justifyContent: "flex-end", paddingLeft: 24 * s }}>
-        {it && !readOnly && <Decide card={card} it={it} s={s} height={52} onTick={onTick} />}
+        {it && !readOnly && <Decide card={card} it={it} s={s} height={60} onTick={onTick} />}
       </div>
     </article>
   );
@@ -608,7 +617,6 @@ export default function LiveFeedScreen({ isActive, tv = false }: { isActive: boo
   // No Needs Created, Needs Updated or To Check counts (Ben, 2026-10-11): each tile already carries its label.
   const kpis: Array<{ label: string; n: number; color: string; loud?: boolean }> = c ? [
     ...(data?.health.replies_enabled ? [{ label: "Needs Reply", n: c.needs_reply, color: "var(--text-primary)" }] : []),
-    // No Needs Follow Up count, for now (O53): it comes back with "Needs Follow Up" in SHOWN_KINDS' rule above.
     // The one count that is about time running out, so it is set heavier than the rest (Ben, 2026-10-10).
     { label: "Within 48 Hours", n: urgentCount, color: AMBER, loud: true },
   ] : [];
@@ -726,7 +734,7 @@ export default function LiveFeedScreen({ isActive, tv = false }: { isActive: boo
 
       {undo && undo.until > now && (
         <div role="status" style={{ position: "absolute", left: "50%", bottom: 32 * s, transform: "translateX(-50%)", background: "var(--surface-2)", color: "var(--text-primary)", border: "1px solid var(--border-strong)", borderRadius: 12 * s, padding: `${12 * s}px ${16 * s}px ${12 * s}px ${20 * s}px`, fontSize: 18 * s, fontWeight: 600, display: "flex", gap: 16 * s, alignItems: "center" }}>
-          {undo.denied ? "Not needed" : "Confirmed"}{undo.card.company ? `: ${undo.card.company}` : ""}
+          {undo.denied ? "False flag" : "Confirmed"}{undo.card.company ? `: ${undo.card.company}` : ""}
           <button onClick={() => { const u = undo; setUndo(null); void tick(u.card, u.item, false); }} style={{ fontSize: 15 * s, fontWeight: 700, padding: `${6 * s}px ${14 * s}px`, borderRadius: 8 * s, border: "none", background: "var(--accent)", color: "var(--accent-contrast)", cursor: "pointer" }}>Undo</button>
         </div>
       )}

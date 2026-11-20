@@ -8,7 +8,7 @@
 // 27 Oct (addendum Prompt 12); the projection tests still describe cases that way, through
 // test/fixtures/stateSource.ts.
 // ============================================================================
-import { FOLLOW_UP_MS, londonDay, orderCards, QUIET_MS } from "./order";
+import { londonDay, orderCards, QUIET_MS } from "./order";
 import type { Need } from "./done";
 
 export type FeedKind = "needs-created" | "needs-updated" | "created-check" | "updated-check" | "needs-reply";
@@ -116,8 +116,6 @@ export interface FeedCard {
   j_number: string | null;
   /** Open, with nothing done on it by anyone for QUIET_MS: listed below the fresh ones. */
   quiet: boolean;
-  /** Open, and nothing on the job from anyone for FOLLOW_UP_MS: the TV raises "Needs Follow Up". */
-  follow_up: boolean;
   /** The tile's second line: what the job is and what needs doing, in plain sentences (cardNote.ts). */
   ask: string | null;
   /** The tile's third line: the one thing a person must check, or the jobs staff may have done it in (done.ts). */
@@ -142,8 +140,6 @@ export interface FeedCounts {
   to_check: number;
   /** Ticked, or verified in OnSinch, within the last day. */
   done: number;
-  /** Open jobs with nothing from anyone for FOLLOW_UP_MS. */
-  needs_follow_up: number;
   /** Undated needs nobody has written about for a fortnight. */
   older: number;
 }
@@ -244,7 +240,7 @@ export function project(
     return { mark: shown.mark, by: shown.by, evidence: shown.evidence, at: first.at };
   };
 
-  const counts: FeedCounts = { needs_created: 0, needs_updated: 0, needs_reply: 0, to_check: 0, needs_follow_up: 0, done: 0, older: 0 };
+  const counts: FeedCounts = { needs_created: 0, needs_updated: 0, needs_reply: 0, to_check: 0, done: 0, older: 0 };
   const awaiting = (thread: string): number | null => {
     const inAt = lastInbound.get(thread);
     if (!inAt) return null;
@@ -353,8 +349,6 @@ export function project(
      */
     const k = jobKey(s);
     const lastActivity = Math.max(activityOf(s), k ? jobActivity.get(k) ?? 0 : 0) || it.at;
-    const followUp = !g && now - lastActivity > FOLLOW_UP_MS;
-    if (followUp) counts.needs_follow_up++;
     cards.set(s.thread_id, {
       thread_id: s.thread_id,
       // The legend's colour is the NEED, not whether an order is bound (Ben, 2026-10-04): an [DECISIONS V34]
@@ -376,7 +370,6 @@ export function project(
       r_number,
       j_number,
       quiet: !g && now - lastActivity > QUIET_MS,
-      follow_up: followUp,
       ask: s.ask,
       check: g ? null : possibly.get(it.item_key) ?? s.check,
       po: s.po ?? null,
@@ -407,7 +400,7 @@ export function project(
     cards.set(r.thread_id, {
       thread_id: r.thread_id, colour: "neutral", lane: "reply", items: [item], green: false, at: item.at,
       order_id: null, company_id: null, company: r.company, contact: firstName(r.contact),
-      dates: [], starts_at: null, awaiting_reply_since: item.at, crew: null, venue: null, r_number: null, j_number: null, quiet: false, follow_up: false, ask: null, check: null,
+      dates: [], starts_at: null, awaiting_reply_since: item.at, crew: null, venue: null, r_number: null, j_number: null, quiet: false, ask: null, check: null,
     });
   }
 

@@ -485,6 +485,11 @@ export interface Settings {
    */
   intake_paused?: boolean;
   /**
+   * THE NEEDS CREATED NOTIFICATION (Ben, 19 Nov): when off, a new booking to make is shown nowhere: no TV card and no
+   * Order Needs Created label in Gmail (feed/serve.ts showCreates). ON by default. Needs Updated has no switch.
+   */
+  needs_created_enabled?: boolean;
+  /**
    * THE MASTER SWITCH for the bot's work in OnSinch (Ben, 2026-10-21): creating orders and
    * updating them. Off, every decision is still made and shown, and a write it would make is a
    * card for a person ("Not written, do it by hand"). The server's SPARTAN_WRITES=live is a second,
@@ -527,7 +532,7 @@ export interface Settings {
   create_lead_applies_to?: "creates" | "changes" | "both";
   /**
    * AI email drafts: the ONE switch for any email the system writes into a Gmail thread for a
-   * person, a reply to an inbound email and a chase on a job the TV marks Needs Follow Up alike.
+   * person, a reply to an inbound email and a chase on a job with nothing from anyone for 24 hours alike.
    * A separate follow-up switch is the same thing twice (Ben, 2026-10-21), so a new kind of draft
    * joins this one rather than adding another. OFF by default. reply_delivery and reply_scope
    * below apply to every draft.
@@ -592,6 +597,7 @@ export const DEFAULT_SETTINGS: Settings = {
   create_lead_applies_to: "creates",
   analytics_tab_enabled: false,
   intake_paused: false,
+  needs_created_enabled: true,
   bot_writes_enabled: false,
   bot_write_classes: {},
   reply_delivery: "draft",

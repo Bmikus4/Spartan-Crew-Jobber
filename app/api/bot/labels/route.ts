@@ -6,7 +6,7 @@ import { automationPausedFlag } from "../../../lib/paused";
 import { serveFeed } from "../../../lib/feed/serve";
 import { liveFeedDeps } from "../../../lib/feed/live";
 import type { FeedCard } from "../../../lib/feed/project";
-import { changes, labelsFor, labelsRefusedAlarm, COLOURS, FOLLOW_UP, ORDER_LABELS, RENAMES, STRIP } from "../../../lib/mail/threadLabels";
+import { changes, labelsFor, labelsRefusedAlarm, COLOURS, ORDER_LABELS, RENAMES, STRIP } from "../../../lib/mail/threadLabels";
 import { ensureSchema } from "../../../lib/migrations";
 import { reportError } from "../../../lib/errorReport";
 
@@ -56,22 +56,23 @@ export async function POST(request: Request): Promise<Response> {
   const cards: FeedCard[] = feed.all ?? [];
   const want = [...new Map(cards.map((c) => [c.thread_id, labelsFor(c)])).values()];
 
-  const rows = (await sql`SELECT thread_id, order_label, follow_up FROM thread_labels`) as { thread_id: string; order_label: string | null; follow_up: boolean }[];
-  const last = new Map(rows.map((r) => [r.thread_id, { order: r.order_label, follow_up: !!r.follow_up }]));
+  const rows = (await sql`SELECT thread_id, order_label FROM thread_labels`) as { thread_id: string; order_label: string | null }[];
+  const last = new Map(rows.map((r) => [r.thread_id, { order: r.order_label }]));
   const full = body.full === true || new Date(now).getUTCMinutes() === 0;
-  const against = full ? new Map([...last].map(([k, v]) => [k, { order: "(resend)", follow_up: v.follow_up }])) : last;
+  const against = full ? new Map([...last].map(([k, v]) => [k, { order: "(resend)" }])) : last;
   const todo = changes(want, against).slice(0, PER_RUN);
 
   if (live) {
     for (const t of todo) {
-      await sql`INSERT INTO thread_labels (thread_id, order_label, follow_up, applied_at) VALUES (${t.thread_id}, ${t.order}, ${t.follow_up}, now())
-        ON CONFLICT (thread_id) DO UPDATE SET order_label = EXCLUDED.order_label, follow_up = EXCLUDED.follow_up, applied_at = now()`;
+      // follow_up stays in the table (the schema is append-only) and is always false: Needs Follow Up was removed (19 Nov).
+      await sql`INSERT INTO thread_labels (thread_id, order_label, follow_up, applied_at) VALUES (${t.thread_id}, ${t.order}, false, now())
+        ON CONFLICT (thread_id) DO UPDATE SET order_label = EXCLUDED.order_label, follow_up = false, applied_at = now()`;
     }
     await markRun("labels", true, { threads: todo.length }).catch(() => {});
   }
   return NextResponse.json({
     ok: true, mode: live ? "live" : "dry", full,
-    labels: [...ORDER_LABELS, FOLLOW_UP].map((name) => ({ name, color: COLOURS[name] })),
+    labels: [...ORDER_LABELS].map((name) => ({ name, color: COLOURS[name] })),
     renames: RENAMES, strip: STRIP,
     threads: todo.map((t) => ({ thread_id: t.thread_id, r_number: t.r_number, add: t.add, remove: t.remove })),
   }, { headers: { "cache-control": "no-store" } });

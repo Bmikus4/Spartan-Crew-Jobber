@@ -1,5 +1,5 @@
 // ============================================================================
-// The tick and the X: "a person has looked, and it is right" (checked) or "it is not needed" (denied).
+// Confirm and False flag: "a person has looked, and it is right" (checked) or "it is a false flag" (denied).
 // ----------------------------------------------------------------------------
 // It records who and when, and does NOTHING else — no OnSinch write, no email, no label. One item holds at most
 // one of the two: setting either removes both first, so a changed mind never leaves a check and an X together.

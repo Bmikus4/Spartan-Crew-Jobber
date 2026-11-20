@@ -46,6 +46,8 @@ export interface FeedDeps {
   jobs?: () => Promise<Job[]>;
   /** Intake is switched off on purpose (Settings intake_paused): its silence is not a fault. */
   intakePaused?: () => Promise<boolean>;
+  /** Settings needs_created_enabled: false takes every needs-created item off the list and off what Gmail reads. */
+  showCreates?: () => Promise<boolean>;
   /** Every thread's live link: the jobs board's carried-over tiles take their numbers from it (ported.ts). */
   links?: () => Promise<Map<string, LiveLink>>;
 }
@@ -92,6 +94,17 @@ export async function serveFeed(deps: FeedDeps, now: number): Promise<{ status: 
   const links = deps.links ? await deps.links().catch(() => new Map<string, LiveLink>()) : new Map<string, LiveLink>();
   const ported = portedCards(jobs, new Set(p.cards.map((c) => c.thread_id)), links);
 
+  // THE NEEDS CREATED TOGGLE (Ben, 19 Nov): off, a card keeps only its other items, and one with nothing else is not a
+  // card. Applied here, before the list and before `all` (which the Gmail labels read), so the TV and Gmail agree. A
+  // failed settings read shows the creates: hiding work on a read error could hide a booking.
+  const creates = deps.showCreates ? await deps.showCreates().catch(() => true) : true;
+  const cardsShown = creates ? p.cards : p.cards.flatMap((c) => {
+    const items = c.items.filter((i) => i.kind !== "needs-created");
+    // The colour follows what is left, by project.ts's rule: red for a create, blue for a change.
+    const lead = items[0]?.kind;
+    return items.length ? [{ ...c, items, colour: lead === "needs-reply" ? "neutral" as const : lead === "created-check" ? "red" as const : "blue" as const }] : [];
+  });
+
   // THE TV SHOWS ONLY WHAT THE SYSTEM COULD NOT DO (Ben, 10-13: "Only those cases should be [DECISIONS V12]
   // moved to the display TV"). An order the bot made or changed is the system's own work and a
   // question is answered from the inbox; both are counted, not shown. A need a person has since
@@ -104,8 +117,8 @@ export async function serveFeed(deps: FeedDeps, now: number): Promise<{ status: 
   // number, and they should always be the correct R and J numbers"). The numbers come only from
   // the thread's link (v2.ts), which the planner keeps and sweepLinks checks every minute by
   // following the J; a job without them is one the planner has not found yet.
-  const shown = p.cards.filter(isFailure);
-  const done_by_system = p.cards.filter((c) => !c.green && c.items.every((i) => i.kind === "created-check" || i.kind === "updated-check")).length;
+  const shown = cardsShown.filter(isFailure);
+  const done_by_system = cardsShown.filter((c) => !c.green && c.items.every((i) => i.kind === "created-check" || i.kind === "updated-check")).length;
   const held = deps.held ? await deps.held().catch(() => [] as HeldLink[]) : [];
   // A HELD LINK NAMES AN ORDER THAT IS GONE, so its R is shown nowhere: R numbers are reused after
   // a delete, and EMS's R11562 could now be another client's order. Its job over, it leaves.
@@ -115,7 +128,7 @@ export async function serveFeed(deps: FeedDeps, now: number): Promise<{ status: 
     items: [{ item_key: `held:${h.thread_id}:${h.r_number ?? ""}`, kind: "needs-updated" as const, status: "Order not found in OnSinch", at: Date.parse(h.since) || now, green: null }],
     green: false, at: Date.parse(h.since) || now, order_id: null, company_id: null, company: cardName({ client: h.sender?.client, sender: h.sender?.address }), contact: null,
     dates: [...(h.days ?? [])].sort(), starts_at: null, awaiting_reply_since: null, crew: null, venue: null, r_number: null, j_number: null,
-    quiet: false, follow_up: false, ask: `${h.r_number ? `R${h.r_number} is` : "Its order is"} no longer in OnSinch.`, check: "Find the order, or build it again.",
+    quiet: false, ask: `${h.r_number ? `R${h.r_number} is` : "Its order is"} no longer in OnSinch.`, check: "Find the order, or build it again.",
   }));
 
   const intake = intakeHealth({ lastReceivedAt: inbound.latest, now });
@@ -136,15 +149,13 @@ export async function serveFeed(deps: FeedDeps, now: number): Promise<{ status: 
         replies_enabled: deps.replies !== null,
         history_at: historyAt,
       },
-      // The header counts what the list holds: "Needs Follow Up" counted every card (9 against
-      // the 8 badges on the list, 10-21).
-      counts: { ...p.counts, needs_follow_up: shown.filter((c) => c.follow_up).length, done_by_system, held: heldCards.length },
+      counts: { ...p.counts, ...(creates ? {} : { needs_created: 0 }), done_by_system, held: heldCards.length },
       // A JOB WHOSE DAYS HAVE ALL PASSED NEVER APPEARS (DECISIONS O13), live, carried over or held: 181 of 186
       // carried-over cards were for past days on 29 Oct. A card with no day leaves when done or after 14 quiet days.
       // DONE CLEARS 24 HOURS AFTER IT WENT GREEN, every card alike (the owner, 1 Nov: "things that are done should auto clear
       // after 24h"). The jobs board's carried-over tiles never left (V9, 10-11): five were 25 to 75 days old on 1 Nov.
       items: [...shown, ...heldCards, ...ported].filter((c) => (!c.dates.length || c.dates[c.dates.length - 1] >= today) && !(c.green && now - doneAt(c) > DONE_DWELL_MS)),
     },
-    all: [...p.cards, ...heldCards],
+    all: [...cardsShown, ...heldCards],
   };
 }
