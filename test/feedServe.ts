@@ -180,6 +180,15 @@ void (async () => {
     ok(!kinds(off.all ?? []).includes("needs-created"), "off: and gone from every card Gmail reads, so no Order Needs Created label", kinds(off.all ?? []).join());
     ok((off.body.counts as Record<string, number>).needs_created === 0, "off: counted as none");
     ok(k(unset).includes("needs-created") && k(broken).includes("needs-created"), "no setting, or a failed settings read: creates are shown (on by default; never hidden on an error)");
+    // Purely subtractive (Ben, 20 Nov): a thread whose only card was a create must not surface its held card when creates
+    // are switched off ("R12143 is no longer in OnSinch" appeared that way).
+    const held = async () => [{ thread_id: "nc", r_number: "12143", sender: { address: "a@client.example", client: "Client" }, since: new Date(NOW - 2 * H).toISOString(), note: null, days: ["2026-10-20"] }] as HeldLink[];
+    const offHeld = await serveFeed(deps({ ...src, held, showCreates: async () => false }), NOW);
+    const onHeld = await serveFeed(deps({ ...src, held, showCreates: async () => true }), NOW);
+    const ids = (r: typeof on) => (r.body.items as FeedCard[]).map((c) => c.thread_id);
+    ok(!ids(offHeld).includes("nc"), "off: the create's thread shows nothing, not its held card", ids(offHeld).join());
+    ok(ids(onHeld).filter((t) => t === "nc").length === 1 && !(onHeld.body.items as FeedCard[]).some((c) => c.thread_id === "nc" && /no longer in OnSinch/.test(c.ask ?? "")), "on: the create shows, and the held card stays behind it", ids(onHeld).join());
+    ok(ids(offHeld).every((t) => ids(onHeld).includes(t)), "off lists nothing that on does not: the toggle only takes away", ids(offHeld).join());
   }
 
   console.log(fails ? `\n${fails} FAILED` : "\nALL PASS");

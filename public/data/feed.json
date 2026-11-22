@@ -6573,5 +6573,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0334",
+  "ts": "2026-11-22T02:25:04+00:00",
+  "kind": "measurement",
+  "headline": "Needs Created toggle purely subtractive: held cards no longer surface when creates are off",
+  "subject": "Switching Needs Created off only hides cards; it no longer surfaces held ones",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 133,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]

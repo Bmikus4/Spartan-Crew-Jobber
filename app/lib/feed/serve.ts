@@ -118,12 +118,16 @@ export async function serveFeed(deps: FeedDeps, now: number): Promise<{ status: 
   // the thread's link (v2.ts), which the planner keeps and sweepLinks checks every minute by
   // following the J; a job without them is one the planner has not found yet.
   const shown = cardsShown.filter(isFailure);
+  // THE TOGGLE ONLY TAKES AWAY (Ben, 20 Nov: "the setting in and of itself is purely subtractive"). A held card stands in
+  // for a thread with no card; judged against the list after creates were hidden, switching creates off emptied those
+  // threads and their held cards appeared ("R12143 is no longer in OnSinch"). Held cards are judged against the full list.
+  const shownBeforeToggle = p.cards.filter(isFailure);
   const done_by_system = cardsShown.filter((c) => !c.green && c.items.every((i) => i.kind === "created-check" || i.kind === "updated-check")).length;
   const held = deps.held ? await deps.held().catch(() => [] as HeldLink[]) : [];
   // A HELD LINK NAMES AN ORDER THAT IS GONE, so its R is shown nowhere: R numbers are reused after
   // a delete, and EMS's R11562 could now be another client's order. Its job over, it leaves.
   const today = new Date(now).toLocaleDateString("en-CA", { timeZone: "Europe/London" });
-  const heldCards = held.filter((h) => !shown.some((c) => c.thread_id === h.thread_id) && !(h.days?.length && h.days.every((d) => d < today))).map((h) => ({
+  const heldCards = held.filter((h) => !shownBeforeToggle.some((c) => c.thread_id === h.thread_id) && !(h.days?.length && h.days.every((d) => d < today))).map((h) => ({
     thread_id: h.thread_id, colour: "blue" as const, lane: "need" as const,
     items: [{ item_key: `held:${h.thread_id}:${h.r_number ?? ""}`, kind: "needs-updated" as const, status: "Order not found in OnSinch", at: Date.parse(h.since) || now, green: null }],
     green: false, at: Date.parse(h.since) || now, order_id: null, company_id: null, company: cardName({ client: h.sender?.client, sender: h.sender?.address }), contact: null,
