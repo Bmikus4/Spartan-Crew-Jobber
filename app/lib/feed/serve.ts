@@ -46,7 +46,7 @@ export interface FeedDeps {
   jobs?: () => Promise<Job[]>;
   /** Intake is switched off on purpose (Settings intake_paused): its silence is not a fault. */
   intakePaused?: () => Promise<boolean>;
-  /** Settings needs_created_enabled: false takes every needs-created item off the list and off what Gmail reads. */
+  /** Settings needs_created_enabled (off by default) takes every needs-created item off the list and off what Gmail reads. */
   showCreates?: () => Promise<boolean>;
   /** Every thread's live link: the jobs board's carried-over tiles take their numbers from it (ported.ts). */
   links?: () => Promise<Map<string, LiveLink>>;
@@ -96,8 +96,9 @@ export async function serveFeed(deps: FeedDeps, now: number): Promise<{ status: 
 
   // THE NEEDS CREATED TOGGLE (Ben, 19 Nov): off, a card keeps only its other items, and one with nothing else is not a
   // card. Applied here, before the list and before `all` (which the Gmail labels read), so the TV and Gmail agree. A
-  // failed settings read shows the creates: hiding work on a read error could hide a booking.
-  const creates = deps.showCreates ? await deps.showCreates().catch(() => true) : true;
+  // failed settings read keeps the default, off (Ben, 21 Nov): a database blip must not flood the TV and Gmail with
+  // bookings he chose not to see. A caller that wires no setting gets the list unfiltered.
+  const creates = deps.showCreates ? await deps.showCreates().catch(() => false) : true;
   const cardsShown = creates ? p.cards : p.cards.flatMap((c) => {
     const items = c.items.filter((i) => i.kind !== "needs-created");
     // The colour follows what is left, by project.ts's rule: red for a create, blue for a change.

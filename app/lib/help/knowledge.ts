@@ -39,7 +39,7 @@ One tile per job that needs a person. Each tile shows the client, a label, the j
 - When the list is empty it says "Everything is checked." or "Nothing else waiting.", or warns that the sync is not healthy.
 
 ## 4 · The Gmail labels
-A thread carries at most one label, set from the board every minute; nobody sets them by hand: **Order Needs Updated**, or **Order Needs Created** while that notification is switched on in Settings.
+A thread carries at most one label, set from the board every minute; nobody sets them by hand: **Order Needs Updated**, or **Order Needs Created** while that notification is switched on in Settings (it is off by default).
 
 ## 5 · What the bot does in OnSinch
 When the bot is allowed to write (the live state below says whether it is now):

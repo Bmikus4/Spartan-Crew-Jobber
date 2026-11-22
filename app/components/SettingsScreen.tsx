@@ -179,9 +179,9 @@ export default function SettingsScreen({ signedInAs }: { signedInAs?: string }) 
 
         <Panel
           title="Needs Created"
-          blurb={<>Show new bookings to make: a card on the office TV and the <b style={{ color: SUB }}>Order Needs Created</b> label in Gmail. <b style={{ color: SUB }}>Off</b>, only bookings that need updating are shown. <b style={{ color: SUB }}>On by default</b>.</>}
+          blurb={<>Show new bookings to make: a card on the office TV and the <b style={{ color: SUB }}>Order Needs Created</b> label in Gmail. <b style={{ color: SUB }}>Off</b>, only bookings that need updating are shown. <b style={{ color: SUB }}>Off by default</b>.</>}
         >
-          <Segmented label="Needs Created" value={s.needs_created_enabled !== false} onChange={(v) => save({ ...s, needs_created_enabled: v })}
+          <Segmented label="Needs Created" value={s.needs_created_enabled === true} onChange={(v) => save({ ...s, needs_created_enabled: v })}
             options={[{ id: false, label: "Off" }, { id: true, label: "On" }]} />
         </Panel>
 

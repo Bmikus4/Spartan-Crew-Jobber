@@ -71,7 +71,7 @@ ticket and deletes it. Old tickets may be thinned to headlines, never rewritten 
   Needs Created, Order Needs Updated, mutually exclusive. Needs Follow Up is another axis. They are derived from
   the TV's cards every minute; nothing sets one by hand.
   **Worn since 19 Nov (O54):** Order Needs Updated, and Order Needs Created while Settings `needs_created_enabled`
-  is on (default on; applied in serve.ts, so the TV and Gmail agree). Needs Follow Up was removed from the code.
+  is on (default OFF since 21 Nov, and a failed settings read is off; applied in serve.ts, so the TV and Gmail agree). Needs Follow Up was removed from the code.
   Order Created / Order Updated stay defined, not worn (`SHOWN_LABELS`), so the sync can take them off.
 - **A draft is not a message.** An unsent draft of ours never counts as Spartan having replied.
 - **Never write Job.min_beginning / max_end**, and treat the job window as unreliable input

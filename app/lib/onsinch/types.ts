@@ -484,7 +484,8 @@ export interface Settings {
   intake_paused?: boolean;
   /**
    * THE NEEDS CREATED NOTIFICATION (Ben, 19 Nov): when off, a new booking to make is shown nowhere: no TV card and no
-   * Order Needs Created label in Gmail (feed/serve.ts showCreates). ON by default. Needs Updated has no switch.
+   * Order Needs Created label in Gmail (feed/serve.ts showCreates). OFF by default (Ben, 21 Nov: "new bookings should
+   * not show by default"): only an explicit true shows them. Needs Updated has no switch.
    */
   needs_created_enabled?: boolean;
   /**
@@ -594,7 +595,7 @@ export const DEFAULT_SETTINGS: Settings = {
   create_lead_enabled: true,
   create_lead_applies_to: "creates",
   intake_paused: false,
-  needs_created_enabled: true,
+  needs_created_enabled: false,
   bot_writes_enabled: false,
   bot_write_classes: {},
   reply_delivery: "draft",

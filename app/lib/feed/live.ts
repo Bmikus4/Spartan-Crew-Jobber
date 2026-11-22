@@ -155,7 +155,7 @@ export function liveFeedDeps(): FeedDeps {
     historyAt,
     remember: async (ms) => { for (const m of ms) await addMark(m); },
     intakePaused: () => getSettings().then((s) => s.intake_paused === true),
-    showCreates: () => getSettings().then((s) => s.needs_created_enabled !== false),
+    showCreates: () => getSettings().then((s) => s.needs_created_enabled === true),
     links,
   };
 }

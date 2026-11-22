@@ -6629,5 +6629,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0338",
+  "ts": "2026-11-22T04:28:18+00:00",
+  "kind": "measurement",
+  "headline": "Needs Created off by default (Ben, 21 Nov); production already off",
+  "subject": "New bookings are off by default; a failed settings read keeps them off",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 134,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]

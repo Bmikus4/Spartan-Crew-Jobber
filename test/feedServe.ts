@@ -7,7 +7,7 @@
 // ============================================================================
 import { readFileSync } from "node:fs";
 import { serveFeed, type FeedDeps, type HeldLink } from "../app/lib/feed/serve";
-import type { ConversationState } from "../app/lib/onsinch/types";
+import { DEFAULT_SETTINGS, type ConversationState } from "../app/lib/onsinch/types";
 import type { FeedCard, FeedMark } from "../app/lib/feed/project";
 import { fromStates } from "./fixtures/stateSource";
 
@@ -179,7 +179,9 @@ void (async () => {
     ok(!k(off).includes("needs-created") && k(off).includes("needs-updated"), "off: the update stays, the create is gone from the list", k(off).join());
     ok(!kinds(off.all ?? []).includes("needs-created"), "off: and gone from every card Gmail reads, so no Order Needs Created label", kinds(off.all ?? []).join());
     ok((off.body.counts as Record<string, number>).needs_created === 0, "off: counted as none");
-    ok(k(unset).includes("needs-created") && k(broken).includes("needs-created"), "no setting, or a failed settings read: creates are shown (on by default; never hidden on an error)");
+    ok(k(unset).includes("needs-created"), "a caller that wires no setting gets the list unfiltered", k(unset).join());
+    ok(!k(broken).includes("needs-created") && k(broken).includes("needs-updated"), "a failed settings read keeps the default, off: the update stays, no create appears", k(broken).join());
+    ok(DEFAULT_SETTINGS.needs_created_enabled === false, "new bookings are off by default (Ben, 21 Nov)");
     // Purely subtractive (Ben, 20 Nov): a thread whose only card was a create must not surface its held card when creates
     // are switched off ("R12143 is no longer in OnSinch" appeared that way).
     const held = async () => [{ thread_id: "nc", r_number: "12143", sender: { address: "a@client.example", client: "Client" }, since: new Date(NOW - 2 * H).toISOString(), note: null, days: ["2026-10-20"] }] as HeldLink[];
