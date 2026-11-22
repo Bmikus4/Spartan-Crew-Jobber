@@ -3,9 +3,9 @@
 // ----------------------------------------------------------------------------
 // Addendum F34 (26 Oct): any signed-in staff member could flip bot_writes_enabled, replies_enabled
 // and reply_delivery from Settings, with no record of who or when, and isAdmin was checked nowhere.
-// Now a non-admin is refused those three and the lead rule's three (DECISIONS O8, 28 Oct; other
-// settings stay theirs), and each change by an admin is stored with its actor and time and raised to
-// the owner as "settings-changed". IO injected.
+// Now a non-admin is refused those three and the lead rule's three (DECISIONS O8, 28 Oct; since stop B,
+// 21 Nov, every setting but Needs Created), and each change by an admin is stored with its actor and time
+// and raised to the owner as "settings-changed". IO injected.
 // npx tsx test/settingsSwitchesGoverned.ts
 // ============================================================================
 import { handleSettingsPost, type SettingsIO } from "../app/lib/routes/settings";
@@ -31,6 +31,8 @@ const post = (body: unknown) => new Request("http://localhost/api/settings", { m
   console.log("\n[who] the admin list");
   ok(isSwitchAdmin(null, true), "the break-glass admin session");
   ok(isSwitchAdmin("ben@samuraisolutions.co.uk") && isSwitchAdmin("BenjaminTMikus@gmail.com"), "the owner's addresses, in any case");
+  ok(isSwitchAdmin("someone@SamuraiSolutions.co.uk"), "any samuraisolutions.co.uk address (stop B, 21 Nov)");
+  ok(!isSwitchAdmin("x@samuraisolutions.co.uk.evil.com") && !isSwitchAdmin("x@notsamuraisolutions.co.uk"), "a domain that only contains it is not");
   ok(!isSwitchAdmin("paz@spartancrew.co.uk") && !isSwitchAdmin(null), "a staff member, or nobody, is not");
   process.env.SPARTAN_ADMIN_EMAILS = "paz@spartancrew.co.uk";
   ok(isSwitchAdmin("paz@spartancrew.co.uk"), "SPARTAN_ADMIN_EMAILS adds an address");
@@ -43,11 +45,10 @@ const post = (body: unknown) => new Request("http://localhost/api/settings", { m
     ok(res.status === 403 && r.history.length === 0 && r.stored().bot_writes_enabled === false && r.stored().reply_delivery === "draft" && r.stored().create_lead_days === 14 && r.stored().create_lead_applies_to === "creates", `${Object.keys(body)[0]}: 403, nothing saved`, { status: res.status });
   }
   {
+    // Since stop B (21 Nov) a non-admin may send Needs Created alone: test/settingsClientLock.ts holds both roles.
     const r = rig();
-    const res = await handleSettingsPost(post({ test_data_autoclear: true }), r.io, { actor: "staff@spartancrew.co.uk", admin: false });
-    ok(res.status === 200 && r.stored().test_data_autoclear === true && r.reports.length === 0, "control: other settings stay a signed-in user's, unreported");
     const same = await handleSettingsPost(post({ bot_writes_enabled: false }), r.io, { actor: "staff@spartancrew.co.uk", admin: false });
-    ok(same.status === 200 && r.history.length === 0, "re-saving a switch at its current value is no change, so not refused");
+    ok(same.status === 403 && r.history.length === 0, "even re-saving a switch at its current value is refused to a non-admin", same.status);
   }
 
   console.log("\n[kept] an admin's change is stored with actor and time, and raised to the owner");

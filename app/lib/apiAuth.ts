@@ -26,22 +26,24 @@ export interface Caller {
   actor: string | null;
   /** the signer's display name, for a screen to show; the actor stays the audit identity */
   name?: string | null;
-  /** may change the write and reply switches (isSwitchAdmin); a service caller never may */
+  /** the Samurai team (isSwitchAdmin): may read and change every setting; a service caller never is */
   admin?: boolean;
 }
 
 /**
- * WHO MAY TURN THE WRITE AND REPLY SWITCHES (addendum F34): the break-glass admin session, the
- * owner's own addresses, and any address in SPARTAN_ADMIN_EMAILS. Until 27 Oct any signed-in staff
- * member could, and isAdmin was read nowhere. The owner's addresses are the default; the env list is
- * the dial (DECISIONS A1).
+ * THE SAMURAI TEAM, who alone read and change the settings beyond Needs Created (Ben, 21 Nov, stop B):
+ * the break-glass admin session, the owner's own addresses, any samuraisolutions.co.uk address, and any
+ * address in SPARTAN_ADMIN_EMAILS (the dial, DECISIONS A1). Spartan's own staff are clients here, so a
+ * spartancrew.co.uk address must never match. Until 27 Oct any signed-in staff member could turn the
+ * write switches (addendum F34).
  */
 const OWNER_EMAILS = ["ben@samuraisolutions.co.uk", "benjamintmikus@gmail.com"];
+const SAMURAI_DOMAIN = "samuraisolutions.co.uk";
 export function isSwitchAdmin(email: string | null | undefined, sessionIsAdmin = false): boolean {
   if (sessionIsAdmin) return true;
   const e = (email || "").trim().toLowerCase();
   const extra = (process.env.SPARTAN_ADMIN_EMAILS || "").toLowerCase().split(",").map((s) => s.trim()).filter(Boolean);
-  return !!e && (OWNER_EMAILS.includes(e) || extra.includes(e));
+  return !!e && (OWNER_EMAILS.includes(e) || e.split("@")[1] === SAMURAI_DOMAIN || extra.includes(e));
 }
 
 export interface CallerInputs {

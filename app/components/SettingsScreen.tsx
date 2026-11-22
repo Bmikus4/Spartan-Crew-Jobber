@@ -16,7 +16,7 @@ import InstallButton from "./InstallButton";
 
 type ReplyDelivery = "draft" | "send";
 type ReplyScope = "all" | "enquiries";
-interface Settings { replies_enabled: boolean; test_data_autoclear?: boolean; create_lead_days?: number; create_lead_enabled?: boolean; create_lead_applies_to?: "creates" | "changes" | "both"; bot_writes_enabled?: boolean; needs_created_enabled?: boolean; reply_delivery: ReplyDelivery; reply_scope: ReplyScope; default_rate_card: number }
+interface Settings { replies_enabled: boolean; test_data_autoclear?: boolean; create_lead_days?: number; create_lead_enabled?: boolean; create_lead_applies_to?: "creates" | "changes" | "both"; bot_writes_enabled?: boolean; needs_created_enabled?: boolean; reply_delivery: ReplyDelivery; reply_scope: ReplyScope; default_rate_card: number; samurai?: boolean }
 
 const SETTINGS_FALLBACK: Settings = { replies_enabled: false, reply_delivery: "draft", reply_scope: "all", default_rate_card: 315 };
 
@@ -111,16 +111,19 @@ export default function SettingsScreen({ signedInAs }: { signedInAs?: string }) 
     void (async () => {
       try {
         const r = await fetch("/api/settings");
+        if (!r.ok) throw new Error(String(r.status));
         setSettings({ ...SETTINGS_FALLBACK, ...(await r.json()) });
       } catch { setSettings(SETTINGS_FALLBACK); }
     })();
   }, []);
 
   const [analyticsOpen, setAnalyticsOpen] = useState(false);
-  const save = useCallback(async (next: Settings) => {
-    setSettings(next); setSaving(true); setFailed(false);
+  // Only the changed field is sent: the server refuses a client's body that names any field but Needs Created
+  // (routes/settings.ts CLIENT_FIELDS), so posting the whole row would refuse every client save.
+  const save = useCallback(async (patch: Partial<Settings>) => {
+    setSettings((cur) => ({ ...(cur ?? SETTINGS_FALLBACK), ...patch })); setSaving(true); setFailed(false);
     try {
-      const r = await fetch("/api/settings", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(next) });
+      const r = await fetch("/api/settings", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(patch) });
       // A failed save used to be swallowed: the try only wrapped the fetch and a
       // non-2xx still fell through to "Saved." So the screen could report a switch
       // as saved that the server had refused.
@@ -160,11 +163,13 @@ export default function SettingsScreen({ signedInAs }: { signedInAs?: string }) 
   );
 
   const s = settings;
+  // Hidden, not locked: the server answers a client with Needs Created alone and refuses the rest.
+  const samurai = s.samurai === true;
   return shell(
     <div style={wrap}>
       <div style={{ maxWidth: 720, margin: "0 auto", display: "flex", flexDirection: "column", gap: 16 }}>
-        <FolderTab label="View analytics" onOpen={() => setAnalyticsOpen(true)} />
-        {analyticsOpen && <AnalyticsPopup onClose={() => setAnalyticsOpen(false)} />}
+        {samurai && <FolderTab label="View analytics" onOpen={() => setAnalyticsOpen(true)} />}
+        {samurai && analyticsOpen && <AnalyticsPopup onClose={() => setAnalyticsOpen(false)} />}
         <header style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
           <div>
             <h1 style={{ fontSize: 22, fontWeight: 700, color: INK, margin: "0 0 2px" }}>Engine controls</h1>
@@ -181,15 +186,16 @@ export default function SettingsScreen({ signedInAs }: { signedInAs?: string }) 
           title="Needs Created"
           blurb={<>Show new bookings to make: a card on the office TV and the <b style={{ color: SUB }}>Order Needs Created</b> label in Gmail. <b style={{ color: SUB }}>Off</b>, only bookings that need updating are shown. <b style={{ color: SUB }}>Off by default</b>.</>}
         >
-          <Segmented label="Needs Created" value={s.needs_created_enabled === true} onChange={(v) => save({ ...s, needs_created_enabled: v })}
+          <Segmented label="Needs Created" value={s.needs_created_enabled === true} onChange={(v) => save({ needs_created_enabled: v })}
             options={[{ id: false, label: "Off" }, { id: true, label: "On" }]} />
         </Panel>
 
+        {samurai && <>
         <Panel
           title="Bot orders and updates"
           blurb={<>The master switch for the bot&apos;s work in OnSinch: creating new orders in Orders To Confirm and updating existing ones. <b style={{ color: SUB }}>Off</b>, every email is still read and decided, and anything the bot would write shows on the TV for a person to do by hand. Off by default.</>}
         >
-          <Segmented label="Bot orders and updates" value={!!s.bot_writes_enabled} onChange={(v) => save({ ...s, bot_writes_enabled: v })}
+          <Segmented label="Bot orders and updates" value={!!s.bot_writes_enabled} onChange={(v) => save({ bot_writes_enabled: v })}
             options={[{ id: false, label: "Off" }, { id: true, label: "On" }]} />
           {s.bot_writes_enabled && <Warn tone="accent">On: the bot creates and updates orders for clients from the next email.</Warn>}
         </Panel>
@@ -198,7 +204,7 @@ export default function SettingsScreen({ signedInAs }: { signedInAs?: string }) 
           title="AI email drafts"
           blurb={<>One switch for every email the system writes in a Gmail thread for a person: a reply to an inbound email, in Spartan&apos;s voice with the whole thread as context, and a chase on a job with nothing from anyone for 24 hours. <b style={{ color: SUB }}>Off by default</b>: orders are read and made without it.</>}
         >
-          <Segmented label="AI email drafts" value={s.replies_enabled} onChange={(v) => save({ ...s, replies_enabled: v })}
+          <Segmented label="AI email drafts" value={s.replies_enabled} onChange={(v) => save({ replies_enabled: v })}
             options={[{ id: false, label: "Off" }, { id: true, label: "On" }]} />
           {/* Said on the screen, not left to be discovered: a switch that changes nothing while
               looking like it worked is how the replies toggle failed before (settingsDb). */}
@@ -214,7 +220,7 @@ export default function SettingsScreen({ signedInAs }: { signedInAs?: string }) 
                   <b style={{ color: SUB }}>Draft</b> leaves the reply in the Gmail thread for a person to read and send. <b style={{ color: SUB }}>Send</b> means the engine sends it itself.
                 </p>
               </div>
-              <Segmented label="Reply delivery" value={s.reply_delivery} onChange={(v) => save({ ...s, reply_delivery: v })}
+              <Segmented label="Reply delivery" value={s.reply_delivery} onChange={(v) => save({ reply_delivery: v })}
                 options={[{ id: "draft" as ReplyDelivery, label: "Draft" }, { id: "send" as ReplyDelivery, label: "Send" }]} />
               {s.reply_delivery === "send" && (
                 <Warn>Send mode emails clients before anyone has read the reply. Only turn it on once drafted replies have been checked for a while.</Warn>
@@ -227,7 +233,7 @@ export default function SettingsScreen({ signedInAs }: { signedInAs?: string }) 
                     <b style={{ color: SUB }}>All emails</b> includes plain acknowledgements like &quot;PO received, thanks&quot;. <b style={{ color: SUB }}>New enquiries only</b> is just the threads asking for crew. Around 45% of threads are acknowledgements, so this roughly halves the drafts waiting to be reviewed.
                   </p>
                 </div>
-                <Segmented label="Which emails get a reply" value={s.reply_scope} onChange={(v) => save({ ...s, reply_scope: v })}
+                <Segmented label="Which emails get a reply" value={s.reply_scope} onChange={(v) => save({ reply_scope: v })}
                   options={[{ id: "all" as ReplyScope, label: "All emails" }, { id: "enquiries" as ReplyScope, label: "New enquiries only" }]} />
               </div>
             </div>
@@ -243,10 +249,11 @@ export default function SettingsScreen({ signedInAs }: { signedInAs?: string }) 
             wall any more. */}
 
         <LeadDaysPanel days={s.create_lead_days ?? 14} enabled={s.create_lead_enabled !== false} appliesTo={s.create_lead_applies_to ?? "creates"}
-          onSave={(v) => save({ ...s, create_lead_days: v })} onEnabled={(v) => save({ ...s, create_lead_enabled: v })}
-          onAppliesTo={(v) => save({ ...s, create_lead_applies_to: v })} />
+          onSave={(v) => save({ create_lead_days: v })} onEnabled={(v) => save({ create_lead_enabled: v })}
+          onAppliesTo={(v) => save({ create_lead_applies_to: v })} />
 
-        <TestDataPanel autoclear={!!s.test_data_autoclear} onAutoclear={(v) => save({ ...s, test_data_autoclear: v })} />
+        <TestDataPanel autoclear={!!s.test_data_autoclear} onAutoclear={(v) => save({ test_data_autoclear: v })} />
+        </>}
 
         <Panel title="Install app" blurb="Add Spartan Crew to a phone or desktop home screen for full-screen, one-tap access.">
           <InstallButton />

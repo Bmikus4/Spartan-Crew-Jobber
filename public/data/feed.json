@@ -6643,5 +6643,23 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0339",
+  "ts": "2026-11-22T05:48:10+00:00",
+  "kind": "decision",
+  "headline": "Stop B: settings locked to the Samurai team server-side; clients see and send Needs Created only",
+  "subject": "Only the Samurai team reads or changes settings; clients get Needs Created alone",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 135,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  },
+  "sources": [
+   "app/lib/routes/settings.ts",
+   "test/settingsClientLock.ts"
+  ]
  }
 ]

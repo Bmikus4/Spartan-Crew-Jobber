@@ -7,12 +7,18 @@ import type { Caller } from "../apiAuth";
 
 /**
  * THE SWITCHES THAT DECIDE WHETHER THE SYSTEM ACTS WITHOUT A PERSON: writes to OnSinch, replies to clients, and
- * the lead rule that hands near work to staff. Until 27 Oct any signed-in staff member could flip them, and
- * nothing recorded who or when (addendum F34); the lead rule joined them on 28 Oct, when the owner made what it
- * covers a setting (DECISIONS O8). Only an admin (apiAuth isSwitchAdmin) may change one; each change is stored
- * with its actor and time and raised to the owner. The other settings stay any signed-in user's.
+ * the lead rule that hands near work to staff. Each change is stored with its actor and time and raised to the
+ * owner (addendum F34; the lead rule joined on 28 Oct, DECISIONS O8). Who may change them is CLIENT_FIELDS below.
  */
 export const SWITCHES = ["bot_writes_enabled", "bot_write_classes", "replies_enabled", "reply_delivery", "create_lead_enabled", "create_lead_days", "create_lead_applies_to"] as const;
+
+/**
+ * THE ONLY SETTINGS A CLIENT SEES OR SENDS (Ben, 21 Nov, stop B): everything else is the Samurai team's
+ * (apiAuth isSwitchAdmin). The server is the lock: the GET returns these fields alone to anyone else, and the
+ * POST refuses a body naming any other field. The Settings screen hiding the Samurai panels is a courtesy that
+ * locks nothing. A field added here becomes readable and writable by every signed-in Spartan staff member.
+ */
+export const CLIENT_FIELDS = ["needs_created_enabled"] as const;
 
 export type SwitchChange = { field: string; from: unknown; to: unknown; actor: string; at: string };
 
@@ -25,17 +31,31 @@ export interface SettingsIO {
 
 export const productionSettingsIO: SettingsIO = { get: () => getSettings(), save: (n) => saveSettings(n), history: (c) => settingsHistory(c), report: reportError };
 
-export async function handleSettingsGet(io: SettingsIO = productionSettingsIO): Promise<Response> {
-  try {
-    return Response.json(await io.get());
-  } catch {
+type Who = Pick<Caller, "actor" | "admin">;
+const NOBODY: Who = { actor: null, admin: false };
+
+/** `samurai` tells the screen which panels to draw; it is not a setting and is never saved. */
+export async function handleSettingsGet(io: SettingsIO = productionSettingsIO, caller: Who = NOBODY): Promise<Response> {
+  let s: Settings;
+  try { s = await io.get(); } catch {
     return Response.json({ ok: false, error: "settings could not be read" }, { status: 500 });
   }
+  if (caller.admin) return Response.json({ ...s, samurai: true });
+  // needs_created_enabled is false unless explicitly true (S-0338), so a client reads the same value the TV applies.
+  return Response.json({ needs_created_enabled: s.needs_created_enabled === true, samurai: false });
 }
 
-export async function handleSettingsPost(request: Request, io: SettingsIO = productionSettingsIO, caller: Pick<Caller, "actor" | "admin"> = { actor: null, admin: false }): Promise<Response> {
+export async function handleSettingsPost(request: Request, io: SettingsIO = productionSettingsIO, caller: Who = NOBODY): Promise<Response> {
   let body: unknown;
   try { body = await request.json(); } catch { return Response.json({ ok: false, error: "bad json" }, { status: 400 }); }
+  if (!caller.admin) {
+    // The raw keys, not the whitelisted ones: a client body naming any other field is refused whole, never trimmed
+    // to the part it may send, so a screen that still sends the full row fails loudly instead of half-saving.
+    const keys = body && typeof body === "object" && !Array.isArray(body) ? Object.keys(body) : [];
+    const refused = keys.filter((k) => !(CLIENT_FIELDS as readonly string[]).includes(k));
+    if (refused.length || !keys.length)
+      return Response.json({ ok: false, error: refused.length ? `only the Samurai team may change ${refused.join(", ")}` : "nothing to change" }, { status: 403 });
+  }
   const next = coerceSettings(body);
   let changes: SwitchChange[];
   try {
@@ -48,8 +68,6 @@ export async function handleSettingsPost(request: Request, io: SettingsIO = prod
     // Without the current values a switch change cannot be told from a re-save, so nothing is written.
     return Response.json({ ok: false, error: "settings could not be read" }, { status: 500 });
   }
-  if (changes.length && !caller.admin)
-    return Response.json({ ok: false, error: `only an admin may change ${changes.map((c) => c.field).join(", ")}` }, { status: 403 });
   let saved: Settings;
   try {
     saved = await io.save(next);
@@ -63,5 +81,6 @@ export async function handleSettingsPost(request: Request, io: SettingsIO = prod
     void io.report({ route: "settings-changed", where: `settings/${c.field}`, what: `${c.field} changed from ${JSON.stringify(c.from)} to ${JSON.stringify(c.to)} at ${c.at}`,
       detail: `by ${c.actor}${kept ? "" : "; the history row could not be written"}` });
   }
-  return Response.json({ ok: true, settings: saved });
+  // A client is answered with its own fields only, as the GET would.
+  return Response.json({ ok: true, settings: caller.admin ? saved : { needs_created_enabled: saved.needs_created_enabled === true } });
 }

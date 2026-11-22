@@ -13,8 +13,10 @@ import { handleSettingsGet, handleSettingsPost } from "../../lib/routes/settings
 export async function GET(request: Request): Promise<Response> {
   // Guarded like the write (SP-20): it returns the reply switches and the default rate card.
   // The Settings screen's same-origin fetch sends the session cookie, so it still works.
-  if (!(await authorizeAction(request)).ok) return Response.json({ ok: false, error: "Unauthorized" }, { status: 401 });
-  return handleSettingsGet();
+  const caller = await authorizeAction(request);
+  if (!caller.ok) return Response.json({ ok: false, error: "Unauthorized" }, { status: 401 });
+  // Anyone outside the Samurai team is answered with Needs Created alone (stop B): routes/settings.ts CLIENT_FIELDS.
+  return handleSettingsGet(undefined, caller);
 }
 
 /**
@@ -32,6 +34,6 @@ export async function GET(request: Request): Promise<Response> {
 export async function POST(request: Request): Promise<Response> {
   const caller = await authorizeAction(request);
   if (!caller.ok) return Response.json({ ok: false, error: "Unauthorized" }, { status: 401 });
-  // The write and reply switches are an admin's alone (addendum F34): routes/settings.ts.
+  // Every field but Needs Created is the Samurai team's alone (stop B): routes/settings.ts.
   return handleSettingsPost(request, undefined, caller);
 }

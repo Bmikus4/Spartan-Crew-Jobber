@@ -42,7 +42,7 @@ async function main() {
   {
     const down = { get: async () => { throw new Error("neon down"); }, save: async () => { throw new Error("neon down"); } };
     ok((await handleSettingsGet(down as any)).status === 500, "GET 500 when the read fails");
-    ok((await handleSettingsPost(req("http://x/api/settings", { replies_enabled: true }), down as any)).status === 500, "POST 500 when the write fails");
+    ok((await handleSettingsPost(req("http://x/api/settings", { replies_enabled: true }), down as any, { actor: "test", admin: true })).status === 500, "POST 500 when the write fails");
     const up = { get: async () => ({ ...DEFAULT_SETTINGS }), save: async (n: any) => ({ ...DEFAULT_SETTINGS, ...n }), history: async () => {}, report: async () => false };
     // As an admin: replies_enabled is a switch, which no one else may change (test/settingsSwitchesGoverned.ts).
     const saved = await (await handleSettingsPost(req("http://x/api/settings", { replies_enabled: true, nonsense: 1 }), up as any, { actor: "test", admin: true })).json() as any;

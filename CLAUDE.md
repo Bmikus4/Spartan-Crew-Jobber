@@ -78,3 +78,6 @@ ticket and deletes it. Old tickets may be thinned to headlines, never rewritten 
   (`app/lib/onsinch/README.md` has the measurement).
 - **`6922 "No Location"` is exempt from every venue phase.** Exactly one may exist; code finds it by name.
 - **Zero references is permission to delete, never a reason to.**
+- **A client sees and sends Needs Created alone (O55, 21 Nov).** Every other setting is the Samurai team's
+  (`apiAuth.ts` isSwitchAdmin); the server enforces it (`routes/settings.ts` CLIENT_FIELDS), not the screen.
+  Spartan's own staff are clients here.
