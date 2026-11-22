@@ -6714,5 +6714,23 @@
   "sources": [
    "app/api/bot"
   ]
+ },
+ {
+  "id": "S-0343",
+  "ts": "2026-11-22T06:32:11+00:00",
+  "kind": "decision",
+  "headline": "D9: wage fields stripped at every order write; stored ones drained by the sync (15,442 bodies held pay)",
+  "subject": "Order bodies are stored without staff pay; the minute sync blanks the old ones",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 136,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  },
+  "sources": [
+   "app/lib/onsinch/pay.ts",
+   "test/payNeverStored.ts"
+  ]
  }
 ]

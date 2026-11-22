@@ -12,6 +12,7 @@ import type { NeonQueryFunction } from "@neondatabase/serverless";
 import type { Transport } from "../../onsinch/onsinch";
 import { readPage } from "../read";
 import { ensureSchema } from "../../migrations";
+import { stripPay, holdsPay } from "../../onsinch/pay";
 
 type Sql = NeonQueryFunction<false, false>;
 
@@ -264,7 +265,8 @@ export async function refreshOrders(sql: Sql, t: Transport, now = Date.now()): P
  * time: this is a history, not a set. Bodies carry no fetch-time field (only OnSinch's own `modified`),
  * so equal content really means nothing changed.
  */
-export async function keepRawBodies(sql: Sql, orders: unknown[], at: string): Promise<void> {
+export async function keepRawBodies(sql: Sql, fetched: unknown[], at: string): Promise<void> {
+  const orders = fetched.map(stripPay);
   for (let i = 0; i < orders.length; i += 50) await sql`INSERT INTO onsinch_orders_raw (order_id, fetched_at, number, company_id, body)
     SELECT (o->>'id')::bigint, ${at}::timestamptz, o->>'number', (o->>'company_id')::int, o
     FROM jsonb_array_elements(${JSON.stringify(orders.slice(i, i + 50))}::jsonb) o
@@ -283,7 +285,7 @@ export async function readClientOrders(sql: Sql, t: Transport, companies: number
   const at = (await meta<Record<string, string>>(sql, "client_orders_at")) ?? {};
   const due = companies.filter((c) => !at[c] || now - Date.parse(at[c]) >= CLIENT_ORDERS_EVERY_MS).slice(0, CLIENTS_PER_RUN);
   for (const c of due) {
-    const orders = (await readPage(t, `/orders?company_id[eq]=${c}&with=Job__SlotTeam__Slot__SlotLocation&limit=100&page=1`)).rows;
+    const orders = (await readPage(t, `/orders?company_id[eq]=${c}&with=Job__SlotTeam__Slot__SlotLocation&limit=100&page=1`)).rows.map(stripPay);
     for (let i = 0; i < orders.length; i += 50) await sql`INSERT INTO onsinch_orders (order_id, number, company_id, body, read_at)
       SELECT (o->>'id')::bigint, o->>'number', (o->>'company_id')::int, o, ${new Date(now).toISOString()}::timestamptz FROM jsonb_array_elements(${JSON.stringify(orders.slice(i, i + 50))}::jsonb) o
       ON CONFLICT (order_id) DO UPDATE SET number = EXCLUDED.number, company_id = EXCLUDED.company_id, body = EXCLUDED.body, read_at = EXCLUDED.read_at`;
@@ -310,13 +312,50 @@ export async function readLinkedOrders(sql: Sql, t: Transport, now = Date.now())
   for (const { order_id } of due) {
     const o = (await readPage(t, `/orders?id[eq]=${Number(order_id)}&with=Job__SlotTeam__Slot__SlotLocation`)).rows[0];
     await sql`INSERT INTO onsinch_orders (order_id, number, company_id, body, read_at, deleted_at)
-      VALUES (${Number(order_id)}, ${o ? String(o.number) : null}, ${o ? Number(o.company_id) : null}, ${o ? JSON.stringify(o) : null}::jsonb, ${at}::timestamptz, ${o ? null : at}::timestamptz)
+      VALUES (${Number(order_id)}, ${o ? String(o.number) : null}, ${o ? Number(o.company_id) : null}, ${o ? JSON.stringify(stripPay(o)) : null}::jsonb, ${at}::timestamptz, ${o ? null : at}::timestamptz)
       ON CONFLICT (order_id) DO UPDATE SET number = coalesce(EXCLUDED.number, onsinch_orders.number), company_id = coalesce(EXCLUDED.company_id, onsinch_orders.company_id),
         body = coalesce(EXCLUDED.body, onsinch_orders.body), read_at = EXCLUDED.read_at, deleted_at = EXCLUDED.deleted_at`;
     if (o) await keepRawBodies(sql, [o], at);
     if (o) await rememberOrder(sql, o);
   }
   return due.length;
+}
+
+const PAY_BATCH = 300;
+export type PayDrain = { table: "orders" | "raw"; after: [string, string] | null; rewrote: number; passes: number; done_at?: string };
+
+/**
+ * Blanks the staff pay stored before every body went through stripPay (D9): PAY_BATCH bodies a minute in key order,
+ * the cache and then the history, rewriting only the bodies that hold pay. Not a migration: a migration runs inside
+ * whichever request comes first after a deploy, and rewriting the whole history at once took 26 s on PGlite, past
+ * the TV feed's 15-30 s limit. Finished only when a whole pass rewrites nothing, so done_at is itself the re-scan
+ * showing 0, and a body an old instance wrote during the deploy is caught by the next pass. A cache row read again
+ * while it was being stripped is left to that read (read_at must match). Remove this step once done_at is set.
+ */
+export async function blankStoredPay(sql: Sql, batch = PAY_BATCH): Promise<PayDrain> {
+  await ensureSchema(sql);
+  const s = (await meta<PayDrain>(sql, "pay_blank")) ?? { table: "orders", after: null, rewrote: 0, passes: 0 };
+  if (s.done_at) return s;
+  const rows = (s.table === "orders"
+    ? await sql`SELECT order_id::text AS a, read_at::text AS b, body FROM onsinch_orders
+        WHERE body IS NOT NULL AND order_id > ${s.after ? s.after[0] : "-1"}::bigint ORDER BY order_id LIMIT ${batch}`
+    : await sql`SELECT order_id::text AS a, fetched_at::text AS b, body FROM onsinch_orders_raw
+        WHERE (order_id, fetched_at) > (${s.after ? s.after[0] : "-1"}::bigint, ${s.after ? s.after[1] : "-infinity"}::timestamptz)
+        ORDER BY order_id, fetched_at LIMIT ${batch}`) as Array<{ a: string; b: string; body: unknown }>;
+  const dirty = rows.filter((r) => holdsPay(r.body)).map((r) => ({ a: r.a, b: r.b, body: stripPay(r.body) }));
+  if (dirty.length && s.table === "orders") await sql`UPDATE onsinch_orders o SET body = x.body
+    FROM jsonb_to_recordset(${JSON.stringify(dirty)}::jsonb) AS x(a TEXT, b TEXT, body JSONB) WHERE o.order_id = x.a::bigint AND o.read_at = x.b::timestamptz`;
+  if (dirty.length && s.table === "raw") await sql`UPDATE onsinch_orders_raw r SET body = x.body
+    FROM jsonb_to_recordset(${JSON.stringify(dirty)}::jsonb) AS x(a TEXT, b TEXT, body JSONB) WHERE r.order_id = x.a::bigint AND r.fetched_at = x.b::timestamptz`;
+  const last = rows[rows.length - 1];
+  let next: PayDrain = { ...s, rewrote: s.rewrote + dirty.length, after: last ? [last.a, last.b] : s.after };
+  if (rows.length < batch) {
+    if (s.table === "orders") next = { ...next, table: "raw", after: null };
+    else if (next.rewrote === 0) next = { ...next, passes: s.passes + 1, done_at: new Date().toISOString() };
+    else next = { table: "orders", after: null, rewrote: 0, passes: s.passes + 1 };
+  }
+  await setMeta(sql, "pay_blank", next);
+  return next;
 }
 
 /** The minute sync's step: the timeline first, then the contacts, places and deleted orders when a day has passed. */
@@ -326,5 +365,7 @@ export async function pullTruth(sql: Sql, t: Transport, now = Date.now()): Promi
   const places = await refreshPlaces(sql, t, now);
   const orders = await refreshOrders(sql, t, now);
   const linked = await readLinkedOrders(sql, t, now);
-  return { ...timeline, contacts: contacts.refreshed ? contacts.contacts : "fresh", places: places.refreshed ? places.places : "fresh", deleted: orders.refreshed ? orders.deleted.length : "fresh", linked };
+  const pay = await blankStoredPay(sql);
+  return { ...timeline, contacts: contacts.refreshed ? contacts.contacts : "fresh", places: places.refreshed ? places.places : "fresh", deleted: orders.refreshed ? orders.deleted.length : "fresh", linked,
+    pay: pay.done_at ? "blanked" : `${pay.table}, pass ${pay.passes + 1}, ${pay.rewrote} rewritten` };
 }

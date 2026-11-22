@@ -23,6 +23,7 @@ import { readRows } from "../read";
 import { ensureSchema } from "../../migrations";
 import { actsOf, type Row } from "./judge";
 import { keepRawBodies } from "./truth";
+import { stripPay } from "../../onsinch/pay";
 import { LOOP_FROM } from "./outcomes";
 import type { Act } from "../score";
 
@@ -221,7 +222,7 @@ async function classifyActions(sql: Sql, t: Transport, opts: { deadline?: number
       if (reads >= READS_PER_RUN) break;
       reads++;
       const got = (await readRows(t, `/orders?id[eq]=${orderId}&with=${NESTED}`))[0] ?? null;
-      await sql`INSERT INTO onsinch_orders (order_id, number, company_id, body, read_at) VALUES (${orderId}, ${got ? String(got.number) : null}, ${got ? Number(got.company_id) : null}, ${JSON.stringify(got)}::jsonb, now())
+      await sql`INSERT INTO onsinch_orders (order_id, number, company_id, body, read_at) VALUES (${orderId}, ${got ? String(got.number) : null}, ${got ? Number(got.company_id) : null}, ${JSON.stringify(stripPay(got))}::jsonb, now())
         ON CONFLICT (order_id) DO UPDATE SET number = EXCLUDED.number, company_id = EXCLUDED.company_id, body = EXCLUDED.body, read_at = now()`;
       if (got) await keepRawBodies(sql, [got], new Date().toISOString());
       o = { body: got };
