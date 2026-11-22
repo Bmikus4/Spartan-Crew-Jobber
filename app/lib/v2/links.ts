@@ -23,6 +23,7 @@ import { readRows } from "./read";
 import { ensureSchema } from "../migrations";
 import { latestText, poTokens } from "./interpret/ground";
 import { rNumbersIn } from "../onsinch/resolve";
+import { utcToLondon } from "./bot/ops";
 
 type Sql = NeonQueryFunction<false, false>;
 export const HOLD_TV_MINUTES = 30;
@@ -50,6 +51,47 @@ function shape(o: any): { job_id: number | null; r: string; shifts: string[] } {
   const jobs = ([] as any[]).concat(o?.Job ?? []);
   const slots = jobs.flatMap((j) => ([] as any[]).concat(j.SlotTeam ?? [])).flatMap((t) => ([] as any[]).concat(t.Slot ?? [])).filter((s) => s.cancelled !== true);
   return { job_id: jobs[0] ? Number(jobs[0].id) : null, r: String(o?.number ?? ""), shifts: [...new Set(slots.map((s) => `${s.beginning}|${s.end}`))].sort() };
+}
+
+/** The London days a link's shifts fall on ("beginning|end" strings, shape()). */
+export function daysOf(shifts: string[]): string[] {
+  return [...new Set(shifts.map((s) => String(s).split("|")[0]).filter(Boolean).map((b) => { try { return utcToLondon(b).date; } catch { return ""; } }).filter(Boolean))].sort();
+}
+
+/** Everything about the order a link first named, kept whole on the link (job_links.original). */
+export type Original = { order_id: number; number: string; created: string | null; name: string | null; shifts: string[]; days: string[] };
+function originalOf(o: any): Original {
+  const s = shape(o);
+  return { order_id: Number(o.id), number: s.r, created: o.created ? String(o.created) : null, name: o.name ? String(o.name) : null, shifts: s.shifts, days: daysOf(s.shifts) };
+}
+
+/**
+ * WHICH ORDER STAFF MADE IN PLACE OF A LOST ONE (Ben, 20 Nov). A linked order that is gone is far more often re-made by
+ * staff than lost by OnSinch. Candidates are the client's orders created after the original was (its own creation time,
+ * kept on the link; the link's first sighting when it was never read). The pick, in order:
+ *   1. exactly one holds every shift the original held (the rule before 20 Nov);
+ *   2. exactly one holds every day the thread asks for now (its newest dated request), else every day the original held.
+ * More than one fitting is no pick: the link is held and the count is noted, never guessed.
+ */
+export function pickRebuild(cands: Array<{ id: number; created: string; shifts: string[] }>, was: { shifts: string[]; days: string[]; since: number }, threadDays: string[]): { id: number | null; how: string; fits: number } {
+  const after = cands.filter((c) => Date.parse(c.created) >= was.since - 3600e3);
+  const byShifts = after.filter((c) => was.shifts.length > 0 && was.shifts.every((w) => c.shifts.includes(w)));
+  if (byShifts.length === 1) return { id: byShifts[0].id, how: "holding every shift the original held", fits: 1 };
+  const days = threadDays.length ? threadDays : was.days;
+  const byDays = after.filter((c) => days.length > 0 && days.every((d) => daysOf(c.shifts).includes(d)));
+  if (byDays.length === 1) return { id: byDays[0].id, how: threadDays.length ? "holding every day the thread now asks for" : "holding every day the original held", fits: 1 };
+  return { id: null, how: "", fits: Math.max(byShifts.length, byDays.length) };
+}
+
+/** The days a thread asks for now: its newest decision with a dated request (the re-plan first, as the TV reads it). */
+async function threadDaysNow(sql: Sql, thread_id: string): Promise<string[]> {
+  const rows = (await sql`SELECT replan, interpretation FROM v2_decisions WHERE thread_id = ${thread_id} ORDER BY sent_at DESC LIMIT 5`) as any[];
+  for (const r of rows) {
+    const g = (r.replan?.grounded?.requests?.length ? r.replan.grounded : r.interpretation?.grounded) ?? null;
+    const days = [...new Set(((g?.requests ?? []) as any[]).flatMap((q) => [q?.date, q?.target?.date]).filter((d): d is string => typeof d === "string" && /^\d{4}-\d{2}-\d{2}$/.test(d)))].sort();
+    if (days.length) return days;
+  }
+  return [];
 }
 
 /** Record that a thread is about an order (after the bot made or changed it, or a verified link). */
@@ -279,24 +321,30 @@ export async function sweepLinks(sql: Sql, limit = 40): Promise<SweepReport> {
       if (!o) { o = (await readRows(t as any, `/orders?id[eq]=${l.order_id}&with=Job__SlotTeam__Slot`))[0] ?? null; }
       if (!o && l.r_number) { const byR = (await readRows(t as any, `/orders?number[eq]=${l.r_number}&with=Job__SlotTeam__Slot`))[0]; if (byR && Number(byR.company_id) === Number(l.company_id)) { o = byR; how = `R${l.r_number} is now order ${byR.id}`; } }
       if (!o && l.company_id) {
-        // A rebuilt order: the same client, created after the link was made, holding every shift the link held.
-        const was: string[] = Array.isArray(l.shifts) ? l.shifts : [];
+        // A rebuilt order (pickRebuild): the same client, made after the original, judged by what the original was and
+        // what the thread asks for now.
+        const orig: Original | null = l.original ?? null;
+        const shifts: string[] = orig?.shifts?.length ? orig.shifts : Array.isArray(l.shifts) ? l.shifts : [];
+        const since = orig?.created ? Date.parse(orig.created) : Date.parse(l.first_seen);
         // Newest first is /orders' default; `sort=-id` reverses it and read the client's 30 OLDEST orders, so no rebuild was ever found.
-        const cands = (await readRows(t as any, `/orders?company_id[eq]=${l.company_id}&with=Job__SlotTeam__Slot&limit=30`))
-          .filter((c) => Date.parse(c.created) >= Date.parse(l.first_seen) - 3600e3 && was.length && was.every((w) => shape(c).shifts.includes(w)));
-        if (cands.length === 1) { o = cands[0]; how = `rebuilt by staff as R${o.number}`; }
-        else if (cands.length > 1) rep.notes.push(`${l.thread_id}: ${cands.length} orders could be the rebuild of R${l.r_number}`);
+        const raw = await readRows(t as any, `/orders?company_id[eq]=${l.company_id}&with=Job__SlotTeam__Slot&limit=30`);
+        const pick = pickRebuild(raw.map((c: any) => ({ id: Number(c.id), created: String(c.created), shifts: shape(c).shifts })), { shifts, days: orig?.days?.length ? orig.days : daysOf(shifts), since }, await threadDaysNow(sql, l.thread_id));
+        if (pick.id != null) { o = raw.find((c: any) => Number(c.id) === pick.id); how = `rebuilt by staff as R${o.number}, ${pick.how}`; }
+        else if (pick.fits > 1) rep.notes.push(`${l.thread_id}: ${pick.fits} orders could be the rebuild of R${l.r_number}`);
       }
       if (o) {
         const s = shape(o);
         const moved = Number(o.id) !== Number(l.order_id);
         if (moved) {
           await sql`DELETE FROM job_links WHERE thread_id = ${l.thread_id} AND order_id = ${Number(o.id)}`;
-          await sql`UPDATE job_links SET order_id = ${Number(o.id)}, r_number = ${s.r}, job_id = ${s.job_id}, shifts = ${JSON.stringify(s.shifts)}::jsonb, state = 'relinked', last_checked = now(), held_since = NULL, note = ${how}
+          // The order this link named before is the original when none was kept yet (a link never read whole).
+          const before: Original = { order_id: Number(l.order_id), number: String(l.r_number ?? ""), created: null, name: null, shifts: Array.isArray(l.shifts) ? l.shifts : [], days: daysOf(Array.isArray(l.shifts) ? l.shifts : []) };
+          await sql`UPDATE job_links SET original = coalesce(original, ${JSON.stringify(before)}::jsonb), order_id = ${Number(o.id)}, r_number = ${s.r}, job_id = ${s.job_id}, shifts = ${JSON.stringify(s.shifts)}::jsonb, state = 'relinked', last_checked = now(), held_since = NULL, note = ${how}
             WHERE thread_id = ${l.thread_id} AND order_id = ${Number(l.order_id)}`;
           rep.relinked++; rep.notes.push(`${l.thread_id}: ${how}`);
         } else {
-          await sql`UPDATE job_links SET r_number = ${s.r}, job_id = ${s.job_id}, shifts = CASE WHEN ${s.shifts.length} > 0 THEN ${JSON.stringify(s.shifts)}::jsonb ELSE shifts END,
+          // The original is kept whole the first time the order is read, and never overwritten: a rebuild is judged by it.
+          await sql`UPDATE job_links SET original = coalesce(original, ${JSON.stringify(originalOf(o))}::jsonb), r_number = ${s.r}, job_id = ${s.job_id}, shifts = CASE WHEN ${s.shifts.length} > 0 THEN ${JSON.stringify(s.shifts)}::jsonb ELSE shifts END,
             state = CASE WHEN state = 'held' THEN 'linked' ELSE state END, last_checked = now(), held_since = NULL WHERE thread_id = ${l.thread_id} AND order_id = ${Number(l.order_id)}`;
           rep.linked++;
         }

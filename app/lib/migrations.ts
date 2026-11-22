@@ -623,6 +623,9 @@ export const MIGRATIONS: ReadonlyArray<readonly [id: string, statement: string]>
   // Every Confirm, False flag and undo, never edited or deleted (Ben, 20 Nov: the system must learn from them). feed_marks
   // keeps only the current state and an undo deletes its row; this keeps every press, with the card as the person saw it.
   ["117_create_table_card_presses", `CREATE TABLE IF NOT EXISTS card_presses (id BIGSERIAL PRIMARY KEY, item_key TEXT NOT NULL, thread_id TEXT NOT NULL, press TEXT NOT NULL, by TEXT, card JSONB, at TIMESTAMPTZ NOT NULL DEFAULT now())`],
+  // The order a link first named, kept whole (number, created, shifts, days) so a lost order can be found again by what
+  // it was, from when it was made (links.ts sweep, 20 Nov). Never overwritten once set.
+  ["118_alter_table_job_links_original", `ALTER TABLE job_links ADD COLUMN IF NOT EXISTS original JSONB`],
 ];
 
 /**
