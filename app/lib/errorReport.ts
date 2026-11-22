@@ -1,31 +1,22 @@
-// The one way Spartan tells a human something broke.
+// The one record of what broke: every failure the system reports is counted in error_reports.
 //
 // WHY IT EXISTS
 // Eleven console.error sites in the pipeline and deps wrote to Vercel's logs, which nobody
 // opens. On 2026-08-26 the Gmail credential expired and the intake failed every five minutes
 // for 42 hours; every dashboard looked healthy and nobody knew until someone looked directly.
 //
-// THE TWO FAILURE MODES PULL OPPOSITE WAYS. Stay quiet and a dead route loses bookings for a
-// week unnoticed. Email every occurrence and a route failing on every request sends hundreds,
-// after which the sender is filtered and the channel is worse than useless — it looks alive
-// while reaching nobody. So: the first sighting emails, repeats inside a window collapse into a
-// count, and the count travels with the next email so the reader can judge severity.
+// IT SENDS NOTHING (Stop 2 deletion D6, 22 Nov). It used to email through an n8n webhook: the owner
+// switched error email off on 4 Nov and the webhook was later deleted, so the sending half could only
+// fail. The alarm that replaces it is O48, one email to the owner when the app or intake goes quiet,
+// raised from the heartbeat and not from here. A report is a row, never a message to a person.
 //
-// EVERY OCCURRENCE IS RECORDED EVEN WHEN NO EMAIL IS SENT. That is the property that makes
-// suppression safe: an empty inbox has to mean an empty system, not a suppressed one.
-//
-// Ported from D:\Code\HoH-Quote-Tool-GH\app\lib\errorReport.ts rather than designed a second
-// time — two error paths is two things to keep working. What changed for Spartan: the four
-// named routes below, its own notify gate (Spartan has no dataCollection module), and a store
-// interface so the counting is testable without a database.
+// One row per fingerprint, counted, so a route failing on every request is one row, not thousands.
 //
 // Rules pinned by test/errorReport.ts.
 
-export type Severity = "alert" | "log";
-
 /**
- * The four things worth waking someone for, distinguished by what they MEAN to the person
- * reading them rather than by where they were thrown.
+ * The kinds of failure, by what they MEAN to the person reading them rather than by where they
+ * were thrown.
  *
  *   booking-lost        the client asked for crew and there is none. A create or amendment
  *                       failed outright.
@@ -39,46 +30,8 @@ export type Severity = "alert" | "log";
  */
 export type Route = "booking-lost" | "write-unconfirmed" | "engine-threw" | "intake-quiet" | "mail-undeliverable" | "mail-pull-failed" | "label-failed" | "help-report" | "system-failed" | "heartbeat" | "settings-changed" | "ladder-rollback";
 
-const ROUTE_TITLE: Record<Route, string> = {
-  "booking-lost": "A BOOKING WAS LOST",
-  "write-unconfirmed": "A WRITE COULD NOT BE CONFIRMED",
-  // The promotion ladder's pre-registered auto-rollback fired (DECISIONS O34): a write class
-  // turned itself off, and only a person's dated decision may turn it back on.
-  "ladder-rollback": "A BOT-WRITE CLASS ROLLED ITSELF OFF",
-  "engine-threw": "THE ENGINE THREW",
-  "intake-quiet": "THE INTAKE WENT QUIET",
-  // The routing-rule intake received a delivery with no raw MIME in it, which means the
-  // provider is configured for its own parsed JSON. Mail keeps arriving and keeps being
-  // shelved unread, so this is silent without a report.
-  "mail-undeliverable": "MAIL ARRIVED IN A SHAPE WE CANNOT READ",
-  // The pull itself failed -- Gmail unreachable, or the credential is not working. This
-  // is NOT "intake-quiet": that one says no mail arrived and could be a quiet afternoon,
-  // while this says we could not go and look, which is never benign and has a different
-  // remedy. Separating them is what stops a broken credential reading as a slow Tuesday.
-  "mail-pull-failed": "THE MAILBOX COULD NOT BE READ",
-  // Ops work from the four Gmail labels and rarely open the dashboard, so a label that did
-  // not land leaves a thread looking done, or looking untouched, when it is neither.
-  "label-failed": "A GMAIL LABEL COULD NOT BE SET",
-  // A person pressed Report an issue in the help panel. Not a failure the system found: the one
-  // route a human raises, sent to the same inbox because that is where SamurAI reads alarms.
-  "help-report": "SOMEBODY REPORTED AN ISSUE FROM THE HELP PANEL",
-  // The decision was recorded, so nothing is lost, but the reason a person must act is the
-  // system's own failure (OnSinch unreadable, a write stopped part-way), not the client's
-  // request. Staff see it as a need; until this route, the owner never heard of it.
-  // The automation stopped somewhere: intake, the sweep, the minute sync or the labels (heartbeat.ts).
-  heartbeat: "THE AUTOMATION'S HEARTBEAT IS STALE",
-  // A write or reply switch was changed: the owner hears of every change, with who and when (routes/settings.ts).
-  "settings-changed": "A SWITCH WAS CHANGED",
-  "system-failed": "THE SYSTEM FAILED ON ITS OWN PART OF AN EMAIL",
-};
-
-/** Default gap between emails about the same thing. Long enough to stop a flood, short enough
- *  that an unfixed problem resurfaces the same working day. */
-export const DEFAULT_WINDOW_MS = 6 * 3600_000;
-
 // Substrings that change on every occurrence. If these reached the fingerprint, each repeat
-// would look like a new problem and the suppression window would never apply — the exact
-// failure this normalisation exists to prevent.
+// would be a new row and a route failing on every request would bury every other one.
 const VOLATILE: [RegExp, string][] = [
   [/\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/gi, "<uuid>"],
   [/\b\d{4}-\d{2}-\d{2}t[\d:.]+z?\b/gi, "<ts>"],
@@ -91,8 +44,7 @@ const VOLATILE: [RegExp, string][] = [
  * A stable key for "the same error again".
  *
  * Short numbers are deliberately KEPT: an HTTP status is the difference between an expired
- * credential and a broken server, and collapsing 401 with 500 would hide one behind the other
- * for six hours.
+ * credential and a broken server, and collapsing 401 with 500 would hide one behind the other.
  */
 export function fingerprint(where: string, what: string): string {
   let norm = String(what ?? "").toLowerCase();
@@ -100,7 +52,7 @@ export function fingerprint(where: string, what: string): string {
   norm = norm.replace(/[^a-z0-9<>]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 48);
 
   // A short non-cryptographic digest bounds the key when the message is long. `where` is kept
-  // verbatim rather than folded into the hash so a collision can only ever over-suppress two
+  // verbatim rather than folded into the hash so a collision can only ever merge two
   // unrelated errors in the SAME place, never across places.
   let h = 5381;
   for (let i = 0; i < norm.length; i++) h = ((h << 5) + h + norm.charCodeAt(i)) | 0;
@@ -109,69 +61,6 @@ export function fingerprint(where: string, what: string): string {
   const place = String(where ?? "").toLowerCase().replace(/[^a-z0-9/_-]+/g, "-").slice(0, 28);
   return `${place}:${digest}`;
 }
-
-/**
- * Whether to email now, given when this fingerprint was last emailed.
- *
- * A lastEmailedAt in the FUTURE suppresses rather than emails: serverless instances disagree
- * about the clock, and the safe direction for a disagreement is quiet, not a flood.
- */
-export function shouldEmail(
-  { lastEmailedAt, now, windowMs = DEFAULT_WINDOW_MS }:
-  { lastEmailedAt: number | null; now: number; windowMs?: number },
-): boolean {
-  if (lastEmailedAt == null) return true;
-  return now - lastEmailedAt >= windowMs;
-}
-
-/** Plain text: the n8n Gmail node renders this template verbatim, so no markup. */
-export function errorEmailText(
-  { route, where, what, detail, count, firstSeenAt }:
-  { route: Route; where: string; what: string; detail?: string; count: number; firstSeenAt: string },
-): string {
-  const lines = [
-    `Automated error report from the Spartan Crew booking engine. No reply is read.`,
-    "",
-    ROUTE_TITLE[route],
-    "",
-    `Where: ${where}`,
-    `What:  ${what}`,
-  ];
-
-  if (count > 1) {
-    lines.push(
-      "",
-      `Seen ${count} times, first at ${firstSeenAt}.`,
-      "Repeats are collapsed to one email per problem per 6 hours, so that is a running total",
-      "rather than one message per occurrence.",
-    );
-  } else {
-    lines.push("", `First seen at ${firstSeenAt}. This is the first occurrence.`);
-  }
-
-  if (detail && detail.trim()) lines.push("", "Detail:", detail.trim().slice(0, 2000));
-
-  lines.push(
-    "",
-    "Every occurrence is recorded whether or not it emails, so no news here genuinely means",
-    "nothing is failing rather than that the reporter itself is broken.",
-  );
-  return lines.join("\n");
-}
-
-/**
- * NO EMAIL UNLESS SPARTAN_ERROR_NOTIFY=1. The owner asked on 4 Nov to stop error emails to his inbox, so a
- * deployment no longer emails by default; the variable, set in Vercel on purpose, is the one way to turn the
- * channel back on. A local run never emailed by default either: in HoH, local test runs sent 17 real emails
- * before a gate existed.
- *
- * The gate is about the CHANNEL, not the count: a blocked report is still recorded in error_reports.
- */
-export function notifyAllowed(): boolean {
-  return (process.env.SPARTAN_ERROR_NOTIFY || "").trim() === "1";
-}
-
-// --- counting -----------------------------------------------------------------------------
 
 export interface Occurrence {
   fingerprint: string;
@@ -182,52 +71,17 @@ export interface Occurrence {
   now: number;
 }
 
-/**
- * Where occurrences are counted and email slots are claimed.
- *
- * Split from reportError so the rules above can be pinned without a database — and because the
- * atomic claim is the one part that MUST be a single statement in Postgres and cannot be
- * verified by reading.
- */
+/** Where occurrences are counted. An interface so the counting is testable without a database. */
 export interface ErrorStore {
-  /** Count this occurrence. Returns the running total and when it was first seen. */
-  record(o: Occurrence): Promise<{ count: number; firstSeenAt: string }>;
-  /** Claim the right to email about this fingerprint. True for exactly one caller per window. */
-  claimEmail(fingerprint: string, windowMs: number, now: number): Promise<boolean>;
-  /**
-   * Give a claim back after the post failed. Without it a dead receiver holds the window for six
-   * hours on an email nobody got: on 2026-10-02 the intake-quiet report claimed, failed, and kept
-   * the claim. A permanently dead receiver then costs one HTTP attempt per occurrence, not a flood,
-   * because nothing is ever delivered.
-   */
-  releaseEmail(fingerprint: string): Promise<void>;
+  record(o: Occurrence): Promise<void>;
 }
 
 export class InMemoryErrorStore implements ErrorStore {
-  readonly rows = new Map<string, { count: number; firstSeenAt: string; lastEmailedAt: number | null }>();
-
+  readonly rows = new Map<string, { count: number; firstSeenAt: string }>();
   async record(o: Occurrence) {
     const row = this.rows.get(o.fingerprint);
-    if (!row) {
-      const fresh = { count: 1, firstSeenAt: new Date(o.now).toISOString(), lastEmailedAt: null };
-      this.rows.set(o.fingerprint, fresh);
-      return { count: 1, firstSeenAt: fresh.firstSeenAt };
-    }
-    row.count += 1;
-    return { count: row.count, firstSeenAt: row.firstSeenAt };
-  }
-
-  async claimEmail(fp: string, windowMs: number, now: number) {
-    const row = this.rows.get(fp);
-    if (!row) return false;
-    if (!shouldEmail({ lastEmailedAt: row.lastEmailedAt, now, windowMs })) return false;
-    row.lastEmailedAt = now;
-    return true;
-  }
-
-  async releaseEmail(fp: string) {
-    const row = this.rows.get(fp);
-    if (row) row.lastEmailedAt = null;
+    if (row) row.count += 1;
+    else this.rows.set(o.fingerprint, { count: 1, firstSeenAt: new Date(o.now).toISOString() });
   }
 }
 
@@ -256,118 +110,35 @@ export function neonErrorStore(): ErrorStore | null {
     _sql = neon(url);
   }
   const sql = _sql;
-
   return {
     async record(o: Occurrence) {
       await ensure(sql);
-      const rows = (await sql`
+      await sql`
         INSERT INTO error_reports (fingerprint, where_at, what, last_detail, deploy_sha)
         VALUES (${o.fingerprint}, ${o.where}, ${o.what}, ${o.detail ?? null}, ${o.deploySha})
         ON CONFLICT (fingerprint) DO UPDATE SET
           last_seen_at = now(),
           occurrences  = error_reports.occurrences + 1,
           last_detail  = COALESCE(${o.detail ?? null}, error_reports.last_detail),
-          deploy_sha   = ${o.deploySha}
-        RETURNING occurrences, first_seen_at
-      `) as { occurrences: number | string; first_seen_at: string | Date }[];
-      return {
-        count: Number(rows[0]?.occurrences ?? 1),
-        firstSeenAt: new Date(rows[0]?.first_seen_at ?? o.now).toISOString(),
-      };
-    },
-
-    // CLAIM the email slot atomically. Rows come back only if this statement is the one that
-    // moved last_emailed_at, so exactly one caller emails per window however many lambdas
-    // arrive together. A concurrent identical UPDATE blocks on the row lock, re-checks the
-    // WHERE against the committed new value, and matches nothing — which is why this is a
-    // conditional UPDATE rather than a read-then-write.
-    async claimEmail(fp: string, windowMs: number) {
-      await ensure(sql);
-      const claim = (await sql`
-        UPDATE error_reports SET last_emailed_at = now()
-        WHERE fingerprint = ${fp}
-          AND (last_emailed_at IS NULL
-               OR now() - last_emailed_at >= ${`${Math.round(windowMs / 1000)} seconds`}::interval)
-        RETURNING fingerprint
-      `) as { fingerprint: string }[];
-      return claim.length > 0;
-    },
-
-    async releaseEmail(fp: string) {
-      await ensure(sql);
-      await sql`UPDATE error_reports SET last_emailed_at = NULL WHERE fingerprint = ${fp}`;
+          deploy_sha   = ${o.deploySha}`;
     },
   };
 }
 
-// Fallback when no store is available. Per warm instance only, which is the point: it bounds a
-// flood to one email per fingerprint per instance instead of one per request, without losing
-// the first sighting entirely.
-const _seenInProcess = new Set<string>();
-
-// --- sending ------------------------------------------------------------------------------
-
 /**
- * The n8n workflow "Spartan Alarms" (mQkxdu2rLkTovYwn since 10-16, scripts/alarm-recipients.mjs;
- * 4QTUkIbqSDrkTC6h before): webhook, Gmail on the "Test Email"
- * credential to ben@ and samuraisolutionsofficial@, then a JSON reply. Spartan's own, so House of
- * Hud's "Send Support Tickets" (switched off 09-28..09-30, reason unknown) can be on or off without
- * silencing Spartan, and never on "Gmail account 14", the credential whose expiry this channel
- * exists to report. A code default, because an unset env var is how this channel went dead.
- * The intake watchdog posts its own alarms to the same webhook.
- */
-const DEFAULT_WEBHOOK = "https://samuraisolutions.app.n8n.cloud/webhook/spartan-alarm";
-
-/** A hung receiver is abandoned after this; the claim is released and the next occurrence retries. */
-const POST_TIMEOUT_MS = 8000;
-
-/**
- * Sends: the report as JSON. Back: {"ok":true} once n8n's Gmail node has sent (the webhook
- * replies from a response node, after the email). Failure looks like: a non-2xx (workflow inactive
- * = 404, Gmail failed = 500), a 200 with an empty body (n8n's answer when a workflow throws), a
- * timeout, or a transport error. Every one is `false` and logged, never a throw: reporting it as
- * sent would mark the window claimed for six hours on an email nobody received.
- */
-async function post(body: Record<string, unknown>, timeoutMs: number): Promise<boolean> {
-  const url = (process.env.ERROR_REPORT_WEBHOOK ?? DEFAULT_WEBHOOK).trim();
-  if (!url) return false;
-  try {
-    const res = await fetch(url, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(body),
-      signal: AbortSignal.timeout(timeoutMs),
-    });
-    const j = res.ok ? ((await res.json().catch(() => null)) as unknown) : null;
-    if (j !== null && typeof j === "object") return true;
-    console.error(`[error-report] receiver answered ${res.status}${res.ok ? " with no JSON body" : ""} for ${body.record_id}`);
-    return false;
-  } catch (err) {
-    console.error(`[error-report] receiver unreachable for ${body.record_id}: ${String(err)}`);
-    return false;
-  }
-}
-
-/**
- * Keeps the lambda alive until the report has been sent. Every caller writes `void reportError()`
- * and returns its response; on Vercel the function is then frozen and an unawaited fetch dies with
- * it. That is where the 29 "fetch failed" lines came from while the intake was down. Outside a
- * request (a script, a test) after() throws, and the promise simply runs to completion.
+ * Keeps the lambda alive until the row is written. Every caller writes `void reportError()` and
+ * returns its response; on Vercel the function is then frozen and an unawaited write dies with it
+ * (the 29 "fetch failed" lines of 1-3 Oct). Outside a request (a script, a test) after() throws,
+ * and the promise simply runs to completion.
  */
 function keepAlive(p: Promise<unknown>): void {
   try { after(p); } catch { /* not in a request scope */ }
 }
 
 /**
- * Report a failure a human needs to know about.
- *
- * NEVER THROWS and never blocks the caller's own error handling — a reporting failure must not
- * turn a handled error into an unhandled one, and must never be the reason a booking fails.
- * Call it with `void`; the send outlives the response through keepAlive(). Returns whether an
- * email was sent, which callers may ignore.
- *
- * `severity: "log"` records the occurrence and never emails: worth counting, not worth
- * interrupting anyone over.
+ * Record a failure. NEVER THROWS and never blocks the caller's own error handling: a reporting
+ * failure must not turn a handled error into an unhandled one, and must never be the reason a
+ * booking fails. Call it with `void`. Resolves to whether the occurrence was recorded.
  */
 export function reportError(args: ReportArgs): Promise<boolean> {
   const p = reportNow(args);
@@ -380,71 +151,23 @@ type ReportArgs = {
   where: string;
   what: string;
   detail?: string;
-  severity?: Severity;
-  windowMs?: number;
   /** Injected by tests. Production uses the Neon-backed store. */
   store?: ErrorStore;
   now?: () => number;
-  /** Injected by tests. Production hands the pending send to Next's after(). */
+  /** Injected by tests. Production hands the pending write to Next's after(). */
   keepAlive?: (p: Promise<unknown>) => void;
-  /** Injected by tests. */
-  timeoutMs?: number;
 };
 
-async function reportNow(
-  { route, where, what, detail, severity = "alert", windowMs = DEFAULT_WINDOW_MS, store, now, timeoutMs = POST_TIMEOUT_MS }: ReportArgs,
-): Promise<boolean> {
+async function reportNow({ route, where, what, detail, store, now }: ReportArgs): Promise<boolean> {
   try {
     const fp = fingerprint(where, what);
-    const at = (now ?? Date.now)();
-    const deploySha = process.env.VERCEL_GIT_COMMIT_SHA || null;
     const sink = store ?? neonErrorStore();
-
-    let count = 1;
-    let firstSeenAt = new Date(at).toISOString();
-    let emailNow: boolean;
-
     if (!sink) {
-      emailNow = severity === "alert" && notifyAllowed() && !_seenInProcess.has(fp);
-      if (emailNow) _seenInProcess.add(fp);
-      console.error(`[error-report] ${fp} (no store) ${where}: ${what}`);
-    } else {
-      // Step 1: always count. No email decision here — this is the half that makes silence
-      // trustworthy, so it happens before anything that can decide not to send.
-      const rec = await sink.record({ fingerprint: fp, where, what, detail, deploySha, now: at });
-      count = rec.count;
-      firstSeenAt = rec.firstSeenAt;
-
-      // THE GATE COMES BEFORE THE CLAIM, and the order is the whole point. There is no
-      // separate development database — a local run writes to production — so claiming the
-      // slot first would let `npx tsx test/all.ts` mark the real fingerprint emailed and
-      // suppress the real alert for six hours without ever sending anything.
-      if (severity === "alert" && !notifyAllowed()) {
-        // Logged rather than swallowed: a suppressed notification that leaves no trace is how
-        // you end up believing a channel works when it is dead.
-        console.error(`[error-report] not sent (not a deployment; set SPARTAN_ERROR_NOTIFY=1): ${where}: ${what}`);
-        return false;
-      }
-      emailNow = severity === "alert" && (await sink.claimEmail(fp, windowMs, at));
+      console.error(`[error-report] ${fp} (no store) ${route} ${where}: ${what}`);
+      return false;
     }
-
-    if (!emailNow) return false;
-
-    const sent = await post({
-      record_id: fp,
-      user_name: `Spartan error report (automated) - ${route}`,
-      user_email: "error-report@spartancrew",
-      ts: new Date(at).toISOString(),
-      route: where,
-      deploy_sha: deploySha,
-      ticket_text: errorEmailText({ route, where, what, detail, count, firstSeenAt }),
-      transcript: `Automated error report. Fingerprint ${fp}. Repeats within ${Math.round(windowMs / 3600_000)} hours are counted, not re-sent.`,
-    }, timeoutMs);
-    if (!sent) {
-      if (sink) await sink.releaseEmail(fp);
-      else _seenInProcess.delete(fp);
-    }
-    return sent;
+    await sink.record({ fingerprint: fp, where, what, detail, deploySha: process.env.VERCEL_GIT_COMMIT_SHA || null, now: (now ?? Date.now)() });
+    return true;
   } catch (err) {
     // The last line of defence: reporting must never be the thing that breaks a booking.
     console.error("[error-report] reporter itself failed", err);

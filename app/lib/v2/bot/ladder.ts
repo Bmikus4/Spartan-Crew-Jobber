@@ -13,7 +13,7 @@
 //                (a) a mismatch ledger row on an enabled class -> that class off;
 //                (b) a staff edit reversing a bot edit on the same record within 72h -> class off;
 //                (c) an error report from the write path -> every class off.
-//                Each trip is written to settings_history and raised to the owner. Re-entry is
+//                Each trip is written to settings_history and to error_reports. Re-entry is
 //                never automatic. Checks read nothing older than a class's `since`, so the three
 //                historical create_order mismatches (14-15 Oct) can never trip a later enable.
 // ============================================================================

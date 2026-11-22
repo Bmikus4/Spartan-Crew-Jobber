@@ -4,7 +4,7 @@
 // No heartbeat for this automation runs in n8n, ever (owner, 26 Oct; DECISIONS O1). Until then
 // n8n carried intake, the minute sync, labels and the watchdog itself, so when n8n stopped the
 // owner heard nothing and staff saw the TV's sync dot turn red after 90 quiet minutes (addendum
-// F32). Four signals, each raised to the owner on its own fingerprint:
+// F32). Four signals, each an error_reports row on its own fingerprint (no email since D6; O48 is the alarm):
 //   intake  no mail captured during working hours (intakeHealth's own judgement)
 //   lag     a client email stored more than 15 minutes ago that nothing has decided
 //   sync    the minute sync has not finished for 5 minutes

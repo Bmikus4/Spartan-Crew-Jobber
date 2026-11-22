@@ -7,8 +7,8 @@ import type { Caller } from "../apiAuth";
 
 /**
  * THE SWITCHES THAT DECIDE WHETHER THE SYSTEM ACTS WITHOUT A PERSON: writes to OnSinch, replies to clients, and
- * the lead rule that hands near work to staff. Each change is stored with its actor and time and raised to the
- * owner (addendum F34; the lead rule joined on 28 Oct, DECISIONS O8). Who may change them is CLIENT_FIELDS below.
+ * the lead rule that hands near work to staff. Each change is stored with its actor and time in settings_history
+ * and error_reports (addendum F34; the lead rule joined on 28 Oct, DECISIONS O8). Who may change them is CLIENT_FIELDS below.
  */
 export const SWITCHES = ["bot_writes_enabled", "bot_write_classes", "replies_enabled", "reply_delivery", "create_lead_enabled", "create_lead_days", "create_lead_applies_to"] as const;
 
@@ -76,7 +76,7 @@ export async function handleSettingsPost(request: Request, io: SettingsIO = prod
     return Response.json({ ok: false, error: "settings not saved" }, { status: 500 });
   }
   for (const c of changes) {
-    // The record is written before the owner is told; a record that fails is said in the alert itself.
+    // The history row is written first; one that fails is said in the error_reports row itself.
     const kept = await io.history(c).then(() => true, () => false);
     void io.report({ route: "settings-changed", where: `settings/${c.field}`, what: `${c.field} changed from ${JSON.stringify(c.from)} to ${JSON.stringify(c.to)} at ${c.at}`,
       detail: `by ${c.actor}${kept ? "" : "; the history row could not be written"}` });

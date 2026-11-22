@@ -6679,5 +6679,23 @@
    "app/lib/migrations.ts",
    "test/migrations.ts"
   ]
+ },
+ {
+  "id": "S-0341",
+  "ts": "2026-11-22T06:07:28+00:00",
+  "kind": "decision",
+  "headline": "D6: errorReport records only; the deleted n8n alarm webhook path is gone (453 -> 176 lines)",
+  "subject": "Error reports are counted rows only; the dead n8n email path is removed",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 135,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  },
+  "sources": [
+   "app/lib/errorReport.ts",
+   "test/errorReport.ts"
+  ]
  }
 ]

@@ -45,7 +45,7 @@ export async function POST(request: Request): Promise<Response> {
     // the job reported ok every minute, so Gmail showed no label and nobody was told. A handful refused is a thread's
     // own trouble; this many is the mailbox's credential, which only a person can reconnect.
     const alarm = labelsRefusedAlarm(failed);
-    if (alarm) await reportError({ route: "label-failed", where: "bot/labels", severity: "alert", ...alarm });
+    if (alarm) await reportError({ route: "label-failed", where: "bot/labels", ...alarm });
     return NextResponse.json({ ok: true, forgotten: failed.length });
   }
 

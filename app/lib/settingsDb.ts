@@ -89,7 +89,7 @@ export async function getSettings(sql: NeonQueryFunction<false, false> | null = 
     return { ...DEFAULT_SETTINGS, ...(rows[0]?.value ?? {}) };
   } catch (err) {
     void reportError({
-      route: "engine-threw", where: "settings/read", severity: "alert",
+      route: "engine-threw", where: "settings/read",
       what: "the settings could not be read, so nothing that depends on them ran",
       detail: String((err as Error)?.message ?? err),
     });

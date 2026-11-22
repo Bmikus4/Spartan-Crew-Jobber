@@ -1,38 +1,20 @@
 // ============================================================================
-// Error reporting — the rules that make an empty inbox mean an empty system.
+// Error reporting: every reported failure is a counted row, and nothing is sent.
 // ----------------------------------------------------------------------------
 // Spartan had no error reporting at all. Eleven console.error sites wrote to
 // Vercel's logs and nowhere else, so when the Gmail credential expired on
 // 2026-08-26 the intake failed every five minutes for 42 hours and nobody knew.
 //
-// The two failure modes pull opposite ways. Stay quiet and a dead route loses
-// bookings for a week unnoticed. Email every occurrence and a route failing on
-// every request sends hundreds, the sender gets filtered, and the channel is
-// worse than useless — alive-looking and reaching nobody. So the first sighting
-// emails, repeats inside a window collapse into a running count, and the count
-// travels with the next email so the reader can judge severity.
-//
-// THAT SUPPRESSION IS ONLY SAFE BECAUSE EVERY OCCURRENCE IS STILL RECORDED.
-// If a suppressed error left no trace, silence would mean "possibly dead"
-// rather than "nothing is wrong", and the whole channel would be unreadable.
-// That is the property [3] and [4] exist to hold.
-//
-// AND IT MUST NEVER BE THE THING THAT BREAKS A BOOKING. reportError is always
-// called with `void` and is pinned here against every way the channel can fail:
-// absent, 500, and n8n's signature failure — 200 with an empty body.
+// It emailed through an n8n webhook until Stop 2 deletion D6 (22 Nov): the owner
+// switched error email off on 4 Nov and the webhook was deleted, so the sending
+// half could only fail. The alarm that replaces it is O48, from the heartbeat.
+// What stays is the record: one row per fingerprint, counted, written even when
+// the caller's request has already answered, and never a throw.
 //
 // Run: npx tsx test/errorReport.ts
 // ============================================================================
-import {
-  DEFAULT_WINDOW_MS,
-  InMemoryErrorStore,
-  errorEmailText,
-  fingerprint,
-  notifyAllowed,
-  reportError,
-  shouldEmail,
-  type ErrorStore,
-} from "../app/lib/errorReport";
+import { readFileSync } from "node:fs";
+import { InMemoryErrorStore, fingerprint, reportError, type ErrorStore } from "../app/lib/errorReport";
 
 let fails = 0;
 const ok = (cond: boolean, label: string, extra = "") => {
@@ -40,34 +22,11 @@ const ok = (cond: boolean, label: string, extra = "") => {
   if (!cond) fails++;
 };
 
-/** Swap global fetch for a recorder. Returns the calls and a restore function. */
-function spyFetch(reply: () => Promise<Response> | Response) {
-  const calls: { url: string; body: unknown }[] = [];
-  const real = globalThis.fetch;
-  globalThis.fetch = (async (url: any, init: any) => {
-    calls.push({ url: String(url), body: init?.body ? JSON.parse(String(init.body)) : null });
-    return await reply();
-  }) as typeof fetch;
-  return { calls, restore: () => { globalThis.fetch = real; } };
-}
-
-/** A deployment with the email channel switched on (SPARTAN_ERROR_NOTIFY=1): allowed to send. Restored by each caller. */
-function asDeployment() {
-  const prior = process.env.VERCEL, priorN = process.env.SPARTAN_ERROR_NOTIFY;
-  process.env.VERCEL = "1";
-  process.env.SPARTAN_ERROR_NOTIFY = "1";
-  return () => {
-    if (prior === undefined) delete process.env.VERCEL; else process.env.VERCEL = prior;
-    if (priorN === undefined) delete process.env.SPARTAN_ERROR_NOTIFY; else process.env.SPARTAN_ERROR_NOTIFY = priorN;
-  };
-}
-
 (async () => {
   console.log("\n[1] the fingerprint collapses the same fault to one identity");
   {
-    // The same OnSinch rejection, twice, differing only in the parts that change
-    // every time. Without normalisation each repeat looks new, the window never
-    // applies, and the flood the window exists to contain arrives anyway.
+    // The same OnSinch rejection, twice, differing only in the parts that change every time.
+    // Without normalisation each repeat is a new row and a flood buries every other fault.
     const a = fingerprint(
       "deps/createCompany",
       "POST /companies failed for 3f1a9c22-77b0-4e1e-9a05-1c2b3d4e5f60 at 2026-08-29T09:14:02.881Z after 1284 ms",
@@ -77,239 +36,60 @@ function asDeployment() {
       "POST /companies failed for 91cc0de1-2222-4bbb-8ccc-000011112222 at 2026-08-29T11:47:55.031Z after 903 ms",
     );
     ok(a === b, "two occurrences of one fault share an identity", `${a} / ${b}`);
-
-    // Short numbers are kept on purpose: an HTTP status is the difference between
-    // an expired credential and a broken server, and collapsing them hides one
-    // behind the other for six hours.
-    ok(
-      fingerprint("deps/createOrder", "OnSinch said 401") !==
-        fingerprint("deps/createOrder", "OnSinch said 500"),
-      "401 and 500 stay separate problems",
-    );
-
-    // `where` is kept verbatim rather than folded into the digest, so a digest
-    // collision can only ever over-suppress two errors in the SAME place.
-    ok(
-      fingerprint("deps/createCompany", "timeout") !== fingerprint("deps/createPlace", "timeout"),
-      "the same message in two places is two problems",
-    );
+    // Short numbers are kept on purpose: an HTTP status is the difference between an expired
+    // credential and a broken server.
+    ok(fingerprint("deps/createOrder", "OnSinch said 401") !== fingerprint("deps/createOrder", "OnSinch said 500"), "401 and 500 stay separate problems");
+    // `where` is kept verbatim, so a digest collision can only merge two errors in the SAME place.
+    ok(fingerprint("deps/createCompany", "timeout") !== fingerprint("deps/createPlace", "timeout"), "the same message in two places is two problems");
   }
 
-  console.log("\n[2] the window decides when to email again");
+  console.log("\n[2] every occurrence is counted on one row");
   {
-    const now = 1_800_000_000_000;
-    ok(shouldEmail({ lastEmailedAt: null, now }), "never emailed — email now");
-    ok(!shouldEmail({ lastEmailedAt: now - 60_000, now }), "a minute ago — suppressed");
-    ok(shouldEmail({ lastEmailedAt: now - DEFAULT_WINDOW_MS - 1, now }), "past the window — email again");
-    // Serverless instances disagree about the clock. The safe direction for a
-    // disagreement is quiet, not a flood.
-    ok(!shouldEmail({ lastEmailedAt: now + 3_600_000, now }), "a future timestamp suppresses rather than floods");
-  }
-
-  console.log("\n[3] every occurrence is recorded even when nothing is emailed");
-  {
-    const undo = asDeployment();
-    const spy = spyFetch(() => new Response(JSON.stringify({ ok: true }), { status: 200 }));
     const store = new InMemoryErrorStore();
+    const fire = () => reportError({ route: "booking-lost", where: "pipeline/order_error", what: "OnSinch said 500", store });
+    const results = [await fire(), await fire(), await fire()];
+    const row = store.rows.get(fingerprint("pipeline/order_error", "OnSinch said 500"));
+    ok(results.every((r) => r === true), "each resolves as recorded", JSON.stringify(results));
+    ok(store.rows.size === 1 && row?.count === 3, "one row, counted three times", String(row?.count));
+  }
+
+  console.log("\n[3] nothing is ever sent, whatever the environment says");
+  {
+    // The env vars that used to open the channel. Set, they must change nothing.
+    const prior = { n: process.env.SPARTAN_ERROR_NOTIFY, w: process.env.ERROR_REPORT_WEBHOOK, v: process.env.VERCEL };
+    process.env.SPARTAN_ERROR_NOTIFY = "1"; process.env.ERROR_REPORT_WEBHOOK = "https://example.invalid/hook"; process.env.VERCEL = "1";
+    const calls: string[] = [];
+    const real = globalThis.fetch;
+    globalThis.fetch = (async (url: any) => { calls.push(String(url)); return new Response("{}", { status: 200 }); }) as typeof fetch;
     try {
-      // severity "log": worth counting, not worth interrupting anyone over.
-      await reportError({ route: "booking-lost", where: "deps/aliases", what: "alias not recorded", severity: "log", store });
-      await reportError({ route: "booking-lost", where: "deps/aliases", what: "alias not recorded", severity: "log", store });
-      const fp = fingerprint("deps/aliases", "alias not recorded");
-      ok(store.rows.get(fp)?.count === 2, "counted twice", String(store.rows.get(fp)?.count));
-      ok(spy.calls.length === 0, "and emailed zero times", String(spy.calls.length));
-    } finally { spy.restore(); undo(); }
-  }
-
-  console.log("\n[4] a flood collapses into one email carrying a running count");
-  {
-    const undo = asDeployment();
-    const spy = spyFetch(() => new Response(JSON.stringify({ ok: true }), { status: 200 }));
-    const store = new InMemoryErrorStore();
-    let clock = 1_800_000_000_000;
-    const fire = () => reportError({
-      route: "booking-lost", where: "pipeline/order_error", what: "OnSinch said 500", store, now: () => clock,
-    });
-    try {
-      const first = await fire();
-      clock += 60_000;
-      const second = await fire();
-      ok(first === true, "the first sighting emails");
-      ok(second === false, "the second inside the window does not");
-      ok(spy.calls.length === 1, "one email for two occurrences", String(spy.calls.length));
-
-      const fp = fingerprint("pipeline/order_error", "OnSinch said 500");
-      ok(store.rows.get(fp)?.count === 2, "both occurrences counted", String(store.rows.get(fp)?.count));
-
-      clock += DEFAULT_WINDOW_MS;
-      const third = await fire();
-      ok(third === true, "past the window it emails again");
-      const text = String((spy.calls[1]?.body as any)?.ticket_text ?? "");
-      ok(/seen 3 times/i.test(text), "and the email carries the running total", text.slice(0, 80));
-    } finally { spy.restore(); undo(); }
-  }
-
-  console.log("\n[5] reporting never throws, however the channel fails");
-  {
-    const undo = asDeployment();
-    const store = new InMemoryErrorStore();
-    const call = (label: string) => reportError({ route: "engine-threw", where: `t/${label}`, what: "boom", store });
-
-    // No webhook configured at all.
-    const priorHook = process.env.ERROR_REPORT_WEBHOOK;
-    process.env.ERROR_REPORT_WEBHOOK = "";
-    let threw = false;
-    try { await call("nohook"); } catch { threw = true; }
-    ok(!threw, "no webhook configured");
-    if (priorHook === undefined) delete process.env.ERROR_REPORT_WEBHOOK; else process.env.ERROR_REPORT_WEBHOOK = priorHook;
-
-    // The webhook 500s.
-    let spy = spyFetch(() => new Response("upstream is down", { status: 500 }));
-    threw = false;
-    try { await call("500"); } catch { threw = true; }
-    ok(!threw, "the webhook 500s");
-    spy.restore();
-
-    // n8n's signature failure: 200 with an empty body, which is what a rejected
-    // secret produces. It must be reported as not-sent, not counted as delivered.
-    spy = spyFetch(() => new Response("", { status: 200 }));
-    threw = false;
-    let sent: boolean | null = null;
-    try { sent = await call("empty"); } catch { threw = true; }
-    ok(!threw, "the webhook returns 200 with an empty body");
-    ok(sent === false, "and that is reported as not sent");
-    spy.restore();
-
-    // The transport itself rejects.
-    spy = spyFetch(() => { throw new Error("ECONNRESET"); });
-    threw = false;
-    try { await call("reset"); } catch { threw = true; }
-    ok(!threw, "the transport rejects");
-    spy.restore();
-
-    // The store itself is broken. Losing the count must not lose the booking.
-    const broken: ErrorStore = {
-      async record() { throw new Error("no database"); },
-      async claimEmail() { throw new Error("no database"); },
-      async releaseEmail() { throw new Error("no database"); },
-    };
-    threw = false;
-    try { await reportError({ route: "engine-threw", where: "t/db", what: "boom", store: broken }); } catch { threw = true; }
-    ok(!threw, "the store is broken");
-
-    undo();
-  }
-
-  console.log("\n[6] a local run and a preview deployment email nobody");
-  {
-    // In HoH, local test runs sent 17 real emails before this gate existed. The
-    // occurrence is still recorded — the gate is about the channel, not the count.
-    const priorV = process.env.VERCEL;
-    const priorN = process.env.SPARTAN_ERROR_NOTIFY;
-    delete process.env.VERCEL;
-    delete process.env.SPARTAN_ERROR_NOTIFY;
-    const spy = spyFetch(() => new Response(JSON.stringify({ ok: true }), { status: 200 }));
-    const store = new InMemoryErrorStore();
-    try {
-      ok(!notifyAllowed(), "not a deployment: sending is refused");
-      const sent = await reportError({ route: "booking-lost", where: "t/gate", what: "boom", store });
-      ok(sent === false, "reportError reports nothing sent");
-      ok(spy.calls.length === 0, "nothing was posted anywhere", String(spy.calls.length));
-      ok(store.rows.get(fingerprint("t/gate", "boom"))?.count === 1, "but the occurrence is still recorded");
-      // AND THE EMAIL SLOT IS NOT CLAIMED. There is no development database — a local run
-      // writes to production — so claiming first and checking the gate second would let this
-      // very test suite mark the real fingerprint emailed and silence the real alert for six
-      // hours without sending anything.
-      ok(store.rows.get(fingerprint("t/gate", "boom"))?.lastEmailedAt === null,
-        "and the production email slot is left unclaimed");
-
-      // A deployment alone no longer emails: the owner switched error email off (4 Nov).
-      process.env.VERCEL = "1";
-      ok(!notifyAllowed(), "a deployment without SPARTAN_ERROR_NOTIFY=1 emails nobody");
-      // One env var, typed on purpose, is how the channel is turned back on.
-      process.env.SPARTAN_ERROR_NOTIFY = "1";
-      ok(notifyAllowed(), "SPARTAN_ERROR_NOTIFY=1 opens it");
+      await reportError({ route: "intake-quiet", where: "t/none", what: "quiet", store: new InMemoryErrorStore() });
+      ok(calls.length === 0, "no request is made", calls.join(","));
     } finally {
-      spy.restore();
-      if (priorV === undefined) delete process.env.VERCEL; else process.env.VERCEL = priorV;
-      if (priorN === undefined) delete process.env.SPARTAN_ERROR_NOTIFY; else process.env.SPARTAN_ERROR_NOTIFY = priorN;
+      globalThis.fetch = real;
+      for (const [k, v] of [["SPARTAN_ERROR_NOTIFY", prior.n], ["ERROR_REPORT_WEBHOOK", prior.w], ["VERCEL", prior.v]] as const) {
+        if (v === undefined) delete process.env[k]; else process.env[k] = v;
+      }
     }
+    const src = readFileSync("app/lib/errorReport.ts", "utf8");
+    ok(!/\bfetch\(|https?:\/\//.test(src), "and errorReport.ts names no URL and makes no request");
   }
 
-  console.log("\n[7] the email says which of the four things happened");
+  console.log("\n[4] reporting never throws");
   {
-    const first = errorEmailText({
-      route: "intake-quiet", where: "health/intake", what: "no mail for 95 minutes",
-      count: 1, firstSeenAt: "2026-08-29T09:00:00.000Z",
-    });
-    ok(/first occurrence/i.test(first), "a first sighting says so");
-    ok(/intake/i.test(first), "and names the route");
-
-    const many = errorEmailText({
-      route: "booking-lost", where: "pipeline/order_error", what: "OnSinch said 500",
-      detail: "order #14866", count: 12, firstSeenAt: "2026-08-29T09:00:00.000Z",
-    });
-    ok(/seen 12 times/i.test(many), "a repeat carries the count");
-    ok(/order #14866/.test(many), "and the detail");
+    const broken: ErrorStore = { async record() { throw new Error("no database"); } };
+    let threw = false, got: boolean | null = null;
+    try { got = await reportError({ route: "engine-threw", where: "t/db", what: "boom", store: broken }); } catch { threw = true; }
+    ok(!threw && got === false, "a broken store resolves false, never throws");
   }
 
   // 2026-10-01..03: intake was down 53 hours and no report reached anyone. Every caller writes
-  // `void reportError()`, so on Vercel the send died when the lambda froze after the response.
-  console.log("\n[8] the pending send is handed to keepAlive, so it outlives the response");
+  // `void reportError()`, so on Vercel the write died when the lambda froze after the response.
+  console.log("\n[5] the pending write is handed to keepAlive, so it outlives the response");
   {
-    const undo = asDeployment();
-    const spy = spyFetch(() => new Response(JSON.stringify({ ok: true }), { status: 200 }));
     const kept: Promise<unknown>[] = [];
-    try {
-      const p = reportError({
-        route: "intake-quiet", where: "t/keepalive", what: "quiet", store: new InMemoryErrorStore(),
-        keepAlive: (q) => { kept.push(q); },
-      });
-      ok(kept.length === 1, "keepAlive receives one promise", String(kept.length));
-      ok(kept[0] === p, "and it is the send itself, not a copy that settles early");
-      ok((await p) === true, "which still resolves to whether the email went");
-    } finally { spy.restore(); undo(); }
-  }
-
-  // SP-16. The 10-02 16:45Z intake-quiet report claimed its window, failed to send, and kept
-  // the claim, so the next real alarm was blocked for six hours.
-  console.log("\n[9] a failed post gives the window back; the next call emails");
-  {
-    const undo = asDeployment();
-    const store = new InMemoryErrorStore();
-    const fp = fingerprint("t/release", "receiver off");
-    const call = () => reportError({ route: "intake-quiet", where: "t/release", what: "receiver off", store });
-    let spy = spyFetch(() => new Response("not found", { status: 404 }));
-    try {
-      ok((await call()) === false, "a 404 from the receiver is not sent");
-      ok(store.rows.get(fp)?.lastEmailedAt === null, "and the claim is released", String(store.rows.get(fp)?.lastEmailedAt));
-      spy.restore();
-      spy = spyFetch(() => new Response(JSON.stringify({ ok: true }), { status: 200 }));
-      ok((await call()) === true, "so the next occurrence emails at once, not six hours later");
-      ok(spy.calls.length === 1, "one post on the second call", String(spy.calls.length));
-    } finally { spy.restore(); undo(); }
-  }
-
-  console.log("\n[10] a receiver that hangs is abandoned at the timeout");
-  {
-    const undo = asDeployment();
-    const store = new InMemoryErrorStore();
-    const real = globalThis.fetch;
-    globalThis.fetch = ((_url: unknown, init?: RequestInit) => new Promise((_, reject) => {
-      init?.signal?.addEventListener("abort", () => reject(init.signal!.reason));
-    })) as typeof fetch;
-    // AbortSignal.timeout's timer is unref'd: with a fetch stub holding nothing open, Node would
-    // exit 0 mid-await and this section would pass by never running. The ref'd timer holds the
-    // loop, and fails the file if the send never settles.
-    const hold = setTimeout(() => { console.log("  FAIL  the send never settled"); process.exit(1); }, 10_000);
-    try {
-      const t0 = Date.now();
-      const sent = await reportError({ route: "engine-threw", where: "t/hang", what: "boom", store, timeoutMs: 50 });
-      const ms = Date.now() - t0;
-      ok(sent === false, "a hung receiver is not sent");
-      ok(ms < 2000, "and it gives up instead of holding the lambda", `${ms} ms`);
-      ok(store.rows.get(fingerprint("t/hang", "boom"))?.lastEmailedAt === null, "and the claim is released");
-    } finally { clearTimeout(hold); globalThis.fetch = real; undo(); }
+    const p = reportError({ route: "intake-quiet", where: "t/keepalive", what: "quiet", store: new InMemoryErrorStore(), keepAlive: (q) => { kept.push(q); } });
+    ok(kept.length === 1 && kept[0] === p, "keepAlive receives the write itself, not a copy that settles early");
+    ok((await p) === true, "which resolves once the row is written");
   }
 
   console.log(`\n${fails ? `${fails} FAILED` : "errorReport: ALL PASS"}\n`);
