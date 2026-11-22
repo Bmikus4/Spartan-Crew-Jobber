@@ -51,8 +51,7 @@ export const CAPS = { orders: 25, companies: 25, threads: 300 };
 /** Every table that keys its rows by email thread. */
 export const THREAD_TABLES = [
   "thread_messages", "v2_decisions", "conversation_state", "tickets", "ticket_events", "metric_events", "feed_marks",
-  "inbound_raw", "message_ledger", "sweep_threads", "sweep_labels", "sender_ledger_threads", "job_links",
-  "order_records", "followup_suppressions", "order_archive",
+  "inbound_raw", "message_ledger", "job_links", "followup_suppressions",
 ] as const;
 
 export type OnsinchCall = (method: "GET" | "DELETE", path: string, body?: unknown) => Promise<{ status: number; data: any }>;
@@ -134,7 +133,6 @@ export async function planTestData(sql: Sql, t: OnsinchCall, opts: { graceMinute
     UNION SELECT thread_id FROM thread_messages WHERE thread_id ~* ${TEST_ID} OR message_id ~* ${TEST_ID}
     UNION SELECT thread_id FROM v2_decisions WHERE company_id = ANY(${testCos}) OR thread_id ~* ${TEST_ID} OR from_address ~* ${TEST_SENDER}
     UNION SELECT thread_id FROM tickets WHERE company_id = ANY(${testCos}) OR thread_id ~* ${TEST_ID}
-    UNION SELECT thread_id FROM order_records WHERE company_id = ANY(${testCos}) OR sender_email ~* ${TEST_SENDER} OR thread_id ~* ${TEST_ID}
     UNION SELECT thread_id FROM job_links WHERE company_id = ANY(${testCos}) OR thread_id ~* ${TEST_ID}
     UNION SELECT thread_id FROM metric_events WHERE thread_id ~* ${TEST_ID}
     UNION SELECT thread_id FROM ticket_events WHERE thread_id ~* ${TEST_ID}
@@ -151,8 +149,7 @@ export async function planTestData(sql: Sql, t: OnsinchCall, opts: { graceMinute
   // Orders: everything on a TEST company, and everything a test thread points at.
   const msgIds = ((await sql`SELECT message_id FROM thread_messages WHERE thread_id = ANY(${threads})`) as any[]).map((r) => r.message_id);
   const pointed = (await sql`
-    SELECT order_id::bigint AS id FROM order_records WHERE thread_id = ANY(${threads})
-    UNION SELECT order_id::bigint FROM job_links WHERE thread_id = ANY(${threads})
+    SELECT order_id::bigint AS id FROM job_links WHERE thread_id = ANY(${threads})
     UNION SELECT onsinch_order_id FROM tickets WHERE thread_id = ANY(${threads}) AND onsinch_order_id IS NOT NULL
     UNION SELECT onsinch_order_id FROM conversation_state WHERE thread_id = ANY(${threads}) AND onsinch_order_id IS NOT NULL
     UNION SELECT (e->'detail'->>'order_id')::bigint FROM v2_decisions d, jsonb_array_elements(CASE WHEN jsonb_typeof(d.executed) = 'array' THEN d.executed ELSE '[]'::jsonb END) e
@@ -182,7 +179,7 @@ export async function planTestData(sql: Sql, t: OnsinchCall, opts: { graceMinute
     if (clients) continue;
     const refs = (await sql`
       SELECT thread_id FROM v2_decisions WHERE company_id = ${id} UNION SELECT thread_id FROM tickets WHERE company_id = ${id}
-      UNION SELECT thread_id FROM order_records WHERE company_id = ${id} UNION SELECT thread_id FROM job_links WHERE company_id = ${id}`) as any[];
+      UNION SELECT thread_id FROM job_links WHERE company_id = ${id}`) as any[];
     const name = String(c.name ?? "").trim();
     const mentions = name.length >= 5 ? ((await sql`SELECT DISTINCT thread_id FROM thread_messages WHERE position(lower(${name}) in lower(body)) > 0`) as any[]) : [];
     const isTest = (th: string) => threads.includes(th);
@@ -214,15 +211,12 @@ export async function planTestData(sql: Sql, t: OnsinchCall, opts: { graceMinute
   return plan;
 }
 
-/** Rows not keyed by a test thread: the ledger of test writes, local runs, and what was learned about TEST companies. */
+/** Rows not keyed by a test thread: the ledger of test writes and local runs. */
 async function extraRows(sql: Sql, testCos: number[], msgIds: string[], orderIds: number[], mode: "count" | "delete", cutoff: string): Promise<Record<string, number>> {
   const q = (where: string) => (mode === "count" ? `SELECT count(*)::int AS n FROM ${where}` : `WITH d AS (DELETE FROM ${where} RETURNING 1) SELECT count(*)::int AS n FROM d`);
   const parts: [string, string, unknown[]][] = [
     ["bot_ledger", `bot_ledger WHERE (source ~* $1 OR split_part(source, '#', 1) = ANY($2) OR (detail->>'order_id') = ANY($3) OR (op->>'company_id') = ANY($4)) AND created_at <= $5`, [TEST_ID, msgIds, orderIds.map(String), testCos.map(String), cutoff]],
     ["v2_decisions (local runs)", `v2_decisions WHERE code_version = 'local' AND (executed IS NULL OR jsonb_typeof(executed) <> 'array' OR jsonb_array_length(executed) = 0)`, []],
-    ["sender_ledger", `sender_ledger WHERE addr ~* $1`, [TEST_SENDER]],
-    ["entity_aliases", `entity_aliases WHERE kind = 'company' AND entity_id = ANY($1)`, [testCos]],
-    ["rate_cards", `rate_cards WHERE company_id = ANY($1)`, [testCos]],
   ];
   const out: Record<string, number> = {};
   for (const [name, where, params] of parts) {

@@ -626,6 +626,13 @@ export const MIGRATIONS: ReadonlyArray<readonly [id: string, statement: string]>
   // The order a link first named, kept whole (number, created, shifts, days) so a lost order can be found again by what
   // it was, from when it was made (links.ts sweep, 20 Nov). Never overwritten once set.
   ["118_alter_table_job_links_original", `ALTER TABLE job_links ADD COLUMN IF NOT EXISTS original JSONB`],
+  // Stop 2 deletions D3-D5 (O52). The old engine's tables, the professions copy unsynced since 18 Aug, and the TV
+  // verifier's columns frozen since 30 Oct: no app code reads them. Their last rows are in the data home (run
+  // prod-db-final-2026-11-22); on 22 Nov no foreign key, view or trigger in production depended on them, which is why
+  // these may run unattended on a deploy's first request. The earlier CREATEs stay: the list is append only.
+  ["119_drop_old_engine_tables", `DROP TABLE IF EXISTS entity_aliases, order_records, order_archive, rate_cards, sender_ledger, sender_ledger_threads, sweep_threads, sweep_labels`],
+  ["120_drop_table_onsinch_professions", `DROP TABLE IF EXISTS onsinch_professions`],
+  ["121_alter_table_feed_meta_drop_verify", `ALTER TABLE feed_meta DROP COLUMN IF EXISTS last_verify_at, DROP COLUMN IF EXISTS timeline_last_id, DROP COLUMN IF EXISTS verify_note`],
 ];
 
 /**

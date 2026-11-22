@@ -24,8 +24,14 @@ const indexes = async () => new Set(((await sql`SELECT indexname AS i FROM pg_in
   const ran = await migrate(sql);
   ok(ran.length === MIGRATIONS.length, `all ${MIGRATIONS.length} ran on an empty database`, ran.length);
   ok(new Set(MIGRATIONS.map(([id]) => id)).size === MIGRATIONS.length, "every id is unique");
-  const prod = JSON.parse(readFileSync("test/fixtures/prod-schema-1027.json", "utf8")) as { columns: Array<{ t: string; c: string; type: string }>; indexes: Array<{ t: string; i: string }> };
+  const raw = JSON.parse(readFileSync("test/fixtures/prod-schema-1027.json", "utf8")) as { columns: Array<{ t: string; c: string; type: string }>; indexes: Array<{ t: string; i: string }> };
+  // Dropped on purpose since the fixture was read (O52 D3-D5, migrations 119-121): production's schema less these.
+  const DROPPED_TABLES = ["entity_aliases", "order_records", "order_archive", "rate_cards", "sender_ledger", "sender_ledger_threads", "sweep_threads", "sweep_labels", "onsinch_professions"];
+  const DROPPED_COLUMNS = ["feed_meta.last_verify_at", "feed_meta.timeline_last_id", "feed_meta.verify_note"];
+  const prod = { columns: raw.columns.filter((r) => !DROPPED_TABLES.includes(r.t) && !DROPPED_COLUMNS.includes(`${r.t}.${r.c}`)), indexes: raw.indexes.filter((r) => !DROPPED_TABLES.includes(r.t)) };
   const have = await columns(), idx = await indexes();
+  const left = [...have.keys()].filter((k) => DROPPED_TABLES.includes(k.split(".")[0]) || DROPPED_COLUMNS.includes(k));
+  ok(left.length === 0 && have.has("feed_meta.id"), "the dropped tables and feed_meta's verify columns are gone; feed_meta itself stays", left);
   const missing = prod.columns.filter((r) => !have.has(`${r.t}.${r.c}`)).map((r) => `${r.t}.${r.c}`);
   ok(missing.length === 0, `every one of production's ${prod.columns.length} columns exists`, missing);
   const retyped = prod.columns.filter((r) => have.has(`${r.t}.${r.c}`) && have.get(`${r.t}.${r.c}`) !== r.type).map((r) => `${r.t}.${r.c}: ${r.type} vs ${have.get(`${r.t}.${r.c}`)}`);

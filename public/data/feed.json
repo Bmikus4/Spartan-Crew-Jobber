@@ -6661,5 +6661,23 @@
    "app/lib/routes/settings.ts",
    "test/settingsClientLock.ts"
   ]
+ },
+ {
+  "id": "S-0340",
+  "ts": "2026-11-22T05:59:16+00:00",
+  "kind": "decision",
+  "headline": "D2-D5: 8 old env vars removed; 9 dead tables and 3 frozen columns dropped after a final data-home snapshot",
+  "subject": "Old-engine tables, onsinch_professions and feed_meta's verify columns are dropped",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 135,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  },
+  "sources": [
+   "app/lib/migrations.ts",
+   "test/migrations.ts"
+  ]
  }
 ]
