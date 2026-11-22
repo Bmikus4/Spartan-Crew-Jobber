@@ -37,6 +37,6 @@ n8n/backups/*.json
 # rate pairs). Same reason data/ is ignored — regenerable, and it is client data.
 .tmp-data/
 
-# The audit harness's own output, rewritten by every run of `npx tsx audit/run.mts`.
+# Output of the retired audit harness (audit/*.mts deleted 21 Nov, D1): kept ignored so old local copies stay out.
 audit/out/
 .tmp-v2/

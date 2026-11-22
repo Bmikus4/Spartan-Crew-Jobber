@@ -82,7 +82,7 @@ await pg.syncSqlClock();
 await sql`CREATE TABLE IF NOT EXISTS app_settings (id TEXT PRIMARY KEY, value JSONB NOT NULL, updated_at TIMESTAMPTZ NOT NULL DEFAULT now())`;
 await sql`INSERT INTO app_settings (id, value) VALUES ('singleton', ${JSON.stringify({ order_mode: "draft-only", reply_scope: "all", intake_paused: false, reply_delivery: "draft", replies_enabled: false,
   create_lead_days: 14, tv_show_unlinked: false, default_rate_card: 315, bot_writes_enabled: false, jobs_board_enabled: false, create_lead_enabled: true, test_data_autoclear: false,
-  analytics_tab_enabled: false, create_lead_applies_to: "creates" })}::jsonb) ON CONFLICT (id) DO NOTHING`;
+  create_lead_applies_to: "creates" })}::jsonb) ON CONFLICT (id) DO NOTHING`;
 
 const machine = (path: string, body: unknown) => new Request(`https://sim${path}`, { method: "POST", headers: { "content-type": "application/json", "x-webhook-secret": "sim-secret" }, body: JSON.stringify(body) });
 const syncErrors: string[] = [];

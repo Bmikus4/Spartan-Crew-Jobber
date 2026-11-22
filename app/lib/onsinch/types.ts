@@ -475,8 +475,6 @@ export interface ConversationState {
 
 /** Client-tunable settings (surfaced in the Vercel settings menu). */
 export interface Settings {
-  /** The Analytics folder tab on the TV board (Ben, 2026-10-11). Settings always has it. */
-  analytics_tab_enabled?: boolean;
   /**
    * Email intake is switched off on purpose (Ben paused it 2026-10-21). The TV's sync icon
    * then reads "Intake Paused" instead of going red after 90 quiet working minutes: staff told
@@ -595,7 +593,6 @@ export const DEFAULT_SETTINGS: Settings = {
   create_lead_days: 14,
   create_lead_enabled: true,
   create_lead_applies_to: "creates",
-  analytics_tab_enabled: false,
   intake_paused: false,
   needs_created_enabled: true,
   bot_writes_enabled: false,
