@@ -620,6 +620,9 @@ export const MIGRATIONS: ReadonlyArray<readonly [id: string, statement: string]>
   // beside — recomputed by the sync for refolded threads and on a rolling sweep, so compared_at says
   // how stale a verdict may be; never hand-edited.
   ["116_alter_table_fold_state_verdicts", `ALTER TABLE fold_state ADD COLUMN IF NOT EXISTS verdicts JSONB, ADD COLUMN IF NOT EXISTS compared_at TIMESTAMPTZ`],
+  // Every Confirm, False flag and undo, never edited or deleted (Ben, 20 Nov: the system must learn from them). feed_marks
+  // keeps only the current state and an undo deletes its row; this keeps every press, with the card as the person saw it.
+  ["117_create_table_card_presses", `CREATE TABLE IF NOT EXISTS card_presses (id BIGSERIAL PRIMARY KEY, item_key TEXT NOT NULL, thread_id TEXT NOT NULL, press TEXT NOT NULL, by TEXT, card JSONB, at TIMESTAMPTZ NOT NULL DEFAULT now())`],
 ];
 
 /**

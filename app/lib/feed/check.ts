@@ -8,9 +8,21 @@
 // ============================================================================
 import type { FeedMark } from "./project";
 
+/** One press as the log keeps it: what was pressed, by whom, and the card as it was on the screen. */
+export type Press = { item_key: string; thread_id: string; press: "confirm" | "false_flag" | "undo"; by: string; card: Record<string, unknown> | null };
+
 export interface CheckStore {
   addMark(m: Omit<FeedMark, "at">): Promise<void>;
   removeCheck(item_key: string): Promise<void>;
+  /** Appends to card_presses. A failed log never undoes or blocks the press itself. */
+  logPress(p: Press): Promise<void>;
+}
+
+/** The card as the screen sent it, capped: it is evidence for learning, not something the press depends on. */
+function cardOf(v: unknown): Record<string, unknown> | null {
+  if (!v || typeof v !== "object" || Array.isArray(v)) return null;
+  const s = JSON.stringify(v);
+  return s.length > 4000 ? null : (v as Record<string, unknown>);
 }
 
 const TICKABLE = /^(needs-created|needs-updated|created-check|updated-check):/;
@@ -29,5 +41,7 @@ export async function applyCheck(body: unknown, actor: string, store: CheckStore
   const denied = b.checked && b.denied === true;
   await store.removeCheck(item_key);
   if (b.checked) await store.addMark({ item_key, thread_id, mark: denied ? "denied" : "checked", by: actor, evidence: name ? { name } : null });
+  await store.logPress({ item_key, thread_id, press: !b.checked ? "undo" : denied ? "false_flag" : "confirm", by: actor, card: cardOf(b.card) })
+    .catch((err) => console.error("[check] press log failed", String(err?.message ?? err).slice(0, 120)));
   return { status: 200, body: { ok: true, item_key, checked: b.checked, denied } };
 }

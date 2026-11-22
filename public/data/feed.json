@@ -6587,5 +6587,19 @@
    "test_files_source": "reported by test/all.ts",
    "result": "pass"
   }
+ },
+ {
+  "id": "S-0335",
+  "ts": "2026-11-22T02:37:52+00:00",
+  "kind": "measurement",
+  "headline": "card_presses: every Confirm, False flag and undo logged with the card, for learning",
+  "subject": "Every Confirm, False flag and undo is logged for good, with the card as it was",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 133,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  }
  }
 ]

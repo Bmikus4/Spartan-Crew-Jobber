@@ -572,7 +572,9 @@ export default function LiveFeedScreen({ isActive, tv = false }: { isActive: boo
     });
     setUndo(checked ? { card, item, denied, until: Date.now() + UNDO_MS } : null);
     try {
-      await fetch("/api/feed/check", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ item_key: item.item_key, thread_id: card.thread_id, checked, denied }) });
+      await fetch("/api/feed/check", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ item_key: item.item_key, thread_id: card.thread_id, checked, denied,
+        // The card as the person saw it, for the press log (card_presses): what the system said, when they disagreed.
+        card: { kind: item.kind, label: labelOf(card, item).text, ask: card.ask, check: card.check, pen: card.pen ?? null, dates: card.dates, r_number: card.r_number, j_number: card.j_number, colour: card.colour } }) });
     } finally {
       void load();
     }

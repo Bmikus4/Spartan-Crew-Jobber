@@ -6,7 +6,7 @@
 // Run: npx tsx test/feedCheck.ts
 // ============================================================================
 import { readFileSync } from "node:fs";
-import { applyCheck, type CheckStore } from "../app/lib/feed/check";
+import { applyCheck, type CheckStore, type Press } from "../app/lib/feed/check";
 import { project, type FeedMark } from "../app/lib/feed/project";
 import type { ConversationState } from "../app/lib/onsinch/types";
 import { fromStates } from "./fixtures/stateSource";
@@ -30,11 +30,13 @@ const state = {
 function memStore() {
   const rows = new Map<string, FeedMark>();
   const calls: string[] = [];
+  const presses: Press[] = [];
   const store: CheckStore = {
+    async logPress(p) { presses.push(p); },
     async addMark(m) { calls.push(`add:${m.mark}`); const k = `${m.item_key}|${m.mark}`; if (!rows.has(k)) rows.set(k, { ...m, at: NOW }); },
     async removeCheck(item_key) { calls.push("remove:checked"); rows.delete(`${item_key}|checked`); rows.delete(`${item_key}|denied`); },
   };
-  return { rows, calls, store };
+  return { rows, calls, store, presses };
 }
 
 void (async () => {
@@ -100,9 +102,26 @@ void (async () => {
     const post = src.slice(src.indexOf("export async function POST"));
     ok(post.indexOf("authorizeAction") >= 0 && post.indexOf("authorizeAction") < post.indexOf("request.json"), "authorizeAction first");
     ok(/status: 401/.test(post), "refuses with 401");
-    ok(/import \{ addMark, removeCheck \} from "..\/..\/..\/lib\/feed\/marksDb"/.test(src) && !/conversation_state|onsinch|gmail/i.test(src), "imports only the tick's two writes");
+    ok(/import \{ addMark, logPress, removeCheck \} from "..\/..\/..\/lib\/feed\/marksDb"/.test(src) && !/conversation_state|onsinch|gmail/i.test(src), "imports only the tick's two writes and the press log");
     const db = readFileSync("app/lib/feed/marksDb.ts", "utf8");
     ok(/DELETE FROM feed_marks WHERE item_key = \$\{item_key\} AND mark IN \('checked', 'denied'\)/.test(db) && (db.match(/DELETE FROM/g) ?? []).length === 1, "the only delete is of a person's check or X");
+  }
+
+  console.log("\n[P] every press is logged for learning, undo included, with the card as it was (Ben, 20 Nov)");
+  {
+    const s2 = memStore();
+    const card = { kind: "needs-updated", label: "Order Needs Updated", ask: "Add 6 crew on Tue 24 and Fri 27 Nov.", check: null, pen: "todo" };
+    await applyCheck({ item_key: KEY, thread_id: "c", checked: true, card }, "kate@spartancrew.co.uk", s2.store);
+    await applyCheck({ item_key: KEY, thread_id: "c", checked: false, card }, "kate@spartancrew.co.uk", s2.store);
+    await applyCheck({ item_key: KEY, thread_id: "c", checked: true, denied: true, card }, "jenny@spartancrew.co.uk", s2.store);
+    ok(s2.presses.map((p) => p.press).join() === "confirm,undo,false_flag", "confirm, undo and false flag are each logged, in order", s2.presses.map((p) => p.press).join());
+    ok(s2.presses.every((p) => p.item_key === KEY && p.card?.ask === card.ask) && s2.presses[2].by === "jenny@spartancrew.co.uk", "each with the card as it was and who pressed it");
+    ok([...s2.rows.values()].map((m) => m.mark).join() === "denied", "the marks still hold only the current state: the log is beside them, not instead");
+    const big = await applyCheck({ item_key: KEY, thread_id: "c", checked: true, card: { ask: "x".repeat(5000) } }, "kate@spartancrew.co.uk", s2.store);
+    ok(big.status === 200 && s2.presses[3].card === null, "an oversized card is dropped from the log, never the press");
+    const failing = memStore(); failing.store.logPress = async () => { throw new Error("log down"); };
+    const r = await applyCheck({ item_key: KEY, thread_id: "c", checked: true }, "kate@spartancrew.co.uk", failing.store);
+    ok(r.status === 200 && [...failing.rows.values()].some((m) => m.mark === "checked"), "a failed log never blocks the press");
   }
 
   console.log(fails ? `\n${fails} FAILED` : "\nALL PASS");

@@ -31,8 +31,8 @@ for (const f of files) ok(!/httpTransport|OnsinchClient|onsinch\/onsinch"/.test(
 console.log("\n[2] no feed source can write anything of the engine's");
 for (const f of files) {
   const src = code(f);
-  const sqlWrites = [...src.matchAll(/\b(?:INSERT\s+INTO|DELETE\s+FROM)\s+(\w+)|\bUPDATE\s+(\w+)\s+SET\b/gi)].map((m) => m[1] ?? m[2]).filter((t) => !/^(feed_marks|feed_meta|feed_history)$/i.test(t));
-  ok(sqlWrites.length === 0, `${f}: SQL writes only feed_marks/feed_meta/feed_history`, sqlWrites.join(","));
+  const sqlWrites = [...src.matchAll(/\b(?:INSERT\s+INTO|DELETE\s+FROM)\s+(\w+)|\bUPDATE\s+(\w+)\s+SET\b/gi)].map((m) => m[1] ?? m[2]).filter((t) => !/^(feed_marks|feed_meta|feed_history|card_presses)$/i.test(t)); // card_presses: the press log, appended only (20 Nov)
+  ok(sqlWrites.length === 0, `${f}: SQL writes only feed_marks/feed_meta/feed_history/card_presses`, sqlWrites.join(","));
   ok(!/stateDb|NeonStateStore|\.put\(|gmailWrite|lib\/deps|executor\(|flag(Manual|Built|Updated)IfNeeded/.test(src), `${f}: no state store, Gmail writer or engine executor`);
   ok(!/["'](POST|PATCH|PUT|DELETE)["']\s*,\s*["']\//.test(src), `${f}: no OnSinch write verb`);
 }

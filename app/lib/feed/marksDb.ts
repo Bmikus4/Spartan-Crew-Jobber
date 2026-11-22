@@ -52,6 +52,13 @@ export async function addMark(m: Omit<FeedMark, "at"> & { at?: number }): Promis
     ON CONFLICT (item_key, mark) DO NOTHING`;
 }
 
+/** One Confirm, False flag or undo, appended for good (card_presses; feed/check.ts Press). */
+export async function logPress(p: { item_key: string; thread_id: string; press: string; by: string; card: Record<string, unknown> | null }): Promise<void> {
+  const sql = need();
+  await ensure(sql);
+  await sql`INSERT INTO card_presses (item_key, thread_id, press, by, card) VALUES (${p.item_key}, ${p.thread_id}, ${p.press}, ${p.by}, ${p.card ? JSON.stringify(p.card) : null})`;
+}
+
 /** Only ever the tick. Automatic evidence is not a person's to delete. */
 export async function removeCheck(item_key: string): Promise<void> {
   const sql = need();
