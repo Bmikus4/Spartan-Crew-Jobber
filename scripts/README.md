@@ -4,7 +4,7 @@ Made by `node scripts/scripts-index.mjs` from each script's own code; test/scrip
 is missing here or its class has changed. **Never run a script marked writes without reading it first**: the gate
 (scripts/session.py) is the only sanctioned way to ship, and production is read only through scripts/_readonly.mts.
 
-139 scripts: 45 can write, 68 read production, 26 are offline. npm marks the ones package.json runs.
+138 scripts: 44 can write, 68 read production, 26 are offline. npm marks the ones package.json runs.
 
 | script | can touch | npm | what it says it is for |
 |---|---|---|---|
@@ -49,7 +49,6 @@ is missing here or its class has changed. **Never run a script marked writes wit
 | swap-gmail-credential.mjs | writes: n8n |  | Point every Gmail node at a reconnected credential. |
 | test-backfill-runner.ts | writes: database |  | Exercise the REAL backfill runner end to end against LIVE OnSinch orders, by |
 | test-dedupe.mjs | writes: database | npm | Prove the dedupe claim against the REAL Neon database, with no dev server: |
-| vercel-bot-100.mts | writes: OnSinch, bot routes |  | THE VERCEL BROWSER BOT, 50 NEW JOBS AND 50 UPDATES, NO AI (Ben, 2026-10-16). |
 | verify-gmail-sa.ts | writes: Gmail | npm | Prove the service account can read the mailbox and change a label — before any |
 | verify-intake-e2e.mjs | writes: database, OnSinch | npm | End-to-end proof that the restructured intake works in PRODUCTION. |
 | wire-engine.mjs | writes: n8n |  | Additively wire the LIVE bookings workflow into the Vercel engine: add one |

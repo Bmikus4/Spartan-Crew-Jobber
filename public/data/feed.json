@@ -6697,5 +6697,22 @@
    "app/lib/errorReport.ts",
    "test/errorReport.ts"
   ]
+ },
+ {
+  "id": "S-0342",
+  "ts": "2026-11-22T06:18:47+00:00",
+  "kind": "decision",
+  "headline": "D7: /api/bot/canary, /run and /process removed (no caller; no bot_ledger row since 20 Oct)",
+  "subject": "The unused bot routes canary, run and process are removed",
+  "confirm": {
+   "tsc": "clean",
+   "suite": "npm run test:all",
+   "test_files": 135,
+   "test_files_source": "reported by test/all.ts",
+   "result": "pass"
+  },
+  "sources": [
+   "app/api/bot"
+  ]
  }
 ]

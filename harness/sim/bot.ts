@@ -5,7 +5,7 @@
 // runOp with the operations the real planner made. Each operation lands as the browser's save
 // lands: on the order, and on the timeline under user 2257. The real bot's ledger rule holds:
 // a key once seen is never run again. What it cannot simulate is the browser itself (a form
-// that changed, a save that timed out); the Vercel run (scripts/vercel-bot-100.mts) covers that.
+// that changed, a save that timed out); nothing here covers that since /api/bot/run was removed (D7, 22 Nov).
 // ============================================================================
 import { createHash } from "node:crypto";
 import { shiftWindow, type Op, type PositionSpec } from "../../app/lib/v2/bot/ops";
